@@ -193,6 +193,19 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Install and launch fopro
+        run: |
+          curl -sL https://github.com/bearcove/fopro/releases/download/v1.0.1/fopro-installer.sh | bash
+          ~/.cargo/bin/fopro &
+
+      - name: Cache .fopro-cache
+        uses: actions/cache@v3
+        with:
+          path: .fopro-cache
+          key: ${{ runner.os }}-fopro-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-fopro-
+
       - name: "Cargo test"
         run: |
           cargo nextest run \

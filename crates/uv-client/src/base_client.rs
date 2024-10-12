@@ -361,15 +361,17 @@ impl BaseClient {
 
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
-        if self
-            .allow_insecure_host
-            .iter()
-            .any(|allow_insecure_host| allow_insecure_host.matches(url))
-        {
-            &self.dangerous_client
-        } else {
-            &self.client
-        }
+        &self.dangerous_client
+
+        // if self
+        //     .allow_insecure_host
+        //     .iter()
+        //     .any(|allow_insecure_host| allow_insecure_host.matches(url))
+        // {
+        //     &self.dangerous_client
+        // } else {
+        //     &self.client
+        // }
     }
 
     /// The configured client timeout, in seconds.
