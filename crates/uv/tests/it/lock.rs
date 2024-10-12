@@ -3530,6 +3530,7 @@ fn lock_requires_python_exact() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X]
+    warning: The workspace `requires-python` value does not have a patch version: `==3.12`. It will be interpreted as `==3.12.[X]`. Did you mean `==3.12.*`?
     Resolved 2 packages in [TIME]
     "###);
 
@@ -3586,6 +3587,7 @@ fn lock_requires_python_exact() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X]
+    warning: The workspace `requires-python` value does not have a patch version: `==3.12`. It will be interpreted as `==3.12.[X]`. Did you mean `==3.12.*`?
     Resolved 2 packages in [TIME]
     "###);
 

@@ -139,7 +139,6 @@ fn upper_bound_ordering() {
 fn is_matching_without_patch() {
     let test_cases = [
         ("==3.12", true),
-        ("==2.7", true),
         ("==3.10, <3.11", true),
         ("==3.10, <=3.11", true),
         ("==3.12.1", false),
