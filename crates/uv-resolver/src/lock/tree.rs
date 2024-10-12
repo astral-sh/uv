@@ -23,9 +23,9 @@ pub struct TreeDisplay<'env> {
     optional_dependencies:
         FxHashMap<&'env PackageId, FxHashMap<ExtraName, Vec<Cow<'env, Dependency>>>>,
     dev_dependencies: FxHashMap<&'env PackageId, FxHashMap<GroupName, Vec<Cow<'env, Dependency>>>>,
-    /// Maximum display depth of the dependency tree
+    /// Maximum display depth of the dependency tree.
     depth: usize,
-    /// Include dev-dependencies in display or not
+    /// Whether to include development dependencies in the display.
     dev: DevMode,
     /// Prune the given packages from the display of the dependency tree.
     prune: Vec<PackageName>,
@@ -233,20 +233,17 @@ impl<'env> TreeDisplay<'env> {
             }
         }
 
-        let show_regular_deps = self.dev != DevMode::Only;
-        let show_dev = self.dev != DevMode::Exclude;
-
         let dependencies: Vec<Node<'env>> = self
             .dependencies
             .get(node.package_id())
-            .filter(|_| show_regular_deps)
+            .filter(|_| self.dev != DevMode::Only)
             .into_iter()
             .flatten()
             .map(|dep| Node::Dependency(dep.as_ref()))
             .chain(
                 self.optional_dependencies
                     .get(node.package_id())
-                    .filter(|_| show_regular_deps)
+                    .filter(|_| self.dev != DevMode::Only)
                     .into_iter()
                     .flatten()
                     .flat_map(|(extra, deps)| {
@@ -257,7 +254,7 @@ impl<'env> TreeDisplay<'env> {
             .chain(
                 self.dev_dependencies
                     .get(node.package_id())
-                    .filter(|_| show_dev)
+                    .filter(|_| self.dev != DevMode::Exclude)
                     .into_iter()
                     .flatten()
                     .flat_map(|(group, deps)| {

@@ -438,7 +438,7 @@ fn dev_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -447,6 +447,18 @@ fn dev_dependencies() -> Result<()> {
     └── anyio v4.3.0 (group: dev)
         ├── idna v3.6
         └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
