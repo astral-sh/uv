@@ -28,8 +28,8 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
 use uv_resolver::{
-    FlatIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
-    ResolverMarkers, SatisfiesResult,
+    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
+    ResolverManifest, ResolverMarkers, SatisfiesResult,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -462,6 +462,8 @@ async fn do_lock(
             build_options,
             upgrade,
             &options,
+            &hasher,
+            &state.index,
             &database,
             printer,
         )
@@ -643,6 +645,8 @@ impl ValidatedLock {
         build_options: &BuildOptions,
         upgrade: &Upgrade,
         options: &Options,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -767,6 +771,8 @@ impl ValidatedLock {
                 indexes,
                 build_options,
                 interpreter.tags()?,
+                hasher,
+                index,
                 database,
             )
             .await?
