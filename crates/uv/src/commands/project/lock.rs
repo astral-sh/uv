@@ -101,6 +101,9 @@ pub(crate) async fn lock(
     .await?
     .into_interpreter();
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Perform the lock operation.
     match do_safe_lock(
         locked,
@@ -108,6 +111,7 @@ pub(crate) async fn lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -153,6 +157,7 @@ pub(super) async fn do_safe_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
+    state: &SharedState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -160,17 +165,6 @@ pub(super) async fn do_safe_lock(
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
-    // Use isolate state for universal resolution. When resolving, we don't enforce that the
-    // prioritized distributions match the current platform. So if we lock here, then try to
-    // install from the same state, and we end up performing a resolution during the sync (i.e.,
-    // for the build dependencies of a source distribution), we may try to use incompatible
-    // distributions.
-    // TODO(charlie): In universal resolution, we should still track version compatibility! We
-    // just need to accept versions that are platform-incompatible. That would also make us more
-    // likely to (e.g.) download a wheel that we'll end up using when installing. This would
-    // make it safe to share the state.
-    let state = SharedState::default();
-
     if frozen {
         // Read the existing lockfile, but don't attempt to lock the project.
         let existing = read(workspace)
@@ -189,7 +183,7 @@ pub(super) async fn do_safe_lock(
             interpreter,
             Some(existing),
             settings,
-            &state,
+            state,
             logger,
             connectivity,
             concurrency,
@@ -215,7 +209,7 @@ pub(super) async fn do_safe_lock(
             interpreter,
             existing,
             settings,
-            &state,
+            state,
             logger,
             connectivity,
             concurrency,

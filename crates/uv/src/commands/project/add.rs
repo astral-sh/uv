@@ -1,11 +1,13 @@
+use std::collections::hash_map::Entry;
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
+
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
-use std::collections::hash_map::Entry;
-use std::fmt::Write;
-use std::path::{Path, PathBuf};
 use tracing::debug;
+use url::Url;
 
 use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
@@ -17,7 +19,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::UnresolvedRequirement;
+use uv_distribution_types::{UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
@@ -635,6 +637,7 @@ async fn lock_and_sync(
         project.workspace(),
         venv.interpreter(),
         settings.into(),
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -726,6 +729,14 @@ async fn lock_and_sync(
                 .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
                 .ok_or(ProjectError::TomlUpdate)?;
 
+            // Invalidate the project metadata.
+            if let VirtualProject::Project(ref project) = project {
+                let url = Url::from_file_path(project.project_root())
+                    .expect("project root is a valid URL");
+                let version_id = VersionId::from_url(&url);
+                debug_assert!(state.index.distributions().remove(&version_id).is_some());
+            }
+
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::do_safe_lock(
@@ -734,6 +745,7 @@ async fn lock_and_sync(
                 project.workspace(),
                 venv.interpreter(),
                 settings.into(),
+                &state,
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -779,7 +791,6 @@ async fn lock_and_sync(
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
-        &state,
         Box::new(DefaultInstallLogger),
         connectivity,
         concurrency,
