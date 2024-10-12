@@ -38,6 +38,16 @@ fn requires_python_included() {
             "{wheel_name}"
         );
     }
+
+    let version_specifiers = VersionSpecifiers::from_str("==3.12").unwrap();
+    let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+    let wheel_names = &["lxml-5.3.0-cp312-cp312-musllinux_1_2_x86_64.whl"];
+    for wheel_name in wheel_names {
+        assert!(
+            requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
+            "{wheel_name}"
+        );
+    }
 }
 
 #[test]
