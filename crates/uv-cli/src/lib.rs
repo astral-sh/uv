@@ -2462,9 +2462,6 @@ pub struct InitArgs {
     pub vcs: Option<VersionControlSystem>,
 
     /// Initialize a build-backend of choice for the project.
-    ///
-    /// By default, uv will use (`hatchling`). Use `--build-backend` to specify an
-    /// alternative build backend.
     #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
     pub build_backend: Option<ProjectBuildBackend>,
 

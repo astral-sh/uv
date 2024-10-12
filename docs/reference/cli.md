@@ -453,9 +453,7 @@ uv init [OPTIONS] [PATH]
 
 <li><code>none</code>:  Do not infer the author information</li>
 </ul>
-</dd><dt><code>--build-backend</code> <i>build-backend</i></dt><dd><p>Initialize a build-backend of choice for the project.</p>
-
-<p>By default, uv will use (<code>hatchling</code>). Use <code>--build-backend</code> to specify an alternative build backend.</p>
+</dd><dt><code>--build-backend</code> <i>build-backend</i></dt><dd><p>Initialize a build-backend of choice for the project</p>
 
 <p>Possible values:</p>
 

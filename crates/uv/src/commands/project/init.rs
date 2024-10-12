@@ -656,21 +656,9 @@ impl InitProjectKind {
             pyproject.push('\n');
             pyproject.push_str(&pyproject_build_system(name, build_backend));
             pyproject_build_backend_prerequisites(name, path, build_backend)?;
-        }
 
-        // Create the source structure.
-        if package {
-            // Retrieve build backend
-            let build_backend = build_backend.unwrap_or_default();
-
-            // Create `src/{name}/__init__.py`, if it doesn't exist already.
-            let src_dir = path.join("src").join(&*name.as_dist_info_name());
-            fs_err::create_dir_all(&src_dir)?;
-            let init_py = src_dir.join("__init__.py");
-            let packaged_script = generate_package_script(name, path, build_backend, false)?;
-            if !init_py.try_exists()? {
-                fs_err::write(init_py, packaged_script)?;
-            }
+            // Generate `src` files
+            generate_package_scripts(name, path, build_backend, false)?;
         } else {
             // Create `hello.py` if it doesn't exist
             // TODO(zanieb): Only create `hello.py` if there are no other Python files?
@@ -742,20 +730,8 @@ impl InitProjectKind {
 
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-        // Create `src/{name}/__init__.py`, if it doesn't exist already.
-        let src_dir = path.join("src").join(&*name.as_dist_info_name());
-        fs_err::create_dir_all(&src_dir)?;
-        let init_py = src_dir.join("__init__.py");
-        let packaged_script = generate_package_script(name, path, build_backend, true)?;
-        if !init_py.try_exists()? {
-            fs_err::write(init_py, packaged_script)?;
-        }
-
-        // Create a `py.typed` file
-        let py_typed = src_dir.join("py.typed");
-        if !py_typed.try_exists()? {
-            fs_err::write(py_typed, "")?;
-        }
+        // Generate `src` files
+        generate_package_scripts(name, path, build_backend, true)?;
 
         // Write .python-version if it doesn't exist.
         if let Some(python_request) = python_request {
@@ -913,8 +889,8 @@ fn pyproject_build_backend_prerequisites(
 
                     [dependencies]
                     # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
-                    # "abi3-py38" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.8
-                    pyo3 = {{ version = "0.22.3", features = ["extension-module", "abi3-py38"] }}
+                    # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
+                    pyo3 = {{ version = "0.22.4", features = ["extension-module", "abi3-py39"] }}
                 "#},
                 )?;
             }
@@ -976,13 +952,17 @@ fn pyproject_build_backend_prerequisites(
 }
 
 /// Generate startup scripts for a package-based application or library.
-fn generate_package_script(
+fn generate_package_scripts(
     package: &PackageName,
     path: &Path,
     build_backend: ProjectBuildBackend,
     is_lib: bool,
-) -> Result<String> {
+) -> Result<()> {
     let module_name = package.as_dist_info_name();
+
+    let src_dir = path.join("src");
+    let pkg_dir = src_dir.join(&*module_name);
+    fs_err::create_dir_all(&pkg_dir)?;
 
     // Python script for pure-python packaged apps or libs
     let pure_python_script = if is_lib {
@@ -1024,10 +1004,10 @@ fn generate_package_script(
     let package_script = match build_backend {
         ProjectBuildBackend::Maturin => {
             // Generate lib.rs
-            let lib_rs = path.join("src").join("lib.rs");
-            if !lib_rs.try_exists()? {
+            let native_src = src_dir.join("lib.rs");
+            if !native_src.try_exists()? {
                 fs_err::write(
-                    lib_rs,
+                    native_src,
                     indoc::formatdoc! {r#"
                     use pyo3::prelude::*;
 
@@ -1048,7 +1028,7 @@ fn generate_package_script(
                 )?;
             }
             // Generate .pyi file
-            let pyi_file = path.join("src").join(&*module_name).join("_core.pyi");
+            let pyi_file = pkg_dir.join("_core.pyi");
             if !pyi_file.try_exists()? {
                 fs_err::write(pyi_file, pyi_contents)?;
             };
@@ -1057,10 +1037,10 @@ fn generate_package_script(
         }
         ProjectBuildBackend::Scikit | ProjectBuildBackend::Meson => {
             // Generate main.cpp
-            let lib_rs = path.join("src").join("main.cpp");
-            if !lib_rs.try_exists()? {
+            let native_src = src_dir.join("main.cpp");
+            if !native_src.try_exists()? {
                 fs_err::write(
-                    lib_rs,
+                    native_src,
                     indoc::formatdoc! {r#"
                     #include <pybind11/pybind11.h>
 
@@ -1079,7 +1059,7 @@ fn generate_package_script(
                 )?;
             }
             // Generate .pyi file
-            let pyi_file = path.join("src").join(&*module_name).join("_core.pyi");
+            let pyi_file = pkg_dir.join("_core.pyi");
             if !pyi_file.try_exists()? {
                 fs_err::write(pyi_file, pyi_contents)?;
             };
@@ -1089,7 +1069,21 @@ fn generate_package_script(
         _ => pure_python_script,
     };
 
-    Ok(package_script)
+    // Create `src/{name}/__init__.py`, if it doesn't exist already.
+    let init_py = pkg_dir.join("__init__.py");
+    if !init_py.try_exists()? {
+        fs_err::write(init_py, package_script)?;
+    }
+
+    // Create `src/{name}/py.typed`, if it doesn't exist already.
+    if is_lib {
+        let py_typed = pkg_dir.join("py.typed");
+        if !py_typed.try_exists()? {
+            fs_err::write(py_typed, "")?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Initialize the version control system at the given path.

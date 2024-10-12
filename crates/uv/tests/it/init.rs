@@ -2660,8 +2660,8 @@ fn init_app_build_backend_maturin() -> Result<()> {
 
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
-        # "abi3-py38" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.8
-        pyo3 = { version = "0.22.3", features = ["extension-module", "abi3-py38"] }
+        # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
+        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
         "###
         );
     });
@@ -3061,8 +3061,8 @@ fn init_lib_build_backend_maturin() -> Result<()> {
 
         [dependencies]
         # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
-        # "abi3-py38" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.8
-        pyo3 = { version = "0.22.3", features = ["extension-module", "abi3-py38"] }
+        # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
+        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
         "###
         );
     });
