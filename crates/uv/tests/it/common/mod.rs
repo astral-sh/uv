@@ -14,11 +14,13 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use etcetera::BaseStrategy;
+use futures::StreamExt;
 use indoc::formatdoc;
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
 
+use tokio::io::AsyncWriteExt;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
@@ -1277,6 +1279,31 @@ pub fn decode_token(content: &[&str]) -> String {
         })
         .join("_");
     token
+}
+
+/// Simulates `reqwest::blocking::get` but returns bytes directly, and disables
+/// certificate verification, passing through the `BaseClient`
+#[tokio::main(flavor = "current_thread")]
+pub async fn download_to_disk(url: &str, path: &Path) {
+    let trusted_hosts: Vec<_> = std::env::var("UV_INSECURE_HOST")
+        .unwrap_or_default()
+        .split(' ')
+        .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
+        .collect();
+
+    let client = uv_client::BaseClientBuilder::new()
+        .allow_insecure_host(trusted_hosts)
+        .build();
+    let url: reqwest::Url = url.parse().unwrap();
+    let client = client.for_host(&url);
+    let response = client.request(http::Method::GET, url).send().await.unwrap();
+
+    let mut file = tokio::fs::File::create(path).await.unwrap();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        file.write_all(&chunk.unwrap()).await.unwrap();
+    }
+    file.sync_all().await.unwrap();
 }
 
 /// Utility macro to return the name of the current function.

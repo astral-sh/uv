@@ -3552,12 +3552,12 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             allow_insecure_host: [
-                TrustedHost {
+                Host {
                     scheme: None,
                     host: "google.com",
                     port: None,
                 },
-                TrustedHost {
+                Host {
                     scheme: None,
                     host: "example.com",
                     port: None,
