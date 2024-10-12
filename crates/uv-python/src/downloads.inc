@@ -30,22 +30,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             patch: 0,
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-aarch64-apple-darwin-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("4ba7f477c56af4f057ca40535aa6907662b7206e3b8b39971d0a507b1c955e44")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Darwin),
             libc: Libc::None,
@@ -54,38 +38,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-apple-darwin-install_only_stripped.tar.gz",
         sha256: Some("d6bc769002842147150a561502a23b57d5a8aa1ba643a6a0abf589bfe834e642")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Darwin),
-            libc: Libc::None,
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-apple-darwin-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("b72b7df7cd22a4e7462dbe95633c5ca61caab41237d68e0ff89e9774cd4985e7")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-aarch64-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("678b0e9cbe2a8e19b0d83d518c7e3689918b22b2847e24f01fb2ce71164f5788")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -113,43 +65,11 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnueabi),
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-armv7-unknown-linux-gnueabi-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("bee06f4fb52a8333f603a29e47e09e43b3bda9a2f338df6c0ccd3e3b81e5347e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
             variant: PythonVariant::Default
 
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
         sha256: Some("ae89ef85195386ce232de29e0f62e7544f80a6923119ed85af40d09a6468bf30")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-armv7-unknown-linux-gnueabihf-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("4d1e234314e1a809c8d027273dfcd647f600490ae59b59341051d973f0c0f586")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -177,22 +97,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             arch: Arch(target_lexicon::Architecture::Powerpc64le),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-ppc64le-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("2d72fb6c7c91c9c00aa1e2b982bc7442da8a51665dfea2193e5e9098a6d7b2cb")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::Powerpc64le),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
 
         },
@@ -209,43 +113,11 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             arch: Arch(target_lexicon::Architecture::S390x),
             os: Os(target_lexicon::OperatingSystem::Linux),
             libc: Libc::Some(target_lexicon::Environment::Gnu),
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-s390x-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("533087017cbd1287af93936d9007bc1bd6ca8886b2cdf59171554cf55c6253e6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::S390x),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
 
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("85e05e27c31cd7267cb17c4c16b729969dd586cd715287f923334db20a51ce67")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_64),
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Gnu),
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("2b46a0f38711cfcdffab90f69ea1372288bd6dcb0f9676b765babb491d42ce06")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -289,22 +161,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
-            variant: PythonVariant::Freethreaded
-
-        },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-i686-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
-        sha256: Some("1dd414e0787f180760952bdc339dfde42e0b7503419baf20d38a6470ed65e455")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
-            os: Os(target_lexicon::OperatingSystem::Windows),
-            libc: Libc::None,
             variant: PythonVariant::Default
 
         },
@@ -321,11 +177,155 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("c82b440476fe04e80228791350a451b65e8080ff01b7168f1c4a5eb9645371f3")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
             variant: PythonVariant::Freethreaded
 
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
-        sha256: Some("fc665561556f4dc843cd3eeba4d482f716aec65d5b89a657316829cfbdc9462a")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-aarch64-apple-darwin-freethreaded%2Bdebug-full.tar.zst",
+        sha256: Some("4ba7f477c56af4f057ca40535aa6907662b7206e3b8b39971d0a507b1c955e44")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Freethreaded
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-apple-darwin-freethreaded%2Bdebug-full.tar.zst",
+        sha256: Some("b72b7df7cd22a4e7462dbe95633c5ca61caab41237d68e0ff89e9774cd4985e7")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-aarch64-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
+        sha256: Some("678b0e9cbe2a8e19b0d83d518c7e3689918b22b2847e24f01fb2ce71164f5788")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+            variant: PythonVariant::Freethreaded
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-armv7-unknown-linux-gnueabi-freethreaded%2Bdebug-full.tar.zst",
+        sha256: Some("bee06f4fb52a8333f603a29e47e09e43b3bda9a2f338df6c0ccd3e3b81e5347e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+            variant: PythonVariant::Freethreaded
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-armv7-unknown-linux-gnueabihf-freethreaded%2Bdebug-full.tar.zst",
+        sha256: Some("4d1e234314e1a809c8d027273dfcd647f600490ae59b59341051d973f0c0f586")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Powerpc64le),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-ppc64le-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
+        sha256: Some("2d72fb6c7c91c9c00aa1e2b982bc7442da8a51665dfea2193e5e9098a6d7b2cb")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::S390x),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-s390x-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
+        sha256: Some("533087017cbd1287af93936d9007bc1bd6ca8886b2cdf59171554cf55c6253e6")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
+        sha256: Some("2b46a0f38711cfcdffab90f69ea1372288bd6dcb0f9676b765babb491d42ce06")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Freethreaded
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-i686-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
+        sha256: Some("1dd414e0787f180760952bdc339dfde42e0b7503419baf20d38a6470ed65e455")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -337,11 +337,11 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             arch: Arch(target_lexicon::Architecture::X86_64),
             os: Os(target_lexicon::OperatingSystem::Windows),
             libc: Libc::None,
-            variant: PythonVariant::Default
+            variant: PythonVariant::Freethreaded
 
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("c82b440476fe04e80228791350a451b65e8080ff01b7168f1c4a5eb9645371f3")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
+        sha256: Some("fc665561556f4dc843cd3eeba4d482f716aec65d5b89a657316829cfbdc9462a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {

@@ -151,7 +151,6 @@ class CPythonFinder(Finder):
         "shared-noopt",
         "static-noopt",
     ]
-    VARIANTS = ["pgo", "lto", "debug", "noopt", "freethreaded"]
     SPECIAL_TRIPLES = {
         "macos": "x86_64-apple-darwin",
         "linux64": "x86_64-unknown-linux-gnu",
@@ -467,6 +466,16 @@ def render(downloads: list[PythonDownload]) -> None:
             return 2, int(prerelease[2:])
         return 3, 0
 
+    def variant_sort_key(variant: Variant | None) -> int:
+        if variant is None:
+            return 0
+        match variant:
+            case Variant.FREETHREADED:
+                return 1
+            case Variant.DEBUG:
+                return 2
+        raise ValueError(f"Missing sort key implementation for variant: {variant}")
+
     def sort_key(download: PythonDownload) -> tuple:
         # Sort by implementation, version (latest first), and then by triple.
         impl_order = [ImplementationName.CPYTHON, ImplementationName.PYPY]
@@ -478,6 +487,7 @@ def render(downloads: list[PythonDownload]) -> None:
             -download.version.patch,
             -prerelease[0],
             -prerelease[1],
+            variant_sort_key(download.variant),
             download.triple,
         )
 
