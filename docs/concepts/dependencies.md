@@ -58,7 +58,7 @@ dependencies = [
 If the project only requires packages from standard package indexes, then `project.dependencies` is
 sufficient. If the project depends on packages from Git, remote URLs, or local sources,
 `tool.uv.sources` can be used to enrich the dependency metadata without ejecting from the
-stands-compliant `project.dependencies` table.
+standards-compliant `project.dependencies` table.
 
 !!! tip
 
