@@ -203,7 +203,7 @@ jobs:
 
       - name: Install and launch fopro
         run: |
-          curl -sL https://github.com/bearcove/fopro/releases/download/v2.0.1/fopro-installer.sh | bash
+          curl -sL https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.sh | bash
           ~/.cargo/bin/fopro &
           echo "UV_ALL_PROXY=localhost:8080" >> $GITHUB_ENV
           echo "UV_CA_CERT=/tmp/fopro-ca.crt" >> $GITHUB_ENV
@@ -270,7 +270,7 @@ jobs:
 
       - name: Install and launch fopro
         run: |
-          curl -sL https://github.com/bearcove/fopro/releases/download/v2.0.1/fopro-installer.sh | bash
+          curl -sL https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.sh | bash
           ~/.cargo/bin/fopro &
           echo "UV_ALL_PROXY=localhost:8080" >> $GITHUB_ENV
           echo "UV_CA_CERT=/tmp/fopro-ca.crt" >> $GITHUB_ENV
@@ -347,11 +347,12 @@ jobs:
 
       - name: Install and launch fopro
         run: |
-          Invoke-WebRequest -Uri https://github.com/bearcove/fopro/releases/download/v2.0.1/fopro-installer.ps1 -OutFile fopro-installer.ps1
+          Invoke-WebRequest -Uri https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.ps1 -OutFile fopro-installer.ps1
           .\fopro-installer.ps1
           Start-Process -FilePath "${{ env.DEV_DRIVE }}\.cargo\bin\fopro.exe" -NoNewWindow
-          echo "UV_ALL_PROXY=localhost:8080" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "UV_ALL_PROXY=127.0.0.1:8080" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "UV_CA_CERT=$env:TEMP\fopro-ca.crt" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Test-NetConnection -ComputerName 127.0.0.1 -Port 8080
 
       - name: "Download deps"
         working-directory: ${{ env.UV_WORKSPACE }}
