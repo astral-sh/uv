@@ -203,7 +203,7 @@ jobs:
 
       - name: Install and launch fopro
         run: |
-          curl -sL https://github.com/bearcove/fopro/releases/download/v1.0.1/fopro-installer.sh | bash
+          curl -sL https://github.com/bearcove/fopro/releases/download/v1.0.2/fopro-installer.sh | bash
           ~/.cargo/bin/fopro &
 
       - name: "Download deps"
@@ -212,10 +212,10 @@ jobs:
             --features python-patch \
             --workspace
 
-      - name: "Set proxy and Git SSL verification"
+      - name: "Set proxy"
         run: |
-          echo "ALL_PROXY=localhost:8080" >> $GITHUB_ENV
-          echo "GIT_SSL_NO_VERIFY=true" >> $GITHUB_ENV
+          echo "UV_ALL_PROXY=localhost:8080" >> $GITHUB_ENV
+          echo "UV_CA_CERT=/tmp/fopro-ca.crt" >> $GITHUB_ENV
 
       - name: "Cargo test"
         run: |
