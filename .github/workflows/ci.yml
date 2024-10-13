@@ -349,10 +349,8 @@ jobs:
         run: |
           Invoke-WebRequest -Uri https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.ps1 -OutFile fopro-installer.ps1
           .\fopro-installer.ps1
-          Start-Process -FilePath "${{ env.DEV_DRIVE }}\.cargo\bin\fopro.exe" -NoNewWindow
           echo "UV_ALL_PROXY=127.0.0.1:8080" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "UV_CA_CERT=$env:TEMP\fopro-ca.crt" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Test-NetConnection -ComputerName 127.0.0.1 -Port 8080
 
       - name: "Download deps"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -362,6 +360,8 @@ jobs:
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
+          Start-Process -FilePath "${{ env.DEV_DRIVE }}\.cargo\bin\fopro.exe" -NoNewWindow
+          Test-NetConnection -ComputerName 127.0.0.1 -Port 8080
           cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
       - name: "Smoke test"
