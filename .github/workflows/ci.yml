@@ -206,6 +206,12 @@ jobs:
           curl -sL https://github.com/bearcove/fopro/releases/download/v1.0.1/fopro-installer.sh | bash
           ~/.cargo/bin/fopro &
 
+      - name: "Download deps"
+        run: |
+          cargo nextest list \
+            --features python-patch \
+            --workspace
+
       - name: "Set proxy and Git SSL verification"
         run: |
           echo "ALL_PROXY=localhost:8080" >> $GITHUB_ENV
