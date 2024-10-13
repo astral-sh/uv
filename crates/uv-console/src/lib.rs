@@ -96,6 +96,12 @@ pub fn password(prompt: &str, term: &Term) -> std::io::Result<String> {
 /// Prompt the user for input text in the given [`Term`].
 ///
 /// This is a slimmed-down version of `dialoguer::Input`.
+#[allow(
+    // Suppress Clippy lints triggered by `dialoguer::Input`.
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss
+)]
 pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
     loop {
         term.write_str(prompt)?;
@@ -190,7 +196,6 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
                             let new_pos_x = (prompt_len + last_space) % line_size;
                             let old_pos_x = (prompt_len + position) % line_size;
                             let diff_pos_x = new_pos_x as i64 - old_pos_x as i64;
-                            //println!("new_pos_x = {}, old_pos_x = {}, diff = {}", new_pos_x, old_pos_x, diff_pos_x);
                             if diff_pos_x < 0 {
                                 term.move_cursor_left(-diff_pos_x as usize)?;
                             } else {
