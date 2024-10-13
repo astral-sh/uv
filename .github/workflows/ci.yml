@@ -204,7 +204,7 @@ jobs:
       - name: Install and launch fopro
         run: |
           curl -sL https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.sh | bash
-          ~/.cargo/bin/fopro &
+          RUST_LOG=warn ~/.cargo/bin/fopro &
           echo "UV_ALL_PROXY=localhost:8080" >> $GITHUB_ENV
           echo "UV_CA_CERT=/tmp/fopro-ca.crt" >> $GITHUB_ENV
 
@@ -271,7 +271,7 @@ jobs:
       - name: Install and launch fopro
         run: |
           curl -sL https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.sh | bash
-          ~/.cargo/bin/fopro &
+          RUST_LOG=warn ~/.cargo/bin/fopro &
           echo "UV_ALL_PROXY=localhost:8080" >> $GITHUB_ENV
           echo "UV_CA_CERT=/tmp/fopro-ca.crt" >> $GITHUB_ENV
 
@@ -360,7 +360,9 @@ jobs:
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
+          $env:RUST_LOG = "warn"
           Start-Process -FilePath "${{ env.DEV_DRIVE }}\.cargo\bin\fopro.exe" -NoNewWindow
+          $env:RUST_LOG = $null
           Test-NetConnection -ComputerName 127.0.0.1 -Port 8080
           cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
