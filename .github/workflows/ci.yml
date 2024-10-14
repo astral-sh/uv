@@ -359,17 +359,16 @@ jobs:
         with:
           tool: cargo-xwin,cargo-bloat
 
-      # xwin is currently broken. See https://github.com/rust-cross/cargo-xwin/issues/127
-      # - name: "Install xwin dependencies"
-      #   run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
-      #
-      # - name: "Clippy"
-      #   working-directory: ${{ github.workspace }}/crates/uv-trampoline
-      #   if: matrix.target-arch == 'x86_64'
-      #   run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
-      #   env:
-      #     XWIN_ARCH: "x86_64"
-      #     XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+      - name: "Install xwin dependencies"
+        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
+
+      - name: "Clippy"
+        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        if: matrix.target-arch == 'x86_64'
+        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
+        env:
+          XWIN_ARCH: "x86_64"
+          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
 
       - name: "Bloat Check"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
