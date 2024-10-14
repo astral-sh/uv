@@ -67,7 +67,7 @@ pub enum Error {
     RecordFile(String),
     #[error("RECORD file is invalid")]
     RecordCsv(#[from] csv::Error),
-    #[error("Broken virtualenv: {0}")]
+    #[error("Broken virtual environment: {0}")]
     BrokenVenv(String),
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
