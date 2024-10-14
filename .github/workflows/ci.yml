@@ -112,7 +112,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # https://github.com/rust-cross/cargo-xwin/issues/127
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
@@ -327,7 +327,7 @@ jobs:
     timeout-minutes: 10
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # https://github.com/rust-cross/cargo-xwin/issues/127
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
