@@ -21,7 +21,7 @@ $ docker run ghcr.io/astral-sh/uv --help
 uv provides a distroless Docker image including the `uv` binary. The following tags are published:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.4.20`
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.4.21`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.4` (the latest patch
   version)
 
@@ -62,7 +62,7 @@ In addition, uv publishes the following images:
 
 As with the distroless image, each image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.4.20-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.4.21-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -74,7 +74,7 @@ official distroless Docker image:
 
 ```dockerfile title="Dockerfile"
 FROM python:3.12-slim-bookworm
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 ```
 
 Or, with the installer:
@@ -100,13 +100,13 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.4.20 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.21 /uv /uvx /bin/
 ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.4.20/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.4.21/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -342,7 +342,7 @@ a big time saver.
 ```dockerfile title="Dockerfile"
 # Install uv
 FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Change the working directory to the `app` directory
 WORKDIR /app
@@ -388,7 +388,7 @@ For example:
 ```dockerfile title="Dockerfile"
 # Install uv
 FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Change the working directory to the `app` directory
 WORKDIR /app

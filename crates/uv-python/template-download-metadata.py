@@ -50,6 +50,18 @@ def prepare_libc(libc: str) -> str | None:
         return libc.title()
 
 
+def prepare_variant(variant: str | None) -> str | None:
+    match variant:
+        case None:
+            return "PythonVariant::Default"
+        case "freethreaded":
+            return "PythonVariant::Freethreaded"
+        case "debug":
+            return "PythonVariant::Debug"
+        case _:
+            raise ValueError(f"Unknown variant: {variant}")
+
+
 def prepare_arch(arch: str) -> str:
     match arch:
         # Special constructors
@@ -78,6 +90,7 @@ def prepare_value(value: dict) -> dict:
     value["name"] = prepare_name(value["name"])
     value["libc"] = prepare_libc(value["libc"])
     value["prerelease"] = prepare_prerelease(value["prerelease"])
+    value["variant"] = prepare_variant(value["variant"])
     return value
 
 
@@ -90,6 +103,8 @@ def main() -> None:
     data["versions"] = [
         {"key": key, "value": prepare_value(value)}
         for key, value in json.loads(VERSION_METADATA.read_text()).items()
+        # Exclude debug variants for now, we don't support them in the Rust side
+        if value["variant"] != "debug"
     ]
 
     # Render the template
@@ -100,7 +115,7 @@ def main() -> None:
 
     # Update the file
     logging.info(f"Updating `{TARGET}`...")
-    TARGET.write_text(output)
+    TARGET.write_text("// DO NOT EDIT\n//\n" + output)
     subprocess.check_call(
         ["rustfmt", str(TARGET)],
         stderr=subprocess.STDOUT,

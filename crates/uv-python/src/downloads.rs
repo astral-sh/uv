@@ -273,9 +273,10 @@ impl PythonDownloadRequest {
             ) {
                 return false;
             }
-            if version.is_freethreaded() {
-                debug!("Installing managed free-threaded Python is not yet supported");
-                return false;
+            if let Some(variant) = version.variant() {
+                if variant != key.variant {
+                    return false;
+                }
             }
         }
         true

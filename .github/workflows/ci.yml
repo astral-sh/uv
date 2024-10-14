@@ -109,7 +109,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-clippy-xwin:
-    timeout-minutes: 10
+    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
+    timeout-minutes: 20
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -324,7 +325,8 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
-    timeout-minutes: 10
+    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
+    timeout-minutes: 20
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -427,6 +429,7 @@ jobs:
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
       - uses: actions/setup-python@v5
       - name: "Add SSH key"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
@@ -434,17 +437,12 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY }}
 
-      - name: "Install dependencies (public)"
-        run: pip install -r docs/requirements.txt
       - name: "Build docs (public)"
-        run: mkdocs build --strict -f mkdocs.public.yml
+        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.public.yml
 
-      - name: "Install dependencies (insiders)"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        run: pip install -r docs/requirements-insiders.txt
       - name: "Build docs (insiders)"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        run: mkdocs build --strict -f mkdocs.insiders.yml
+        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.insiders.yml
 
   build-binary-linux:
     timeout-minutes: 10
@@ -644,6 +642,23 @@ jobs:
       - name: "Create a virtual environment"
         run: |
           ./uv venv -p 3.13t --python-preference only-system
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install anyio
+
+      - name: "Install free-threaded Python via uv"
+        run: |
+          ./uv python install 3.13t
+          ./uv venv -p 3.13t --python-preference only-managed
 
       - name: "Check version"
         run: |
@@ -997,13 +1012,14 @@ jobs:
             code:
               - "crates/uv-publish/**/*"
               - "scripts/publish/**/*"
+              - ".github/workflows/ci.yml"
 
   integration-test-publish:
     timeout-minutes: 10
     needs: integration-test-publish-changed
     name: "integration test | uv publish"
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     environment: uv-test-publish
     env:
       # No dbus in GitHub Actions
