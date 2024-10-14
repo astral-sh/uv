@@ -108,30 +108,37 @@ jobs:
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-  cargo-clippy-windows:
-    timeout-minutes: 15
+  cargo-clippy-xwin:
+    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
+    timeout-minutes: 20
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on:
-      labels: "windows-latest-xlarge"
+    runs-on: ubuntu-latest
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Create Dev Drive using ReFS
-        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
-
-      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
-      - name: Copy Git Repo to Dev Drive
-        run: |
-          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
-
+      - name: Load xwin cache
+        uses: actions/cache@v4
+        with:
+          path: "${{ github.workspace}}/.xwin"
+          key: cargo-xwin-x86_64
+      - name: Load rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Install Rust toolchain"
-        run: rustup component add clippy
-
+        run: rustup target add x86_64-pc-windows-msvc
+      - name: "Install cargo-xwin"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-xwin
+      - name: Install xwin dependencies
+        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
       - name: "Clippy"
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo xwin clippy --target x86_64-pc-windows-msvc --workspace --all-targets --all-features --locked --profile fast-build -- -D warnings
+        env:
+          XWIN_ARCH: "x86_64"
+          XWIN_CACHE_DIR: "${{ github.workspace}}/.xwin"
 
   cargo-dev-generate-all:
     timeout-minutes: 10
@@ -318,7 +325,8 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
-    timeout-minutes: 10
+    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
+    timeout-minutes: 20
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -353,17 +361,16 @@ jobs:
         with:
           tool: cargo-xwin,cargo-bloat
 
-      # xwin is currently broken. See https://github.com/rust-cross/cargo-xwin/issues/127
-      # - name: "Install xwin dependencies"
-      #   run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
-      #
-      # - name: "Clippy"
-      #   working-directory: ${{ github.workspace }}/crates/uv-trampoline
-      #   if: matrix.target-arch == 'x86_64'
-      #   run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
-      #   env:
-      #     XWIN_ARCH: "x86_64"
-      #     XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+      - name: "Install xwin dependencies"
+        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
+
+      - name: "Clippy"
+        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        if: matrix.target-arch == 'x86_64'
+        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
+        env:
+          XWIN_ARCH: "x86_64"
+          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
 
       - name: "Bloat Check"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
