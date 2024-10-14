@@ -119,7 +119,7 @@ pub(crate) async fn publish(
 fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
     let term = Term::stderr();
     if !term.is_term() {
-        anyhow::bail!("Not a terminal");
+        return Ok((None, None));
     }
     let username_prompt = "Enter username ('__token__' if using a token): ";
     let password_prompt = "Enter password: ";

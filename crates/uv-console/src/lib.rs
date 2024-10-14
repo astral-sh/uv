@@ -78,19 +78,15 @@ pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<boo
 ///
 /// This is a slimmed-down version of `dialoguer::Password`.
 pub fn password(prompt: &str, term: &Term) -> std::io::Result<String> {
-    loop {
-        term.write_str(prompt)?;
-        term.show_cursor()?;
-        term.flush()?;
+    term.write_str(prompt)?;
+    term.show_cursor()?;
+    term.flush()?;
 
-        let input = term.read_secure_line()?;
+    let input = term.read_secure_line()?;
 
-        term.clear_line()?;
+    term.clear_line()?;
 
-        if !input.is_empty() {
-            return Ok(input);
-        }
-    }
+    Ok(input)
 }
 
 /// Prompt the user for input text in the given [`Term`].
@@ -103,129 +99,96 @@ pub fn password(prompt: &str, term: &Term) -> std::io::Result<String> {
     clippy::cast_sign_loss
 )]
 pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
+    term.write_str(prompt)?;
+    term.show_cursor()?;
+    term.flush()?;
+
+    let prompt_len = measure_text_width(prompt);
+
+    let mut chars: Vec<char> = Vec::new();
+    let mut position = 0;
     loop {
-        term.write_str(prompt)?;
-        term.show_cursor()?;
-        term.flush()?;
-
-        let prompt_len = measure_text_width(prompt);
-
-        let mut chars: Vec<char> = Vec::new();
-        let mut position = 0;
-        loop {
-            match term.read_key()? {
-                Key::Backspace if position > 0 => {
-                    position -= 1;
-                    chars.remove(position);
-                    let line_size = term.size().1 as usize;
-                    // Case we want to delete last char of a line so the cursor is at the beginning of the next line
-                    if (position + prompt_len) % (line_size - 1) == 0 {
-                        term.clear_line()?;
-                        term.move_cursor_up(1)?;
-                        term.move_cursor_right(line_size + 1)?;
-                    } else {
-                        term.clear_chars(1)?;
-                    }
-
-                    let tail: String = chars[position..].iter().collect();
-
-                    if !tail.is_empty() {
-                        term.write_str(&tail)?;
-
-                        let total = position + prompt_len + tail.chars().count();
-                        let total_line = total / line_size;
-                        let line_cursor = (position + prompt_len) / line_size;
-                        term.move_cursor_up(total_line - line_cursor)?;
-
-                        term.move_cursor_left(line_size)?;
-                        term.move_cursor_right((position + prompt_len) % line_size)?;
-                    }
-
-                    term.flush()?;
+        match term.read_key()? {
+            Key::Backspace if position > 0 => {
+                position -= 1;
+                chars.remove(position);
+                let line_size = term.size().1 as usize;
+                // Case we want to delete last char of a line so the cursor is at the beginning of the next line
+                if (position + prompt_len) % (line_size - 1) == 0 {
+                    term.clear_line()?;
+                    term.move_cursor_up(1)?;
+                    term.move_cursor_right(line_size + 1)?;
+                } else {
+                    term.clear_chars(1)?;
                 }
-                Key::Char(chr) if !chr.is_ascii_control() => {
-                    chars.insert(position, chr);
-                    position += 1;
-                    let tail: String = iter::once(&chr).chain(chars[position..].iter()).collect();
+
+                let tail: String = chars[position..].iter().collect();
+
+                if !tail.is_empty() {
                     term.write_str(&tail)?;
-                    term.move_cursor_left(tail.chars().count() - 1)?;
-                    term.flush()?;
-                }
-                Key::ArrowLeft if position > 0 => {
-                    if (position + prompt_len) % term.size().1 as usize == 0 {
-                        term.move_cursor_up(1)?;
-                        term.move_cursor_right(term.size().1 as usize)?;
-                    } else {
-                        term.move_cursor_left(1)?;
-                    }
-                    position -= 1;
-                    term.flush()?;
-                }
-                Key::ArrowRight if position < chars.len() => {
-                    if (position + prompt_len) % (term.size().1 as usize - 1) == 0 {
-                        term.move_cursor_down(1)?;
-                        term.move_cursor_left(term.size().1 as usize)?;
-                    } else {
-                        term.move_cursor_right(1)?;
-                    }
-                    position += 1;
-                    term.flush()?;
-                }
-                Key::UnknownEscSeq(seq) if seq == vec!['b'] => {
-                    let line_size = term.size().1 as usize;
-                    let nb_space = chars[..position]
-                        .iter()
-                        .rev()
-                        .take_while(|c| c.is_whitespace())
-                        .count();
-                    let find_last_space = chars[..position - nb_space]
-                        .iter()
-                        .rposition(|c| c.is_whitespace());
 
-                    // If we find a space we set the cursor to the next char else we set it to the beginning of the input
-                    if let Some(mut last_space) = find_last_space {
-                        if last_space < position {
-                            last_space += 1;
-                            let new_line = (prompt_len + last_space) / line_size;
-                            let old_line = (prompt_len + position) / line_size;
-                            let diff_line = old_line - new_line;
-                            if diff_line != 0 {
-                                term.move_cursor_up(old_line - new_line)?;
-                            }
+                    let total = position + prompt_len + tail.chars().count();
+                    let total_line = total / line_size;
+                    let line_cursor = (position + prompt_len) / line_size;
+                    term.move_cursor_up(total_line - line_cursor)?;
 
-                            let new_pos_x = (prompt_len + last_space) % line_size;
-                            let old_pos_x = (prompt_len + position) % line_size;
-                            let diff_pos_x = new_pos_x as i64 - old_pos_x as i64;
-                            if diff_pos_x < 0 {
-                                term.move_cursor_left(-diff_pos_x as usize)?;
-                            } else {
-                                term.move_cursor_right((diff_pos_x) as usize)?;
-                            }
-                            position = last_space;
-                        }
-                    } else {
-                        term.move_cursor_left(position)?;
-                        position = 0;
-                    }
-
-                    term.flush()?;
+                    term.move_cursor_left(line_size)?;
+                    term.move_cursor_right((position + prompt_len) % line_size)?;
                 }
-                Key::UnknownEscSeq(seq) if seq == vec!['f'] => {
-                    let line_size = term.size().1 as usize;
-                    let find_next_space = chars[position..].iter().position(|c| c.is_whitespace());
 
-                    // If we find a space we set the cursor to the next char else we set it to the beginning of the input
-                    if let Some(mut next_space) = find_next_space {
-                        let nb_space = chars[position + next_space..]
-                            .iter()
-                            .take_while(|c| c.is_whitespace())
-                            .count();
-                        next_space += nb_space;
-                        let new_line = (prompt_len + position + next_space) / line_size;
+                term.flush()?;
+            }
+            Key::Char(chr) if !chr.is_ascii_control() => {
+                chars.insert(position, chr);
+                position += 1;
+                let tail: String = iter::once(&chr).chain(chars[position..].iter()).collect();
+                term.write_str(&tail)?;
+                term.move_cursor_left(tail.chars().count() - 1)?;
+                term.flush()?;
+            }
+            Key::ArrowLeft if position > 0 => {
+                if (position + prompt_len) % term.size().1 as usize == 0 {
+                    term.move_cursor_up(1)?;
+                    term.move_cursor_right(term.size().1 as usize)?;
+                } else {
+                    term.move_cursor_left(1)?;
+                }
+                position -= 1;
+                term.flush()?;
+            }
+            Key::ArrowRight if position < chars.len() => {
+                if (position + prompt_len) % (term.size().1 as usize - 1) == 0 {
+                    term.move_cursor_down(1)?;
+                    term.move_cursor_left(term.size().1 as usize)?;
+                } else {
+                    term.move_cursor_right(1)?;
+                }
+                position += 1;
+                term.flush()?;
+            }
+            Key::UnknownEscSeq(seq) if seq == vec!['b'] => {
+                let line_size = term.size().1 as usize;
+                let nb_space = chars[..position]
+                    .iter()
+                    .rev()
+                    .take_while(|c| c.is_whitespace())
+                    .count();
+                let find_last_space = chars[..position - nb_space]
+                    .iter()
+                    .rposition(|c| c.is_whitespace());
+
+                // If we find a space we set the cursor to the next char else we set it to the beginning of the input
+                if let Some(mut last_space) = find_last_space {
+                    if last_space < position {
+                        last_space += 1;
+                        let new_line = (prompt_len + last_space) / line_size;
                         let old_line = (prompt_len + position) / line_size;
-                        term.move_cursor_down(new_line - old_line)?;
+                        let diff_line = old_line - new_line;
+                        if diff_line != 0 {
+                            term.move_cursor_up(old_line - new_line)?;
+                        }
 
-                        let new_pos_x = (prompt_len + position + next_space) % line_size;
+                        let new_pos_x = (prompt_len + last_space) % line_size;
                         let old_pos_x = (prompt_len + position) % line_size;
                         let diff_pos_x = new_pos_x as i64 - old_pos_x as i64;
                         if diff_pos_x < 0 {
@@ -233,48 +196,67 @@ pub fn input(prompt: &str, term: &Term) -> std::io::Result<String> {
                         } else {
                             term.move_cursor_right((diff_pos_x) as usize)?;
                         }
-                        position += next_space;
-                    } else {
-                        let new_line = (prompt_len + chars.len()) / line_size;
-                        let old_line = (prompt_len + position) / line_size;
-                        term.move_cursor_down(new_line - old_line)?;
-
-                        let new_pos_x = (prompt_len + chars.len()) % line_size;
-                        let old_pos_x = (prompt_len + position) % line_size;
-                        let diff_pos_x = new_pos_x as i64 - old_pos_x as i64;
-                        match diff_pos_x.cmp(&0) {
-                            Ordering::Less => {
-                                term.move_cursor_left((-diff_pos_x - 1) as usize)?;
-                            }
-                            Ordering::Equal => {}
-                            Ordering::Greater => {
-                                term.move_cursor_right((diff_pos_x) as usize)?;
-                            }
-                        }
-                        position = chars.len();
+                        position = last_space;
                     }
-
-                    term.flush()?;
+                } else {
+                    term.move_cursor_left(position)?;
+                    position = 0;
                 }
-                Key::Enter => break,
-                _ => (),
-            }
-        }
-        let input = chars.iter().collect::<String>();
-        term.write_line("")?;
 
-        match input.parse::<String>() {
-            Ok(value) => {
                 term.flush()?;
-                return Ok(value);
             }
-            Err(err) => {
-                term.write_line(&err.to_string())?;
-                term.show_cursor()?;
-                term.flush()?;
+            Key::UnknownEscSeq(seq) if seq == vec!['f'] => {
+                let line_size = term.size().1 as usize;
+                let find_next_space = chars[position..].iter().position(|c| c.is_whitespace());
 
-                continue;
+                // If we find a space we set the cursor to the next char else we set it to the beginning of the input
+                if let Some(mut next_space) = find_next_space {
+                    let nb_space = chars[position + next_space..]
+                        .iter()
+                        .take_while(|c| c.is_whitespace())
+                        .count();
+                    next_space += nb_space;
+                    let new_line = (prompt_len + position + next_space) / line_size;
+                    let old_line = (prompt_len + position) / line_size;
+                    term.move_cursor_down(new_line - old_line)?;
+
+                    let new_pos_x = (prompt_len + position + next_space) % line_size;
+                    let old_pos_x = (prompt_len + position) % line_size;
+                    let diff_pos_x = new_pos_x as i64 - old_pos_x as i64;
+                    if diff_pos_x < 0 {
+                        term.move_cursor_left(-diff_pos_x as usize)?;
+                    } else {
+                        term.move_cursor_right((diff_pos_x) as usize)?;
+                    }
+                    position += next_space;
+                } else {
+                    let new_line = (prompt_len + chars.len()) / line_size;
+                    let old_line = (prompt_len + position) / line_size;
+                    term.move_cursor_down(new_line - old_line)?;
+
+                    let new_pos_x = (prompt_len + chars.len()) % line_size;
+                    let old_pos_x = (prompt_len + position) % line_size;
+                    let diff_pos_x = new_pos_x as i64 - old_pos_x as i64;
+                    match diff_pos_x.cmp(&0) {
+                        Ordering::Less => {
+                            term.move_cursor_left((-diff_pos_x - 1) as usize)?;
+                        }
+                        Ordering::Equal => {}
+                        Ordering::Greater => {
+                            term.move_cursor_right((diff_pos_x) as usize)?;
+                        }
+                    }
+                    position = chars.len();
+                }
+
+                term.flush()?;
             }
+            Key::Enter => break,
+            _ => (),
         }
     }
+    let input = chars.iter().collect::<String>();
+    term.write_line("")?;
+
+    Ok(input)
 }
