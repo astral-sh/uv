@@ -1225,6 +1225,14 @@ fn is_windows_store_shim(_path: &Path) -> bool {
     false
 }
 
+impl PythonVariant {
+    fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
+        match self {
+            PythonVariant::Default => !interpreter.gil_disabled(),
+            PythonVariant::Freethreaded => interpreter.gil_disabled(),
+        }
+    }
+}
 impl PythonRequest {
     /// Create a request from a string.
     ///
@@ -1798,27 +1806,30 @@ impl VersionRequest {
 
     /// Check if a interpreter matches the requested Python version.
     pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
-        if self.is_freethreaded() && !interpreter.gil_disabled() {
-            return false;
-        }
         match self {
-            Self::Any | Self::Default => true,
-            Self::Major(major, _) => interpreter.python_major() == *major,
-            Self::MajorMinor(major, minor, _) => {
-                (interpreter.python_major(), interpreter.python_minor()) == (*major, *minor)
+            Self::Any => true,
+            // Do not use free-threaded interpreters by default
+            Self::Default => PythonVariant::Default.matches_interpreter(interpreter),
+            Self::Major(major, variant) => {
+                interpreter.python_major() == *major && variant.matches_interpreter(interpreter)
             }
-            Self::MajorMinorPatch(major, minor, patch, _) => {
+            Self::MajorMinor(major, minor, variant) => {
+                (interpreter.python_major(), interpreter.python_minor()) == (*major, *minor)
+                    && variant.matches_interpreter(interpreter)
+            }
+            Self::MajorMinorPatch(major, minor, patch, variant) => {
                 (
                     interpreter.python_major(),
                     interpreter.python_minor(),
                     interpreter.python_patch(),
                 ) == (*major, *minor, *patch)
+                    && variant.matches_interpreter(interpreter)
             }
-            Self::Range(specifiers, _) => {
+            Self::Range(specifiers, variant) => {
                 let version = interpreter.python_version().only_release();
-                specifiers.contains(&version)
+                specifiers.contains(&version) && variant.matches_interpreter(interpreter)
             }
-            Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
+            Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
                 let version = interpreter.python_version();
                 let Some(interpreter_prerelease) = version.pre() else {
                     return false;
@@ -1828,6 +1839,7 @@ impl VersionRequest {
                     interpreter.python_minor(),
                     interpreter_prerelease,
                 ) == (*major, *minor, *prerelease)
+                    && variant.matches_interpreter(interpreter)
             }
         }
     }
