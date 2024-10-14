@@ -117,10 +117,10 @@ fn test_prepare_metadata() {
         .path()
         .join("uv_backend-0.1.0.dist-info/RECORD");
     assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-        uv_backend-0.1.0.dist-info/WHEEL,sha256=70ce44709b6a53e0d0c5a6755b0290179697020f1f867e794f26154fe4825738,79
-        uv_backend-0.1.0.dist-info/METADATA,sha256=e4a0d390317d7182f65ea978254c71ed283e0a4242150cf1c99a694b113ff68d,224
-        uv_backend-0.1.0.dist-info/RECORD,,
-        "###);
+    uv_backend-0.1.0.dist-info/WHEEL,sha256=1889a32410898a395359e85de53e3063be35d9113130eaf23659cb84740c0c6c,79
+    uv_backend-0.1.0.dist-info/METADATA,sha256=e4a0d390317d7182f65ea978254c71ed283e0a4242150cf1c99a694b113ff68d,224
+    uv_backend-0.1.0.dist-info/RECORD,,
+    "###);
 
     let wheel_file = metadata_dir.path().join("uv_backend-0.1.0.dist-info/WHEEL");
     let filters = vec![(uv_version::version(), "[VERSION]")];
