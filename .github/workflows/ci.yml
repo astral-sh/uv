@@ -997,13 +997,14 @@ jobs:
             code:
               - "crates/uv-publish/**/*"
               - "scripts/publish/**/*"
+              - ".github/workflows/ci.yml"
 
   integration-test-publish:
     timeout-minutes: 10
     needs: integration-test-publish-changed
     name: "integration test | uv publish"
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     environment: uv-test-publish
     env:
       # No dbus in GitHub Actions
