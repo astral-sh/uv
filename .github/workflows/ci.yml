@@ -109,7 +109,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-clippy-xwin:
-    timeout-minutes: 10
+    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
+    timeout-minutes: 20
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
@@ -324,7 +325,8 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
-    timeout-minutes: 10
+    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
+    timeout-minutes: 20
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
