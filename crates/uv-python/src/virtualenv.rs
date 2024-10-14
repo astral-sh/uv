@@ -39,9 +39,9 @@ pub struct PyVenvConfiguration {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Broken virtualenv `{0}`: `pyvenv.cfg` is missing")]
+    #[error("Broken virtual environment `{0}`: `pyvenv.cfg` is missing")]
     MissingPyVenvCfg(PathBuf),
-    #[error("Broken virtualenv `{0}`: `pyvenv.cfg` could not be parsed")]
+    #[error("Broken virtual environment `{0}`: `pyvenv.cfg` could not be parsed")]
     ParsePyVenvCfg(PathBuf, #[source] io::Error),
 }
 
