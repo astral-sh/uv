@@ -5,6 +5,8 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use std::path::Path;
 
+use uv_static::EnvVars;
+
 use crate::common::{self, decode_token, packse_index_url, uv_snapshot, TestContext};
 
 /// Add a PyPI requirement.
@@ -3702,7 +3704,7 @@ fn add_lower_bound_local() -> Result<()> {
     "#})?;
 
     // Adding `torch` should include a lower-bound, but no local segment.
-    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--extra-index-url").arg(packse_index_url()).env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("local-simple-a").arg("--extra-index-url").arg(packse_index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

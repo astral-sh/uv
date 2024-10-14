@@ -4,6 +4,7 @@ use assert_cmd::assert::OutputAssertExt;
 use std::env;
 use std::path::Path;
 use tempfile::TempDir;
+use uv_static::EnvVars;
 
 /// Test that build backend works if we invoke it directly.
 ///
@@ -40,7 +41,7 @@ fn uv_backend_direct() -> Result<()> {
         .arg("-c")
         .arg("import uv_backend\nuv_backend.greet()")
         // Python on windows
-        .env("PYTHONUTF8", "1"), @r###"
+        .env(EnvVars::PYTHONUTF8, "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

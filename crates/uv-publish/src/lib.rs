@@ -30,6 +30,7 @@ use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFile
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{Metadata23, MetadataError};
+use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
 pub use trusted_publishing::TrustedPublishingToken;
@@ -247,7 +248,7 @@ pub async fn check_trusted_publishing(
                 return Ok(None);
             }
             // If we aren't in GitHub Actions, we can't use trusted publishing.
-            if env::var("GITHUB_ACTIONS") != Ok("true".to_string()) {
+            if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
                 return Ok(None);
             }
             // We could check for credentials from the keyring or netrc the auth middleware first, but
@@ -266,7 +267,7 @@ pub async fn check_trusted_publishing(
         }
         TrustedPublishing::Always => {
             debug!("Using trusted publishing for GitHub Actions");
-            if env::var("GITHUB_ACTIONS") != Ok("true".to_string()) {
+            if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
                 warn_user_once!(
                     "Trusted publishing was requested, but you're not in GitHub Actions."
                 );

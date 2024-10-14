@@ -24,6 +24,7 @@ uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true, features = ["schemars"] }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive"], optional = true }
 either = { workspace = true }

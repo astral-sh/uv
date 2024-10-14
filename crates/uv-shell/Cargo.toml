@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 uv-fs = { workspace = true }
+uv-static = { workspace = true }
 
 anyhow = { workspace = true }
 home = { workspace = true }

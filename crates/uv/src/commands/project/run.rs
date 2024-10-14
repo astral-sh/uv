@@ -32,6 +32,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
 use uv_scripts::Pep723Item;
+use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
 
@@ -859,17 +860,17 @@ pub(crate) async fn run(
             .chain(std::iter::once(base_interpreter.scripts()))
             .map(PathBuf::from)
             .chain(
-                std::env::var_os("PATH")
+                std::env::var_os(EnvVars::PATH)
                     .as_ref()
                     .iter()
                     .flat_map(std::env::split_paths),
             ),
     )?;
-    process.env("PATH", new_path);
+    process.env(EnvVars::PATH, new_path);
 
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
-        process.env("VIRTUAL_ENV", interpreter.sys_prefix().as_os_str());
+        process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     };
 
     // Spawn and wait for completion

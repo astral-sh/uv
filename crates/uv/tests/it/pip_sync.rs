@@ -16,6 +16,7 @@ use crate::common::{
     TestContext,
 };
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
     Command::new(venv_to_interpreter(venv))
@@ -427,7 +428,7 @@ fn link() -> Result<()> {
     // Create a separate virtual environment, but reuse the same cache.
     let context2 = TestContext::new("3.12");
     let mut cmd = context1.pip_sync();
-    cmd.env("VIRTUAL_ENV", context2.venv.as_os_str())
+    cmd.env(EnvVars::VIRTUAL_ENV, context2.venv.as_os_str())
         .current_dir(&context2.temp_dir);
 
     uv_snapshot!(cmd
@@ -706,7 +707,7 @@ fn install_sdist() -> Result<()> {
     requirements_txt.write_str("source-distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1539,7 +1540,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     requirements_txt.write_str("source_distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1562,7 +1563,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     context.reset_venv();
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1609,7 +1610,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     );
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -3347,7 +3348,7 @@ fn no_stream() -> Result<()> {
         .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--index-url")
         .arg("https://buf.build/gen/python"), @r###"
@@ -3626,7 +3627,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
         .write_str("source-distribution==0.0.1 --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -4827,7 +4828,7 @@ fn require_hashes_registry_no_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--index-url")
@@ -4857,7 +4858,7 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--find-links")
@@ -4885,7 +4886,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4915,7 +4916,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4946,7 +4947,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4971,7 +4972,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -4998,7 +4999,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -5037,7 +5038,7 @@ fn require_hashes_url() -> Result<()> {
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5065,7 +5066,7 @@ fn require_hashes_url_other_fragment() -> Result<()> {
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5090,7 +5091,7 @@ fn require_hashes_url_invalid() -> Result<()> {
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5124,7 +5125,7 @@ fn require_hashes_url_ignore() -> Result<()> {
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5158,7 +5159,7 @@ fn require_hashes_url_unnamed() -> Result<()> {
         .write_str("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5211,7 +5212,7 @@ fn target_built_distribution() -> Result<()> {
         .arg("-B")
         .arg("-c")
         .arg("import iniconfig")
-        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
         .current_dir(&context.temp_dir)
         .assert()
         .success();
@@ -5308,7 +5309,7 @@ fn target_source_distribution() -> Result<()> {
         .arg("-B")
         .arg("-c")
         .arg("import iniconfig")
-        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
         .current_dir(&context.temp_dir)
         .assert()
         .success();
@@ -5375,7 +5376,7 @@ fn target_no_build_isolation() -> Result<()> {
         .arg("-B")
         .arg("-c")
         .arg("import wheel")
-        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
         .current_dir(&context.temp_dir)
         .assert()
         .success();
@@ -5418,7 +5419,7 @@ fn prefix() -> Result<()> {
         .arg("-c")
         .arg("import iniconfig")
         .env(
-            "PYTHONPATH",
+            EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
         )
         .current_dir(&context.temp_dir)

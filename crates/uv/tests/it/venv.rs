@@ -3,7 +3,9 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
+
 use uv_python::{PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME};
+use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
 
@@ -53,7 +55,7 @@ fn create_venv_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // `uv venv` ignores `UV_PROJECT_ENVIRONMENT` when it's not a project
-    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -83,7 +85,7 @@ fn create_venv_project_environment() -> Result<()> {
     )?;
 
     // But, if we're in a project we'll respect it
-    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -104,7 +106,7 @@ fn create_venv_project_environment() -> Result<()> {
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.venv().env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(child.path()), @r###"
+    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(child.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -192,7 +194,7 @@ fn create_venv_ignores_virtual_env_variable() {
     // We shouldn't care if `VIRTUAL_ENV` is set to an non-existent directory
     // because we ignore virtual environment interpreter sources (we require a system interpreter)
     uv_snapshot!(context.filters(), context.venv()
-        .env("VIRTUAL_ENV", context.temp_dir.child("does-not-exist").as_os_str()), @r###"
+        .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child("does-not-exist").as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -594,7 +596,7 @@ fn create_venv_unknown_python_minor() {
         .arg("--python")
         .arg("3.100")
         // Unset this variable to force what the user would see
-        .env_remove("UV_TEST_PYTHON_PATH");
+        .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
     if cfg!(windows) {
         uv_snapshot!(&mut command, @r###"
@@ -632,7 +634,7 @@ fn create_venv_unknown_python_patch() {
         .arg("--python")
         .arg("3.12.100")
         // Unset this variable to force what the user would see
-        .env_remove("UV_TEST_PYTHON_PATH");
+        .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
     if cfg!(windows) {
         uv_snapshot!(&mut command, @r###"
@@ -859,7 +861,7 @@ fn windows_shims() -> Result<()> {
     // Create a virtual environment at `.venv` with the shim
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
-        .env("UV_TEST_PYTHON_PATH", format!("{};{}", shim_path.display(), context.python_path().to_string_lossy())), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, format!("{};{}", shim_path.display(), context.python_path().to_string_lossy())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1001,7 +1003,7 @@ fn verify_nested_pyvenv_cfg() -> Result<()> {
         .arg(subvenv.as_os_str())
         .arg("--python")
         .arg("3.12")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
         .assert()
         .success();
 
@@ -1037,7 +1039,7 @@ fn path_with_trailing_space_gives_proper_error() {
     ));
     uv_snapshot!(filters, std::process::Command::new(crate::common::get_bin())
         .arg("venv")
-        .env("UV_CACHE_DIR", path_with_trailing_slash), @r###"
+        .env(EnvVars::UV_CACHE_DIR, path_with_trailing_slash), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

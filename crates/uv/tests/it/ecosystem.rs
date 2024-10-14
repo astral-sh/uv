@@ -3,6 +3,7 @@ use anyhow::Result;
 use insta::assert_snapshot;
 use std::path::Path;
 use std::process::Command;
+use uv_static::EnvVars;
 
 // These tests just run `uv lock` on an assorted of ecosystem
 // projects.
@@ -46,7 +47,7 @@ fn home_assistant_core() -> Result<()> {
 #[test]
 fn transformers() -> Result<()> {
     // Takes too long on non-Linux in CI.
-    if !cfg!(target_os = "linux") && std::env::var_os("CI").is_some() {
+    if !cfg!(target_os = "linux") && std::env::var_os(EnvVars::CI).is_some() {
         return Ok(());
     }
     lock_ecosystem_package("3.12", "transformers")
@@ -62,7 +63,7 @@ fn warehouse() -> Result<()> {
         return Ok(());
     }
     // Also, takes too long on non-Linux in CI.
-    if !cfg!(target_os = "linux") && std::env::var_os("CI").is_some() {
+    if !cfg!(target_os = "linux") && std::env::var_os(EnvVars::CI).is_some() {
         return Ok(());
     }
     lock_ecosystem_package("3.11", "warehouse")
@@ -101,18 +102,18 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
         .arg("--cache-dir")
         .arg(&cache_dir)
         // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
-        .env_remove("VIRTUAL_ENV")
-        .env("UV_NO_WRAP", "1")
-        .env("HOME", context.home_dir.as_os_str())
-        .env("UV_PYTHON_INSTALL_DIR", "")
-        .env("UV_TEST_PYTHON_PATH", context.python_path())
-        .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .env(EnvVars::UV_NO_WRAP, "1")
+        .env(EnvVars::HOME, context.home_dir.as_os_str())
+        .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
+        .env(EnvVars::UV_TEST_PYTHON_PATH, context.python_path())
+        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .current_dir(context.temp_dir.path());
 
     if cfg!(all(windows, debug_assertions)) {
         // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
         // default windows stack of 1MB
-        command.env("UV_STACK_SIZE", (2 * 1024 * 1024).to_string());
+        command.env(EnvVars::UV_STACK_SIZE, (2 * 1024 * 1024).to_string());
     }
     let (snapshot, _) = common::run_and_format(
         &mut command,

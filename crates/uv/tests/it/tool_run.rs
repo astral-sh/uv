@@ -2,6 +2,7 @@ use crate::common::{copy_dir_all, uv_snapshot, TestContext};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use uv_static::EnvVars;
 
 #[test]
 fn tool_run_args() {
@@ -13,8 +14,8 @@ fn tool_run_args() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--version")
         .arg("pytest")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -27,8 +28,8 @@ fn tool_run_args() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -49,8 +50,8 @@ fn tool_run_args() {
         .arg("--")
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -70,8 +71,8 @@ fn tool_run_at_version() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest@8.0.0")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -91,8 +92,8 @@ fn tool_run_at_version() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest@")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -105,8 +106,8 @@ fn tool_run_at_version() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest@invalid")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -131,8 +132,8 @@ fn tool_run_at_version() {
         .arg("pytest")
         .arg("pytest@8.0.0")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -164,8 +165,8 @@ fn tool_run_from_version() {
         .arg("pytest==8.0.0")
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -192,8 +193,8 @@ fn tool_run_suggest_valid_commands() {
     .arg("--from")
     .arg("black")
     .arg("orange")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -217,8 +218,8 @@ fn tool_run_suggest_valid_commands() {
 
     uv_snapshot!(context.filters(), context.tool_run()
     .arg("fastapi-cli")
-    .env("UV_TOOL_DIR", tool_dir.as_os_str())
-    .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -249,10 +250,10 @@ fn tool_run_warn_executable_not_in_from() {
         .arg("--from")
         .arg("fastapi")
         .arg("fastapi")
-        .env("UV_EXCLUDE_NEWER", "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
         // (FastAPI 0.111 is only available from this date onwards)
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -309,8 +310,8 @@ fn tool_run_from_install() {
     context
         .tool_install()
         .arg("black==24.1.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
@@ -318,8 +319,8 @@ fn tool_run_from_install() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -334,8 +335,8 @@ fn tool_run_from_install() {
         .arg("--isolated")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -358,8 +359,8 @@ fn tool_run_from_install() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("black@24.1.1")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -386,8 +387,8 @@ fn tool_run_from_install() {
         .arg("iniconfig")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -413,8 +414,8 @@ fn tool_run_from_install() {
         .arg("black==24.2.0")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -446,8 +447,8 @@ fn tool_run_cache() {
         .arg("3.12")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -472,8 +473,8 @@ fn tool_run_cache() {
         .arg("3.12")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -491,8 +492,8 @@ fn tool_run_cache() {
         .arg("--refresh")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -519,8 +520,8 @@ fn tool_run_cache() {
         .arg("packaging")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -545,8 +546,8 @@ fn tool_run_cache() {
         .arg("3.11")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -571,8 +572,8 @@ fn tool_run_cache() {
         .arg("3.12")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -591,8 +592,8 @@ fn tool_run_cache() {
         .arg("iniconfig")
         .arg("black")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -624,8 +625,8 @@ fn tool_run_url() {
         .arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
         .arg("flask")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -664,8 +665,8 @@ fn tool_run_requirements_txt() {
         .arg("typing-extensions")
         .arg("flask")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -710,8 +711,8 @@ fn tool_run_requirements_txt_arguments() {
         .arg("requirements.txt")
         .arg("flask")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -744,8 +745,8 @@ fn tool_run_list_installed() {
 
     // No tools installed.
     uv_snapshot!(context.filters(), context.tool_run()
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -760,15 +761,15 @@ fn tool_run_list_installed() {
     context
         .tool_install()
         .arg("black==24.2.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
     // List installed tools.
     uv_snapshot!(context.filters(), context.tool_run()
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -793,12 +794,12 @@ fn tool_run_without_output() {
 
     // On the first run, only show the summary line.
     uv_snapshot!(context.filters(), context.tool_run()
-        .env_remove("UV_SHOW_RESOLUTION")
+        .env_remove(EnvVars::UV_SHOW_RESOLUTION)
         .arg("--")
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -810,12 +811,12 @@ fn tool_run_without_output() {
 
     // Subsequent runs are quiet.
     uv_snapshot!(context.filters(), context.tool_run()
-        .env_remove("UV_SHOW_RESOLUTION")
+        .env_remove(EnvVars::UV_SHOW_RESOLUTION)
         .arg("--")
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -869,8 +870,8 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .arg("ipython")
         .arg("-c")
         .arg("import numpy; import pandas;")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -949,8 +950,8 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
         .arg("ipython")
         .arg("-c")
         .arg("import numpy; import pandas;")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1028,8 +1029,8 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .arg("ipython")
         .arg("-c")
         .arg("import numpy; import pandas;")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1110,8 +1111,8 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
         .arg("ipython")
         .arg("-c")
         .arg("import numpy; import pandas;")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1186,8 +1187,8 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
         .arg("iniconfig")
         .arg("flask")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1211,7 +1212,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     "###);
 
     // Requesting an editable requirement should install it in a layer, even if it satisfied
-    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg("./src/anyio_local").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()),
+    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg("./src/anyio_local").arg("flask").arg("--version").env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()),
     @r###"
     success: true
     exit_code: 0
@@ -1235,7 +1236,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     "###);
 
     // Requesting the project itself should use a new environment.
-    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg(".").arg("flask").arg("--version").env("UV_TOOL_DIR", tool_dir.as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.tool_run().arg("--with-editable").arg(".").arg("flask").arg("--version").env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1267,8 +1268,8 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
         .arg("./foo")
         .arg("flask")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir
-        .as_os_str()).env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir
+        .as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1289,8 +1290,8 @@ fn warn_no_executables_found() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("requests")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1320,8 +1321,8 @@ fn tool_run_upgrade_warn() {
         .arg("--upgrade")
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1344,8 +1345,8 @@ fn tool_run_upgrade_warn() {
         .arg("typing-extensions")
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1373,8 +1374,8 @@ fn tool_run_resolution_error() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("add")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1395,8 +1396,8 @@ fn tool_run_latest() {
     context
         .tool_install()
         .arg("pytest==7.0.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
         .success();
 
@@ -1404,8 +1405,8 @@ fn tool_run_latest() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1418,8 +1419,8 @@ fn tool_run_latest() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest@latest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1439,8 +1440,8 @@ fn tool_run_latest() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest")
         .arg("--version")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

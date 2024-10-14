@@ -7,6 +7,7 @@ use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 
 use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
+use uv_static::EnvVars;
 
 #[test]
 fn sync() -> Result<()> {
@@ -1643,7 +1644,7 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Running `uv sync` should create `foo` in the project directory when customized
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1668,7 +1669,7 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // An absolute path can be provided
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foobar/.venv"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foobar/.venv"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1693,7 +1694,7 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // An absolute path can be provided
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", context.temp_dir.join("bar")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, context.temp_dir.join("bar")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1714,7 +1715,7 @@ fn sync_custom_environment_path() -> Result<()> {
     // And, it can be outside the project
     let tempdir = tempdir_in(TestContext::test_bucket_dir())?;
     context = context.with_filtered_path(tempdir.path(), "OTHER_TEMPDIR");
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", tempdir.path().join(".venv")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, tempdir.path().join(".venv")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1735,7 +1736,7 @@ fn sync_custom_environment_path() -> Result<()> {
     fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
     fs_err::create_dir(context.temp_dir.join("foo"))?;
     fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1761,7 +1762,7 @@ fn sync_custom_environment_path() -> Result<()> {
     fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
 
     // We can delete and use it
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1838,7 +1839,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Running `uv sync` should create `foo` in the workspace root when customized
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1863,7 +1864,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Similarly, `uv sync` from the child project uses `foo` relative to  the workspace root
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(context.temp_dir.join("child")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(context.temp_dir.join("child")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1886,7 +1887,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::missing());
 
     // And, `uv sync --package child` uses `foo` relative to  the workspace root
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1927,7 +1928,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     )?;
 
     // We should not warn if it matches the project environment
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join(".venv")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join(".venv")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1940,7 +1941,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // Including if it's a relative path that matches
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", ".venv"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, ".venv"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1958,7 +1959,7 @@ fn sync_virtual_env_warning() -> Result<()> {
         let link = context.temp_dir.join("link");
         symlink(context.temp_dir.join(".venv"), &link)?;
 
-        uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", link), @r###"
+        uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, link), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1970,7 +1971,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     }
 
     // But we should warn if it's a different path
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1982,7 +1983,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // Including absolute paths
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join("foo")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join("foo")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1994,7 +1995,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // We should not warn if the project environment has been customized and matches
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2008,7 +2009,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // But we should warn if they don't match still
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2027,7 +2028,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // And `VIRTUAL_ENV` is resolved relative to the project root so with relative paths we should
     // warn from a child too
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(&child), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2039,7 +2040,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // But, a matching absolute path shouldn't warn
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join("foo")).env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join("foo")).env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(&child), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

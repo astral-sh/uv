@@ -6,6 +6,8 @@ use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use indoc::indoc;
 
+use uv_static::EnvVars;
+
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
@@ -377,7 +379,7 @@ fn show_editable() -> Result<()> {
         .arg("../../scripts/packages/poetry_editable")
         .current_dir(current_dir()?)
         .env(
-            "CARGO_TARGET_DIR",
+            EnvVars::CARGO_TARGET_DIR,
             "../../../target/target_install_editable",
         )
         .assert()

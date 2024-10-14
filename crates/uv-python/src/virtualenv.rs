@@ -6,6 +6,7 @@ use std::{
 use fs_err as fs;
 use thiserror::Error;
 use uv_pypi_types::Scheme;
+use uv_static::EnvVars;
 
 /// The layout of a virtual environment.
 #[derive(Debug)]
@@ -49,7 +50,7 @@ pub enum Error {
 ///
 /// Supports `VIRTUAL_ENV`.
 pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
-    if let Some(dir) = env::var_os("VIRTUAL_ENV").filter(|value| !value.is_empty()) {
+    if let Some(dir) = env::var_os(EnvVars::VIRTUAL_ENV).filter(|value| !value.is_empty()) {
         return Some(PathBuf::from(dir));
     }
 
@@ -60,7 +61,7 @@ pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
 ///
 /// Supports `CONDA_PREFIX`.
 pub(crate) fn conda_prefix_from_env() -> Option<PathBuf> {
-    if let Some(dir) = env::var_os("CONDA_PREFIX").filter(|value| !value.is_empty()) {
+    if let Some(dir) = env::var_os(EnvVars::CONDA_PREFIX).filter(|value| !value.is_empty()) {
         return Some(PathBuf::from(dir));
     }
 

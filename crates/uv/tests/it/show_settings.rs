@@ -1,16 +1,17 @@
 use std::process::Command;
 
 use assert_fs::prelude::*;
+use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
 
 /// and operating system.
 fn add_shared_args(mut command: Command) -> Command {
     command
-        .env("UV_LINK_MODE", "clone")
-        .env("UV_CONCURRENT_DOWNLOADS", "50")
-        .env("UV_CONCURRENT_BUILDS", "16")
-        .env("UV_CONCURRENT_INSTALLS", "8");
+        .env(EnvVars::UV_LINK_MODE, "clone")
+        .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
+        .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "8");
     command
 }
 
@@ -1972,7 +1973,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2098,7 +2099,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2224,7 +2225,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2352,7 +2353,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2499,7 +2500,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

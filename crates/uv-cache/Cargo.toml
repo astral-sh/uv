@@ -23,6 +23,7 @@ uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 directories = { workspace = true }

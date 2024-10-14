@@ -6,12 +6,6 @@ use indexmap::IndexSet;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
-use tracing::trace;
-use uv_distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
-use uv_normalize::PackageName;
-use uv_pep440::Version;
-use uv_pep508::MarkerTree;
-
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
@@ -21,6 +15,12 @@ use crate::pubgrub::{
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
+use tracing::trace;
+use uv_distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
+use uv_static::EnvVars;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -213,7 +213,8 @@ impl std::fmt::Display for NoSolutionError {
         // Transform the error tree for reporting
         let mut tree = self.error.clone();
         simplify_derivation_tree_markers(&self.python_requirement, &mut tree);
-        let should_display_tree = std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some()
+        let should_display_tree = std::env::var_os(EnvVars::UV_INTERNAL__SHOW_DERIVATION_TREE)
+            .is_some()
             || tracing::enabled!(tracing::Level::TRACE);
 
         if should_display_tree {
@@ -268,7 +269,7 @@ fn display_tree(
     display_tree_inner(error, &mut lines, 0);
     lines.reverse();
 
-    if std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some() {
+    if std::env::var_os(EnvVars::UV_INTERNAL__SHOW_DERIVATION_TREE).is_some() {
         eprintln!("{name}\n{}", lines.join("\n"));
     } else {
         trace!("{name}\n{}", lines.join("\n"));

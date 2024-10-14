@@ -10,6 +10,7 @@ use assert_fs::{fixture::ChildPath, prelude::*, TempDir};
 use indoc::{formatdoc, indoc};
 use temp_env::with_vars;
 use test_log::test;
+use uv_static::EnvVars;
 
 use uv_cache::Cache;
 
@@ -85,13 +86,13 @@ impl TestContext {
 
         let mut run_vars = vec![
             // Ensure `PATH` is used
-            ("UV_TEST_PYTHON_PATH", None),
+            (EnvVars::UV_TEST_PYTHON_PATH, None),
             // Ignore active virtual environments (i.e. that the dev is using)
-            ("VIRTUAL_ENV", None),
-            ("PATH", path.as_deref()),
+            (EnvVars::VIRTUAL_ENV, None),
+            (EnvVars::PATH, path.as_deref()),
             // Use the temporary python directory
             (
-                "UV_PYTHON_INSTALL_DIR",
+                EnvVars::UV_PYTHON_INSTALL_DIR,
                 Some(self.installations.root().as_os_str()),
             ),
             // Set a working directory
@@ -817,14 +818,15 @@ fn find_best_python_skips_source_without_match() -> Result<()> {
     TestContext::mock_venv(&venv, "3.12.0")?;
     context.add_python_versions(&["3.10.1"])?;
 
-    let python = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-        find_best_python_installation(
-            &PythonRequest::parse("3.10"),
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python =
+        context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+            find_best_python_installation(
+                &PythonRequest::parse("3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
     assert!(
         matches!(
             python,
@@ -846,14 +848,15 @@ fn find_best_python_returns_to_earlier_source_on_fallback() -> Result<()> {
     TestContext::mock_venv(&venv, "3.10.1")?;
     context.add_python_versions(&["3.10.3"])?;
 
-    let python = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-        find_best_python_installation(
-            &PythonRequest::parse("3.10.2"),
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python =
+        context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+            find_best_python_installation(
+                &PythonRequest::parse("3.10.2"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
     assert!(
         matches!(
             python,
@@ -879,14 +882,15 @@ fn find_python_from_active_python() -> Result<()> {
     let venv = context.tempdir.child("some-venv");
     TestContext::mock_venv(&venv, "3.12.0")?;
 
-    let python = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-        find_python_installation(
-            &PythonRequest::Default,
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python =
+        context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.12.0",
@@ -903,14 +907,15 @@ fn find_python_from_active_python_prerelease() -> Result<()> {
     let venv = context.tempdir.child("some-venv");
     TestContext::mock_venv(&venv, "3.13.0rc1")?;
 
-    let python = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-        find_python_installation(
-            &PythonRequest::Default,
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python =
+        context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.13.0rc1",
@@ -926,8 +931,9 @@ fn find_python_from_conda_prefix() -> Result<()> {
     let condaenv = context.tempdir.child("condaenv");
     TestContext::mock_conda_prefix(&condaenv, "3.12.0")?;
 
-    let python =
-        context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
+    let python = context.run_with_vars(
+        &[(EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str()))],
+        || {
             // Note this python is not treated as a system interpreter
             find_python_installation(
                 &PythonRequest::Default,
@@ -935,7 +941,8 @@ fn find_python_from_conda_prefix() -> Result<()> {
                 PythonPreference::OnlySystem,
                 &context.cache,
             )
-        })??;
+        },
+    )??;
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.12.0",
@@ -955,8 +962,8 @@ fn find_python_from_conda_prefix_and_virtualenv() -> Result<()> {
 
     let python = context.run_with_vars(
         &[
-            ("VIRTUAL_ENV", Some(venv.as_os_str())),
-            ("CONDA_PREFIX", Some(condaenv.as_os_str())),
+            (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
+            (EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str())),
         ],
         || {
             find_python_installation(
@@ -976,15 +983,17 @@ fn find_python_from_conda_prefix_and_virtualenv() -> Result<()> {
     // Put a virtual environment in the working directory
     let venv = context.workdir.child(".venv");
     TestContext::mock_venv(venv, "3.12.2")?;
-    let python =
-        context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
+    let python = context.run_with_vars(
+        &[(EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str()))],
+        || {
             find_python_installation(
                 &PythonRequest::Default,
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
             )
-        })??;
+        },
+    )??;
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.12.1",
@@ -1046,14 +1055,15 @@ fn find_python_skips_broken_active_python() -> Result<()> {
     // Delete the pyvenv cfg to break the virtualenv
     fs_err::remove_file(venv.join("pyvenv.cfg"))?;
 
-    let python = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-        find_python_installation(
-            &PythonRequest::Default,
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python =
+        context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.12.0",
@@ -1079,7 +1089,10 @@ fn find_python_from_parent_interpreter() -> Result<()> {
     )?;
 
     let python = context.run_with_vars(
-        &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
+        &[(
+            EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+            Some(parent.as_os_str()),
+        )],
         || {
             find_python_installation(
                 &PythonRequest::Default,
@@ -1101,8 +1114,11 @@ fn find_python_from_parent_interpreter() -> Result<()> {
     context.add_python_versions(&["3.12.3"])?;
     let python = context.run_with_vars(
         &[
-            ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
-            ("VIRTUAL_ENV", Some(venv.as_os_str())),
+            (
+                EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                Some(parent.as_os_str()),
+            ),
+            (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
         ],
         || {
             find_python_installation(
@@ -1122,8 +1138,11 @@ fn find_python_from_parent_interpreter() -> Result<()> {
     // Test with `EnvironmentPreference::ExplicitSystem`
     let python = context.run_with_vars(
         &[
-            ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
-            ("VIRTUAL_ENV", Some(venv.as_os_str())),
+            (
+                EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                Some(parent.as_os_str()),
+            ),
+            (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
         ],
         || {
             find_python_installation(
@@ -1143,8 +1162,11 @@ fn find_python_from_parent_interpreter() -> Result<()> {
     // Test with `EnvironmentPreference::OnlySystem`
     let python = context.run_with_vars(
         &[
-            ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
-            ("VIRTUAL_ENV", Some(venv.as_os_str())),
+            (
+                EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                Some(parent.as_os_str()),
+            ),
+            (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
         ],
         || {
             find_python_installation(
@@ -1164,8 +1186,11 @@ fn find_python_from_parent_interpreter() -> Result<()> {
     // Test with `EnvironmentPreference::OnlyVirtual`
     let python = context.run_with_vars(
         &[
-            ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
-            ("VIRTUAL_ENV", Some(venv.as_os_str())),
+            (
+                EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                Some(parent.as_os_str()),
+            ),
+            (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
         ],
         || {
             find_python_installation(
@@ -1200,7 +1225,10 @@ fn find_python_from_parent_interpreter_prerelease() -> Result<()> {
     )?;
 
     let python = context.run_with_vars(
-        &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
+        &[(
+            EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+            Some(parent.as_os_str()),
+        )],
         || {
             find_python_installation(
                 &PythonRequest::Default,
@@ -1227,14 +1255,15 @@ fn find_python_active_python_skipped_if_system_required() -> Result<()> {
     context.add_python_versions(&["3.10.0", "3.11.1", "3.12.2"])?;
 
     // Without a specific request
-    let python = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-        find_python_installation(
-            &PythonRequest::Default,
-            EnvironmentPreference::OnlySystem,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python =
+        context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.10.0",
@@ -1242,14 +1271,15 @@ fn find_python_active_python_skipped_if_system_required() -> Result<()> {
     );
 
     // With a requested minor version
-    let python = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-        find_python_installation(
-            &PythonRequest::parse("3.12"),
-            EnvironmentPreference::OnlySystem,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python =
+        context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+            find_python_installation(
+                &PythonRequest::parse("3.12"),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.12.2",
@@ -1257,14 +1287,15 @@ fn find_python_active_python_skipped_if_system_required() -> Result<()> {
     );
 
     // With a patch version that cannot be python
-    let result = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-        find_python_installation(
-            &PythonRequest::parse("3.12.3"),
-            EnvironmentPreference::OnlySystem,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })?;
+    let result =
+        context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+            find_python_installation(
+                &PythonRequest::parse("3.12.3"),
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })?;
     assert!(
         result.is_err(),
         "We should not find an python; got {result:?}"
@@ -1293,7 +1324,7 @@ fn find_python_fails_if_no_virtualenv_and_system_not_allowed() -> Result<()> {
 
     // With an invalid virtual environment variable
     let result = context.run_with_vars(
-        &[("VIRTUAL_ENV", Some(context.tempdir.as_os_str()))],
+        &[(EnvVars::VIRTUAL_ENV, Some(context.tempdir.as_os_str()))],
         || {
             find_python_installation(
                 &PythonRequest::parse("3.12.3"),
@@ -1536,15 +1567,17 @@ fn find_python_allows_venv_directory_path() -> Result<()> {
     let other_venv = context.tempdir.child("foobar").child(".venv");
     TestContext::mock_venv(&other_venv, "3.11.1")?;
     context.add_python_versions(&["3.12.2"])?;
-    let python =
-        context.run_with_vars(&[("VIRTUAL_ENV", Some(other_venv.as_os_str()))], || {
+    let python = context.run_with_vars(
+        &[(EnvVars::VIRTUAL_ENV, Some(other_venv.as_os_str()))],
+        || {
             find_python_installation(
                 &PythonRequest::parse(venv.to_str().unwrap()),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
             )
-        })??;
+        },
+    )??;
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.10.0",

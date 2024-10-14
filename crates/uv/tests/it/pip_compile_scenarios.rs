@@ -13,6 +13,8 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
 use predicates::prelude::predicate;
 
+use uv_static::EnvVars;
+
 use crate::common::{
     build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions, uv_snapshot,
     TestContext,
@@ -32,8 +34,8 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg("--find-links")
         .arg(build_vendor_links_url());
     context.add_shared_args(&mut command, true);
-    command.env_remove("UV_EXCLUDE_NEWER");
-    command.env("UV_TEST_PYTHON_PATH", python_path);
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    command.env(EnvVars::UV_TEST_PYTHON_PATH, python_path);
 
     command
 }

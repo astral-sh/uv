@@ -7,6 +7,8 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 
+use uv_static::EnvVars;
+
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
@@ -2226,7 +2228,7 @@ fn init_git_not_installed() {
     let child = context.temp_dir.child("foo");
 
     // Without explicit `--vcs git`, `uv init` succeeds without initializing a Git repository.
-    uv_snapshot!(context.filters(), context.init().env("PATH", &*child).arg(child.as_ref()), @r###"
+    uv_snapshot!(context.filters(), context.init().env(EnvVars::PATH, &*child).arg(child.as_ref()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2238,7 +2240,7 @@ fn init_git_not_installed() {
     // With explicit `--vcs git`, `uv init` will fail.
     let child = context.temp_dir.child("bar");
     // Set `PATH` to child to make `git` command cannot be found.
-    uv_snapshot!(context.filters(), context.init().env("PATH", &*child).arg(child.as_ref()).arg("--vcs").arg("git"), @r###"
+    uv_snapshot!(context.filters(), context.init().env(EnvVars::PATH, &*child).arg(child.as_ref()).arg("--vcs").arg("git"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

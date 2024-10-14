@@ -35,6 +35,7 @@ use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, PublishOptions, ResolverInstallerOptions,
     ResolverOptions,
 };
+use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
@@ -74,15 +75,15 @@ impl GlobalSettings {
             quiet: args.quiet,
             verbose: args.verbose,
             color: if args.no_color
-                || std::env::var_os("NO_COLOR")
+                || std::env::var_os(EnvVars::NO_COLOR)
                     .filter(|v| !v.is_empty())
                     .is_some()
             {
                 ColorChoice::Never
-            } else if std::env::var_os("FORCE_COLOR")
+            } else if std::env::var_os(EnvVars::FORCE_COLOR)
                 .filter(|v| !v.is_empty())
                 .is_some()
-                || std::env::var_os("CLICOLOR_FORCE")
+                || std::env::var_os(EnvVars::CLICOLOR_FORCE)
                     .filter(|v| !v.is_empty())
                     .is_some()
             {
@@ -2535,17 +2536,19 @@ impl PublishSettings {
 
 // Environment variables that are not exposed as CLI arguments.
 mod env {
+    use uv_static::EnvVars;
+
     pub(super) const CONCURRENT_DOWNLOADS: (&str, &str) =
-        ("UV_CONCURRENT_DOWNLOADS", "a non-zero integer");
+        (EnvVars::UV_CONCURRENT_DOWNLOADS, "a non-zero integer");
 
     pub(super) const CONCURRENT_BUILDS: (&str, &str) =
-        ("UV_CONCURRENT_BUILDS", "a non-zero integer");
+        (EnvVars::UV_CONCURRENT_BUILDS, "a non-zero integer");
 
     pub(super) const CONCURRENT_INSTALLS: (&str, &str) =
-        ("UV_CONCURRENT_INSTALLS", "a non-zero integer");
+        (EnvVars::UV_CONCURRENT_INSTALLS, "a non-zero integer");
 
     pub(super) const UV_PYTHON_DOWNLOADS: (&str, &str) = (
-        "UV_PYTHON_DOWNLOADS",
+        EnvVars::UV_PYTHON_DOWNLOADS,
         "one of 'auto', 'true', 'manual', 'never', or 'false'",
     );
 }
