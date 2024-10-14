@@ -25,7 +25,6 @@ uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
-directories = { workspace = true }
 etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 nanoid = { workspace = true }

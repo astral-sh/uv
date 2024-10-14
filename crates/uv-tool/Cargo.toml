@@ -28,7 +28,7 @@ uv-settings = { workspace = true }
 uv-state = { workspace = true }
 uv-virtualenv = { workspace = true }
 
-dirs-sys = { workspace = true }
+etcetera = { workspace = true }
 fs-err = { workspace = true }
 pathdiff = { workspace = true }
 serde = { workspace = true }
