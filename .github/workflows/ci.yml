@@ -655,6 +655,23 @@ jobs:
         run: |
           ./uv pip install anyio
 
+      - name: "Install free-threaded Python via uv"
+        run: |
+          ./uv python install 3.13t
+          ./uv venv -p 3.13t --python-preference only-managed
+
+      - name: "Check version"
+        run: |
+          .venv/bin/python --version
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install anyio
+
   integration-test-pypy-linux:
     timeout-minutes: 10
     needs: build-binary-linux
