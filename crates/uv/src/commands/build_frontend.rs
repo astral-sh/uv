@@ -581,6 +581,14 @@ async fn build_package(
                 Err(err) => return Err(err.into()),
             };
 
+            // Add a git boundary for builds inside the `dist/` directory, to avoid build backends
+            // such as hatchling from traversing upwards and reading gitignore files from the
+            // project. See also `uv_cache::Cache::init()`.
+            fs_err::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .open(temp_dir.path().join(".git"))?;
+
             writeln!(
                 printer.stderr(),
                 "{}",

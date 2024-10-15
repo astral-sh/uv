@@ -1,7 +1,10 @@
 use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
 use assert_fs::prelude::*;
+use fs_err::File;
+use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use zip::ZipArchive;
 
 #[test]
 fn build() -> Result<()> {
@@ -1758,6 +1761,59 @@ fn build_no_build_logs() -> Result<()> {
     Building source distribution...
     Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz and project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    Ok(())
+}
+
+/// Check that we have a working git boundary for builds from source dist to wheel in `dist/`.
+#[test]
+fn git_boundary_in_dist_build() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("demo");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [project]
+        name = "demo"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        "#,
+    )?;
+    project.child("src/demo/__init__.py").write_str(
+        r#"
+        def run():
+            print("Running like the wind!")
+        "#,
+    )?;
+
+    uv_snapshot!(&context.filters(), context.build().current_dir(project.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/demo-0.1.0.tar.gz and dist/demo-0.1.0-py3-none-any.whl
+    "###);
+
+    // Check that the source file is included
+    let reader = File::open(project.join("dist/demo-0.1.0-py3-none-any.whl"))?;
+    let mut files: Vec<_> = ZipArchive::new(reader)?
+        .file_names()
+        .map(ToString::to_string)
+        .collect();
+    files.sort();
+    assert_snapshot!(files.join("\n"), @r###"
+    demo-0.1.0.dist-info/METADATA
+    demo-0.1.0.dist-info/RECORD
+    demo-0.1.0.dist-info/WHEEL
+    demo/__init__.py
     "###);
 
     Ok(())
