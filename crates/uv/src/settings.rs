@@ -80,16 +80,16 @@ impl GlobalSettings {
             ) {
                 // `--color` is passed explicitly, use `args.color`.
                 args.color
-            } else if std::env::var_os("NO_COLOR")
+            } else if std::env::var_os(EnvVars::NO_COLOR)
                 .filter(|v| !v.is_empty())
                 .is_some()
             {
                 // If the `NO_COLOR` is set, disable color output.
                 ColorChoice::Never
-            } else if std::env::var_os("FORCE_COLOR")
+            } else if std::env::var_os(EnvVars::FORCE_COLOR)
                 .filter(|v| !v.is_empty())
                 .is_some()
-                || std::env::var_os("CLICOLOR_FORCE")
+                || std::env::var_os(EnvVars::CLICOLOR_FORCE)
                     .filter(|v| !v.is_empty())
                     .is_some()
             {
