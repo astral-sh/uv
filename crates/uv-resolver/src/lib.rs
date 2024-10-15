@@ -34,6 +34,7 @@ mod error;
 mod exclude_newer;
 mod exclusions;
 mod flat_index;
+mod fork_indexes;
 mod fork_urls;
 mod graph_ops;
 mod lock;

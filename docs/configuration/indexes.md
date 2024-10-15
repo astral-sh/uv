@@ -51,6 +51,28 @@ name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 ```
 
+Similarly, to pull from a different index based on the platform, you can provide a list of sources
+disambiguated by environment markers:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["pytorch"]
+
+[tool.uv.sources]
+pytorch = [
+  { index = "torch-cu118", marker = "sys_platform == 'darwin'"},
+  { index = "torch-cu124", marker = "sys_platform != 'darwin'"},
+]
+
+[[tool.uv.index]]
+name = "torch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+
+[[tool.uv.index]]
+name = "torch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+```
+
 An index can be marked as `explicit = true` to prevent packages from being installed from that index
 unless explicitly pinned to it. For example, to ensure that `torch` is installed from the `pytorch`
 index, but all other packages are installed from PyPI, add the following to your `pyproject.toml`:
