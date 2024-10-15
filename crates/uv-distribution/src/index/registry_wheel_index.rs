@@ -83,7 +83,7 @@ impl<'a> RegistryWheelIndex<'a> {
         let mut entries = vec![];
 
         let flat_index_urls: Vec<Index> = index_locations
-            .flat_index()
+            .flat_indexes()
             .map(|flat_index| Index::from_extra_index_url(IndexUrl::from(flat_index.clone())))
             .collect();
 

@@ -4602,6 +4602,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-auth",
  "uv-cache-info",
  "uv-cache-key",
  "uv-distribution-filename",

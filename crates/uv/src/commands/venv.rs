@@ -9,7 +9,6 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -229,8 +228,13 @@ async fn venv_impl(
     let interpreter = python.into_interpreter();
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.allowed_urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
+    }
+    for index in index_locations.flat_indexes() {
+        uv_auth::store_credentials_from_url(index.url());
     }
 
     if managed {
@@ -278,8 +282,13 @@ async fn venv_impl(
         let interpreter = venv.interpreter();
 
         // Add all authenticated sources to the cache.
-        for url in index_locations.allowed_urls() {
-            store_credentials_from_url(url);
+        for index in index_locations.allowed_indexes() {
+            if let Some(credentials) = index.credentials() {
+                uv_auth::store_credentials(index.raw_url(), credentials);
+            }
+        }
+        for index in index_locations.flat_indexes() {
+            uv_auth::store_credentials_from_url(index.url());
         }
 
         // Instantiate a client.
@@ -299,7 +308,7 @@ async fn venv_impl(
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
             let client = FlatIndexClient::new(&client, cache);
             let entries = client
-                .fetch(index_locations.flat_index())
+                .fetch(index_locations.flat_indexes())
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(
