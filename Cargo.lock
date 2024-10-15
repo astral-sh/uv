@@ -4286,6 +4286,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "uv-configuration",
+ "uv-distribution",
  "uv-distribution-types",
  "uv-fs",
  "uv-pep440",

@@ -27,6 +27,13 @@ artifacts in a `dist/` subdirectory.
 Alternatively, `uv build <SRC>` will build the package in the specified directory, while
 `uv build --package <PACKAGE>` will build the specified package within the current workspace.
 
+!!! info
+
+    By default, `uv build` respects `tool.uv.sources` when resolving build dependencies from the
+    `build-system.requires` section of the `pyproject.toml`. When publishing a package, we recommend
+    running `uv build --no-sources` to ensure that the package builds correctly when `tool.uv.sources`
+    is disabled, as is the case when using other build tools, like [`pypa/build`](https://github.com/pypa/build).
+
 ## Publishing your package
 
 Publish your package with `uv publish`:
