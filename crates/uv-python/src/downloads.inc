@@ -196,8 +196,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Freethreaded
 
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-aarch64-apple-darwin-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("4ba7f477c56af4f057ca40535aa6907662b7206e3b8b39971d0a507b1c955e44")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-aarch64-apple-darwin-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("8cc1586c4ee730bb33b7e6d39f1b6388f895075fadb1771e3c27b0561abb9242")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -212,8 +212,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Freethreaded
 
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-apple-darwin-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("b72b7df7cd22a4e7462dbe95633c5ca61caab41237d68e0ff89e9774cd4985e7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-apple-darwin-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("117528b68096379b1303faee1f4f9e32ef3d255207ec92fb063f1bd0b942549d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -308,8 +308,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Freethreaded
 
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
-        sha256: Some("2b46a0f38711cfcdffab90f69ea1372288bd6dcb0f9676b765babb491d42ce06")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241008/cpython-3.13.0%2B20241008-x86_64-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("00a159a64640ce614bdac064b270a9854d86d40d1d8387a822daf1fe0881e64b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
