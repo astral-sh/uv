@@ -215,7 +215,19 @@ pub(crate) async fn run(
 
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
         if let Some(dependencies) = script.dependencies {
-            // // Collect any `tool.uv.sources` from the script.
+            // Collect any `tool.uv.index` from the script.
+            let empty = Vec::default();
+            let script_indexes = match settings.sources {
+                SourceStrategy::Enabled => script
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.indexes.as_deref())
+                    .unwrap_or(&empty),
+                SourceStrategy::Disabled => &empty,
+            };
+
+            // Collect any `tool.uv.sources` from the script.
             let empty = BTreeMap::default();
             let script_sources = match settings.sources {
                 SourceStrategy::Enabled => script
@@ -234,6 +246,7 @@ pub(crate) async fn run(
                         requirement,
                         script_dir.as_ref(),
                         script_sources,
+                        script_indexes,
                     )
                     .map_ok(LoweredRequirement::into_inner)
                 })
