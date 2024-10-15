@@ -11,7 +11,7 @@ use uv_distribution_types::{DependencyMetadata, IndexLocations};
 use uv_install_wheel::linker::LinkMode;
 
 use uv_auth::store_credentials_from_url;
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
@@ -572,7 +572,7 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path()).map_err(|err| {
                 anyhow::anyhow!("`{}` is not a valid source distribution, as it ends with an unsupported extension. Expected one of: {err}.", path.user_display())
             })?;
-            let temp_dir = tempfile::tempdir_in(&output_dir)?;
+            let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
 
             // Extract the top-level directory from the archive.
