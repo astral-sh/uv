@@ -280,10 +280,11 @@ pub fn build(
     source_tree: &Path,
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
+    uv_version: &str,
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system();
+    pyproject_toml.check_build_system("1.0.0+test");
 
     check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
@@ -329,18 +330,27 @@ pub fn build(
     }
 
     debug!("Adding metadata files to {}", wheel_path.user_display());
-    let dist_info_dir =
-        write_dist_info(&mut wheel_writer, &pyproject_toml, &filename, source_tree)?;
+    let dist_info_dir = write_dist_info(
+        &mut wheel_writer,
+        &pyproject_toml,
+        &filename,
+        source_tree,
+        uv_version,
+    )?;
     wheel_writer.close(&dist_info_dir)?;
 
     Ok(filename)
 }
 
 /// Write the dist-info directory to the output directory without building the wheel.
-pub fn metadata(source_tree: &Path, metadata_directory: &Path) -> Result<String, Error> {
+pub fn metadata(
+    source_tree: &Path,
+    metadata_directory: &Path,
+    uv_version: &str,
+) -> Result<String, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system();
+    pyproject_toml.check_build_system("1.0.0+test");
 
     let filename = WheelFilename {
         name: pyproject_toml.name().clone(),
@@ -356,8 +366,13 @@ pub fn metadata(source_tree: &Path, metadata_directory: &Path) -> Result<String,
         metadata_directory.user_display()
     );
     let mut wheel_writer = FilesystemWrite::new(metadata_directory);
-    let dist_info_dir =
-        write_dist_info(&mut wheel_writer, &pyproject_toml, &filename, source_tree)?;
+    let dist_info_dir = write_dist_info(
+        &mut wheel_writer,
+        &pyproject_toml,
+        &filename,
+        source_tree,
+        uv_version,
+    )?;
     wheel_writer.close(&dist_info_dir)?;
 
     Ok(dist_info_dir)
@@ -419,6 +434,7 @@ fn write_dist_info(
     pyproject_toml: &PyProjectToml,
     filename: &WheelFilename,
     root: &Path,
+    uv_version: &str,
 ) -> Result<String, Error> {
     let dist_info_dir = format!(
         "{}-{}.dist-info",
@@ -429,7 +445,7 @@ fn write_dist_info(
     writer.write_directory(&dist_info_dir)?;
 
     // Add `WHEEL`.
-    let wheel_info = wheel_info(filename);
+    let wheel_info = wheel_info(filename, uv_version);
     writer.write_bytes(&format!("{dist_info_dir}/WHEEL"), wheel_info.as_bytes())?;
 
     // Add `entry_points.txt`.
@@ -450,11 +466,11 @@ fn write_dist_info(
 }
 
 /// Returns the `WHEEL` file contents.
-fn wheel_info(filename: &WheelFilename) -> String {
+fn wheel_info(filename: &WheelFilename, uv_version: &str) -> String {
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#file-contents
     let mut wheel_info = vec![
         ("Wheel-Version", "1.0".to_string()),
-        ("Generator", format!("uv {}", uv_version::version())),
+        ("Generator", format!("uv {uv_version}")),
         ("Root-Is-Purelib", "true".to_string()),
     ];
     for python_tag in &filename.python_tag {
