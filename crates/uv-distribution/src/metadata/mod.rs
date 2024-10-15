@@ -32,6 +32,8 @@ pub enum MetadataError {
         String,
         #[source] Box<Pep508Error<VerbatimParsedUrl>>,
     ),
+    #[error("Failed to find group `{0}` included by `{1}`")]
+    GroupNotFound(GroupName, GroupName),
 }
 
 #[derive(Debug, Clone)]

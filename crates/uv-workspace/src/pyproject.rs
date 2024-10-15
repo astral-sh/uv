@@ -44,7 +44,7 @@ pub struct PyProjectToml {
     /// Tool-specific metadata.
     pub tool: Option<Tool>,
     /// Non-project dependency groups, as defined in PEP 735.
-    pub dependency_groups: Option<BTreeMap<GroupName, Vec<String>>>,
+    pub dependency_groups: Option<BTreeMap<GroupName, Vec<DependencyGroupSpecifier>>>,
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
@@ -111,6 +111,20 @@ impl AsRef<[u8]> for PyProjectToml {
     fn as_ref(&self) -> &[u8] {
         self.raw.as_bytes()
     }
+}
+
+/// A specifier item in a PEP 735 Dependency Group
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case", untagged)]
+pub enum DependencyGroupSpecifier {
+    /// PEP 508 requirement string
+    Requirement(String),
+    /// Include another dependency group
+    #[serde(rename_all = "kebab-case")]
+    Table {
+        /// The name of the group to include
+        include_group: Option<String>,
+    },
 }
 
 /// PEP 621 project metadata (`project`).

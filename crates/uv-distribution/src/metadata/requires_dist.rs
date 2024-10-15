@@ -1,7 +1,7 @@
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -9,7 +9,7 @@ use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_workspace::pyproject::{Sources, ToolUvSources};
+use uv_workspace::pyproject::{DependencyGroupSpecifier, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
 #[derive(Debug, Clone)]
@@ -116,32 +116,23 @@ impl RequiresDist {
                 .dependency_groups
                 .iter()
                 .flatten()
-                .map(|(name, requirements)| {
-                    (
-                        name.clone(),
-                        requirements
-                            .iter()
-                            .map(|requirement| {
-                                match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(
-                                    requirement,
-                                ) {
-                                    Ok(requirement) => Ok(requirement),
-                                    Err(err) => Err(MetadataError::GroupParseError(
-                                        name.clone(),
-                                        requirement.clone(),
-                                        Box::new(err),
-                                    )),
-                                }
-                            })
-                            .collect::<Result<Vec<_>, _>>(),
-                    )
-                })
+                .collect::<BTreeMap<_, _>>();
+
+            // Resolve inclusions
+            let dependency_groups = resolve_dependency_groups(&dependency_groups);
+
+            let dependency_groups = dependency_groups
+                .into_iter()
                 .chain(
                     // Only add the `dev` group if `dev-dependencies` is defined
                     dev_dependencies
                         .into_iter()
                         .map(|requirements| (DEV_DEPENDENCIES.clone(), Ok(requirements.clone()))),
                 )
+                .collect::<BTreeMap<_, _>>();
+
+            let dependency_groups = dependency_groups
+                .into_iter()
                 .map(|(name, requirements)| {
                     // Apply sources to the requirements
                     match requirements {
@@ -258,6 +249,92 @@ fn apply_source_strategy(
             .map(uv_pypi_types::Requirement::from)
             .collect()),
     }
+}
+
+/// Resolve the dependency groups (which may contain references to other groups) into concrete
+/// lists of requirements.
+fn resolve_dependency_groups(
+    groups: &BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
+) -> BTreeMap<GroupName, Result<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>, MetadataError>> {
+    fn resolve_group(
+        resolved: &mut BTreeMap<
+            GroupName,
+            Result<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>, MetadataError>,
+        >,
+        groups: &BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
+        name: &GroupName,
+        parents: &BTreeSet<GroupName>,
+    ) -> Result<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>, MetadataError> {
+        let Some(specifiers) = groups.get(name) else {
+            // Missing group
+            let parent_name = parents
+                .iter()
+                .last()
+                .expect("We should always have a parent when a group is missing");
+            return Err(MetadataError::GroupNotFound(
+                name.clone(),
+                parent_name.clone(),
+            ));
+        };
+
+        if parents.contains(name) {
+            // A cycle was detected
+            // TODO(zanieb): We should probably add an error variant for this, we probably want to
+            // show the full `parents` list to demonstrate the cycle?
+            return Ok(Vec::new());
+        }
+
+        if let Some(result) = resolved.get(name) {
+            // Already resolved this group
+            // TODO(zanieb): Can we avoid cloning here? Will we want to clone anyway?
+            return Ok(result.as_ref().unwrap().clone());
+        }
+
+        let mut parents = parents.clone();
+        parents.insert(name.clone());
+
+        let mut requirements = Vec::new();
+        for specifier in *specifiers {
+            match specifier {
+                DependencyGroupSpecifier::Requirement(requirement) => {
+                    match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement) {
+                        Ok(requirement) => requirements.push(requirement),
+                        Err(err) => {
+                            return Err(MetadataError::GroupParseError(
+                                name.clone(),
+                                requirement.clone(),
+                                Box::new(err),
+                            ));
+                        }
+                    }
+                }
+                DependencyGroupSpecifier::Table {
+                    include_group: Some(include_name),
+                } => {
+                    let include_name = GroupName::from_str(include_name).unwrap();
+                    let include_requirements =
+                        resolve_group(resolved, groups, &include_name, &parents)?;
+                    requirements.extend(include_requirements);
+                }
+                DependencyGroupSpecifier::Table {
+                    include_group: None,
+                } => {}
+            }
+        }
+
+        resolved.insert(name.clone(), Ok(requirements.clone()));
+        Ok(requirements)
+    }
+
+    let mut resolved = BTreeMap::new();
+
+    for name in groups.keys() {
+        // TODO(zanieb): Raise errors? or defer them until a group is needed per the PEP's
+        // suggestion?
+        let _ = resolve_group(&mut resolved, groups, name, &BTreeSet::new());
+    }
+
+    resolved
 }
 
 #[cfg(test)]
