@@ -1989,6 +1989,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             fork_urls,
             markers,
             self.workspace_members.clone(),
+            self.options,
         ))
     }
 

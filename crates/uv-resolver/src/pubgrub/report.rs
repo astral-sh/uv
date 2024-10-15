@@ -19,7 +19,7 @@ use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
-use crate::{RequiresPython, ResolverMarkers};
+use crate::{Flexibility, Options, RequiresPython, ResolverMarkers};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 
@@ -511,6 +511,7 @@ impl PubGrubReportFormatter<'_> {
         fork_urls: &ForkUrls,
         markers: &ResolverMarkers,
         workspace_members: &BTreeSet<PackageName>,
+        options: Options,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         match derivation_tree {
@@ -519,15 +520,17 @@ impl PubGrubReportFormatter<'_> {
             ) => {
                 if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
-                    if !fork_urls.contains_key(name) {
-                        self.prerelease_available_hint(
-                            package,
-                            name,
-                            set,
-                            selector,
-                            markers,
-                            output_hints,
-                        );
+                    if options.flexibility == Flexibility::Configurable {
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_available_hint(
+                                package,
+                                name,
+                                set,
+                                selector,
+                                markers,
+                                output_hints,
+                            );
+                        }
                     }
 
                     // Check for no versions due to no `--find-links` flat index.
@@ -592,6 +595,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     markers,
                     workspace_members,
+                    options,
                     output_hints,
                 );
                 self.generate_hints(
@@ -604,6 +608,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     markers,
                     workspace_members,
+                    options,
                     output_hints,
                 );
             }
@@ -995,29 +1000,32 @@ impl std::fmt::Display for PubGrubHint {
             Self::PrereleaseAvailable { package, version } => {
                 write!(
                     f,
-                    "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
+                    "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    version.bold()
+                    version.bold(),
+                    "--prerelease=allow".green(),
                 )
             }
             Self::PrereleaseRequested { package, range } => {
                 write!(
                     f,
-                    "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
+                    "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    PackageRange::compatibility(package, range, None).bold()
+                    PackageRange::compatibility(package, range, None).bold(),
+                    "--prerelease=allow".green(),
                 )
             }
             Self::NoIndex => {
                 write!(
                     f,
-                    "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)",
+                    "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
+                    "--find-links <uri>".green(),
                 )
             }
             Self::Offline => {
@@ -1183,8 +1191,8 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package,
-                    dependency,
+                    package.bold(),
+                    dependency.bold(),
                 )
             }
             Self::UncheckedIndex {
@@ -1198,7 +1206,7 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package,
+                    package.bold(),
                     found_index.cyan(),
                     PackageRange::compatibility(package, range, None).cyan(),
                     next_index.cyan(),

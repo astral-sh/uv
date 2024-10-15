@@ -966,7 +966,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(Refresh::All(Timestamp::now()));
 
-            commands::tool_upgrade(
+            Box::pin(commands::tool_upgrade(
                 args.name,
                 args.python,
                 globals.connectivity,
@@ -978,7 +978,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 &cache,
                 printer,
-            )
+            ))
             .await
         }
         Commands::Tool(ToolNamespace {

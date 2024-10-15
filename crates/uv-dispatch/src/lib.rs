@@ -28,8 +28,8 @@ use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_pypi_types::Requirement;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
-    ResolverMarkers,
+    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
+    PythonRequirement, Resolver, ResolverMarkers,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -170,6 +170,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer)
                 .index_strategy(self.index_strategy)
+                .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
             ResolverMarkers::specific_environment(markers),

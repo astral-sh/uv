@@ -2243,6 +2243,43 @@ fn only_binary_editable_setup_py() {
     );
 }
 
+/// We should not recommend `--prerelease=allow` in source distribution build failures, since we
+/// don't propagate the `--prerelease` flag to the source distribution build regardless.
+#[test]
+fn no_prerelease_hint_source_builds() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=40.8.0"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env("UV_EXCLUDE_NEWER", "2018-10-08"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to fetch wheel: project @ file://[TEMP_DIR]/
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
 #[test]
 fn cache_priority() {
     let context = TestContext::new("3.12");
