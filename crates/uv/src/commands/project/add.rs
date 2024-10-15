@@ -740,7 +740,8 @@ async fn lock_and_sync(
                 let url = Url::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
-                debug_assert!(state.index.distributions().remove(&version_id).is_some());
+                let existing = state.index.distributions().remove(&version_id);
+                debug_assert!(existing.is_some(), "distribution should exist");
             }
 
             // If the file was modified, we have to lock again, though the only expected change is
