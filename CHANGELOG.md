@@ -11,7 +11,7 @@
 - Support PEP 723 metadata with `uv run -` ([#8111](https://github.com/astral-sh/uv/pull/8111))
 - Support `pip install --exact` ([#8044](https://github.com/astral-sh/uv/pull/8044))
 - Support `uv export --no-header` ([#8096](https://github.com/astral-sh/uv/pull/8096))
-- ADd Python 3.13 images to Docker publish ([#8105](https://github.com/astral-sh/uv/pull/8105))
+- Add Python 3.13 images to Docker publish ([#8105](https://github.com/astral-sh/uv/pull/8105))
 - Support remote (`https://`) scripts in `uv run` ([#6375](https://github.com/astral-sh/uv/pull/6375))
 - Allow comma value-delimited arguments in `uv run --with` ([#7909](https://github.com/astral-sh/uv/pull/7909))
 
