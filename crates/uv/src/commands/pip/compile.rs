@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 use std::path::Path;
 
@@ -445,14 +446,18 @@ pub(crate) async fn pip_compile(
     let mut wrote_preamble = false;
 
     // If necessary, include the `--index-url` and `--extra-index-url` locations.
+    let mut added_extra_indexes = HashSet::new();
+
     if include_index_url {
         if let Some(index) = index_locations.index() {
             writeln!(writer, "--index-url {}", index.verbatim())?;
             wrote_preamble = true;
         }
         for extra_index in index_locations.extra_index() {
-            writeln!(writer, "--extra-index-url {}", extra_index.verbatim())?;
-            wrote_preamble = true;
+            if added_extra_indexes.insert(extra_index.verbatim()) {
+                writeln!(writer, "--extra-index-url {}", extra_index.verbatim())?;
+                wrote_preamble = true;
+            }
         }
     }
 
