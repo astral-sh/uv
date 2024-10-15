@@ -150,7 +150,7 @@ async fn build_impl(
         let src = std::path::absolute(src)?;
         let metadata = match fs_err::tokio::metadata(&src).await {
             Ok(metadata) => metadata,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 return Err(anyhow::anyhow!(
                     "Source `{}` does not exist",
                     src.user_display()
@@ -559,6 +559,7 @@ async fn build_package(
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
+                    sources,
                     BuildKind::Sdist,
                     build_output,
                 )
@@ -604,6 +605,7 @@ async fn build_package(
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
+                    sources,
                     BuildKind::Wheel,
                     build_output,
                 )
@@ -625,6 +627,7 @@ async fn build_package(
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
+                    sources,
                     BuildKind::Sdist,
                     build_output,
                 )
@@ -646,6 +649,7 @@ async fn build_package(
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
+                    sources,
                     BuildKind::Wheel,
                     build_output,
                 )
@@ -666,6 +670,7 @@ async fn build_package(
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
+                    sources,
                     BuildKind::Sdist,
                     build_output,
                 )
@@ -683,6 +688,7 @@ async fn build_package(
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
+                    sources,
                     BuildKind::Wheel,
                     build_output,
                 )
@@ -722,6 +728,7 @@ async fn build_package(
                     subdirectory,
                     version_id.map(ToString::to_string),
                     dist,
+                    sources,
                     BuildKind::Wheel,
                     build_output,
                 )

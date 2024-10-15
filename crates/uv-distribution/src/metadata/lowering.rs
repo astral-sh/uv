@@ -34,6 +34,7 @@ impl LoweredRequirement {
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         workspace: &'data Workspace,
+        lower_bound: LowerBound,
     ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), Origin::Project)
@@ -62,15 +63,17 @@ impl LoweredRequirement {
 
         let Some(source) = source else {
             let has_sources = !project_sources.is_empty() || !workspace.sources().is_empty();
-            // Support recursive editable inclusions.
-            if has_sources
-                && requirement.version_or_url.is_none()
-                && &requirement.name != project_name
-            {
-                warn_user_once!(
-                    "Missing version constraint (e.g., a lower bound) for `{}`",
-                    requirement.name
-                );
+            if matches!(lower_bound, LowerBound::Warn) {
+                // Support recursive editable inclusions.
+                if has_sources
+                    && requirement.version_or_url.is_none()
+                    && &requirement.name != project_name
+                {
+                    warn_user_once!(
+                        "Missing version constraint (e.g., a lower bound) for `{}`",
+                        requirement.name
+                    );
+                }
             }
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
@@ -532,4 +535,12 @@ fn path_source(
             url,
         })
     }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum LowerBound {
+    /// Allow missing lower bounds.
+    Allow,
+    /// Warn about missing lower bounds.
+    Warn,
 }

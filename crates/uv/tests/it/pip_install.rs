@@ -748,6 +748,27 @@ fn reinstall_incomplete() -> Result<()> {
 #[test]
 fn exact_install_removes_extraneous_packages() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
+    // Install anyio
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--exact")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
 
     // Install flask
     uv_snapshot!(context.filters(), context.pip_install()
@@ -770,10 +791,55 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
     "###
     );
 
-    // Install anyio with exact flag removes flask and flask dependencies.
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio==3.7.0")?;
+    // Install requirements file with exact flag removes flask and flask dependencies.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--exact")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+     - blinker==1.7.0
+     - click==8.1.7
+     - flask==3.0.2
+     - itsdangerous==2.1.2
+     - jinja2==3.1.3
+     - markupsafe==2.1.5
+     - werkzeug==3.0.1
+    "###
+    );
+
+    // Install flask again
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("flask"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    requirements_txt.write_str(indoc! {r"
+        anyio==3.7.0
+        flit_core<4.0.0
+        "
+    })?;
+
+    // Install requirements file with exact flag installs flit_core and removes flask and flask dependencies.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--exact")
         .arg("-r")
@@ -787,15 +853,13 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + anyio==3.7.0
      - blinker==1.7.0
      - click==8.1.7
      - flask==3.0.2
-     + idna==3.6
+     + flit-core==3.9.0
      - itsdangerous==2.1.2
      - jinja2==3.1.3
      - markupsafe==2.1.5
-     + sniffio==1.3.1
      - werkzeug==3.0.1
     "###
     );

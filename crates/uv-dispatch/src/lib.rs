@@ -229,7 +229,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         } = Planner::new(resolution).build(
             site_packages,
             &Reinstall::default(),
-            &BuildOptions::default(),
+            self.build_options,
             self.hasher,
             self.index_locations,
             self.config_settings,
@@ -312,6 +312,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         subdirectory: Option<&'data Path>,
         version_id: Option<String>,
         dist: Option<&'data SourceDist>,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
@@ -349,6 +350,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self,
             self.source_build_context.clone(),
             version_id,
+            sources,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,

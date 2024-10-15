@@ -1,6 +1,7 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
+use indoc::indoc;
 use insta::assert_snapshot;
 
 use predicates::prelude::predicate;
@@ -2717,6 +2718,169 @@ fn sync_dynamic_extra() -> Result<()> {
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
      - typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn build_system_requires_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let build = context.temp_dir.child("backend");
+    build.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "backend"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=3.10"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    build
+        .child("src")
+        .child("backend")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def hello() -> str:
+                return "Hello, world!"
+        "#})?;
+    build.child("README.md").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("project").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "backend==0.1.0"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["../backend"]
+
+        [tool.uv.sources]
+        backend = { workspace = true }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("project")
+        .child("setup.py")
+        .write_str(indoc! {r"
+        from setuptools import setup
+
+        from backend import hello
+
+        hello()
+
+        setup()
+        ",
+        })?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("project")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn build_system_requires_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let build = context.temp_dir.child("backend");
+    build.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "backend"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=3.10"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    build
+        .child("src")
+        .child("backend")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def hello() -> str:
+                return "Hello, world!"
+        "#})?;
+    build.child("README.md").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("project").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "backend==0.1.0"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        backend = { path = "../backend" }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("project")
+        .child("setup.py")
+        .write_str(indoc! {r"
+        from setuptools import setup
+
+        from backend import hello
+
+        hello()
+
+        setup()
+        ",
+        })?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("project")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
     "###);
 
     Ok(())
