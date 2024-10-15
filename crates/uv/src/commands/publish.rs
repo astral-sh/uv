@@ -1,7 +1,8 @@
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{human_readable_bytes, ExitStatus};
 use crate::printer::Printer;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
+use console::Term;
 use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::sync::Arc;
@@ -69,10 +70,15 @@ pub(crate) async fn publish(
         &oidc_client.client(),
     )
     .await?;
+
     let (username, password) = if let Some(password) = trusted_publishing_token {
         (Some("__token__".to_string()), Some(password.into()))
     } else {
-        (username, password)
+        if username.is_none() && password.is_none() {
+            prompt_username_and_password()?
+        } else {
+            (username, password)
+        }
     };
 
     for (file, filename) in files {
@@ -108,4 +114,17 @@ pub(crate) async fn publish(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
+    let term = Term::stderr();
+    if !term.is_term() {
+        return Ok((None, None));
+    }
+    let username_prompt = "Enter username ('__token__' if using a token): ";
+    let password_prompt = "Enter password: ";
+    let username = uv_console::input(username_prompt, &term).context("Failed to read username")?;
+    let password =
+        uv_console::password(password_prompt, &term).context("Failed to read password")?;
+    Ok((Some(username), Some(password)))
 }
