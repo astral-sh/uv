@@ -844,12 +844,6 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 build-backend = "scikit_build_core.build"
             "#}
         .to_string(),
-        ProjectBuildBackend::Meson => indoc::indoc! {r#"
-                [build-system]
-                requires = ["meson-python", "pybind11"]
-                build-backend = "mesonpy"
-            "#}
-        .to_string(),
     }
 }
 
@@ -910,38 +904,6 @@ fn pyproject_build_backend_prerequisites(
 
                     pybind11_add_module(_core MODULE src/main.cpp)
                     install(TARGETS _core DESTINATION ${{SKBUILD_PROJECT_NAME}})
-                "#},
-                )?;
-            }
-        }
-        ProjectBuildBackend::Meson => {
-            // Generate meson.build
-            let build_file = path.join("meson.build");
-            if !build_file.try_exists()? {
-                fs_err::write(
-                    build_file,
-                    indoc::formatdoc! {r#"
-                    project(
-                        '{module_name}',
-                        'cpp',
-                        version: '0.1.0',
-                        meson_version: '>= 1.2.3',
-                        default_options: [
-                            'cpp_std=c++11',
-                        ],
-                    )
-
-                    py = import('python').find_installation(pure: false)
-                    pybind11_dep = dependency('pybind11')
-
-                    py.extension_module('_core',
-                        'src/main.cpp',
-                        subdir: '{module_name}',
-                        install: true,
-                        dependencies : [pybind11_dep],
-                    )
-
-                    install_subdir('src/{module_name}', install_dir: py.get_install_dir() / '{module_name}', strip_directory: true)
                 "#},
                 )?;
             }
@@ -1035,7 +997,7 @@ fn generate_package_scripts(
             // Return python script calling binary
             binary_call_script
         }
-        ProjectBuildBackend::Scikit | ProjectBuildBackend::Meson => {
+        ProjectBuildBackend::Scikit => {
             // Generate main.cpp
             let native_src = src_dir.join("main.cpp");
             if !native_src.try_exists()? {

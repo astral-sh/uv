@@ -469,8 +469,6 @@ uv init [OPTIONS] [PATH]
 <li><code>maturin</code>:  Use <a href='https://pypi.org/project/maturin'>maturin</a> as the project build backend</li>
 
 <li><code>scikit</code>:  Use <a href='https://pypi.org/project/scikit-build-core'>scikit-build-core</a> as the project build backend</li>
-
-<li><code>meson</code>:  Use <a href='https://pypi.org/project/meson-python'>meson-python</a> as the project build backend</li>
 </ul>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 

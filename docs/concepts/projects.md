@@ -234,27 +234,12 @@ Hello from example-lib!
 ```
 
 Other build backends supported by `uv init` include `hatchling`, `flit-core`, `pdm-backend`,
-`setuptools`, `maturin`, `scikit-build-core`, and `meson-python`.
+`setuptools`, `maturin`, and `scikit-build-core`.
 
 !!! tip
 
 Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
-backends such as `maturin`, `scikit-build-core`, or `meson-python`.
-
-!!! note
-
-[meson-editable]:
-  https://mesonbuild.com/meson-python/how-to-guides/editable-installs.html#build-dependencies
-
-When `meson-python` is used with editable installations, it may be beneficial to leverage
-`--no-build-isolation` such that changes to `main.cpp` can be automatically rebuilt on import. See
-more on this topic in [Meson Editable Installs][meson-editable]. You may also further customize
-build isolation behavior using `dependency-metadata` as described in the dedicated
-[build isolation](#build-isolation) section.
-
-As of time of writing, `meson-python` cannot detect a moving build environment. As a result,
-commands such as `uv sync` or `uv run` will not behave as expected. In such cases, it is recommended
-to leverage `--no-editable` instead to avoid errors.
+backends such as `maturin`, and `scikit-build-core`.
 
 ### Packaged applications
 

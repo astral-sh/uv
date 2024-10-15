@@ -17,6 +17,4 @@ pub enum ProjectBuildBackend {
     Maturin,
     /// Use [scikit-build-core](https://pypi.org/project/scikit-build-core) as the project build backend.
     Scikit,
-    /// Use [meson-python](https://pypi.org/project/meson-python) as the project build backend.
-    Meson,
 }
