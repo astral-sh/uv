@@ -230,6 +230,12 @@ pub fn files_for_publishing(
             }
             let dist_filename = DistFilename::try_from_normalized_filename(&filename)
                 .ok_or_else(|| PublishError::InvalidFilename(dist.clone()))?;
+            if dist_filename.to_string() != filename {
+                warn_user!(
+                    "Invalid filename: Expected `{dist_filename}`, found `{filename}`. \
+                    This is a problem with the build backend."
+                );
+            }
             files.push((dist, filename, dist_filename));
         }
     }
