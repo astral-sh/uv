@@ -74,22 +74,29 @@ impl GlobalSettings {
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
-            color: if args.no_color
-                || std::env::var_os(EnvVars::NO_COLOR)
-                    .filter(|v| !v.is_empty())
-                    .is_some()
-            {
-                ColorChoice::Never
-            } else if std::env::var_os(EnvVars::FORCE_COLOR)
+            color: if matches!(
+                args.color,
+                ColorChoice::Always | ColorChoice::Never | ColorChoice::Auto
+            ) {
+                // `--color` is passed explicitly, use `args.color`.
+                args.color
+            } else if std::env::var_os("NO_COLOR")
                 .filter(|v| !v.is_empty())
                 .is_some()
-                || std::env::var_os(EnvVars::CLICOLOR_FORCE)
+            {
+                // If the `NO_COLOR` is set, disable color output.
+                ColorChoice::Never
+            } else if std::env::var_os("FORCE_COLOR")
+                .filter(|v| !v.is_empty())
+                .is_some()
+                || std::env::var_os("CLICOLOR_FORCE")
                     .filter(|v| !v.is_empty())
                     .is_some()
             {
+                // If `FORCE_COLOR` or `CLICOLOR_FORCE` is set, always enable color output.
                 ColorChoice::Always
             } else {
-                args.color
+                ColorChoice::Auto
             },
             native_tls: flag(args.native_tls, args.no_native_tls)
                 .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
