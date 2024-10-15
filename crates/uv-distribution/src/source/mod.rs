@@ -388,6 +388,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             project_root,
+            self.build_context.locations(),
             self.build_context.sources(),
             LowerBound::Warn,
         )
@@ -1086,6 +1087,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1120,6 +1122,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1149,6 +1152,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
                 )
                 .await?,
@@ -1194,6 +1198,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 resource.install_path.as_ref(),
+                self.build_context.locations(),
                 self.build_context.sources(),
             )
             .await?,
@@ -1374,7 +1379,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                Metadata::from_workspace(
+                    metadata,
+                    &path,
+                    self.build_context.locations(),
+                    self.build_context.sources(),
+                )
+                .await?,
             ));
         }
 
@@ -1395,7 +1406,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                    Metadata::from_workspace(
+                        metadata,
+                        &path,
+                        self.build_context.locations(),
+                        self.build_context.sources(),
+                    )
+                    .await?,
                 ));
             }
         }
@@ -1420,7 +1437,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                Metadata::from_workspace(
+                    metadata,
+                    &path,
+                    self.build_context.locations(),
+                    self.build_context.sources(),
+                )
+                .await?,
             ));
         }
 
@@ -1460,7 +1483,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(metadata, fetch.path(), self.build_context.sources()).await?,
+            Metadata::from_workspace(
+                metadata,
+                fetch.path(),
+                self.build_context.locations(),
+                self.build_context.sources(),
+            )
+            .await?,
         ))
     }
 

@@ -30,7 +30,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 pub use crate::error::{Error, MissingHeaderCause};
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::{LowerBound, RequiresDist};
-use uv_distribution_types::Resolution;
+use uv_distribution_types::{IndexLocations, Resolution};
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -250,6 +250,7 @@ impl SourceBuild {
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         version_id: Option<String>,
+        locations: &IndexLocations,
         source_strategy: SourceStrategy,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
@@ -272,6 +273,7 @@ impl SourceBuild {
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
             fallback_package_name,
+            locations,
             source_strategy,
             &default_backend,
         )
@@ -371,6 +373,7 @@ impl SourceBuild {
                 package_name.as_ref(),
                 package_version.as_ref(),
                 version_id.as_deref(),
+                locations,
                 source_strategy,
                 build_kind,
                 level,
@@ -433,6 +436,7 @@ impl SourceBuild {
     async fn extract_pep517_backend(
         source_tree: &Path,
         package_name: Option<&PackageName>,
+        locations: &IndexLocations,
         source_strategy: SourceStrategy,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
@@ -465,6 +469,7 @@ impl SourceBuild {
                                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                                     requires_dist,
                                     source_tree,
+                                    locations,
                                     source_strategy,
                                     LowerBound::Allow,
                                 )
@@ -803,6 +808,7 @@ async fn create_pep517_build_environment(
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
     version_id: Option<&str>,
+    locations: &IndexLocations,
     source_strategy: SourceStrategy,
     build_kind: BuildKind,
     level: BuildOutput,
@@ -915,6 +921,7 @@ async fn create_pep517_build_environment(
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
                     source_tree,
+                    locations,
                     source_strategy,
                     LowerBound::Allow,
                 )

@@ -1,5 +1,6 @@
 use uv_cache::Refresh;
 use uv_configuration::ConfigSettings;
+use uv_distribution_types::{PipExtraIndex, PipFindLinks, PipIndex};
 use uv_resolver::PrereleaseMode;
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
 
@@ -201,11 +202,12 @@ impl From<IndexArgs> for PipOptions {
                 .combine(
                     index.map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
                 ),
-            index_url: index_url.and_then(Maybe::into_option),
-            extra_index_url: extra_index_url.map(|extra_index_url| {
-                extra_index_url
+            index_url: index_url.and_then(Maybe::into_option).map(PipIndex::from),
+            extra_index_url: extra_index_url.map(|extra_index_urls| {
+                extra_index_urls
                     .into_iter()
                     .filter_map(Maybe::into_option)
+                    .map(PipExtraIndex::from)
                     .collect()
             }),
             no_index: if no_index { Some(true) } else { None },
@@ -213,6 +215,7 @@ impl From<IndexArgs> for PipOptions {
                 find_links
                     .into_iter()
                     .filter_map(Maybe::into_option)
+                    .map(PipFindLinks::from)
                     .collect()
             }),
             ..PipOptions::default()
