@@ -16,7 +16,7 @@ use uv_configuration::{
     NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution_types::{DependencyMetadata, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::Requirement;
@@ -233,9 +233,6 @@ async fn venv_impl(
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
     }
-    for index in index_locations.flat_indexes() {
-        uv_auth::store_credentials_from_url(index.url());
-    }
 
     if managed {
         writeln!(
@@ -287,9 +284,6 @@ async fn venv_impl(
                 uv_auth::store_credentials(index.raw_url(), credentials);
             }
         }
-        for index in index_locations.flat_indexes() {
-            uv_auth::store_credentials_from_url(index.url());
-        }
 
         // Instantiate a client.
         let client = RegistryClientBuilder::try_from(client_builder)
@@ -308,7 +302,7 @@ async fn venv_impl(
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
             let client = FlatIndexClient::new(&client, cache);
             let entries = client
-                .fetch(index_locations.flat_indexes())
+                .fetch(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(

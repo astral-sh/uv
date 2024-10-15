@@ -14,13 +14,13 @@ use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LO
 
 /// An entry in the [`RegistryWheelIndex`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct IndexEntry {
+pub struct IndexEntry<'index> {
     /// The cached distribution.
     pub dist: CachedRegistryDist,
-    /// The index from which the wheel was downloaded.
-    pub index: Index,
     /// Whether the wheel was built from source (true), or downloaded from the registry directly (false).
     pub built: bool,
+    /// The index from which the wheel was downloaded.
+    pub index: &'index Index,
 }
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
@@ -30,7 +30,7 @@ pub struct RegistryWheelIndex<'a> {
     tags: &'a Tags,
     index_locations: &'a IndexLocations,
     hasher: &'a HashStrategy,
-    index: FxHashMap<&'a PackageName, Vec<IndexEntry>>,
+    index: FxHashMap<&'a PackageName, Vec<IndexEntry<'a>>>,
 }
 
 impl<'a> RegistryWheelIndex<'a> {
@@ -73,21 +73,16 @@ impl<'a> RegistryWheelIndex<'a> {
     }
 
     /// Add a package to the index by reading from the cache.
-    fn index(
+    fn index<'index>(
         package: &PackageName,
         cache: &Cache,
         tags: &Tags,
-        index_locations: &IndexLocations,
+        index_locations: &'index IndexLocations,
         hasher: &HashStrategy,
-    ) -> Vec<IndexEntry> {
+    ) -> Vec<IndexEntry<'index>> {
         let mut entries = vec![];
 
-        let flat_index_urls: Vec<Index> = index_locations
-            .flat_indexes()
-            .map(|flat_index| Index::from_extra_index_url(IndexUrl::from(flat_index.clone())))
-            .collect();
-
-        for index in index_locations.indexes().chain(flat_index_urls.iter()) {
+        for index in index_locations.allowed_indexes() {
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,
@@ -117,7 +112,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                     ) {
                                         entries.push(IndexEntry {
                                             dist: wheel.into_registry_dist(),
-                                            index: index.clone(),
+                                            index,
                                             built: false,
                                         });
                                     }
@@ -144,7 +139,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                     ) {
                                         entries.push(IndexEntry {
                                             dist: wheel.into_registry_dist(),
-                                            index: index.clone(),
+                                            index,
                                             built: false,
                                         });
                                     }
@@ -200,7 +195,7 @@ impl<'a> RegistryWheelIndex<'a> {
                                 ) {
                                     entries.push(IndexEntry {
                                         dist: wheel.into_registry_dist(),
-                                        index: index.clone(),
+                                        index,
                                         built: true,
                                     });
                                 }
