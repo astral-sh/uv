@@ -63,8 +63,10 @@ fn invalid_validation_error() {
     dist.child("aviary.gsm8k-0.7.6-py3-none-any.whl")
         .touch()
         .unwrap();
-    // Unescaped dot
     dist.child("aviary.gsm8k-0.7.6.tar.gz").touch().unwrap();
+    // Not lowercase
+    dist.child("Foo-0.7.6-py3-none-any.whl").touch().unwrap();
+    dist.child("Foo-0.7.6.tar.gz").touch().unwrap();
     // Complex but valid
     dist.child("maturin-1.7.4-py3.py2-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl").touch().unwrap();
 
@@ -80,11 +82,13 @@ fn invalid_validation_error() {
 
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
+    warning: Invalid filename: Expected `foo-0.7.6-py3-none-any.whl`, found `Foo-0.7.6-py3-none-any.whl`. This is a problem with the build backend.
+    warning: Invalid filename: Expected `foo-0.7.6.tar.gz`, found `Foo-0.7.6.tar.gz`. This is a problem with the build backend.
     warning: Invalid filename: Expected `aviary_gsm8k-0.7.6-py3-none-any.whl`, found `aviary.gsm8k-0.7.6-py3-none-any.whl`. This is a problem with the build backend.
     warning: Invalid filename: Expected `aviary_gsm8k-0.7.6.tar.gz`, found `aviary.gsm8k-0.7.6.tar.gz`. This is a problem with the build backend.
-    Publishing 3 files https://test.pypi.org/legacy/
-    Uploading aviary_gsm8k-0.7.6-py3-none-any.whl ([SIZE])
-    error: Failed to publish: `dist/aviary.gsm8k-0.7.6-py3-none-any.whl`
+    Publishing 5 files https://test.pypi.org/legacy/
+    Uploading foo-0.7.6-py3-none-any.whl ([SIZE])
+    error: Failed to publish: `dist/Foo-0.7.6-py3-none-any.whl`
       Caused by: Failed to read metadata
       Caused by: Failed to read from zip file
       Caused by: unable to locate the end of central directory record
