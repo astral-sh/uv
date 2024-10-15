@@ -1594,7 +1594,7 @@ fn install_git_public_https_missing_branch_or_tag() {
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`git fetch .*`", "`git fetch [...]`"));
+    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
     filters.push(("exit status", "exit code"));
 
     uv_snapshot!(filters, context.pip_install()
@@ -1624,7 +1624,7 @@ fn install_git_public_https_missing_commit() {
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`git fetch .*`", "`git fetch [...]`"));
+    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
     filters.push(("exit status", "exit code"));
 
     // There are flakes on Windows where this irrelevant error is appended
@@ -1842,6 +1842,7 @@ fn install_git_private_https_pat_not_authorized() {
 
     let mut filters = context.filters();
     filters.insert(0, (token, "***"));
+    filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
