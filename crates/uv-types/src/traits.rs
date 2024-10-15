@@ -108,6 +108,7 @@ pub trait BuildContext {
         subdirectory: Option<&'a Path>,
         version_id: Option<String>,
         dist: Option<&'a SourceDist>,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;

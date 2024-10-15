@@ -1,6 +1,7 @@
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
 
+use crate::metadata::lowering::LowerBound;
 use std::collections::BTreeMap;
 use std::path::Path;
 use uv_configuration::SourceStrategy;
@@ -38,6 +39,7 @@ impl RequiresDist {
         metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
         sources: SourceStrategy,
+        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
@@ -48,13 +50,14 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(metadata, &project_workspace, sources)
+        Self::from_project_workspace(metadata, &project_workspace, sources, lower_bound)
     }
 
     fn from_project_workspace(
         metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
         source_strategy: SourceStrategy,
+        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
@@ -92,6 +95,7 @@ impl RequiresDist {
                             project_workspace.project_root(),
                             sources,
                             project_workspace.workspace(),
+                            lower_bound,
                         )
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),
@@ -124,6 +128,7 @@ impl RequiresDist {
                         project_workspace.project_root(),
                         sources,
                         project_workspace.workspace(),
+                        lower_bound,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
@@ -170,6 +175,7 @@ mod test {
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
+    use crate::metadata::lowering::LowerBound;
     use crate::RequiresDist;
 
     async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
@@ -193,6 +199,7 @@ mod test {
             requires_dist,
             &project_workspace,
             SourceStrategy::Enabled,
+            LowerBound::Warn,
         )?)
     }
 
