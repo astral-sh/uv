@@ -204,7 +204,12 @@ pub(crate) async fn pip_install(
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
-    if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
+    if reinstall.is_none()
+        && upgrade.is_none()
+        && source_trees.is_empty()
+        && overrides.is_empty()
+        && matches!(modifications, Modifications::Sufficient)
+    {
         match site_packages.satisfies(&requirements, &constraints, &markers)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
@@ -223,6 +228,7 @@ pub(crate) async fn pip_install(
                 if dry_run {
                     writeln!(printer.stderr(), "Would make no changes")?;
                 }
+
                 return Ok(ExitStatus::Success);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
