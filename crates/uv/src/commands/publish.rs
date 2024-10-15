@@ -85,7 +85,7 @@ pub(crate) async fn publish(
         bail!("You need to provide a username with a password, use `--token` for tokens");
     }
 
-    for (file, filename) in files {
+    for (file, raw_filename, filename) in files {
         let size = fs_err::metadata(&file)?.len();
         let (bytes, unit) = human_readable_bytes(size);
         writeln!(
@@ -97,6 +97,7 @@ pub(crate) async fn publish(
         let reporter = PublishReporter::single(printer);
         let uploaded = upload(
             &file,
+            &raw_filename,
             &filename,
             &publish_url,
             &upload_client.client(),

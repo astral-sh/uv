@@ -198,9 +198,15 @@ impl PublishSendError {
     }
 }
 
+/// Collect the source distributions and wheels for publishing.
+///
+/// Returns the path, the raw filename and the parsed filename. The raw filename is a fixup for
+/// <https://github.com/astral-sh/uv/issues/8030> caused by
+/// <https://github.com/pypa/setuptools/issues/3777> in combination with
+/// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
 pub fn files_for_publishing(
     paths: Vec<String>,
-) -> Result<Vec<(PathBuf, DistFilename)>, PublishError> {
+) -> Result<Vec<(PathBuf, String, DistFilename)>, PublishError> {
     let mut seen = FxHashSet::default();
     let mut files = Vec::new();
     for path in paths {
@@ -212,15 +218,19 @@ pub fn files_for_publishing(
             if !seen.insert(dist.clone()) {
                 continue;
             }
-            let Some(filename) = dist.file_name().and_then(|filename| filename.to_str()) else {
+            let Some(filename) = dist
+                .file_name()
+                .and_then(|filename| filename.to_str())
+                .map(ToString::to_string)
+            else {
                 continue;
             };
             if filename == ".gitignore" {
                 continue;
             }
-            let filename = DistFilename::try_from_normalized_filename(filename)
+            let dist_filename = DistFilename::try_from_normalized_filename(&filename)
                 .ok_or_else(|| PublishError::InvalidFilename(dist.clone()))?;
-            files.push((dist, filename));
+            files.push((dist, filename, dist_filename));
         }
     }
     // TODO(konsti): Should we sort those files, e.g. wheels before sdists because they are more
@@ -287,6 +297,7 @@ pub async fn check_trusted_publishing(
 /// Implements a custom retry flow since the request isn't cloneable.
 pub async fn upload(
     file: &Path,
+    raw_filename: &str,
     filename: &DistFilename,
     registry: &Url,
     client: &ClientWithMiddleware,
@@ -305,6 +316,7 @@ pub async fn upload(
         attempt += 1;
         let (request, idx) = build_request(
             file,
+            raw_filename,
             filename,
             registry,
             client,
@@ -489,6 +501,7 @@ async fn form_metadata(
 /// Returns the request and the reporter progress bar id.
 async fn build_request(
     file: &Path,
+    raw_filename: &str,
     filename: &DistFilename,
     registry: &Url,
     client: &ClientWithMiddleware,
@@ -510,7 +523,8 @@ async fn build_request(
     // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
     // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
     let file_reader = Body::wrap_stream(ReaderStream::new(reader));
-    let part = Part::stream(file_reader).file_name(filename.to_string());
+    // See [`files_for_publishing`] on `raw_filename`
+    let part = Part::stream(file_reader).file_name(raw_filename.to_string());
     form = form.part("content", part);
 
     let url = if let Some(username) = username {
