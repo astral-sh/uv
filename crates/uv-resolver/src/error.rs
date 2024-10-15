@@ -15,6 +15,7 @@ use crate::pubgrub::{
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
+use crate::Options;
 use tracing::trace;
 use uv_distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
 use uv_normalize::PackageName;
@@ -117,6 +118,7 @@ pub struct NoSolutionError {
     fork_urls: ForkUrls,
     markers: ResolverMarkers,
     workspace_members: BTreeSet<PackageName>,
+    options: Options,
 }
 
 impl NoSolutionError {
@@ -133,6 +135,7 @@ impl NoSolutionError {
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
         workspace_members: BTreeSet<PackageName>,
+        options: Options,
     ) -> Self {
         Self {
             error,
@@ -146,6 +149,7 @@ impl NoSolutionError {
             fork_urls,
             markers,
             workspace_members,
+            options,
         }
     }
 
@@ -250,6 +254,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.fork_urls,
             &self.markers,
             &self.workspace_members,
+            self.options,
             &mut additional_hints,
         );
         for hint in additional_hints {

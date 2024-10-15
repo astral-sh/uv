@@ -7,7 +7,7 @@ pub use lock::{
     Lock, LockError, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
 };
 pub use manifest::Manifest;
-pub use options::{Options, OptionsBuilder};
+pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
 pub use pubgrub::{PubGrubSpecifier, PubGrubSpecifierError};
