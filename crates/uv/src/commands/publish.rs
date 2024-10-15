@@ -82,7 +82,11 @@ pub(crate) async fn publish(
     };
 
     if password.is_some() && username.is_none() {
-        bail!("You need to provide a username with a password, use `--token` for tokens");
+        bail!(
+            "Attempted to publish with a password, but no username. Either provide a username \
+            with `--user` (`UV_PUBLISH_USERNAME`), or use `--token` (`UV_PUBLISH_TOKEN`) instead \
+            of a password."
+        );
     }
 
     for (file, filename) in files {
