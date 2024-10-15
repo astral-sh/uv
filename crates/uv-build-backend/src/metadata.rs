@@ -358,7 +358,6 @@ impl PyProjectToml {
             }
         }
 
-        // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)
         let project_urls = self
             .project
             .urls
