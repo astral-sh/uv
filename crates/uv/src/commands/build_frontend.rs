@@ -11,7 +11,7 @@ use uv_distribution_types::{DependencyMetadata, IndexLocations};
 use uv_install_wheel::linker::LinkMode;
 
 use uv_auth::store_credentials_from_url;
-use uv_cache::Cache;
+use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
@@ -572,7 +572,7 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path()).map_err(|err| {
                 anyhow::anyhow!("`{}` is not a valid source distribution, as it ends with an unsupported extension. Expected one of: {err}.", path.user_display())
             })?;
-            let temp_dir = tempfile::tempdir_in(&output_dir)?;
+            let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
 
             // Extract the top-level directory from the archive.
@@ -581,14 +581,6 @@ async fn build_package(
                 Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
                 Err(err) => return Err(err.into()),
             };
-
-            // Add a git boundary for builds inside the `dist/` directory, to avoid build backends
-            // such as hatchling from traversing upwards and reading gitignore files from the
-            // project. See also `uv_cache::Cache::init()`.
-            fs_err::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .open(temp_dir.path().join(".git"))?;
 
             writeln!(
                 printer.stderr(),
