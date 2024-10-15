@@ -4680,6 +4680,7 @@ dependencies = [
  "uv-cache-key",
  "uv-fs",
  "uv-static",
+ "which",
 ]
 
 [[package]]

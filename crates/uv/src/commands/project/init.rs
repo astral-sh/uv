@@ -11,6 +11,7 @@ use uv_cli::AuthorFrom;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{VersionControlError, VersionControlSystem};
 use uv_fs::{Simplified, CWD};
+use uv_git::GIT;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{
@@ -896,14 +897,14 @@ fn get_author_info(path: &Path, author_from: AuthorFrom) -> Option<Author> {
 
 /// Fetch the default author from git configuration.
 fn get_author_from_git(path: &Path) -> Result<Author> {
-    let Ok(git) = which::which("git") else {
+    let Ok(git) = GIT.as_ref() else {
         anyhow::bail!("`git` not found in PATH")
     };
 
     let mut name = None;
     let mut email = None;
 
-    let output = Command::new(&git)
+    let output = Command::new(git)
         .arg("config")
         .arg("--get")
         .arg("user.name")
@@ -915,7 +916,7 @@ fn get_author_from_git(path: &Path) -> Result<Author> {
         name = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
     }
 
-    let output = Command::new(&git)
+    let output = Command::new(git)
         .arg("config")
         .arg("--get")
         .arg("user.email")

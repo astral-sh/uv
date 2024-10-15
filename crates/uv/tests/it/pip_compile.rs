@@ -11397,6 +11397,9 @@ fn git_source_refs() -> Result<()> {
 fn git_source_missing_tag() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    let mut filters = context.filters();
+    filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
@@ -11410,7 +11413,7 @@ fn git_source_missing_tag() -> Result<()> {
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "missing" }
     "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(filters, context.pip_compile()
         .arg("pyproject.toml"), @r###"
     success: false
     exit_code: 2
