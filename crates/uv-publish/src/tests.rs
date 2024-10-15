@@ -21,9 +21,9 @@ impl Reporter for DummyReporter {
 /// Snapshot the data we send for an upload request for a source distribution.
 #[tokio::test]
 async fn upload_request_source_dist() {
-    let filename = "tqdm-999.0.0.tar.gz";
-    let file = PathBuf::from("../../scripts/links/").join(filename);
-    let filename = DistFilename::try_from_normalized_filename(filename).unwrap();
+    let raw_filename = "tqdm-999.0.0.tar.gz";
+    let file = PathBuf::from("../../scripts/links/").join(raw_filename);
+    let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
     let form_metadata = form_metadata(&file, &filename).await.unwrap();
 
@@ -81,6 +81,7 @@ async fn upload_request_source_dist() {
 
     let (request, _) = build_request(
         &file,
+        raw_filename,
         &filename,
         &Url::parse("https://example.org/upload").unwrap(),
         &BaseClientBuilder::new().build().client(),
@@ -129,10 +130,10 @@ async fn upload_request_source_dist() {
 /// Snapshot the data we send for an upload request for a wheel.
 #[tokio::test]
 async fn upload_request_wheel() {
-    let filename =
+    let raw_filename =
         "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
-    let file = PathBuf::from("../../scripts/links/").join(filename);
-    let filename = DistFilename::try_from_normalized_filename(filename).unwrap();
+    let file = PathBuf::from("../../scripts/links/").join(raw_filename);
+    let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
     let form_metadata = form_metadata(&file, &filename).await.unwrap();
 
@@ -225,6 +226,7 @@ async fn upload_request_wheel() {
 
     let (request, _) = build_request(
         &file,
+        raw_filename,
         &filename,
         &Url::parse("https://example.org/upload").unwrap(),
         &BaseClientBuilder::new().build().client(),
