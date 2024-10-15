@@ -50,6 +50,7 @@ uv-static = { workspace = true }
 uv-tool = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
+uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
