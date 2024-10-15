@@ -74,12 +74,9 @@ impl GlobalSettings {
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
-            color: if matches!(
-                args.color,
-                ColorChoice::Always | ColorChoice::Never | ColorChoice::Auto
-            ) {
-                // `--color` is passed explicitly, use `args.color`.
-                args.color
+            color: if let Some(color_choice) = args.color {
+                // If `--color` is passed explicitly, use its value.
+                color_choice
             } else if std::env::var_os(EnvVars::NO_COLOR)
                 .filter(|v| !v.is_empty())
                 .is_some()
