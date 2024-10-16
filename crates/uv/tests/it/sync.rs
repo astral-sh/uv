@@ -1109,7 +1109,7 @@ fn sync_include_group() -> Result<()> {
 
         [dependency-groups]
         foo = ["anyio", {include-group = "bar"}]
-        bar = ["trio"]
+        bar = ["iniconfig"]
         "#,
     )?;
 
@@ -1121,7 +1121,7 @@ fn sync_include_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 11 packages in [TIME]
+    Resolved 6 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
@@ -1133,16 +1133,13 @@ fn sync_include_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 11 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + attrs==23.2.0
      + idna==3.6
-     + outcome==1.3.0.post0
+     + iniconfig==2.0.0
      + sniffio==1.3.1
-     + sortedcontainers==2.4.0
-     + trio==0.25.0
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("bar"), @r###"
@@ -1151,9 +1148,11 @@ fn sync_include_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 11 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
+    Resolved 6 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
      - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
      - typing-extensions==4.10.0
     "###);
 
@@ -1163,9 +1162,11 @@ fn sync_include_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 11 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Resolved 6 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
      + typing-extensions==4.10.0
     "###);
 
@@ -1175,9 +1176,51 @@ fn sync_include_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 11 packages in [TIME]
+    Resolved 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
      - typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_dev_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())

@@ -874,8 +874,8 @@ bar = ["b"]
         foo,
         &[
             DependencyGroupSpecifier::Requirement("a".to_string()),
-            DependencyGroupSpecifier::Table {
-                include_group: Some("bar".to_string())
+            DependencyGroupSpecifier::IncludeGroup {
+                include_group: GroupName::from_str("bar").unwrap(),
             }
         ]
     );
@@ -885,6 +885,6 @@ bar = ["b"]
         .expect("Group `bar` should be present");
     assert_eq!(
         bar,
-        &[DependencyGroupSpecifier::Requirement("b".to_string()),]
+        &[DependencyGroupSpecifier::Requirement("b".to_string())]
     );
 }
