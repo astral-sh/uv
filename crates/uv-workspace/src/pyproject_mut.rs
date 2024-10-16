@@ -12,6 +12,7 @@ use url::Url;
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
+use uv_normalize::GroupName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 
@@ -123,9 +124,11 @@ impl PyProjectTomlMut {
         Ok(())
     }
 
-    /// Retrieves a mutable reference to the root [`Table`] of the TOML document, creating the
-    /// `project` table if necessary.
-    fn doc(&mut self) -> Result<&mut Table, Error> {
+    /// Retrieves a mutable reference to the `project` [`Table`] of the TOML document, creating the
+    /// table if necessary.
+    ///
+    /// For a script, this returns the root table.
+    fn project(&mut self) -> Result<&mut Table, Error> {
         let doc = match self.target {
             DependencyTarget::Script => self.doc.as_table_mut(),
             DependencyTarget::PyProjectToml => self
@@ -140,7 +143,9 @@ impl PyProjectTomlMut {
 
     /// Retrieves an optional mutable reference to the `project` [`Table`], returning `None` if it
     /// doesn't exist.
-    fn doc_mut(&mut self) -> Result<Option<&mut Table>, Error> {
+    ///
+    /// For a script, this returns the root table.
+    fn project_mut(&mut self) -> Result<Option<&mut Table>, Error> {
         let doc = match self.target {
             DependencyTarget::Script => Some(self.doc.as_table_mut()),
             DependencyTarget::PyProjectToml => self
@@ -162,7 +167,7 @@ impl PyProjectTomlMut {
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
-            .doc()?
+            .project()?
             .entry("dependencies")
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
@@ -393,7 +398,7 @@ impl PyProjectTomlMut {
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
-            .doc()?
+            .project()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
             .as_table_like_mut()
@@ -417,6 +422,41 @@ impl PyProjectTomlMut {
         Ok(added)
     }
 
+    /// Adds a dependency to `dependency-groups`.
+    ///
+    /// Returns `true` if the dependency was added, `false` if it was updated.
+    pub fn add_dependency_group_requirement(
+        &mut self,
+        group: &GroupName,
+        req: &Requirement,
+        source: Option<&Source>,
+    ) -> Result<ArrayEdit, Error> {
+        // Get or create `dependency-groups`.
+        let dependency_groups = self
+            .doc
+            .entry("dependency-groups")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let group = dependency_groups
+            .entry(group.as_ref())
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let name = req.name.clone();
+        let added = add_dependency(req, group, source.is_some())?;
+
+        dependency_groups.fmt();
+
+        if let Some(source) = source {
+            self.add_source(&name, source)?;
+        }
+
+        Ok(added)
+    }
+
     /// Set the minimum version for an existing dependency in `project.dependencies`.
     pub fn set_dependency_minimum_version(
         &mut self,
@@ -425,7 +465,7 @@ impl PyProjectTomlMut {
     ) -> Result<(), Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
-            .doc()?
+            .project()?
             .entry("dependencies")
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
@@ -494,13 +534,50 @@ impl PyProjectTomlMut {
     ) -> Result<(), Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
-            .doc()?
+            .project()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
         let group = optional_dependencies
+            .entry(group.as_ref())
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let Some(req) = group.get(index) else {
+            return Err(Error::MissingDependency(index));
+        };
+
+        let mut req = req
+            .as_str()
+            .and_then(try_parse_requirement)
+            .ok_or(Error::MalformedDependencies)?;
+        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+            VersionSpecifier::greater_than_equal_version(version),
+        )));
+        group.replace(index, req.to_string());
+
+        Ok(())
+    }
+
+    /// Set the minimum version for an existing dependency in `dependency-groups`.
+    pub fn set_dependency_group_requirement_minimum_version(
+        &mut self,
+        group: &GroupName,
+        index: usize,
+        version: Version,
+    ) -> Result<(), Error> {
+        // Get or create `dependency-groups`.
+        let dependency_groups = self
+            .doc
+            .entry("dependency-groups")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let group = dependency_groups
             .entry(group.as_ref())
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
@@ -552,7 +629,7 @@ impl PyProjectTomlMut {
     pub fn remove_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.dependencies`.
         let Some(dependencies) = self
-            .doc_mut()?
+            .project_mut()?
             .and_then(|project| project.get_mut("dependencies"))
             .map(|dependencies| {
                 dependencies
@@ -606,7 +683,7 @@ impl PyProjectTomlMut {
     ) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.optional-dependencies.<group>`.
         let Some(optional_dependencies) = self
-            .doc_mut()?
+            .project_mut()?
             .and_then(|project| project.get_mut("optional-dependencies"))
             .map(|extras| {
                 extras
@@ -626,6 +703,39 @@ impl PyProjectTomlMut {
         };
 
         let requirements = remove_dependency(name, optional_dependencies);
+        self.remove_source(name)?;
+
+        Ok(requirements)
+    }
+
+    /// Removes all occurrences of the dependency in the group with the given name.
+    pub fn remove_dependency_group_requirement(
+        &mut self,
+        name: &PackageName,
+        group: &GroupName,
+    ) -> Result<Vec<Requirement>, Error> {
+        // Try to get `project.optional-dependencies.<group>`.
+        let Some(group_dependencies) = self
+            .doc
+            .get_mut("dependency-groups")
+            .map(|groups| {
+                groups
+                    .as_table_like_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
+            .transpose()?
+            .and_then(|groups| groups.get_mut(group.as_ref()))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
+            .transpose()?
+        else {
+            return Ok(Vec::new());
+        };
+
+        let requirements = remove_dependency(name, group_dependencies);
         self.remove_source(name)?;
 
         Ok(requirements)
@@ -718,7 +828,7 @@ impl PyProjectTomlMut {
                 let Some(dependencies) = dependencies.as_array() else {
                     continue;
                 };
-                let Ok(group) = ExtraName::new(group.to_string()) else {
+                let Ok(group) = GroupName::new(group.to_string()) else {
                     continue;
                 };
 

@@ -43,7 +43,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         lock: &'lock Lock,
         root_name: &PackageName,
         extras: &ExtrasSpecification,
-        dev: DevSpecification<'_>,
+        dev: &DevSpecification,
         editable: EditableMode,
         hashes: bool,
         install_options: &'lock InstallOptions,
