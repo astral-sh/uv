@@ -44,6 +44,8 @@ pub struct PyProjectToml {
     pub project: Option<Project>,
     /// Tool-specific metadata.
     pub tool: Option<Tool>,
+    /// Non-project dependency groups, as defined in PEP 735.
+    pub dependency_groups: Option<BTreeMap<ExtraName, Vec<String>>>,
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
@@ -1126,6 +1128,8 @@ pub enum DependencyType {
     Dev,
     /// A dependency in `project.optional-dependencies.{0}`.
     Optional(ExtraName),
+    /// A dependency in `dependency-groups.{0}`.
+    Group(ExtraName),
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
