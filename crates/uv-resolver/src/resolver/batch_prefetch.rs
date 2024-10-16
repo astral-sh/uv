@@ -1,7 +1,7 @@
 use std::cmp::min;
 
 use itertools::Itertools;
-use pubgrub::Range;
+use pubgrub::{Range, Term};
 use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
@@ -49,6 +49,7 @@ impl BatchPrefetcher {
         index: Option<&IndexUrl>,
         version: &Version,
         current_range: &Range<Version>,
+        unchangeable_constraints: Option<&Term<Range<Version>>>,
         python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
         in_memory: &InMemoryIndex,
@@ -119,11 +120,22 @@ impl BatchPrefetcher {
                     }
                 }
                 BatchPrefetchStrategy::InOrder { previous } => {
-                    let range = if selector.use_highest_version(name) {
+                    let mut range = if selector.use_highest_version(name) {
                         Range::strictly_lower_than(previous)
                     } else {
                         Range::strictly_higher_than(previous)
                     };
+                    // If we have constraints from root, don't go beyond those. Example: We are
+                    // prefetching for foo 1.60 and have a dependency for `foo>=1.50`, so we should
+                    // only prefetch 1.60 to 1.50, knowing 1.49 will always be rejected.
+                    if let Some(unchangeable_constraints) = unchangeable_constraints {
+                        range = match unchangeable_constraints {
+                            Term::Positive(constraints) => range.intersection(constraints),
+                            Term::Negative(negative_constraints) => {
+                                range.intersection(&negative_constraints.complement())
+                            }
+                        };
+                    }
                     if let Some(candidate) =
                         selector.select_no_preference(name, &range, version_map, markers)
                     {
