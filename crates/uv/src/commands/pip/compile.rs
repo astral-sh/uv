@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -466,9 +467,12 @@ pub(crate) async fn pip_compile(
             writeln!(writer, "--index-url {}", index.url().verbatim())?;
             wrote_preamble = true;
         }
+        let mut seen = FxHashSet::default();
         for extra_index in index_locations.implicit_indexes() {
-            writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
-            wrote_preamble = true;
+            if seen.insert(extra_index.url()) {
+                writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
+                wrote_preamble = true;
+            }
         }
     }
 
