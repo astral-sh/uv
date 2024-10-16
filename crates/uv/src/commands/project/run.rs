@@ -109,7 +109,9 @@ pub(crate) async fn run(
 
     // Initialize env file, if necessary.
     if !no_env_file {
-        let env_file_path = env_file.clone().unwrap_or(Path::new(".env").to_path_buf());
+        let env_file_path = env_file
+            .clone()
+            .unwrap_or_else(|| Path::new(".env").to_path_buf());
 
         let loaded = dotenvy::from_path_override(&env_file_path);
 
