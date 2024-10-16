@@ -1,4 +1,4 @@
-use crate::commit_info::CacheCommit;
+use crate::git_info::{Commit, Tags};
 use crate::timestamp::Timestamp;
 
 use serde::Deserialize;
@@ -26,7 +26,9 @@ pub struct CacheInfo {
     /// files to timestamp via the `cache-keys` field.
     timestamp: Option<Timestamp>,
     /// The commit at which the distribution was built.
-    commit: Option<CacheCommit>,
+    commit: Option<Commit>,
+    /// The Git tags present at the time of the build.
+    tags: Option<Tags>,
 }
 
 impl CacheInfo {
@@ -51,6 +53,7 @@ impl CacheInfo {
     /// Compute the cache info for a given directory.
     pub fn from_directory(directory: &Path) -> Result<Self, CacheInfoError> {
         let mut commit = None;
+        let mut tags = None;
         let mut timestamp = None;
 
         // Read the cache keys.
@@ -109,13 +112,37 @@ impl CacheInfo {
                     }
                     timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
                 }
-                CacheKey::Git { git: true } => match CacheCommit::from_repository(directory) {
+                CacheKey::Git {
+                    git: GitPattern::Bool(true),
+                } => match Commit::from_repository(directory) {
                     Ok(commit_info) => commit = Some(commit_info),
                     Err(err) => {
                         debug!("Failed to read the current commit: {err}");
                     }
                 },
-                CacheKey::Git { git: false } => {}
+                CacheKey::Git {
+                    git: GitPattern::Set(set),
+                } => {
+                    if set.commit.unwrap_or(false) {
+                        match Commit::from_repository(directory) {
+                            Ok(commit_info) => commit = Some(commit_info),
+                            Err(err) => {
+                                debug!("Failed to read the current commit: {err}");
+                            }
+                        }
+                    }
+                    if set.tags.unwrap_or(false) {
+                        match Tags::from_repository(directory) {
+                            Ok(tags_info) => tags = Some(tags_info),
+                            Err(err) => {
+                                debug!("Failed to read the current tags: {err}");
+                            }
+                        }
+                    }
+                }
+                CacheKey::Git {
+                    git: GitPattern::Bool(false),
+                } => {}
             }
         }
 
@@ -150,7 +177,11 @@ impl CacheInfo {
             }
         }
 
-        Ok(Self { timestamp, commit })
+        Ok(Self {
+            timestamp,
+            commit,
+            tags,
+        })
     }
 
     /// Compute the cache info for a given file, assumed to be a binary or source distribution
@@ -165,14 +196,18 @@ impl CacheInfo {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.timestamp.is_none() && self.commit.is_none()
+        self.timestamp.is_none() && self.commit.is_none() && self.tags.is_none()
     }
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct TimestampCommit {
+    #[serde(default)]
     timestamp: Option<Timestamp>,
-    commit: Option<CacheCommit>,
+    #[serde(default)]
+    commit: Option<Commit>,
+    #[serde(default)]
+    tags: Option<Tags>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -192,9 +227,15 @@ impl From<CacheInfoWire> for CacheInfo {
                 timestamp: Some(timestamp),
                 ..Self::default()
             },
-            CacheInfoWire::TimestampCommit(TimestampCommit { timestamp, commit }) => {
-                Self { timestamp, commit }
-            }
+            CacheInfoWire::TimestampCommit(TimestampCommit {
+                timestamp,
+                commit,
+                tags,
+            }) => Self {
+                timestamp,
+                commit,
+                tags,
+            },
         }
     }
 }
@@ -226,8 +267,24 @@ pub enum CacheKey {
     Path(String),
     /// Ex) `{ file = "Cargo.lock" }` or `{ file = "**/*.toml" }`
     File { file: String },
-    /// Ex) `{ git = true }`
-    Git { git: bool },
+    /// Ex) `{ git = true }` or `{ git = { commit = true, tags = false } }`
+    Git { git: GitPattern },
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
+pub enum GitPattern {
+    Bool(bool),
+    Set(GitSet),
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct GitSet {
+    commit: Option<bool>,
+    tags: Option<bool>,
 }
 
 pub enum FilePattern {

@@ -69,9 +69,9 @@ pub struct Options {
     /// determine whether any files have changed.
     ///
     /// Cache keys can also include version control information. For example, if a project uses
-    /// `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = "pyproject.toml" }]`
+    /// `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true }, { file = "pyproject.toml" }]`
     /// to include the current Git commit hash in the cache key (in addition to the
-    /// `pyproject.toml`).
+    /// `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.
     ///
     /// Cache keys only affect the project defined by the `pyproject.toml` in which they're
     /// specified (as opposed to, e.g., affecting all members in a workspace), and all paths and
@@ -80,7 +80,7 @@ pub struct Options {
         default = r#"[{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]"#,
         value_type = "list[dict]",
         example = r#"
-            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = true }]
+            cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
         "#
     )]
     cache_keys: Option<Vec<CacheKey>>,
