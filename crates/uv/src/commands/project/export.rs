@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevMode, DevSpecification, EditableMode, ExportFormat, ExtrasSpecification,
+    Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
     InstallOptions, LowerBound,
 };
 use uv_normalize::PackageName;
@@ -33,7 +33,7 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     editable: EditableMode,
     locked: bool,
     frozen: bool,
@@ -141,7 +141,7 @@ pub(crate) async fn export(
                 &lock,
                 project.project_name(),
                 &extras,
-                &DevSpecification::from(dev),
+                &dev.with_default_dev(),
                 editable,
                 hashes,
                 &install_options,
