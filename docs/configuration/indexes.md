@@ -162,8 +162,8 @@ In addition to the `[[tool.uv.index]]` configuration option, uv supports pip-sty
 `--extra-index-url` command-line options for compatibility, where `--index-url` defines the default
 index and `--extra-index-url` defines additional indexes.
 
-These options can be used in conjunction with the `[[tool.uv.index]]` configuration option, and use
-the same prioritization rules:
+These options can be used in conjunction with the `[[tool.uv.index]]` configuration option, and
+follow the same prioritization rules:
 
 - The default index is always treated as lowest priority, whether defined via the legacy
   `--index-url` argument, the recommended `--default-index` argument, or a `[[tool.uv.index]]` entry
@@ -172,4 +172,5 @@ the same prioritization rules:
   `--extra-index-url` argument, the recommended `--index` argument, or `[[tool.uv.index]]` entries.
 
 In effect, `--index-url` and `--extra-index-url` can be thought of as unnamed `[[tool.uv.index]]`
-entries, with `default = true` enabled for the former.
+entries, with `default = true` enabled for the former. In that context, `--index-url` maps to
+`--default-index`, and `--extra-index-url` maps to `--index`.
