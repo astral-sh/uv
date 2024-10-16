@@ -5,13 +5,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::distribution_database::ManagedClient;
-use crate::error::Error;
-use crate::metadata::{ArchiveMetadata, Metadata};
-use crate::reporter::Facade;
-use crate::source::built_wheel_metadata::BuiltWheelMetadata;
-use crate::source::revision::Revision;
-use crate::{LowerBound, Reporter, RequiresDist};
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::Response;
@@ -37,6 +30,14 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
+
+use crate::distribution_database::ManagedClient;
+use crate::error::Error;
+use crate::metadata::{ArchiveMetadata, Metadata};
+use crate::reporter::Facade;
+use crate::source::built_wheel_metadata::BuiltWheelMetadata;
+use crate::source::revision::Revision;
+use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
@@ -390,7 +391,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             project_root,
             self.build_context.locations(),
             self.build_context.sources(),
-            LowerBound::Warn,
+            self.build_context.bounds(),
         )
         .await?;
         Ok(requires_dist)
@@ -1089,6 +1090,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.install_path.as_ref(),
                     self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1124,6 +1126,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.install_path.as_ref(),
                     self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1154,6 +1157,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.install_path.as_ref(),
                     self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1200,6 +1204,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 resource.install_path.as_ref(),
                 self.build_context.locations(),
                 self.build_context.sources(),
+                self.build_context.bounds(),
             )
             .await?,
         ))
@@ -1384,6 +1389,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &path,
                     self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1411,6 +1417,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         &path,
                         self.build_context.locations(),
                         self.build_context.sources(),
+                        self.build_context.bounds(),
                     )
                     .await?,
                 ));
@@ -1442,6 +1449,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &path,
                     self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1488,6 +1496,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 fetch.path(),
                 self.build_context.locations(),
                 self.build_context.sources(),
+                self.build_context.bounds(),
             )
             .await?,
         ))

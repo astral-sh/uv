@@ -14,7 +14,7 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
-    SourceStrategy,
+    LowerBound, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -234,6 +234,7 @@ pub(crate) async fn add(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
+    let bounds = LowerBound::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::default();
@@ -304,6 +305,7 @@ pub(crate) async fn add(
         &settings.build_options,
         &build_hasher,
         settings.exclude_newer,
+        bounds,
         sources,
         concurrency,
     );
@@ -588,6 +590,7 @@ pub(crate) async fn add(
         &dependency_type,
         raw_sources,
         settings.as_ref(),
+        bounds,
         connectivity,
         concurrency,
         native_tls,
@@ -648,6 +651,7 @@ async fn lock_and_sync(
     dependency_type: &DependencyType,
     raw_sources: bool,
     settings: ResolverInstallerSettingsRef<'_>,
+    bounds: LowerBound,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -660,6 +664,7 @@ async fn lock_and_sync(
         project.workspace(),
         venv.interpreter(),
         settings.into(),
+        bounds,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -773,6 +778,7 @@ async fn lock_and_sync(
                 project.workspace(),
                 venv.interpreter(),
                 settings.into(),
+                bounds,
                 &state,
                 Box::new(SummaryResolveLogger),
                 connectivity,

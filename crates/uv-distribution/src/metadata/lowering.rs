@@ -4,7 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use url::Url;
-
+use uv_configuration::LowerBound;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{Index, IndexLocations, Origin};
 use uv_git::GitReference;
@@ -171,7 +171,8 @@ impl LoweredRequirement {
                                     index,
                                 ));
                             };
-                            let source = registry_source(&requirement, index.into_url())?;
+                            let source =
+                                registry_source(&requirement, index.into_url(), lower_bound)?;
                             (source, marker)
                         }
                         Source::Workspace {
@@ -260,6 +261,7 @@ impl LoweredRequirement {
         sources: &'data BTreeMap<PackageName, Sources>,
         indexes: &'data [Index],
         locations: &'data IndexLocations,
+        lower_bound: LowerBound,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
@@ -354,7 +356,8 @@ impl LoweredRequirement {
                                     index,
                                 ));
                             };
-                            let source = registry_source(&requirement, index.into_url())?;
+                            let source =
+                                registry_source(&requirement, index.into_url(), lower_bound)?;
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
@@ -487,13 +490,16 @@ fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSour
 fn registry_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     index: Url,
+    bounds: LowerBound,
 ) -> Result<RequirementSource, LoweringError> {
     match &requirement.version_or_url {
         None => {
-            warn_user_once!(
-                "Missing version constraint (e.g., a lower bound) for `{}`",
-                requirement.name
-            );
+            if matches!(bounds, LowerBound::Warn) {
+                warn_user_once!(
+                    "Missing version constraint (e.g., a lower bound) for `{}`",
+                    requirement.name
+                );
+            }
             Ok(RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: Some(index),
@@ -573,12 +579,4 @@ fn path_source(
             url,
         })
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum LowerBound {
-    /// Allow missing lower bounds.
-    Allow,
-    /// Warn about missing lower bounds.
-    Warn,
 }

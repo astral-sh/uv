@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{
+    BuildKind, BuildOptions, BuildOutput, ConfigSettings, LowerBound, SourceStrategy,
+};
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist, Resolution,
     SourceDist,
@@ -74,6 +76,9 @@ pub trait BuildContext {
 
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
+
+    /// Whether to warn on missing lower bounds.
+    fn bounds(&self) -> LowerBound;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;

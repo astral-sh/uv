@@ -8,7 +8,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    IndexStrategy, LowerBound, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
@@ -369,6 +369,7 @@ pub(crate) async fn pip_install(
         &build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Warn,
         sources,
         concurrency,
     );

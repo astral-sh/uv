@@ -27,9 +27,8 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
-pub use crate::error::{Error, MissingHeaderCause};
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
-use uv_distribution::{LowerBound, RequiresDist};
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
+use uv_distribution::RequiresDist;
 use uv_distribution_types::{IndexLocations, Resolution};
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
 use uv_pep440::Version;
@@ -38,6 +37,8 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
+
+pub use crate::error::{Error, MissingHeaderCause};
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend {

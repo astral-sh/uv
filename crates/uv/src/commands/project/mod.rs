@@ -7,7 +7,9 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
+use uv_configuration::{
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
@@ -703,6 +705,7 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         *exclude_newer,
+        LowerBound::Allow,
         *sources,
         concurrency,
     );
@@ -886,6 +889,7 @@ pub(crate) async fn resolve_environment<'a>(
         build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Allow,
         sources,
         concurrency,
     );
@@ -1020,6 +1024,7 @@ pub(crate) async fn sync_environment(
         build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Allow,
         sources,
         concurrency,
     );
@@ -1226,6 +1231,7 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         *exclude_newer,
+        LowerBound::Allow,
         *sources,
         concurrency,
     );

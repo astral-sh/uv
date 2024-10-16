@@ -12,7 +12,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -111,6 +111,7 @@ pub(crate) async fn lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        LowerBound::Warn,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -157,6 +158,7 @@ pub(super) async fn do_safe_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
+    bounds: LowerBound,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
@@ -183,6 +185,7 @@ pub(super) async fn do_safe_lock(
             interpreter,
             Some(existing),
             settings,
+            bounds,
             state,
             logger,
             connectivity,
@@ -209,6 +212,7 @@ pub(super) async fn do_safe_lock(
             interpreter,
             existing,
             settings,
+            bounds,
             state,
             logger,
             connectivity,
@@ -234,6 +238,7 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     settings: ResolverSettingsRef<'_>,
+    bounds: LowerBound,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
@@ -437,6 +442,7 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer,
+        bounds,
         sources,
         concurrency,
     );

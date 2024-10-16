@@ -16,7 +16,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, SourceStrategy, TrustedHost,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, LowerBound, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -486,6 +486,7 @@ async fn build_package(
         build_options,
         &hasher,
         exclude_newer,
+        LowerBound::Allow,
         sources,
         concurrency,
     );

@@ -9,7 +9,7 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
-    HashCheckingMode, InstallOptions,
+    HashCheckingMode, InstallOptions, LowerBound,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
@@ -115,6 +115,7 @@ pub(crate) async fn sync(
         target.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        LowerBound::Warn,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -311,6 +312,7 @@ pub(super) async fn do_sync(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
+    let bounds = LowerBound::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let dry_run = false;
@@ -347,6 +349,7 @@ pub(super) async fn do_sync(
         build_options,
         &build_hasher,
         exclude_newer,
+        bounds,
         sources,
         concurrency,
     );
