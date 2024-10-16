@@ -330,12 +330,8 @@ fn python_executables_from_installed<'a>(
         {
             // Skip interpreter probing if we already know the version doesn't match.
             let version_filter = move |entry: &WindowsPython| {
-                if let Some(version_request) = version {
-                    if let Some(version) = &entry.version {
-                        version_request.matches_version(version)
-                    } else {
-                        true
-                    }
+                if let Some(found) = &entry.version {
+                    version.matches_version(found)
                 } else {
                     true
                 }
@@ -583,6 +579,7 @@ fn python_interpreters<'a>(
         cache,
     )
     .filter(move |result| result_satisfies_environment_preference(result, environments))
+    .filter(move |result| result_satisfies_version_request(result, version))
 }
 
 /// Lazily convert Python executables into interpreters.
@@ -654,6 +651,24 @@ fn satisfies_environment_preference(
         }
         (EnvironmentPreference::OnlySystem, false) => true,
     }
+}
+
+/// Utility for applying [`VersionRequest::matches_interpreter`] to a result type.
+fn result_satisfies_version_request(
+    result: &Result<(PythonSource, Interpreter), Error>,
+    request: &VersionRequest,
+) -> bool {
+    result.as_ref().ok().map_or(true, |(source, interpreter)| {
+        if request.matches_interpreter(interpreter) {
+            true
+        } else {
+            debug!(
+                "Skipping interpreter at `{}` from {source}: does not satisfy request `{request}`",
+                interpreter.sys_executable().user_display()
+            );
+            false
+        }
+    })
 }
 
 /// Utility for applying [`satisfies_environment_preference`] to a result type.
@@ -845,16 +860,11 @@ pub fn find_python_installations<'a>(
             };
             Box::new({
                 debug!("Searching for {request} in {preference}");
-                python_interpreters(version, None, environments, preference, cache)
-                    .filter(|result| match result {
-                        Err(_) => true,
-                        Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
-                    })
-                    .map(|result| {
-                        result
-                            .map(PythonInstallation::from_tuple)
-                            .map(FindPythonResult::Ok)
-                    })
+                python_interpreters(version, None, environments, preference, cache).map(|result| {
+                    result
+                        .map(PythonInstallation::from_tuple)
+                        .map(FindPythonResult::Ok)
+                })
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
@@ -983,7 +993,7 @@ pub(crate) fn find_python_installation(
 
         // If it's an alternative implementation and alternative implementations aren't allowed,
         // skip it. Note we avoid querying these interpreters at all if they're on the search path
-        // and are not requested, but other sources such as the managed installations will include
+        // and are not requested, but other sources such as the managed installations can include
         // them.
         if installation.is_alternative_implementation()
             && !request.allows_alternative_implementations()
@@ -1639,6 +1649,7 @@ impl std::fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
+    /// Return possible executable names for the given version request.
     pub(crate) fn executable_names(
         &self,
         implementation: Option<&ImplementationName>,
@@ -1722,6 +1733,7 @@ impl VersionRequest {
         names
     }
 
+    /// Return the major version segment of the request, if any.
     pub(crate) fn major(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
@@ -1732,6 +1744,7 @@ impl VersionRequest {
         }
     }
 
+    /// Return the minor version segment of the request, if any.
     pub(crate) fn minor(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
@@ -1742,6 +1755,7 @@ impl VersionRequest {
         }
     }
 
+    /// Return the patch version segment of the request, if any.
     pub(crate) fn patch(&self) -> Option<u8> {
         match self {
             Self::Any | Self::Default | Self::Range(_, _) => None,
@@ -1752,6 +1766,9 @@ impl VersionRequest {
         }
     }
 
+    /// Check if the request is for a version supported by uv.
+    ///
+    /// If not, an `Err` is returned with an explanatory message.
     pub(crate) fn check_supported(&self) -> Result<(), String> {
         match self {
             Self::Any | Self::Default => (),
@@ -1800,7 +1817,7 @@ impl VersionRequest {
         Ok(())
     }
 
-    /// Check if a interpreter matches the requested Python version.
+    /// Check if a interpreter matches the request.
     pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         match self {
             Self::Any => true,
@@ -1840,6 +1857,10 @@ impl VersionRequest {
         }
     }
 
+    /// Check if a version is compatible with the request.
+    ///
+    /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
+    /// avoid querying interpreters if it's clear it cannot fulfull the request.
     pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
             Self::Any | Self::Default => true,
@@ -1859,6 +1880,10 @@ impl VersionRequest {
         }
     }
 
+    /// Check if major and minor version segments are compatible with the request.
+    ///
+    /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
+    /// avoid querying interpreters if it's clear it cannot fulfull the request.
     fn matches_major_minor(&self, major: u8, minor: u8) -> bool {
         match self {
             Self::Any | Self::Default => true,
@@ -1878,6 +1903,11 @@ impl VersionRequest {
         }
     }
 
+    /// Check if major, minor, patch, and prerelease version segments are compatible with the
+    /// request.
+    ///
+    /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
+    /// avoid querying interpreters if it's clear it cannot fulfull the request.
     pub(crate) fn matches_major_minor_patch_prerelease(
         &self,
         major: u8,
@@ -1906,7 +1936,7 @@ impl VersionRequest {
         }
     }
 
-    /// Return true if a patch version is present in the request.
+    /// Whether a patch version segment is present in the request.
     fn has_patch(&self) -> bool {
         match self {
             Self::Any | Self::Default => false,
@@ -1920,7 +1950,7 @@ impl VersionRequest {
 
     /// Return a new [`VersionRequest`] without the patch version if possible.
     ///
-    /// If the patch version is not present, it is returned unchanged.
+    /// If the patch version is not present, the request is returned unchanged.
     #[must_use]
     fn without_patch(self) -> Self {
         match self {
@@ -1951,6 +1981,7 @@ impl VersionRequest {
         }
     }
 
+    /// Whether this request is for a free-threaded Python variant.
     pub(crate) fn is_freethreaded(&self) -> bool {
         match self {
             Self::Any | Self::Default => false,
@@ -1985,7 +2016,7 @@ impl VersionRequest {
         }
     }
 
-    /// Return the required [`PythonVariant`] of the request.
+    /// Return the [`PythonVariant`] of the request, if any.
     pub(crate) fn variant(&self) -> Option<PythonVariant> {
         match self {
             Self::Any => None,
