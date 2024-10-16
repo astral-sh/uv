@@ -659,6 +659,7 @@ fn result_satisfies_version_request(
     request: &VersionRequest,
 ) -> bool {
     result.as_ref().ok().map_or(true, |(source, interpreter)| {
+        let request = request.clone().into_request_for_source(*source);
         if request.matches_interpreter(interpreter) {
             true
         } else {
@@ -903,12 +904,9 @@ pub fn find_python_installations<'a>(
                 )
                 .filter(|result| match result {
                     Err(_) => true,
-                    Ok((_source, interpreter)) => {
-                        version.matches_interpreter(interpreter)
-                            && interpreter
-                                .implementation_name()
-                                .eq_ignore_ascii_case(implementation.into())
-                    }
+                    Ok((_source, interpreter)) => interpreter
+                        .implementation_name()
+                        .eq_ignore_ascii_case(implementation.into()),
                 })
                 .map(|result| {
                     result
@@ -1815,6 +1813,29 @@ impl VersionRequest {
         }
 
         Ok(())
+    }
+
+    /// Change this request into a request appropriate for the given [`PythonSource`].
+    ///
+    /// For example, if [`VersionRequest::Default`] is requested, it will be changed to
+    /// [`VersionRequest::Any`] for sources that should allow non-default interpreters like
+    /// free-threaded variants.
+    #[must_use]
+    pub(crate) fn into_request_for_source(self, source: PythonSource) -> Self {
+        match self {
+            Self::Default => match source {
+                PythonSource::ParentInterpreter
+                | PythonSource::CondaPrefix
+                | PythonSource::ProvidedPath
+                | PythonSource::DiscoveredEnvironment
+                | PythonSource::ActiveEnvironment => Self::Any,
+                PythonSource::SearchPath
+                | PythonSource::Registry
+                | PythonSource::MicrosoftStore
+                | PythonSource::Managed => Self::Default,
+            },
+            _ => self,
+        }
     }
 
     /// Check if a interpreter matches the request.
