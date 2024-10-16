@@ -7,7 +7,7 @@ use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use insta::assert_json_snapshot;
 
-use uv_pep508::ExtraName;
+use uv_normalize::GroupName;
 
 use crate::pyproject::PyProjectToml;
 use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
@@ -866,7 +866,7 @@ test = ["a"]
         .dependency_groups
         .expect("`dependency-groups` should be present");
     let test = groups
-        .get(&ExtraName::from_str("test").unwrap())
+        .get(&GroupName::from_str("test").unwrap())
         .expect("Group `test` should be present");
     assert_eq!(test, &["a".to_string()]);
 }
