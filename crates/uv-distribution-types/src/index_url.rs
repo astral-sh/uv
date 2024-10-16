@@ -1,5 +1,5 @@
 use itertools::Either;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
@@ -393,26 +393,82 @@ impl<'a> IndexUrls {
     }
 }
 
+bitflags::bitflags! {
+    #[derive(Debug, Copy, Clone)]
+    struct Flags: u8 {
+        /// Whether the index supports range requests.
+        const NO_RANGE_REQUESTS = 1;
+        /// Whether the index returned a `401 Unauthorized` status code.
+        const UNAUTHORIZED      = 1 << 2;
+        /// Whether the index returned a `403 Forbidden` status code.
+        const FORBIDDEN         = 1 << 1;
+    }
+}
+
 /// A map of [`IndexUrl`]s to their capabilities.
 ///
-/// For now, we only support a single capability (range requests), and we only store an index if
-/// it _doesn't_ support range requests. The benefit is that the map is almost always empty, so
-/// validating capabilities is extremely cheap.
+/// We only store indexes that lack capabilities (i.e., don't support range requests, aren't
+/// authorized). The benefit is that the map is almost always empty, so validating capabilities is
+/// extremely cheap.
 #[derive(Debug, Default, Clone)]
-pub struct IndexCapabilities(Arc<RwLock<FxHashSet<IndexUrl>>>);
+pub struct IndexCapabilities(Arc<RwLock<FxHashMap<IndexUrl, Flags>>>);
 
 impl IndexCapabilities {
     /// Returns `true` if the given [`IndexUrl`] supports range requests.
     pub fn supports_range_requests(&self, index_url: &IndexUrl) -> bool {
-        !self.0.read().unwrap().contains(index_url)
+        !self
+            .0
+            .read()
+            .unwrap()
+            .get(index_url)
+            .is_some_and(|flags| flags.intersects(Flags::NO_RANGE_REQUESTS))
     }
 
     /// Mark an [`IndexUrl`] as not supporting range requests.
-    pub fn set_supports_range_requests(&self, index_url: IndexUrl, supports: bool) {
-        if supports {
-            self.0.write().unwrap().remove(&index_url);
-        } else {
-            self.0.write().unwrap().insert(index_url);
-        }
+    pub fn set_no_range_requests(&self, index_url: IndexUrl) {
+        self.0
+            .write()
+            .unwrap()
+            .entry(index_url)
+            .or_insert(Flags::empty())
+            .insert(Flags::NO_RANGE_REQUESTS);
+    }
+
+    /// Returns `true` if the given [`IndexUrl`] returns a `401 Unauthorized` status code.
+    pub fn unauthorized(&self, index_url: &IndexUrl) -> bool {
+        self.0
+            .read()
+            .unwrap()
+            .get(index_url)
+            .is_some_and(|flags| flags.intersects(Flags::UNAUTHORIZED))
+    }
+
+    /// Mark an [`IndexUrl`] as returning a `401 Unauthorized` status code.
+    pub fn set_unauthorized(&self, index_url: IndexUrl) {
+        self.0
+            .write()
+            .unwrap()
+            .entry(index_url)
+            .or_insert(Flags::empty())
+            .insert(Flags::UNAUTHORIZED);
+    }
+
+    /// Returns `true` if the given [`IndexUrl`] returns a `403 Forbidden` status code.
+    pub fn forbidden(&self, index_url: &IndexUrl) -> bool {
+        self.0
+            .read()
+            .unwrap()
+            .get(index_url)
+            .is_some_and(|flags| flags.intersects(Flags::FORBIDDEN))
+    }
+
+    /// Mark an [`IndexUrl`] as returning a `403 Forbidden` status code.
+    pub fn set_forbidden(&self, index_url: IndexUrl) {
+        self.0
+            .write()
+            .unwrap()
+            .entry(index_url)
+            .or_insert(Flags::empty())
+            .insert(Flags::FORBIDDEN);
     }
 }

@@ -2,7 +2,7 @@ use std::future::Future;
 
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
-use uv_distribution_types::{Dist, IndexUrl};
+use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
@@ -80,6 +80,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     hasher: HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
     build_options: &'a BuildOptions,
+    capabilities: &'a IndexCapabilities,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -93,6 +94,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
         build_options: &'a BuildOptions,
+        capabilities: &'a IndexCapabilities,
     ) -> Self {
         Self {
             fetcher,
@@ -103,6 +105,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             hasher: hasher.clone(),
             exclude_newer,
             build_options,
+            capabilities,
         }
     }
 }
@@ -117,7 +120,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
         let result = self
             .fetcher
             .client()
-            .managed(|client| client.simple(package_name, index))
+            .managed(|client| client.simple(package_name, index, self.capabilities))
             .await;
 
         match result {
@@ -128,7 +131,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                         VersionMap::from_metadata(
                             metadata,
                             package_name,
-                            &index,
+                            index,
                             self.tags.as_ref(),
                             &self.requires_python,
                             &self.allowed_yanks,

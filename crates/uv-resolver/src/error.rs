@@ -17,7 +17,9 @@ use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
 use crate::Options;
 use tracing::trace;
-use uv_distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
+use uv_distribution_types::{
+    BuiltDist, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist, SourceDist,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -126,6 +128,7 @@ pub struct NoSolutionError {
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
     index_locations: IndexLocations,
+    index_capabilities: IndexCapabilities,
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
@@ -143,6 +146,7 @@ impl NoSolutionError {
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
         index_locations: IndexLocations,
+        index_capabilities: IndexCapabilities,
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
@@ -157,6 +161,7 @@ impl NoSolutionError {
             selector,
             python_requirement,
             index_locations,
+            index_capabilities,
             unavailable_packages,
             incomplete_packages,
             fork_urls,
@@ -261,6 +266,7 @@ impl std::fmt::Display for NoSolutionError {
             &tree,
             &self.selector,
             &self.index_locations,
+            &self.index_capabilities,
             &self.available_indexes,
             &self.unavailable_packages,
             &self.incomplete_packages,

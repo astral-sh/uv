@@ -202,11 +202,12 @@ impl RegistryClient {
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the pypi json api approximately implements.
     #[instrument("simple_api", skip_all, fields(package = % package_name))]
-    pub async fn simple(
-        &self,
+    pub async fn simple<'index>(
+        &'index self,
         package_name: &PackageName,
-        index: Option<&IndexUrl>,
-    ) -> Result<Vec<(IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
+        index: Option<&'index IndexUrl>,
+        capabilities: &IndexCapabilities,
+    ) -> Result<Vec<(&'index IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
         } else {
@@ -222,7 +223,7 @@ impl RegistryClient {
         for index in it {
             match self.simple_single_index(package_name, index).await {
                 Ok(metadata) => {
-                    results.push((index.clone(), metadata));
+                    results.push((index, metadata));
 
                     // If we're only using the first match, we can stop here.
                     if self.index_strategy == IndexStrategy::FirstIndex {
@@ -230,22 +231,23 @@ impl RegistryClient {
                     }
                 }
                 Err(err) => match err.into_kind() {
-                    // The package is unavailable due to a lack of connectivity.
-                    ErrorKind::Offline(_) => continue,
-
                     // The package could not be found in the remote index.
-                    ErrorKind::WrappedReqwestError(err) => {
-                        if err.status() == Some(StatusCode::NOT_FOUND)
-                            || err.status() == Some(StatusCode::UNAUTHORIZED)
-                            || err.status() == Some(StatusCode::FORBIDDEN)
-                        {
-                            continue;
+                    ErrorKind::WrappedReqwestError(err) => match err.status() {
+                        Some(StatusCode::NOT_FOUND) => {}
+                        Some(StatusCode::UNAUTHORIZED) => {
+                            capabilities.set_unauthorized(index.clone());
                         }
-                        return Err(ErrorKind::from(err).into());
-                    }
+                        Some(StatusCode::FORBIDDEN) => {
+                            capabilities.set_forbidden(index.clone());
+                        }
+                        _ => return Err(ErrorKind::from(err).into()),
+                    },
+
+                    // The package is unavailable due to a lack of connectivity.
+                    ErrorKind::Offline(_) => {}
 
                     // The package could not be found in the local index.
-                    ErrorKind::FileNotFound(_) => continue,
+                    ErrorKind::FileNotFound(_) => {}
 
                     other => return Err(other.into()),
                 },
@@ -671,7 +673,7 @@ impl RegistryClient {
 
                         // Mark the index as not supporting range requests.
                         if let Some(index) = index {
-                            capabilities.set_supports_range_requests(index.clone(), false);
+                            capabilities.set_no_range_requests(index.clone());
                         }
                     } else {
                         return Err(err);
