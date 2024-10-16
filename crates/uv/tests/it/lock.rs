@@ -12319,7 +12319,7 @@ fn lock_named_index_cli() -> Result<()> {
 
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to parse entry for: `jinja2`
+      Caused by: Failed to parse entry: `jinja2`
       Caused by: Package `jinja2` references an undeclared index: `pytorch`
     "###);
 
