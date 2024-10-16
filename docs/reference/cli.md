@@ -131,6 +131,9 @@ uv run [OPTIONS] [COMMAND]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--env-file</code> <i>env-file</i></dt><dd><p>Load environment variables from a file. The default is to use <code>.env</code></p>
+
+<p>May also be set with the <code>UV_ENV_FILE</code> environment variable.</p>
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -282,6 +285,9 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+</dd><dt><code>--no-env-file</code></dt><dd><p>Skip loading of the environment variables file</p>
+
+<p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p>
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
