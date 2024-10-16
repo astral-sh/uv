@@ -127,7 +127,7 @@ pub(crate) async fn run(
             }
             Err(dotenvy::Error::LineParse(line_content, line_num)) => {
                 warn_user!(
-                    "Failed to parse environment file `{}` (line {}): {}",
+                    "Failed to parse line in environment file `{}` at position {}: {}",
                     env_file_path.display(),
                     line_num,
                     line_content
