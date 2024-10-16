@@ -175,7 +175,7 @@ memray3.11 = a:b7
                 module: "a".to_string(),
                 function: "b6".to_string()
             }),
-            console_scripts.get(0)
+            console_scripts.first()
         );
         assert_eq!(
             Some(&Script {
