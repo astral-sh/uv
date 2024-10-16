@@ -79,6 +79,8 @@ pub(crate) async fn run(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
+    env_file: Option<PathBuf>,
+    no_env_file: bool,
 ) -> anyhow::Result<ExitStatus> {
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
@@ -104,6 +106,41 @@ pub(crate) async fn run(
 
     // Initialize any shared state.
     let state = SharedState::default();
+
+    // Initialize env file, if necessary.
+    if !no_env_file {
+        let env_file_path = env_file.clone().unwrap_or(Path::new(".env").to_path_buf());
+
+        let loaded = dotenvy::from_path_override(&env_file_path);
+
+        match loaded {
+            Err(dotenvy::Error::Io(err)) => {
+                if env_file.is_some() {
+                    bail!(
+                        "Failed to read environment file `{}`: {}",
+                        env_file_path.display(),
+                        err
+                    );
+                }
+            }
+            Err(dotenvy::Error::LineParse(line_content, line_num)) => {
+                warn_user!(
+                    "Failed to parse environment file `{}` (line {}): {}",
+                    env_file_path.display(),
+                    line_num,
+                    line_content
+                );
+            }
+            Err(dotenvy::Error::EnvVar(err)) => {
+                warn_user!(
+                    "Failed to parse environment file `{}`: {}",
+                    env_file_path.display(),
+                    err
+                );
+            }
+            _ => {}
+        }
+    }
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);

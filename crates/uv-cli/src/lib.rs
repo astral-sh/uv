@@ -2628,6 +2628,14 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_editable: bool,
 
+    /// Load environment variables from a file. The default is to use `.env`.
+    #[arg(long, value_parser = parse_file_path, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Option<PathBuf>,
+
+    /// Skip loading of the environment variables file
+    #[arg(long, conflicts_with = "env_file", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    pub no_env_file: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be

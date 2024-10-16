@@ -93,6 +93,7 @@ unicode-width = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
+dotenvy = "0.15.7"
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }
