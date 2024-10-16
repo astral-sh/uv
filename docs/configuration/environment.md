@@ -75,6 +75,8 @@ uv accepts the following command-line arguments as environment variables:
   set, uv will use this password for publishing.
 - `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
   the environment.
+- `UV_ENV_FILE`: Equivalent to the `--env-file` command-line argument in `uv run`. If set, uv will use this file as the environment file.
+- `UV_NO_ENV_FILE`: Equivalent to the `--no-env-file` command-line argument in `uv run`. If set, uv will not use an environment file.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
