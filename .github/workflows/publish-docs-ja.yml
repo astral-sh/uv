@@ -1,0 +1,19 @@
+name: mkdocs-ja 
+on:
+  push:
+    branches:
+      - japanese
+permissions:
+  contents: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Git Credentials
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - run: uvx --with-requirements docs/requirements.txt -- mkdocs gh-deploy --force --config-file mkdocs.public.yml
