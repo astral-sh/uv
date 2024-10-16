@@ -61,3 +61,39 @@ impl From<DevMode> for DevSpecification {
         }
     }
 }
+
+impl DevSpecification {
+    /// Determine the [`DevSpecification`] policy from the command-line arguments.
+    pub fn from_args(
+        dev: bool,
+        no_dev: bool,
+        only_dev: bool,
+        group: Vec<GroupName>,
+        only_group: Vec<GroupName>,
+    ) -> Self {
+        let from_mode = DevSpecification::from(DevMode::from_args(dev, no_dev, only_dev));
+        if !group.is_empty() {
+            match from_mode {
+                DevSpecification::Exclude => Self::Include(group),
+                DevSpecification::Include(dev) => {
+                    Self::Include(group.into_iter().chain(dev).collect())
+                }
+                DevSpecification::Only(_) => {
+                    unreachable!("cannot specify both `--only-dev` and `--group`")
+                }
+            }
+        } else if !only_group.is_empty() {
+            match from_mode {
+                DevSpecification::Exclude => Self::Only(only_group),
+                DevSpecification::Only(dev) => {
+                    Self::Only(only_group.into_iter().chain(dev).collect())
+                }
+                // TODO(zanieb): `dev` defaults to true we can't tell if `--dev` was provided in
+                // conflict with `--only-group` here
+                DevSpecification::Include(_) => Self::Only(only_group),
+            }
+        } else {
+            from_mode
+        }
+    }
+}
