@@ -70,6 +70,7 @@ local_targets = {
     "pypi-keyring": "astral-test-keyring",
     "gitlab": "astral-test-token",
     "codeberg": "astral-test-token",
+    "cloudsmith": "astral-test-token",
 }
 all_targets = local_targets | {
     "pypi-trusted-publishing": "astral-test-trusted-publishing"
@@ -85,6 +86,7 @@ project_urls = {
         "https://test.pypi.org/simple/astral-test-token/",
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/astral-test-token",
         "https://codeberg.org/api/packages/astral-test-user/pypi/simple/astral-test-token",
+        "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/astral-test-token/",
     ],
 }
 
@@ -96,7 +98,8 @@ def get_new_version(project_name: str) -> str:
     versions = set()
     for url in project_urls[project_name]:
         data = httpx.get(url).text
-        for filename in list(m.group(1) for m in re.finditer(">([^<]+)</a>", data)):
+        href_text = "<a[^>]+>([^<>]+)</a>"
+        for filename in list(m.group(1) for m in re.finditer(href_text, data)):
             if filename.endswith(".whl"):
                 [_name, version, _build, _tags] = parse_wheel_filename(filename)
             else:
@@ -214,6 +217,19 @@ def publish_project(target: str, uv: Path):
                 "publish",
                 "--publish-url",
                 "https://codeberg.org/api/packages/astral-test-user/pypi",
+            ],
+            cwd=cwd.joinpath(project_name),
+            env=env,
+        )
+    elif target == "cloudsmith":
+        env = os.environ.copy()
+        env["UV_PUBLISH_TOKEN"] = os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"]
+        check_call(
+            [
+                uv,
+                "publish",
+                "--publish-url",
+                "https://python.cloudsmith.io/astral-test/astral-test-1/",
             ],
             cwd=cwd.joinpath(project_name),
             env=env,
