@@ -134,3 +134,25 @@ fn upper_bound_ordering() {
         }
     }
 }
+
+#[test]
+fn is_exact_without_patch() {
+    let test_cases = [
+        ("==3.12", true),
+        ("==3.10, <3.11", true),
+        ("==3.10, <=3.11", true),
+        ("==3.12.1", false),
+        ("==3.12.*", false),
+        ("==3.*", false),
+        (">=3.10", false),
+        (">3.9", false),
+        ("<4.0", false),
+        (">=3.10, <3.11", false),
+        ("", false),
+    ];
+    for (version, expected) in test_cases {
+        let version_specifiers = VersionSpecifiers::from_str(version).unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+        assert_eq!(requires_python.is_exact_without_patch(), expected);
+    }
+}

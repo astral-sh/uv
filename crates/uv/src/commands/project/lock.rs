@@ -335,6 +335,8 @@ async fn do_lock(
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
             warn_user_once!("The workspace `requires-python` value does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+        } else if requires_python.is_exact_without_patch() {
+            warn_user_once!("The workspace `requires-python` value contains an exact match without a patch version: `{requires_python}`. When omitted, the patch version is implicitly `0`, e.g., `{requires_python}.0`. Did you mean `{requires_python}.*`?");
         }
         requires_python
     } else {
