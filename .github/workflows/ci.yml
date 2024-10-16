@@ -653,7 +653,7 @@ jobs:
 
       - name: "Check install"
         run: |
-          ./uv pip install anyio
+          ./uv pip install -v anyio
 
       - name: "Install free-threaded Python via uv"
         run: |
@@ -670,7 +670,7 @@ jobs:
 
       - name: "Check install"
         run: |
-          ./uv pip install anyio
+          ./uv pip install -v anyio
 
   integration-test-pypy-linux:
     timeout-minutes: 10
