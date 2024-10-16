@@ -289,7 +289,7 @@ fn python_executables_from_environments<'a>(
 /// This function does not guarantee that the executables are valid Python interpreters.
 /// See [`python_interpreters_from_executables`].
 fn python_executables_from_installed<'a>(
-    version: Option<&'a VersionRequest>,
+    version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
@@ -306,11 +306,7 @@ fn python_executables_from_installed<'a>(
                 Ok(installations
                     .into_iter()
                     .filter(move |installation| {
-                        if version.is_none()
-                            || version.is_some_and(|version| {
-                                version.matches_version(&installation.version())
-                            })
-                        {
+                        if version.matches_version(&installation.version()) {
                             true
                         } else {
                             debug!("Skipping incompatible managed installation `{installation}`");
@@ -395,7 +391,7 @@ fn python_executables_from_installed<'a>(
 /// See [`python_executables_from_installed`] and [`python_executables_from_environments`]
 /// for more information on discovery.
 fn python_executables<'a>(
-    version: Option<&'a VersionRequest>,
+    version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
@@ -440,15 +436,14 @@ fn python_executables<'a>(
 /// If a `version` is not provided, we will only look for default executable names e.g.
 /// `python3` and `python` — `python3.9` and similar will not be included.
 fn python_executables_from_search_path<'a>(
-    version: Option<&'a VersionRequest>,
+    version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
 ) -> impl Iterator<Item = PathBuf> + 'a {
     // `UV_TEST_PYTHON_PATH` can be used to override `PATH` to limit Python executable availability in the test suite
     let search_path = env::var_os(EnvVars::UV_TEST_PYTHON_PATH)
         .unwrap_or(env::var_os(EnvVars::PATH).unwrap_or_default());
 
-    let version_request = version.unwrap_or(&VersionRequest::Default);
-    let possible_names: Vec<_> = version_request
+    let possible_names: Vec<_> = version
         .executable_names(implementation)
         .into_iter()
         .map(|name| name.to_string())
@@ -485,7 +480,7 @@ fn python_executables_from_search_path<'a>(
                         // parameters, and the dir is local while we return the iterator.
                         .collect::<Vec<_>>()
                 })
-                .chain(find_all_minor(implementation, version_request, &dir_clone))
+                .chain(find_all_minor(implementation, version, &dir_clone))
                 .filter(|path| !is_windows_store_shim(path))
                 .inspect(|path| trace!("Found possible Python executable: {}", path.display()))
                 .chain(
@@ -577,7 +572,7 @@ fn find_all_minor(
 ///
 /// See [`python_executables`] for more information on discovery.
 fn python_interpreters<'a>(
-    version: Option<&'a VersionRequest>,
+    version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
@@ -821,23 +816,18 @@ pub fn find_python_installations<'a>(
         }
         PythonRequest::Any => Box::new({
             debug!("Searching for any Python interpreter in {preference}");
-            python_interpreters(
-                Some(&VersionRequest::Any),
-                None,
-                environments,
-                preference,
-                cache,
+            python_interpreters(&VersionRequest::Any, None, environments, preference, cache).map(
+                |result| {
+                    result
+                        .map(PythonInstallation::from_tuple)
+                        .map(FindPythonResult::Ok)
+                },
             )
-            .map(|result| {
-                result
-                    .map(PythonInstallation::from_tuple)
-                    .map(FindPythonResult::Ok)
-            })
         }),
         PythonRequest::Default => Box::new({
             debug!("Searching for default Python interpreter in {preference}");
             python_interpreters(
-                Some(&VersionRequest::Default),
+                &VersionRequest::Default,
                 None,
                 environments,
                 preference,
@@ -855,7 +845,7 @@ pub fn find_python_installations<'a>(
             };
             Box::new({
                 debug!("Searching for {request} in {preference}");
-                python_interpreters(Some(version), None, environments, preference, cache)
+                python_interpreters(version, None, environments, preference, cache)
                     .filter(|result| match result {
                         Err(_) => true,
                         Ok((_source, interpreter)) => version.matches_interpreter(interpreter),
@@ -869,18 +859,24 @@ pub fn find_python_installations<'a>(
         }
         PythonRequest::Implementation(implementation) => Box::new({
             debug!("Searching for a {request} interpreter in {preference}");
-            python_interpreters(None, Some(implementation), environments, preference, cache)
-                .filter(|result| match result {
-                    Err(_) => true,
-                    Ok((_source, interpreter)) => interpreter
-                        .implementation_name()
-                        .eq_ignore_ascii_case(implementation.into()),
-                })
-                .map(|result| {
-                    result
-                        .map(PythonInstallation::from_tuple)
-                        .map(FindPythonResult::Ok)
-                })
+            python_interpreters(
+                &VersionRequest::Default,
+                Some(implementation),
+                environments,
+                preference,
+                cache,
+            )
+            .filter(|result| match result {
+                Err(_) => true,
+                Ok((_source, interpreter)) => interpreter
+                    .implementation_name()
+                    .eq_ignore_ascii_case(implementation.into()),
+            })
+            .map(|result| {
+                result
+                    .map(PythonInstallation::from_tuple)
+                    .map(FindPythonResult::Ok)
+            })
         }),
         PythonRequest::ImplementationVersion(implementation, version) => {
             if let Err(err) = version.check_supported() {
@@ -889,7 +885,7 @@ pub fn find_python_installations<'a>(
             Box::new({
                 debug!("Searching for {request} in {preference}");
                 python_interpreters(
-                    Some(version),
+                    version,
                     Some(implementation),
                     environments,
                     preference,
@@ -920,7 +916,7 @@ pub fn find_python_installations<'a>(
             Box::new({
                 debug!("Searching for {request} in {preference}");
                 python_interpreters(
-                    request.version(),
+                    request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
                     environments,
                     preference,
