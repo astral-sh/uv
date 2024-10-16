@@ -248,9 +248,9 @@ impl RequiresPython {
         self.range.lower().as_ref() == Bound::Unbounded
     }
 
-    /// Returns `true` if the `Requires-Python` specifier is set to a specific version
-    /// without a patch version. (e.g. `==3.10`)
-    pub fn is_matching_without_patch(&self) -> bool {
+    /// Returns `true` if the `Requires-Python` specifier is set to an exact version
+    /// without specifying a patch version. (e.g. `==3.10`)
+    pub fn is_exact_without_patch(&self) -> bool {
         match self.range.lower().as_ref() {
             Bound::Included(version) => {
                 version.release().len() == 2

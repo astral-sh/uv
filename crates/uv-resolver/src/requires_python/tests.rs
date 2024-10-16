@@ -136,7 +136,7 @@ fn upper_bound_ordering() {
 }
 
 #[test]
-fn is_matching_without_patch() {
+fn is_exact_without_patch() {
     let test_cases = [
         ("==3.12", true),
         ("==3.10, <3.11", true),
@@ -153,6 +153,6 @@ fn is_matching_without_patch() {
     for (version, expected) in test_cases {
         let version_specifiers = VersionSpecifiers::from_str(version).unwrap();
         let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
-        assert_eq!(requires_python.is_matching_without_patch(), expected);
+        assert_eq!(requires_python.is_exact_without_patch(), expected);
     }
 }
