@@ -76,8 +76,6 @@ additional sources are supported by uv:
 - Path: A local wheel, source distribution, or project directory.
 - Workspace: A member of the current workspace.
 
-Only a single source may be defined for each dependency.
-
 Note that if a non-uv project uses a project with sources as a Git- or path-dependency, only
 `project.dependencies` and `project.optional-dependencies` are respected. Any information provided
 in the source table will need to be re-specified in a format specific to the other package manager.
