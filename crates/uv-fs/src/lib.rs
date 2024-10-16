@@ -325,10 +325,10 @@ impl LockedFile {
                 Ok(Self(file))
             }
             Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures
-                // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
-                // the error when it is `WouldBlock`, which is expected and noisy otherwise.
-                trace!("Try lock error: {err:?}");
+                // Log error code and enum kind to help debugging more exotic failures.
+                if err.kind() != std::io::ErrorKind::WouldBlock {
+                    trace!("Try lock error: {err:?}");
+                }
                 info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
