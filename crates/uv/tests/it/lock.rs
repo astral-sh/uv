@@ -6475,8 +6475,8 @@ fn lock_env_credentials() -> Result<()> {
 
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()
-        .env("UV_HTTP_BASIC_PROXY_USERNAME", "public")
-        .env("UV_HTTP_BASIC_PROXY_PASSWORD", "heron"), @r###"
+        .env(EnvVars::UV_HTTP_BASIC_PROXY_USERNAME, "public")
+        .env(EnvVars::UV_HTTP_BASIC_PROXY_PASSWORD, "heron"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

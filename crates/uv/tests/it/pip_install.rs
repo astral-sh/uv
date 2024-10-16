@@ -2327,7 +2327,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env("UV_EXCLUDE_NEWER", "2018-10-08"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::UV_EXCLUDE_NEWER, "2018-10-08"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----

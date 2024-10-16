@@ -4206,6 +4206,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uv-once-map",
+ "uv-static",
  "wiremock",
 ]
 
