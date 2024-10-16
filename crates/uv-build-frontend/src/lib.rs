@@ -245,6 +245,7 @@ impl SourceBuild {
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
+        install_path: &Path,
         fallback_package_name: Option<&PackageName>,
         fallback_package_version: Option<&Version>,
         interpreter: &Interpreter,
@@ -273,6 +274,7 @@ impl SourceBuild {
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
+            install_path,
             fallback_package_name,
             locations,
             source_strategy,
@@ -368,6 +370,7 @@ impl SourceBuild {
             create_pep517_build_environment(
                 &runner,
                 &source_tree,
+                install_path,
                 &venv,
                 &pep517_backend,
                 build_context,
@@ -436,6 +439,7 @@ impl SourceBuild {
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
     async fn extract_pep517_backend(
         source_tree: &Path,
+        install_path: &Path,
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
@@ -469,7 +473,7 @@ impl SourceBuild {
                                 };
                                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                                     requires_dist,
-                                    source_tree,
+                                    install_path,
                                     locations,
                                     source_strategy,
                                     LowerBound::Allow,
@@ -803,6 +807,7 @@ fn escape_path_for_python(path: &Path) -> String {
 async fn create_pep517_build_environment(
     runner: &PythonRunner,
     source_tree: &Path,
+    install_path: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
@@ -921,7 +926,7 @@ async fn create_pep517_build_environment(
                 };
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
-                    source_tree,
+                    install_path,
                     locations,
                     source_strategy,
                     LowerBound::Allow,
