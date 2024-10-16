@@ -1,6 +1,6 @@
 use std::collections::hash_map::Entry;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_distribution_types::{CachedRegistryDist, Hashed, Index, IndexLocations, IndexUrl};
@@ -82,7 +82,12 @@ impl<'a> RegistryWheelIndex<'a> {
     ) -> Vec<IndexEntry<'index>> {
         let mut entries = vec![];
 
+        let mut seen = FxHashSet::default();
         for index in index_locations.allowed_indexes() {
+            if !seen.insert(index.url()) {
+                continue;
+            }
+
             // Index all the wheels that were downloaded directly from the registry.
             let wheel_dir = cache.shard(
                 CacheBucket::Wheels,

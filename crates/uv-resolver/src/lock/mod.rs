@@ -1058,6 +1058,7 @@ impl Lock {
         let remotes = indexes.map(|locations| {
             locations
                 .allowed_indexes()
+                .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         Some(UrlString::from(index.url().redacted()))
@@ -1070,6 +1071,7 @@ impl Lock {
         let locals = indexes.map(|locations| {
             locations
                 .allowed_indexes()
+                .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
                     IndexUrl::Path(url) => {
