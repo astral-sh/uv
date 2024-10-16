@@ -3,10 +3,13 @@ use crate::Metadata;
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::str::FromStr;
+
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_workspace::pyproject::ToolUvSources;
+use uv_pypi_types::VerbatimParsedUrl;
+use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
 #[derive(Debug, Clone)]
@@ -97,48 +100,71 @@ impl RequiresDist {
         };
 
         let dev_dependencies = {
+            // First, collect `tool.uv.dev_dependencies`
             let dev_dependencies = project_workspace
                 .current_project()
                 .pyproject_toml()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dev_dependencies.as_ref())
-                .into_iter()
+                .and_then(|uv| uv.dev_dependencies.as_ref());
+
+            // Then, collect `dependency-groups`
+            let dependency_groups = project_workspace
+                .current_project()
+                .pyproject_toml()
+                .dependency_groups
+                .iter()
                 .flatten()
-                .cloned();
-            let dev_dependencies = match source_strategy {
-                SourceStrategy::Enabled => dev_dependencies
-                    .flat_map(|requirement| {
-                        let requirement_name = requirement.name.clone();
-                        LoweredRequirement::from_requirement(
-                            requirement,
-                            &metadata.name,
-                            project_workspace.project_root(),
+                .map(|(name, requirements)| {
+                    (
+                        name.clone(),
+                        requirements
+                            .iter()
+                            .map(|requirement| {
+                                match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(
+                                    requirement,
+                                ) {
+                                    Ok(requirement) => Ok(requirement),
+                                    Err(err) => Err(MetadataError::GroupParseError(
+                                        name.clone(),
+                                        requirement.clone(),
+                                        Box::new(err),
+                                    )),
+                                }
+                            })
+                            .collect::<Result<Vec<_>, _>>(),
+                    )
+                })
+                .chain(
+                    // Only add the `dev` group if `dev-dependencies` is defined
+                    dev_dependencies
+                        .into_iter()
+                        .map(|requirements| (DEV_DEPENDENCIES.clone(), Ok(requirements.clone()))),
+                )
+                .map(|(name, requirements)| {
+                    // Apply sources to the requirements
+                    match requirements {
+                        Ok(requirements) => match apply_source_strategy(
+                            source_strategy,
+                            requirements,
+                            &metadata,
                             project_sources,
                             project_indexes,
                             locations,
-                            project_workspace.workspace(),
+                            project_workspace,
                             lower_bound,
-                        )
-                        .map(move |requirement| match requirement {
-                            Ok(requirement) => Ok(requirement.into_inner()),
-                            Err(err) => {
-                                Err(MetadataError::LoweringError(requirement_name.clone(), err))
-                            }
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-                SourceStrategy::Disabled => dev_dependencies
-                    .into_iter()
-                    .map(uv_pypi_types::Requirement::from)
-                    .collect(),
-            };
-            if dev_dependencies.is_empty() {
-                BTreeMap::default()
-            } else {
-                BTreeMap::from([(DEV_DEPENDENCIES.clone(), dev_dependencies)])
-            }
+                            &name,
+                        ) {
+                            Ok(requirements) => Ok((name, requirements)),
+                            Err(err) => Err(err),
+                        },
+                        Err(err) => Err(err),
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            dependency_groups.into_iter().collect::<BTreeMap<_, _>>()
         };
 
         let requires_dist = metadata.requires_dist.into_iter();
@@ -158,9 +184,10 @@ impl RequiresDist {
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
-                        Err(err) => {
-                            Err(MetadataError::LoweringError(requirement_name.clone(), err))
-                        }
+                        Err(err) => Err(MetadataError::LoweringError(
+                            requirement_name.clone(),
+                            Box::new(err),
+                        )),
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
@@ -187,6 +214,49 @@ impl From<Metadata> for RequiresDist {
             provides_extras: metadata.provides_extras,
             dev_dependencies: metadata.dev_dependencies,
         }
+    }
+}
+
+fn apply_source_strategy(
+    source_strategy: SourceStrategy,
+    requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    metadata: &uv_pypi_types::RequiresDist,
+    project_sources: &BTreeMap<PackageName, Sources>,
+    project_indexes: &[uv_distribution_types::Index],
+    locations: &IndexLocations,
+    project_workspace: &ProjectWorkspace,
+    lower_bound: LowerBound,
+    group_name: &GroupName,
+) -> Result<Vec<uv_pypi_types::Requirement>, MetadataError> {
+    match source_strategy {
+        SourceStrategy::Enabled => requirements
+            .into_iter()
+            .flat_map(|requirement| {
+                let requirement_name = requirement.name.clone();
+                LoweredRequirement::from_requirement(
+                    requirement,
+                    &metadata.name,
+                    project_workspace.project_root(),
+                    project_sources,
+                    project_indexes,
+                    locations,
+                    project_workspace.workspace(),
+                    lower_bound,
+                )
+                .map(move |requirement| match requirement {
+                    Ok(requirement) => Ok(requirement.into_inner()),
+                    Err(err) => Err(MetadataError::GroupLoweringError(
+                        group_name.clone(),
+                        requirement_name.clone(),
+                        Box::new(err),
+                    )),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>(),
+        SourceStrategy::Disabled => Ok(requirements
+            .into_iter()
+            .map(uv_pypi_types::Requirement::from)
+            .collect()),
     }
 }
 
@@ -255,7 +325,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry for: `tqdm`
+        error: Failed to parse entry: `tqdm`
           Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
         "###);
     }
@@ -422,7 +492,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry for: `tqdm`
+        error: Failed to parse entry: `tqdm`
           Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
         "###);
     }
@@ -441,7 +511,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry for: `tqdm`
+        error: Failed to parse entry: `tqdm`
           Caused by: Package is not included as workspace package in `tool.uv.workspace`
         "###);
     }

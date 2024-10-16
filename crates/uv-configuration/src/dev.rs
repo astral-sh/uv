@@ -1,5 +1,5 @@
 use either::Either;
-use uv_normalize::GroupName;
+use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum DevMode {
@@ -27,17 +27,17 @@ impl DevMode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum DevSpecification<'group> {
+#[derive(Debug, Clone)]
+pub enum DevSpecification {
     /// Include dev dependencies from the specified group.
-    Include(&'group [GroupName]),
+    Include(Vec<GroupName>),
     /// Do not include dev dependencies.
     Exclude,
-    /// Include dev dependencies from the specified group, and exclude all non-dev dependencies.
-    Only(&'group [GroupName]),
+    /// Include dev dependencies from the specified groups, and exclude all non-dev dependencies.
+    Only(Vec<GroupName>),
 }
 
-impl<'group> DevSpecification<'group> {
+impl DevSpecification {
     /// Returns an [`Iterator`] over the group names to include.
     pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
         match self {
@@ -49,5 +49,15 @@ impl<'group> DevSpecification<'group> {
     /// Returns `true` if the specification allows for production dependencies.
     pub fn prod(&self) -> bool {
         matches!(self, Self::Exclude | Self::Include(_))
+    }
+}
+
+impl From<DevMode> for DevSpecification {
+    fn from(mode: DevMode) -> Self {
+        match mode {
+            DevMode::Include => Self::Include(vec![DEV_DEPENDENCIES.clone()]),
+            DevMode::Exclude => Self::Exclude,
+            DevMode::Only => Self::Only(vec![DEV_DEPENDENCIES.clone()]),
+        }
     }
 }
