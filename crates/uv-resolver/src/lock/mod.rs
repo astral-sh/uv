@@ -550,7 +550,7 @@ impl Lock {
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
-        dev: DevSpecification<'_>,
+        dev: &DevSpecification,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
