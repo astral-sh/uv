@@ -846,8 +846,8 @@ impl AddSettings {
             python,
         } = args;
 
-        let dependency_type = if let Some(group) = optional {
-            DependencyType::Optional(group)
+        let dependency_type = if let Some(extra) = optional {
+            DependencyType::Optional(extra)
         } else if dev {
             DependencyType::Dev
         } else {
