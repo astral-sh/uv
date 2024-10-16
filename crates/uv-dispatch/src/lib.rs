@@ -15,7 +15,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, Reinstall,
+    SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -56,6 +57,7 @@ pub struct BuildDispatch<'a> {
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
+    bounds: LowerBound,
     sources: SourceStrategy,
     concurrency: Concurrency,
 }
@@ -80,6 +82,7 @@ impl<'a> BuildDispatch<'a> {
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
+        bounds: LowerBound,
         sources: SourceStrategy,
         concurrency: Concurrency,
     ) -> Self {
@@ -104,6 +107,7 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
+            bounds,
             sources,
             concurrency,
         }
@@ -150,6 +154,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     fn config_settings(&self) -> &ConfigSettings {
         self.config_settings
+    }
+
+    fn bounds(&self) -> LowerBound {
+        self.bounds
     }
 
     fn sources(&self) -> SourceStrategy {

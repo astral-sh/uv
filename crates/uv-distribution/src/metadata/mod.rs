@@ -3,15 +3,15 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::SourceStrategy;
+use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigest, ResolutionMetadata};
 use uv_workspace::WorkspaceError;
 
+pub use crate::metadata::lowering::LoweredRequirement;
 use crate::metadata::lowering::LoweringError;
-pub use crate::metadata::lowering::{LowerBound, LoweredRequirement};
 pub use crate::metadata::requires_dist::RequiresDist;
 
 mod lowering;
@@ -64,6 +64,7 @@ impl Metadata {
         install_path: &Path,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        bounds: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let RequiresDist {
@@ -80,7 +81,7 @@ impl Metadata {
             install_path,
             locations,
             sources,
-            LowerBound::Warn,
+            bounds,
         )
         .await?;
 

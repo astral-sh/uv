@@ -1,10 +1,9 @@
-use crate::metadata::lowering::LowerBound;
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use uv_configuration::SourceStrategy;
+use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::pyproject::ToolUvSources;
@@ -198,12 +197,11 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-    use uv_configuration::SourceStrategy;
+    use uv_configuration::{LowerBound, SourceStrategy};
     use uv_distribution_types::IndexLocations;
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
-    use crate::metadata::lowering::LowerBound;
     use crate::RequiresDist;
 
     async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
@@ -228,7 +226,7 @@ mod test {
             &project_workspace,
             &IndexLocations::default(),
             SourceStrategy::default(),
-            LowerBound::Warn,
+            LowerBound::default(),
         )?)
     }
 

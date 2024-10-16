@@ -17,7 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
+    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -248,6 +249,7 @@ pub(crate) async fn run(
                         script_sources,
                         script_indexes,
                         &settings.index_locations,
+                        LowerBound::Allow,
                     )
                     .map_ok(LoweredRequirement::into_inner)
                 })
@@ -544,6 +546,7 @@ pub(crate) async fn run(
                     project.workspace(),
                     venv.interpreter(),
                     settings.as_ref().into(),
+                    LowerBound::Allow,
                     &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)

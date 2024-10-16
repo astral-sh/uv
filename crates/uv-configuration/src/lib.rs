@@ -1,4 +1,5 @@
 pub use authentication::*;
+pub use bounds::*;
 pub use build_options::*;
 pub use concurrency::*;
 pub use config_settings::*;
@@ -20,6 +21,7 @@ pub use trusted_publishing::*;
 pub use vcs::*;
 
 mod authentication;
+mod bounds;
 mod build_options;
 mod concurrency;
 mod config_settings;

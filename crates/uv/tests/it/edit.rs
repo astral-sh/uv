@@ -5214,7 +5214,6 @@ fn add_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Missing version constraint (e.g., a lower bound) for `jinja2`
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -5426,7 +5425,6 @@ fn add_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Missing version constraint (e.g., a lower bound) for `typing-extensions`
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
