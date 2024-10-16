@@ -327,7 +327,7 @@ impl LockedFile {
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
                 if err.kind() != std::io::ErrorKind::WouldBlock {
-                    trace!("Try lock error: {err:?}");
+                    debug!("Try lock error: {err:?}");
                 }
                 info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
