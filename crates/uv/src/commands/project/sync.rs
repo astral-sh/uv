@@ -8,7 +8,7 @@ use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
+    Concurrency, Constraints, DevSpecification, EditableMode, ExtrasSpecification,
     HashCheckingMode, InstallOptions, LowerBound,
 };
 use uv_dispatch::BuildDispatch;
@@ -43,7 +43,7 @@ pub(crate) async fn sync(
     frozen: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevSpecification,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -155,7 +155,7 @@ pub(crate) async fn sync(
         &venv,
         &lock,
         &extras,
-        &DevSpecification::from(dev),
+        &dev,
         editable,
         install_options,
         modifications,
