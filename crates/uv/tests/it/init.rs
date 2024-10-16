@@ -2437,14 +2437,13 @@ fn init_application_package_flit() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello from foo!
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2519,14 +2518,13 @@ fn init_library_flit() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello from foo!
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2666,14 +2664,13 @@ fn init_app_build_backend_maturin() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello from foo!
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
@@ -2934,14 +2931,13 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     Hello from foo!
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
