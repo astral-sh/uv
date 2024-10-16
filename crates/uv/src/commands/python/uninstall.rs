@@ -24,11 +24,9 @@ pub(crate) async fn uninstall(
 
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let installations = if let Some(install_dir) = install_dir {
-        ManagedPythonInstallations::from_path(install_dir)
-    } else {
-        ManagedPythonInstallations::from_settings()?.init()?
-    };
+    // need to convert install_dir to Option<PathBuf> to match the function signature
+    let installations =
+        ManagedPythonInstallations::from_settings(install_dir.map(|p| p.to_path_buf()))?.init()?;
 
     let _lock = installations.lock().await?;
 

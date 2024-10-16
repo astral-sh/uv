@@ -33,12 +33,8 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    let installations = if let Some(install_dir) = install_dir {
-        ManagedPythonInstallations::from_path(install_dir)
-    } else {
-        ManagedPythonInstallations::from_settings()?
-    }
-    .init()?;
+    let installations =
+        ManagedPythonInstallations::from_settings(install_dir.map(|p| p.to_path_buf()))?.init()?;
     let installations_dir = installations.root();
     let cache_dir = installations.cache();
     let _lock = installations.lock().await?;

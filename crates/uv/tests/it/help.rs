@@ -427,6 +427,11 @@ fn help_subsubcommand() {
               See `uv help python` to view supported request formats.
 
     Options:
+      -i, --install-dir <INSTALL_DIR>
+              The directory where Python will be installed
+              
+              [env: UV_PYTHON_INSTALL_DIR=]
+
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
               
@@ -620,7 +625,7 @@ fn help_flag_subcommand() {
 fn help_flag_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -632,7 +637,9 @@ fn help_flag_subsubcommand() {
       [TARGETS]...  The Python version(s) to install
 
     Options:
-      -r, --reinstall  Reinstall the requested Python version, if it's already installed
+      -i, --install-dir <INSTALL_DIR>  The directory where Python will be installed [env:
+                                       UV_PYTHON_INSTALL_DIR=]
+      -r, --reinstall                  Reinstall the requested Python version, if it's already installed
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -665,7 +672,7 @@ fn help_flag_subsubcommand() {
       -V, --version                    Display the uv version
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]

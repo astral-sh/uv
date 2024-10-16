@@ -3734,8 +3734,7 @@ pub struct PythonListArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonInstallArgs {
-    /// The directory where Python will be installed.
-    ///
+    /// The directory to store the Python installation in.
     #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
     pub install_dir: Option<PathBuf>,
 

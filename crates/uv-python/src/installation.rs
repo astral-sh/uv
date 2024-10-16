@@ -122,7 +122,7 @@ impl PythonInstallation {
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Self, Error> {
-        let installations = ManagedPythonInstallations::from_settings()?.init()?;
+        let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
         let cache_dir = installations.cache();
         let _lock = installations.lock().await?;
