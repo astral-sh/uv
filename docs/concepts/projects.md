@@ -207,8 +207,8 @@ $ uv run --directory example-lib python -c "import example_lib; print(example_li
 Hello from example-lib!
 ```
 
-In addition, you can further customize the build backend of a packaged application by specifying
-`--build-backend` including binary build backends such as `maturin`.
+You can select a different build backend template by using `--build-backend` with `hatchling`,
+`flit-core`, `pdm-backend`, `setuptools`, `maturin`, or `scikit-build-core`.
 
 ```console
 $ uv init --lib --build-backend maturin example-lib
@@ -233,13 +233,10 @@ $ uv run --directory example-lib python -c "import example_lib; print(example_li
 Hello from example-lib!
 ```
 
-Other build backends supported by `uv init` include `hatchling`, `flit-core`, `pdm-backend`,
-`setuptools`, `maturin`, and `scikit-build-core`.
-
 !!! tip
 
 Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
-backends such as `maturin`, and `scikit-build-core`.
+backends such as `maturin` and `scikit-build-core`.
 
 ### Packaged applications
 
