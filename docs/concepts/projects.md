@@ -203,9 +203,40 @@ def hello() -> str:
 And you can import and execute it using `uv run`:
 
 ```console
-$ uv run python -c "import example_lib; print(example_lib.hello())"
+$ uv run --directory example-lib python -c "import example_lib; print(example_lib.hello())"
 Hello from example-lib!
 ```
+
+You can select a different build backend template by using `--build-backend` with `hatchling`,
+`flit-core`, `pdm-backend`, `setuptools`, `maturin`, or `scikit-build-core`.
+
+```console
+$ uv init --lib --build-backend maturin example-lib
+$ tree example-lib
+example-lib
+├── .python-version
+├── Cargo.toml
+├── README.md
+├── pyproject.toml
+└── src
+    ├── lib.rs
+    └── example_lib
+        ├── py.typed
+        ├── __init__.py
+        └── _core.pyi
+```
+
+And you can import and execute it using `uv run`:
+
+```console
+$ uv run --directory example-lib python -c "import example_lib; print(example_lib.hello())"
+Hello from example-lib!
+```
+
+!!! tip
+
+Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
+backends such as `maturin` and `scikit-build-core`.
 
 ### Packaged applications
 
@@ -257,7 +288,7 @@ build-backend = "hatchling.build"
 Which can be executed with `uv run`:
 
 ```console
-$ uv run example-packaged-app
+$ uv run --directory example-packaged-app example-packaged-app
 Hello from example-packaged-app!
 ```
 
@@ -266,6 +297,31 @@ Hello from example-packaged-app!
     An existing application can be redefined as a distributable package by adding a build system.
     However, this may require changes to the project directory structure, depending on the build
     backend.
+
+In addition, you can further customize the build backend of a packaged application by specifying
+`--build-backend` including binary build backends such as `maturin`.
+
+```console
+$ uv init --app --package --build-backend maturin example-packaged-app
+$ tree example-packaged-app
+example-packaged-app
+├── .python-version
+├── Cargo.toml
+├── README.md
+├── pyproject.toml
+└── src
+    ├── lib.rs
+    └── example_packaged_app
+        ├── __init__.py
+        └── _core.pyi
+```
+
+Which can also be executed with `uv run`:
+
+```console
+$ uv run --directory example-packaged-app example-packaged-app
+Hello from example-packaged-app!
+```
 
 ## Project environments
 

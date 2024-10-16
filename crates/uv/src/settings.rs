@@ -21,8 +21,8 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost,
-    TrustedPublishing, Upgrade, VersionControlSystem,
+    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, SourceStrategy, TargetTriple,
+    TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_install_wheel::linker::LinkMode;
@@ -164,6 +164,7 @@ pub(crate) struct InitSettings {
     pub(crate) package: bool,
     pub(crate) kind: InitKind,
     pub(crate) vcs: Option<VersionControlSystem>,
+    pub(crate) build_backend: Option<ProjectBuildBackend>,
     pub(crate) no_readme: bool,
     pub(crate) author_from: Option<AuthorFrom>,
     pub(crate) no_pin_python: bool,
@@ -185,6 +186,7 @@ impl InitSettings {
             lib,
             script,
             vcs,
+            build_backend,
             no_readme,
             author_from,
             no_pin_python,
@@ -208,6 +210,7 @@ impl InitSettings {
             package,
             kind,
             vcs,
+            build_backend,
             no_readme,
             author_from,
             no_pin_python,
