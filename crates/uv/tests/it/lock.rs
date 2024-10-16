@@ -8982,7 +8982,7 @@ fn lock_mismatched_sources() -> Result<()> {
 
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to parse entry for: `uv-public-pypackage`
+      Caused by: Failed to parse entry: `uv-public-pypackage`
       Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
     "###);
 
