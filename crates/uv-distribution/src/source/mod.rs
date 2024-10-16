@@ -473,7 +473,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_dist_entry.path(),
                 subdirectory,
                 &cache_shard,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .await?;
 
@@ -586,7 +586,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source,
                 source_dist_entry.path(),
                 subdirectory,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .boxed_local()
             .await?
@@ -617,7 +617,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_dist_entry.path(),
                 subdirectory,
                 &cache_shard,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .await?;
 
@@ -775,7 +775,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_entry.path(),
                 None,
                 &cache_shard,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .await?;
 
@@ -862,12 +862,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(
-                source,
-                source_entry.path(),
-                None,
-                self.build_context.sources(),
-            )
+            .build_metadata(source, source_entry.path(), None, SourceStrategy::Disabled)
             .boxed_local()
             .await?
         {
@@ -905,7 +900,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_entry.path(),
                 None,
                 &cache_shard,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .await?;
 
