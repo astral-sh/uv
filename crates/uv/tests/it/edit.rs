@@ -4081,8 +4081,12 @@ fn add_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4106,14 +4110,19 @@ fn add_group() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.add().arg("trio").arg("--group").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("requests").arg("--group").arg("test"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Resolved 8 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + requests==2.31.0
+     + urllib3==2.2.1
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4132,7 +4141,7 @@ fn add_group() -> Result<()> {
         [dependency-groups]
         test = [
             "anyio==3.7.0",
-            "trio",
+            "requests>=2.31.0",
         ]
         "###
         );
@@ -4144,8 +4153,8 @@ fn add_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Resolved 8 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4164,7 +4173,7 @@ fn add_group() -> Result<()> {
         [dependency-groups]
         test = [
             "anyio==3.7.0",
-            "trio",
+            "requests>=2.31.0",
         ]
         second = [
             "anyio==3.7.0",
