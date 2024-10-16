@@ -204,6 +204,7 @@ pub(crate) async fn add(
                     bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
                 }
                 DependencyType::Dev => (),
+                DependencyType::Group(_) => (),
             }
         }
 
@@ -469,6 +470,7 @@ pub(crate) async fn add(
             DependencyType::Optional(ref group) => {
                 toml.add_optional_dependency(group, &requirement, source.as_ref())?
             }
+            DependencyType::Group(_) => todo!("adding dependencies to groups is not yet supported"),
         };
 
         // If the edit was inserted before the end of the list, update the existing edits.
@@ -743,6 +745,9 @@ async fn lock_and_sync(
                 DependencyType::Optional(ref group) => {
                     toml.set_optional_dependency_minimum_version(group, *index, minimum)?;
                 }
+                DependencyType::Group(_) => {
+                    todo!("adding dependencies to groups is not yet supported")
+                }
             }
 
             modified = true;
@@ -817,6 +822,7 @@ async fn lock_and_sync(
             let dev = DevMode::Exclude;
             (extras, dev)
         }
+        DependencyType::Group(_) => todo!("adding dependencies to groups is not yet supported"),
     };
 
     project::sync::do_sync(
