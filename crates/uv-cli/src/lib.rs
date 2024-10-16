@@ -3880,7 +3880,7 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by
     /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are
     /// provided, earlier values take priority.
-    #[arg(long, env = "UV_INDEX", value_delimiter = ' ', value_parser = parse_index, help_heading = "Index options")]
+    #[arg(long, env = EnvVars::UV_INDEX, value_delimiter = ' ', value_parser = parse_index, help_heading = "Index options")]
     pub index: Option<Vec<Maybe<Index>>>,
 
     /// The URL of the default package index (by default: <https://pypi.org/simple>).
@@ -3890,7 +3890,7 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other indexes specified via
     /// the `--index` flag.
-    #[arg(long, env = "UV_DEFAULT_INDEX", value_parser = parse_default_index, help_heading = "Index options")]
+    #[arg(long, env = EnvVars::UV_DEFAULT_INDEX, value_parser = parse_default_index, help_heading = "Index options")]
     pub default_index: Option<Maybe<Index>>,
 
     /// (Deprecated: use `--default-index` instead) The URL of the Python package index (by default: <https://pypi.org/simple>).
