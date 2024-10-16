@@ -85,8 +85,10 @@ uv accepts the following command-line arguments as environment variables:
   `uv.lock` remains unchanged.
 - `UV_FROZEN`: Equivalent to the `--frozen` command-line argument. If set, uv will run without
   updating the `uv.lock` file.
-- `UV_ENV_FILE`: Equivalent to the `--env-file` command-line argument in `uv run`. If set, uv will use this file as the environment file.
-- `UV_NO_ENV_FILE`: Equivalent to the `--no-env-file` command-line argument in `uv run`. If set, uv will not use an environment file.
+- `UV_ENV_FILE`: Equivalent to the `--env-file` command-line argument in `uv run`. If set, uv will
+  use this file as the environment file.
+- `UV_NO_ENV_FILE`: Equivalent to the `--no-env-file` command-line argument in `uv run`. If set, uv
+  will not use an environment file.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
