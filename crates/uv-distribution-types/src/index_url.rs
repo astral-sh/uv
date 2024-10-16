@@ -15,7 +15,7 @@ use crate::{Index, Verbatim};
 
 static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
-static DEFAULT_INDEX_URL: LazyLock<Index> = LazyLock::new(|| {
+static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_index_url(IndexUrl::Pypi(VerbatimUrl::from_url(PYPI_URL.clone())))
 });
 
@@ -235,7 +235,7 @@ impl<'a> IndexLocations {
                 .iter()
                 .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
                 .find(|index| index.default && !index.explicit)
-                .or_else(|| Some(&DEFAULT_INDEX_URL))
+                .or_else(|| Some(&DEFAULT_INDEX))
         }
     }
 
@@ -299,16 +299,41 @@ impl<'a> IndexLocations {
         }
     }
 
-    /// Return an iterator over all allowed [`Index`] entries.
+    /// Return a vector containing all allowed [`Index`] entries.
     ///
-    /// This includes explicit indexes, implicit indexes flat indexes, and the default index.
+    /// This includes explicit indexes, implicit indexes, flat indexes, and the default index.
     ///
-    /// If `no_index` was enabled, then this always returns an empty iterator.
-    pub fn allowed_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        self.flat_indexes()
-            .chain(self.explicit_indexes())
-            .chain(self.implicit_indexes())
-            .chain(self.default_index())
+    /// The indexes will be returned in the order in which they were defined, such that the
+    /// last-defined index is the last item in the vector.
+    pub fn allowed_indexes(&'a self) -> Vec<&'a Index> {
+        if self.no_index {
+            self.flat_index.iter().rev().collect()
+        } else {
+            let mut indexes = vec![];
+
+            let mut seen = FxHashSet::default();
+            let mut default = false;
+            for index in {
+                self.indexes
+                    .iter()
+                    .chain(self.flat_index.iter())
+                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
+            } {
+                if index.default && !index.explicit {
+                    if default {
+                        continue;
+                    }
+                    default = true;
+                }
+                indexes.push(index);
+            }
+            if !default {
+                indexes.push(&*DEFAULT_INDEX);
+            }
+
+            indexes.reverse();
+            indexes
+        }
     }
 }
 
@@ -337,7 +362,7 @@ impl<'a> IndexUrls {
                 .iter()
                 .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
                 .find(|index| index.default && !index.explicit)
-                .or_else(|| Some(&DEFAULT_INDEX_URL))
+                .or_else(|| Some(&DEFAULT_INDEX))
         }
     }
 
