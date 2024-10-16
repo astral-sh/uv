@@ -3,7 +3,8 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 use thiserror::Error;
-use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
+use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, RawString, Table, TomlError, Value};
+use uv_distribution_types::Index;
 use uv_fs::PortablePath;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
@@ -188,6 +189,88 @@ impl PyProjectTomlMut {
         }
 
         Ok(edit)
+    }
+
+    /// Add an [`Index`] to `tool.uv.index`.
+    pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
+        let existing = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("index")
+            .or_insert(Item::ArrayOfTables(ArrayOfTables::new()))
+            .as_array_of_tables()
+            .ok_or(Error::MalformedSources)?;
+
+        let mut table = Table::new();
+        if let Some(name) = index.name.as_ref() {
+            table.insert("name", toml_edit::value(name.to_string()));
+        } else if let Some(name) = existing
+            .iter()
+            .find(|table| {
+                table
+                    .get("url")
+                    .is_some_and(|url| url.as_str() == Some(index.url.url().as_str()))
+            })
+            .and_then(|existing| existing.get("name"))
+        {
+            // If there's an existing index with the same URL, and a name, preserve the name.
+            table.insert("name", name.clone());
+        }
+        table.insert("url", toml_edit::value(index.url.to_string()));
+        if index.default {
+            table.insert("default", toml_edit::value(true));
+        }
+
+        // Push the item to the table.
+        let mut updated = ArrayOfTables::new();
+        updated.push(table);
+        for table in existing {
+            // If there's another index with the same name, replace it.
+            if table
+                .get("name")
+                .is_some_and(|name| name.as_str() == index.name.as_deref())
+            {
+                continue;
+            }
+
+            // If there's another default index, remove it.
+            if index.default
+                && table
+                    .get("default")
+                    .is_some_and(|default| default.as_bool() == Some(true))
+            {
+                continue;
+            }
+
+            // If there's another index with the same URL, replace it.
+            if table
+                .get("url")
+                .is_some_and(|url| url.as_str() == Some(index.url.url().as_str()))
+            {
+                continue;
+            }
+
+            updated.push(table.clone());
+        }
+        self.doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .insert("index", Item::ArrayOfTables(updated));
+
+        Ok(())
     }
 
     /// Adds a dependency to `project.optional-dependencies`.

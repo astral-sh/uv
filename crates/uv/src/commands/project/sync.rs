@@ -1,24 +1,18 @@
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations;
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, SharedState};
-use crate::commands::{diagnostics, pip, project, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
-use anyhow::{Context, Result};
-use itertools::Itertools;
 use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
+
+use anyhow::{Context, Result};
+use itertools::Itertools;
+use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
-    HashCheckingMode, InstallOptions,
+    HashCheckingMode, InstallOptions, LowerBound,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
+use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
@@ -31,6 +25,15 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
+
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations;
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::lock::do_safe_lock;
+use crate::commands::project::{ProjectError, SharedState};
+use crate::commands::{diagnostics, pip, project, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -112,6 +115,7 @@ pub(crate) async fn sync(
         target.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        LowerBound::Warn,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -276,8 +280,10 @@ pub(super) async fn do_sync(
     let resolution = apply_editable_mode(resolution, editable);
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        uv_auth::store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Populate credentials from the workspace.
@@ -306,6 +312,7 @@ pub(super) async fn do_sync(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
+    let bounds = LowerBound::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let dry_run = false;
@@ -316,7 +323,9 @@ pub(super) async fn do_sync(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -340,6 +349,7 @@ pub(super) async fn do_sync(
         build_options,
         &build_hasher,
         exclude_newer,
+        bounds,
         sources,
         concurrency,
     );

@@ -70,6 +70,7 @@ standards-compliant `project.dependencies` table.
 During development, a project may rely on a package that isn't available on PyPI. The following
 additional sources are supported by uv:
 
+- Index: A package resolved from a specific package index.
 - Git: A Git repository.
 - URL: A remote wheel or source distribution.
 - Path: A local wheel, source distribution, or project directory.
@@ -90,6 +91,29 @@ $ uv lock --no-sources
 
 The use of `--no-sources` will also prevent uv from discovering any
 [workspace members](#workspace-member) that could satisfy a given dependency.
+
+### Index
+
+To pin a Python package to a specific index, add a named index to the `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+  "torch",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+```
+
+The `explicit` flag is optional and indicates that the index should _only_ be used for packages that
+explicitly specify it in `tool.uv.sources`. If `explicit` is not set, other packages may be resolved
+from the index, if not found elsewhere.
 
 ### Git
 
@@ -248,7 +272,9 @@ download the source from GitHub on macOS, and fall back to PyPI on all other pla
 
 You can specify multiple sources for a single dependency by providing a list of sources,
 disambiguated by [PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible
-environment markers. For example, to pull in different `httpx` commits on macOS vs. Linux:
+environment markers.
+
+For example, to pull in different `httpx` commits on macOS vs. Linux:
 
 ```toml title="pyproject.toml"
 [project]
@@ -261,6 +287,29 @@ httpx = [
   { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" },
   { git = "https://github.com/encode/httpx", tag = "0.24.1", marker = "sys_platform == 'linux'" },
 ]
+```
+
+This strategy even extends to pulling packages from different indexes based on environment markers.
+For example, to pull `torch` from different PyTorch indexes based on the platform:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["torch"]
+
+[tool.uv.sources]
+torch = [
+  { index = "torch-cu118", marker = "sys_platform == 'darwin'"},
+  { index = "torch-cu124", marker = "sys_platform != 'darwin'"},
+]
+
+[[tool.uv.index]]
+name = "torch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+
+[[tool.uv.index]]
+name = "torch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+
 ```
 
 ## Optional dependencies
@@ -323,6 +372,73 @@ To add a development dependency, include the `--dev` flag:
 $ uv add ruff --dev
 ```
 
+## Build dependencies
+
+If a project is structured as [Python package](./projects.md#build-systems), it may declare
+dependencies that are required to build the project, but not required to run it. These dependencies
+are specified in the `[build-system]` table under `build-system.requires`, following
+[PEP 518](https://peps.python.org/pep-0518/).
+
+For example, if a project uses `setuptools` as its build backend, it should declare `setuptools` as
+a build dependency:
+
+```toml title="pyproject.toml"
+[project]
+name = "pandas"
+version = "0.1.0"
+
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+```
+
+By default, uv will respect `tool.uv.sources` when resolving build dependencies. For example, to use
+a local version of `setuptools` for building, add the source to `tool.uv.sources`:
+
+```toml title="pyproject.toml"
+[project]
+name = "pandas"
+version = "0.1.0"
+
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+setuptools = { path = "./packages/setuptools" }
+```
+
+When publishing a package, we recommend running `uv build --no-sources` to ensure that the package
+builds correctly when `tool.uv.sources` is disabled, as is the case when using other build tools,
+like [`pypa/build`](https://github.com/pypa/build).
+
+## Editable dependencies
+
+A regular installation of a directory with a Python package first builds a wheel and then installs
+that wheel into your virtual environment, copying all source files. When the package source files
+are edited, the virtual environment will contain outdated versions.
+
+Editable installations solve this problem by adding a link to the project within the virtual
+environment (a `.pth` file), which instructs the interpreter to include the source files directly.
+
+There are some limitations to editables (mainly: the build backend needs to support them, and native
+modules aren't recompiled before import), but they are useful for development, as the virtual
+environment will always use the latest changes to the package.
+
+uv uses editable installation for workspace packages by default.
+
+To add an editable dependency, use the `--editable` flag:
+
+```console
+$ uv add --editable ./path/foo
+```
+
+Or, to opt-out of using an editable dependency in a workspace:
+
+```console
+$ uv add --no-editable ./path/foo
+```
+
 ## PEP 508
 
 [PEP 508](https://peps.python.org/pep-0508/) defines a syntax for dependency specification. It is
@@ -355,30 +471,3 @@ Markers are combined with `and`, `or`, and parentheses, e.g.,
 `aiohttp >=3.7.4,<4; (sys_platform != 'win32' or implementation_name != 'pypy') and python_version >= '3.10'`.
 Note that versions within markers must be quoted, while versions _outside_ of markers must _not_ be
 quoted.
-
-## Editable dependencies
-
-A regular installation of a directory with a Python package first builds a wheel and then installs
-that wheel into your virtual environment, copying all source files. When the package source files
-are edited, the virtual environment will contain outdated versions.
-
-Editable installations solve this problem by adding a link to the project within the virtual
-environment (a `.pth` file), which instructs the interpreter to include the source files directly.
-
-There are some limitations to editables (mainly: the build backend needs to support them, and native
-modules aren't recompiled before import), but they are useful for development, as the virtual
-environment will always use the latest changes to the package.
-
-uv uses editable installation for workspace packages by default.
-
-To add an editable dependency, use the `--editable` flag:
-
-```console
-$ uv add --editable ./path/foo
-```
-
-Or, to opt-out of using an editable dependency in a workspace:
-
-```console
-$ uv add --no-editable ./path/foo
-```

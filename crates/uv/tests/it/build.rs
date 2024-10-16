@@ -1,7 +1,11 @@
 use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
 use assert_fs::prelude::*;
+use fs_err::File;
+use indoc::indoc;
+use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use zip::ZipArchive;
 
 #[test]
 fn build() -> Result<()> {
@@ -1758,6 +1762,212 @@ fn build_no_build_logs() -> Result<()> {
     Building source distribution...
     Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz and project/dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn tool_uv_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"\\\.", ""),
+        ])
+        .collect::<Vec<_>>();
+
+    let build = context.temp_dir.child("backend");
+    build.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "backend"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=3.10"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    build
+        .child("src")
+        .child("backend")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def hello() -> str:
+                return "Hello, world!"
+        "#})?;
+    build.child("README.md").touch()?;
+
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "backend==0.1.0"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        backend = { path = "../backend" }
+        "#,
+    )?;
+
+    project.child("setup.py").write_str(indoc! {r"
+        from setuptools import setup
+
+        from backend import hello
+
+        hello()
+
+        setup()
+        ",
+    })?;
+
+    uv_snapshot!(filters, context.build().current_dir(project.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    running egg_info
+    creating project.egg-info
+    writing project.egg-info/PKG-INFO
+    writing dependency_links to project.egg-info/dependency_links.txt
+    writing requirements to project.egg-info/requires.txt
+    writing top-level names to project.egg-info/top_level.txt
+    writing manifest file 'project.egg-info/SOURCES.txt'
+    reading manifest file 'project.egg-info/SOURCES.txt'
+    writing manifest file 'project.egg-info/SOURCES.txt'
+    running sdist
+    running egg_info
+    writing project.egg-info/PKG-INFO
+    writing dependency_links to project.egg-info/dependency_links.txt
+    writing requirements to project.egg-info/requires.txt
+    writing top-level names to project.egg-info/top_level.txt
+    reading manifest file 'project.egg-info/SOURCES.txt'
+    writing manifest file 'project.egg-info/SOURCES.txt'
+    warning: sdist: standard file not found: should have one of README, README.rst, README.txt, README.md
+
+    running check
+    creating project-0.1.0
+    creating project-0.1.0/project.egg-info
+    copying files to project-0.1.0...
+    copying pyproject.toml -> project-0.1.0
+    copying setup.py -> project-0.1.0
+    copying project.egg-info/PKG-INFO -> project-0.1.0/project.egg-info
+    copying project.egg-info/SOURCES.txt -> project-0.1.0/project.egg-info
+    copying project.egg-info/dependency_links.txt -> project-0.1.0/project.egg-info
+    copying project.egg-info/requires.txt -> project-0.1.0/project.egg-info
+    copying project.egg-info/top_level.txt -> project-0.1.0/project.egg-info
+    copying project.egg-info/SOURCES.txt -> project-0.1.0/project.egg-info
+    Writing project-0.1.0/setup.cfg
+    Creating tar archive
+    removing 'project-0.1.0' (and everything under it)
+    Building wheel from source distribution...
+    running egg_info
+    writing project.egg-info/PKG-INFO
+    writing dependency_links to project.egg-info/dependency_links.txt
+    writing requirements to project.egg-info/requires.txt
+    writing top-level names to project.egg-info/top_level.txt
+    reading manifest file 'project.egg-info/SOURCES.txt'
+    writing manifest file 'project.egg-info/SOURCES.txt'
+    running bdist_wheel
+    running build
+    installing to build/bdist.linux-x86_64/wheel
+    running install
+    running install_egg_info
+    running egg_info
+    writing project.egg-info/PKG-INFO
+    writing dependency_links to project.egg-info/dependency_links.txt
+    writing requirements to project.egg-info/requires.txt
+    writing top-level names to project.egg-info/top_level.txt
+    reading manifest file 'project.egg-info/SOURCES.txt'
+    writing manifest file 'project.egg-info/SOURCES.txt'
+    Copying project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.12.egg-info
+    running install_scripts
+    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
+    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
+    adding 'project-0.1.0.dist-info/METADATA'
+    adding 'project-0.1.0.dist-info/WHEEL'
+    adding 'project-0.1.0.dist-info/top_level.txt'
+    adding 'project-0.1.0.dist-info/RECORD'
+    removing build/bdist.linux-x86_64/wheel
+    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    "###);
+
+    project
+        .child("dist")
+        .child("project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("project-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
+
+/// Check that we have a working git boundary for builds from source dist to wheel in `dist/`.
+#[test]
+fn git_boundary_in_dist_build() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("demo");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [project]
+        name = "demo"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        "#,
+    )?;
+    project.child("src/demo/__init__.py").write_str(
+        r#"
+        def run():
+            print("Running like the wind!")
+        "#,
+    )?;
+
+    uv_snapshot!(&context.filters(), context.build().current_dir(project.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/demo-0.1.0.tar.gz and dist/demo-0.1.0-py3-none-any.whl
+    "###);
+
+    // Check that the source file is included
+    let reader = File::open(project.join("dist/demo-0.1.0-py3-none-any.whl"))?;
+    let mut files: Vec<_> = ZipArchive::new(reader)?
+        .file_names()
+        .map(ToString::to_string)
+        .collect();
+    files.sort();
+    assert_snapshot!(files.join("\n"), @r###"
+    demo-0.1.0.dist-info/METADATA
+    demo-0.1.0.dist-info/RECORD
+    demo-0.1.0.dist-info/WHEEL
+    demo/__init__.py
     "###);
 
     Ok(())

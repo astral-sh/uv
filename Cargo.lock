@@ -4096,7 +4096,7 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 
 [[package]]
 name = "uv"
-version = "0.4.21"
+version = "0.4.22"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4206,6 +4206,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uv-once-map",
+ "uv-static",
  "wiremock",
 ]
 
@@ -4286,6 +4287,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "uv-configuration",
+ "uv-distribution",
  "uv-distribution-types",
  "uv-fs",
  "uv-pep440",
@@ -4601,6 +4603,7 @@ dependencies = [
  "tracing",
  "url",
  "urlencoding",
+ "uv-auth",
  "uv-cache-info",
  "uv-cache-key",
  "uv-distribution-filename",
@@ -4679,6 +4682,7 @@ dependencies = [
  "uv-cache-key",
  "uv-fs",
  "uv-static",
+ "which",
 ]
 
 [[package]]
@@ -5119,6 +5123,7 @@ dependencies = [
  "serde",
  "thiserror",
  "toml",
+ "uv-distribution-types",
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
@@ -5231,7 +5236,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.4.21"
+version = "0.4.22"
 
 [[package]]
 name = "uv-virtualenv"
@@ -5283,6 +5288,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "url",
+ "uv-distribution-types",
  "uv-fs",
  "uv-git",
  "uv-macros",

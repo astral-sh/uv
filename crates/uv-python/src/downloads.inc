@@ -5226,6 +5226,134 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-unknown-linux-gnu-lto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-unknown-linux-musl-lto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-i686-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 10,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
             minor: 9,
             patch: 20,
             prerelease: None,
@@ -6810,6 +6938,854 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
     ManagedPythonDownload {
         key: PythonInstallationKey {
             major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-aarch64-unknown-linux-gnu-lto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-musl-lto-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-i686-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-pc-windows-msvc-shared-pgo-20211017T1616.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-aarch64-apple-darwin-pgo%2Blto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-apple-darwin-pgo%2Blto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-aarch64-unknown-linux-gnu-lto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-unknown-linux-musl-lto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-i686-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-aarch64-apple-darwin-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-apple-darwin-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-unknown-linux-musl-lto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-i686-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-aarch64-apple-darwin-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-apple-darwin-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-unknown-linux-musl-lto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-i686-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 4,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-aarch64-apple-darwin-pgo%2Blto-20210413T2055.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-apple-darwin-pgo%2Blto-20210413T2055.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-unknown-linux-gnu-pgo%2Blto-20210413T2055.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-unknown-linux-musl-lto-20210413T2055.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-i686-pc-windows-msvc-shared-pgo-20210413T2055.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-pc-windows-msvc-shared-pgo-20210413T2055.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64)),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-aarch64-apple-darwin-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-apple-darwin-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-unknown-linux-musl-lto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-i686-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 1,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-apple-darwin-pgo-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 1,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-unknown-linux-gnu-pgo-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 1,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-unknown-linux-musl-noopt-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 1,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-i686-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 1,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-apple-darwin-pgo-20201020T0626.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-unknown-linux-gnu-pgo-20201020T0627.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-unknown-linux-musl-noopt-20201020T0627.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-i686-pc-windows-msvc-shared-pgo-20201021T0245.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 9,
+            patch: 0,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-pc-windows-msvc-shared-pgo-20201021T0245.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
             minor: 8,
             patch: 20,
             prerelease: None,
@@ -7894,6 +8870,982 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-x86_64-pc-windows-msvc-shared-install_only.tar.gz",
         sha256: Some("4658e08a00d60b1e01559b74d58ff4dd04da6df935d55f6268a15d6d0a679d74")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-apple-darwin-pgo%2Blto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-unknown-linux-musl-lto-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-i686-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 11,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-pc-windows-msvc-shared-pgo-20210724T1424.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 10,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-apple-darwin-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 10,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 10,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 10,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-unknown-linux-musl-lto-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 10,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-i686-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 10,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-pc-windows-msvc-shared-pgo-20210506T0943.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-apple-darwin-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-unknown-linux-musl-lto-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-i686-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-pc-windows-msvc-shared-pgo-20210414T1515.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 8,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-apple-darwin-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 8,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 8,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-unknown-linux-gnu-pgo%2Blto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 8,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-unknown-linux-musl-lto-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 8,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-i686-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 8,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-pc-windows-msvc-shared-pgo-20210327T1202.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-apple-darwin-pgo-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-unknown-linux-gnu-pgo-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-unknown-linux-musl-noopt-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-i686-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-pc-windows-msvc-shared-pgo-20210103T1125.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-apple-darwin-pgo-20201020T0626.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-unknown-linux-gnu-pgo-20201020T0627.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-unknown-linux-musl-noopt-20201020T0627.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-i686-pc-windows-msvc-shared-pgo-20201021T0233.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-pc-windows-msvc-shared-pgo-20201021T0232.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200823/cpython-3.8.5-x86_64-apple-darwin-pgo-20200823T2228.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.8.5-x86_64-unknown-linux-gnu-pgo-20200823T0036.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.8.5-x86_64-unknown-linux-musl-noopt-20200823T0036.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200830/cpython-3.8.5-i686-pc-windows-msvc-shared-pgo-20200830T2311.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 5,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200830/cpython-3.8.5-x86_64-pc-windows-msvc-shared-pgo-20200830T2254.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200530/cpython-3.8.3-x86_64-apple-darwin-pgo-20200530T1845.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-unknown-linux-gnu-pgo-20200518T0040.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-unknown-linux-musl-noopt-20200518T0040.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-i686-pc-windows-msvc-shared-pgo-20200518T0154.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 3,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-pc-windows-msvc-shared-pgo-20200517T2207.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-apple-darwin-pgo-20200418T2238.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-unknown-linux-gnu-pgo-20200418T2243.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-unknown-linux-musl-noopt-20200418T2309.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-i686-pc-windows-msvc-shared-pgo-20200418T2315.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 8,
+            patch: 2,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-pc-windows-msvc-shared-pgo-20200418T2315.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200823/cpython-3.7.9-x86_64-apple-darwin-pgo-20200823T2228.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-unknown-linux-gnu-pgo-20200823T0036.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-unknown-linux-musl-noopt-20200823T0036.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-i686-pc-windows-msvc-shared-pgo-20200823T0159.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 9,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-pc-windows-msvc-shared-pgo-20200823T0118.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Darwin),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200530/cpython-3.7.7-x86_64-apple-darwin-pgo-20200530T1845.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-unknown-linux-gnu-pgo-20200518T0040.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Musl),
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-unknown-linux-musl-noopt-20200518T0040.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-i686-pc-windows-msvc-shared-pgo-20200517T2153.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 7,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-pc-windows-msvc-shared-pgo-20200517T2128.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-x86-shared-pgo-20200217T0110.tar.zst",
+        sha256: None
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 7,
+            patch: 6,
+            prerelease: None,
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch(target_lexicon::Architecture::X86_64),
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+
+        },
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-amd64-shared-pgo-20200217T0022.tar.zst",
+        sha256: None
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {

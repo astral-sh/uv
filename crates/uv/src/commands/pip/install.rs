@@ -4,17 +4,16 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    IndexStrategy, LowerBound, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DependencyMetadata, IndexLocations, NameRequirementSpecification, Resolution,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Resolution,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
@@ -204,7 +203,12 @@ pub(crate) async fn pip_install(
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
-    if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
+    if reinstall.is_none()
+        && upgrade.is_none()
+        && source_trees.is_empty()
+        && overrides.is_empty()
+        && matches!(modifications, Modifications::Sufficient)
+    {
         match site_packages.satisfies(&requirements, &constraints, &markers)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
@@ -223,6 +227,7 @@ pub(crate) async fn pip_install(
                 if dry_run {
                     writeln!(printer.stderr(), "Would make no changes")?;
                 }
+
                 return Ok(ExitStatus::Success);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
@@ -269,12 +274,26 @@ pub(crate) async fn pip_install(
     let dev = Vec::default();
 
     // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    let index_locations = index_locations.combine(
+        extra_index_urls
+            .into_iter()
+            .map(Index::from_extra_index_url)
+            .chain(index_url.map(Index::from_index_url))
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        find_links
+            .into_iter()
+            .map(Index::from_find_links)
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        no_index,
+    );
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -292,7 +311,9 @@ pub(crate) async fn pip_install(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
     };
 
@@ -348,6 +369,7 @@ pub(crate) async fn pip_install(
         &build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Warn,
         sources,
         concurrency,
     );

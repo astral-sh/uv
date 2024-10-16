@@ -9,7 +9,7 @@ use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Te
 use rustc_hash::FxHashMap;
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{IndexLocations, IndexUrl};
+use uv_distribution_types::{Index, IndexLocations, IndexUrl};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -626,7 +626,7 @@ impl PubGrubReportFormatter<'_> {
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
-        let no_find_links = index_locations.flat_index().peekable().peek().is_none();
+        let no_find_links = index_locations.flat_indexes().peekable().peek().is_none();
 
         // Add hints due to the package being entirely unavailable.
         match unavailable_packages.get(name) {
@@ -708,6 +708,7 @@ impl PubGrubReportFormatter<'_> {
                 // indexes were not queried, and could contain a compatible version.
                 if let Some(next_index) = index_locations
                     .indexes()
+                    .map(Index::url)
                     .skip_while(|url| *url != found_index)
                     .nth(1)
                 {

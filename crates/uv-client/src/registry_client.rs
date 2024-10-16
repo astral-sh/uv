@@ -1,6 +1,7 @@
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, TryStreamExt};
 use http::HeaderMap;
+use itertools::Either;
 use reqwest::{Client, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use std::collections::BTreeMap;
@@ -16,7 +17,7 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -204,8 +205,15 @@ impl RegistryClient {
     pub async fn simple(
         &self,
         package_name: &PackageName,
+        index: Option<&IndexUrl>,
     ) -> Result<Vec<(IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
-        let mut it = self.index_urls.indexes().peekable();
+        let indexes = if let Some(index) = index {
+            Either::Left(std::iter::once(index))
+        } else {
+            Either::Right(self.index_urls.indexes().map(Index::url))
+        };
+
+        let mut it = indexes.peekable();
         if it.peek().is_none() {
             return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }

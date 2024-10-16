@@ -45,7 +45,7 @@ uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-once-map = { path = "crates/uv-once-map" }
 uv-options-metadata = { path = "crates/uv-options-metadata" }
-uv-pep440 = { path = "crates/uv-pep440", features = ["tracing"] }
+uv-pep440 = { path = "crates/uv-pep440", features = ["tracing", "rkyv"] }
 uv-pep508 = { path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
 uv-platform-tags = { path = "crates/uv-platform-tags" }
 uv-pubgrub = { path = "crates/uv-pubgrub" }

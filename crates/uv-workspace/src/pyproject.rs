@@ -15,7 +15,7 @@ use std::str::FromStr;
 use std::{collections::BTreeMap, mem};
 use thiserror::Error;
 use url::Url;
-
+use uv_distribution_types::Index;
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
@@ -154,9 +154,49 @@ pub struct ToolUv {
     /// The sources to use (e.g., workspace members, Git repositories, local paths) when resolving
     /// dependencies.
     pub sources: Option<ToolUvSources>,
+
+    /// The indexes to use when resolving dependencies.
+    ///
+    /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
+    /// (the simple repository API), or a local directory laid out in the same format.
+    ///
+    /// Indexes are considered in the order in which they're defined, such that the first-defined
+    /// index has the highest priority. Further, the indexes provided by this setting are given
+    /// higher priority than any indexes specified via [`index_url`](#index-url) or
+    /// [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains
+    /// a given package, unless an alternative [index strategy](#index-strategy) is specified.
+    ///
+    /// If an index is marked as `explicit = true`, it will be used exclusively for those
+    /// dependencies that select it explicitly via `[tool.uv.sources]`, as in:
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "pytorch"
+    /// url = "https://download.pytorch.org/whl/cu121"
+    /// explicit = true
+    ///
+    /// [tool.uv.sources]
+    /// torch = { index = "pytorch" }
+    /// ```
+    ///
+    /// If an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is
+    /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
+    /// PyPI default index.
+    #[option(
+        default = "\"[]\"",
+        value_type = "dict",
+        example = r#"
+            [[tool.uv.index]]
+            name = "pytorch"
+            url = "https://download.pytorch.org/whl/cu121"
+        "#
+    )]
+    pub index: Option<Vec<Index>>,
+
     /// The workspace definition for the project, if any.
     #[option_group]
     pub workspace: Option<ToolUvWorkspace>,
+
     /// Whether the project is managed by uv. If `false`, uv will ignore the project when
     /// `uv run` is invoked.
     #[option(
@@ -167,6 +207,7 @@ pub struct ToolUv {
         "#
     )]
     pub managed: Option<bool>,
+
     /// Whether the project should be considered a Python package, or a non-package ("virtual")
     /// project.
     ///
@@ -185,6 +226,7 @@ pub struct ToolUv {
         "#
     )]
     pub package: Option<bool>,
+
     /// The project's development dependencies. Development dependencies will be installed by
     /// default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
     #[cfg_attr(
@@ -202,6 +244,7 @@ pub struct ToolUv {
         "#
     )]
     pub dev_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
     /// A list of supported environments against which to resolve dependencies.
     ///
     /// By default, uv will resolve for all possible environments during a `uv lock` operation.
@@ -226,6 +269,7 @@ pub struct ToolUv {
         "#
     )]
     pub environments: Option<SupportedEnvironments>,
+
     /// Overrides to apply when resolving the project's dependencies.
     ///
     /// Overrides are used to force selection of a specific version of a package, regardless of the
@@ -261,6 +305,7 @@ pub struct ToolUv {
         "#
     )]
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
     /// Constraints to apply when resolving the project's dependencies.
     ///
     /// Constraints are used to restrict the versions of dependencies that are selected during
@@ -315,7 +360,7 @@ impl ToolUvSources {
 impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::de::Deserializer<'de>,
+        D: Deserializer<'de>,
     {
         struct SourcesVisitor;
 
@@ -503,16 +548,6 @@ impl TryFrom<SourcesWire> for Sources {
                     return Err(SourceError::EmptySources);
                 }
 
-                // Ensure that there is at most one registry source.
-                if sources
-                    .iter()
-                    .filter(|source| matches!(source, Source::Registry { .. }))
-                    .nth(1)
-                    .is_some()
-                {
-                    return Err(SourceError::MultipleIndexes);
-                }
-
                 Ok(Self(sources))
             }
         }
@@ -581,7 +616,6 @@ pub enum Source {
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
-        // TODO(konstin): The string is more-or-less a placeholder
         index: String,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
@@ -923,8 +957,6 @@ pub enum SourceError {
     OverlappingMarkers(String, String, String),
     #[error("Must provide at least one source")]
     EmptySources,
-    #[error("Sources can only include a single index source")]
-    MultipleIndexes,
 }
 
 impl Source {
@@ -933,6 +965,7 @@ impl Source {
         source: RequirementSource,
         workspace: bool,
         editable: Option<bool>,
+        index: Option<String>,
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
@@ -973,7 +1006,19 @@ impl Source {
         }
 
         let source = match source {
-            RequirementSource::Registry { .. } => return Ok(None),
+            RequirementSource::Registry { index: Some(_), .. } => {
+                return Ok(None);
+            }
+            RequirementSource::Registry { index: None, .. } => {
+                if let Some(index) = index {
+                    Source::Registry {
+                        index,
+                        marker: MarkerTree::TRUE,
+                    }
+                } else {
+                    return Ok(None);
+                }
+            }
             RequirementSource::Path { install_path, .. }
             | RequirementSource::Directory { install_path, .. } => Source::Path {
                 editable,

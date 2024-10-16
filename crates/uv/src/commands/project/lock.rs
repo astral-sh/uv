@@ -8,16 +8,16 @@ use anstream::eprint;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
-use uv_auth::store_credentials_from_url;
+
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    DependencyMetadata, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -111,6 +111,7 @@ pub(crate) async fn lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        LowerBound::Warn,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,
@@ -157,6 +158,7 @@ pub(super) async fn do_safe_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
+    bounds: LowerBound,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
@@ -183,6 +185,7 @@ pub(super) async fn do_safe_lock(
             interpreter,
             Some(existing),
             settings,
+            bounds,
             state,
             logger,
             connectivity,
@@ -209,6 +212,7 @@ pub(super) async fn do_safe_lock(
             interpreter,
             existing,
             settings,
+            bounds,
             state,
             logger,
             connectivity,
@@ -234,6 +238,7 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     settings: ResolverSettingsRef<'_>,
+    bounds: LowerBound,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
@@ -330,6 +335,8 @@ async fn do_lock(
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
             warn_user_once!("The workspace `requires-python` value does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+        } else if requires_python.is_exact_without_patch() {
+            warn_user_once!("The workspace `requires-python` value contains an exact match without a patch version: `{requires_python}`. When omitted, the patch version is implicitly `0`, e.g., `{requires_python}.0`. Did you mean `{requires_python}.*`?");
         }
         requires_python
     } else {
@@ -364,8 +371,10 @@ async fn do_lock(
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -409,7 +418,9 @@ async fn do_lock(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
@@ -433,6 +444,7 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer,
+        bounds,
         sources,
         concurrency,
     );

@@ -17,7 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
+    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -215,7 +216,19 @@ pub(crate) async fn run(
 
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
         if let Some(dependencies) = script.dependencies {
-            // // Collect any `tool.uv.sources` from the script.
+            // Collect any `tool.uv.index` from the script.
+            let empty = Vec::default();
+            let script_indexes = match settings.sources {
+                SourceStrategy::Enabled => script
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.indexes.as_deref())
+                    .unwrap_or(&empty),
+                SourceStrategy::Disabled => &empty,
+            };
+
+            // Collect any `tool.uv.sources` from the script.
             let empty = BTreeMap::default();
             let script_sources = match settings.sources {
                 SourceStrategy::Enabled => script
@@ -234,6 +247,9 @@ pub(crate) async fn run(
                         requirement,
                         script_dir.as_ref(),
                         script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
                     )
                     .map_ok(LoweredRequirement::into_inner)
                 })
@@ -530,6 +546,7 @@ pub(crate) async fn run(
                     project.workspace(),
                     venv.interpreter(),
                     settings.as_ref().into(),
+                    LowerBound::Allow,
                     &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)

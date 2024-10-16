@@ -174,11 +174,24 @@ class CPythonFinder(Finder):
             (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?\+
             (?P<date>\d+)-
             (?P<triple>[a-z\d_]+-[a-z\d]+(?>-[a-z\d]+)?-[a-z\d]+)-
-            (?>(?P<build_options>.+)-)?
-            (?P<flavor>.+)
+            (?:(?P<build_options>.+)-)?
+            (?P<flavor>[a-z_]+)?
             \.tar\.(?:gz|zst)
         $
-    """
+        """
+    )
+
+    _legacy_filename_re = re.compile(
+        r"""(?x)
+        ^
+            cpython-
+            (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?-
+            (?P<triple>[a-z\d_-]+)-
+            (?P<build_options>(debug|pgo|noopt|lto|pgo\+lto))?-
+            (?P<date>[a-zA-z\d]+)
+            \.tar\.(?:gz|zst)
+        $
+        """
     )
 
     def __init__(self, client: httpx.AsyncClient):
@@ -296,12 +309,18 @@ class CPythonFinder(Finder):
             return None
         filename = unquote(url.rsplit("/", maxsplit=1)[-1])
 
-        match = self._filename_re.match(filename)
+        match = self._filename_re.match(filename) or self._legacy_filename_re.match(
+            filename
+        )
         if match is None:
             logging.debug("Skipping %s: no regex match", filename)
             return None
 
-        version, _date, triple, build_options, flavor = match.groups()
+        groups = match.groupdict()
+        version = groups["ver"]
+        triple = groups["triple"]
+        build_options = groups.get("build_options")
+        flavor = groups.get("flavor", "full")
 
         build_options = build_options.split("+") if build_options else []
         variant: Variant | None
