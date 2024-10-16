@@ -21,7 +21,7 @@ workspace = true
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-rkyv = { workspace = true }
+rkyv = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 unscanny = { workspace = true }
