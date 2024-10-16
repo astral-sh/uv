@@ -1712,6 +1712,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
+                source_root,
                 Some(source.to_string()),
                 source.as_dist(),
                 source_strategy,
@@ -1756,6 +1757,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
+                source_root,
                 Some(source.to_string()),
                 source.as_dist(),
                 source_strategy,

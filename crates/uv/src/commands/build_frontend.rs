@@ -535,9 +535,9 @@ async fn build_package(
     };
 
     // Prepare some common arguments for the build.
+    let dist = None;
     let subdirectory = None;
     let version_id = source.path().file_name().and_then(|name| name.to_str());
-    let dist = None;
 
     let build_output = match printer {
         Printer::Default | Printer::NoProgress | Printer::Verbose => {
@@ -563,6 +563,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -601,6 +602,7 @@ async fn build_package(
                 .setup_build(
                     &extracted,
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -623,6 +625,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -645,6 +648,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -666,6 +670,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -684,6 +689,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -724,6 +730,7 @@ async fn build_package(
                 .setup_build(
                     &extracted,
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,

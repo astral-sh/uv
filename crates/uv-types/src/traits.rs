@@ -111,6 +111,7 @@ pub trait BuildContext {
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
+        install_path: &'a Path,
         version_id: Option<String>,
         dist: Option<&'a SourceDist>,
         sources: SourceStrategy,

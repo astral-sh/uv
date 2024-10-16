@@ -318,6 +318,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         source: &'data Path,
         subdirectory: Option<&'data Path>,
+        install_path: &'data Path,
         version_id: Option<String>,
         dist: Option<&'data SourceDist>,
         sources: SourceStrategy,
@@ -352,6 +353,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let builder = SourceBuild::setup(
             source,
             subdirectory,
+            install_path,
             dist_name,
             dist_version,
             self.interpreter,
