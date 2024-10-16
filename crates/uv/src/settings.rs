@@ -19,10 +19,10 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevMode, DevSpecification, EditableMode,
-    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
-    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, EditableMode, ExportFormat,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
+    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, SourceStrategy, TargetTriple,
+    TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_install_wheel::linker::LinkMode;
@@ -227,7 +227,7 @@ pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
@@ -280,7 +280,8 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            // TODO(zanieb): Support `--group` here
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, vec![], vec![]),
             editable: EditableMode::from_args(no_editable),
             with,
             with_editable,
@@ -690,7 +691,7 @@ pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevSpecification,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
@@ -740,7 +741,7 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevSpecification::from_args(dev, no_dev, only_dev, group, only_group),
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
                 no_install_project,
@@ -995,7 +996,7 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
@@ -1028,7 +1029,8 @@ impl TreeSettings {
         } = args;
 
         Self {
-            dev: DevMode::from_args(dev, no_dev, false),
+            // TODO(zanieb): Support `--group` here
+            dev: DevGroupsSpecification::from_args(dev, no_dev, false, vec![], vec![]),
             locked,
             frozen,
             universal,
@@ -1052,7 +1054,7 @@ pub(crate) struct ExportSettings {
     pub(crate) format: ExportFormat,
     pub(crate) package: Option<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
@@ -1102,7 +1104,8 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            // TODO(zanieb): Support `--group` here
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, vec![], vec![]),
             editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
             install_options: InstallOptions::new(

@@ -6,8 +6,8 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevMode, DevSpecification, EditableMode, ExtrasSpecification, InstallOptions,
-    LowerBound,
+    Concurrency, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
+    InstallOptions, LowerBound,
 };
 use uv_fs::Simplified;
 use uv_pep508::PackageName;
@@ -215,7 +215,7 @@ pub(crate) async fn remove(
         &venv,
         &lock,
         &extras,
-        &DevSpecification::from(dev),
+        &DevGroupsSpecification::from(dev),
         EditableMode::Editable,
         install_options,
         Modifications::Exact,
