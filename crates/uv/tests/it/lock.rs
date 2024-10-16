@@ -3530,7 +3530,7 @@ fn lock_requires_python_exact() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X]
-    warning: The workspace `requires-python` value contains an exact match without a patch version: `==3.12`. When omitted, the patch version is implicitly `0`, e.g., `==3.12.[X]`. Did you mean `==3.12.*`?
+    warning: The workspace `requires-python` value (`==3.12`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.12.[X]`). Did you mean `==3.12.*`?
     Resolved 2 packages in [TIME]
     "###);
 
@@ -3587,7 +3587,7 @@ fn lock_requires_python_exact() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X]
-    warning: The workspace `requires-python` value contains an exact match without a patch version: `==3.12`. When omitted, the patch version is implicitly `0`, e.g., `==3.12.[X]`. Did you mean `==3.12.*`?
+    warning: The workspace `requires-python` value (`==3.12`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.12.[X]`). Did you mean `==3.12.*`?
     Resolved 2 packages in [TIME]
     "###);
 
@@ -4139,7 +4139,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The workspace `requires-python` value does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
+    warning: The workspace `requires-python` value (`<=3.12`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
     Resolved 2 packages in [TIME]
     "###);
 
@@ -4186,7 +4186,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The workspace `requires-python` value does not contain a lower bound: `<=3.12`. Set a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
+    warning: The workspace `requires-python` value (`<=3.12`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
     Resolved 2 packages in [TIME]
     "###);
 
