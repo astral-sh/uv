@@ -9,7 +9,7 @@ use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Te
 use rustc_hash::FxHashMap;
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{Index, IndexLocations, IndexUrl};
+use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -505,6 +505,7 @@ impl PubGrubReportFormatter<'_> {
         derivation_tree: &ErrorTree,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
@@ -540,6 +541,7 @@ impl PubGrubReportFormatter<'_> {
                         set,
                         selector,
                         index_locations,
+                        index_capabilities,
                         available_indexes,
                         unavailable_packages,
                         incomplete_packages,
@@ -589,6 +591,7 @@ impl PubGrubReportFormatter<'_> {
                     &derived.cause1,
                     selector,
                     index_locations,
+                    index_capabilities,
                     available_indexes,
                     unavailable_packages,
                     incomplete_packages,
@@ -602,6 +605,7 @@ impl PubGrubReportFormatter<'_> {
                     &derived.cause2,
                     selector,
                     index_locations,
+                    index_capabilities,
                     available_indexes,
                     unavailable_packages,
                     incomplete_packages,
@@ -621,6 +625,7 @@ impl PubGrubReportFormatter<'_> {
         set: &Range<Version>,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
@@ -719,6 +724,20 @@ impl PubGrubReportFormatter<'_> {
                         next_index: next_index.clone(),
                     });
                 }
+            }
+        }
+
+        // Add hints due to an index returning an unauthorized response.
+        for index in index_locations.indexes() {
+            if index_capabilities.unauthorized(&index.url) {
+                hints.insert(PubGrubHint::UnauthorizedIndex {
+                    index: index.url.clone(),
+                });
+            }
+            if index_capabilities.forbidden(&index.url) {
+                hints.insert(PubGrubHint::ForbiddenIndex {
+                    index: index.url.clone(),
+                });
             }
         }
     }
@@ -873,6 +892,10 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         next_index: IndexUrl,
     },
+    /// An index returned an Unauthorized (401) response.
+    UnauthorizedIndex { index: IndexUrl },
+    /// An index returned a Forbidden (403) response.
+    ForbiddenIndex { index: IndexUrl },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -920,6 +943,12 @@ enum PubGrubHintCore {
     },
     UncheckedIndex {
         package: PubGrubPackage,
+    },
+    UnauthorizedIndex {
+        index: IndexUrl,
+    },
+    ForbiddenIndex {
+        index: IndexUrl,
     },
 }
 
@@ -974,6 +1003,8 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 workspace,
             },
             PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
+            PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
+            PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
         }
     }
 }
@@ -1212,6 +1243,26 @@ impl std::fmt::Display for PubGrubHint {
                     PackageRange::compatibility(package, range, None).cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
+                )
+            }
+            Self::UnauthorizedIndex { index } => {
+                write!(
+                    f,
+                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    index.redacted().cyan(),
+                    "401 Unauthorized".bold().red(),
+                )
+            }
+            Self::ForbiddenIndex { index } => {
+                write!(
+                    f,
+                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    index.redacted().cyan(),
+                    "403 Forbidden".bold().red(),
                 )
             }
         }

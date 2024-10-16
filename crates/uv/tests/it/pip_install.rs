@@ -4725,6 +4725,8 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
     Request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "###
     );
 }
@@ -4766,6 +4768,8 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
     Request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "###
     );
 }

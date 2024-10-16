@@ -4591,6 +4591,7 @@ name = "uv-distribution-types"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bitflags 2.6.0",
  "fs-err",
  "itertools 0.13.0",
  "jiff",

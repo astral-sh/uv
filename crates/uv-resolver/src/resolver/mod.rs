@@ -166,6 +166,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             hasher,
             options.exclude_newer,
             build_context.build_options(),
+            build_context.capabilities(),
         );
 
         Self::new_custom_io(
@@ -339,6 +340,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state.markers,
                         &visited,
                         &self.locations,
+                        &self.capabilities,
                     ));
                 }
 
@@ -1972,6 +1974,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         markers: ResolverMarkers,
         visited: &FxHashSet<PackageName>,
         index_locations: &IndexLocations,
+        index_capabilities: &IndexCapabilities,
     ) -> ResolveError {
         err = NoSolutionError::collapse_proxies(err);
 
@@ -2045,6 +2048,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.selector.clone(),
             self.python_requirement.clone(),
             index_locations.clone(),
+            index_capabilities.clone(),
             unavailable_packages,
             incomplete_packages,
             fork_urls,
