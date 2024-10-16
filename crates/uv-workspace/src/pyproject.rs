@@ -19,7 +19,7 @@ use uv_distribution_types::Index;
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
@@ -44,7 +44,7 @@ pub struct PyProjectToml {
     /// Tool-specific metadata.
     pub tool: Option<Tool>,
     /// Non-project dependency groups, as defined in PEP 735.
-    pub dependency_groups: Option<BTreeMap<ExtraName, Vec<String>>>,
+    pub dependency_groups: Option<BTreeMap<GroupName, Vec<String>>>,
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
@@ -1101,7 +1101,7 @@ pub enum DependencyType {
     /// A dependency in `project.optional-dependencies.{0}`.
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
-    Group(ExtraName),
+    Group(GroupName),
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>
