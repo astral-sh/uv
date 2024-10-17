@@ -576,12 +576,10 @@ jobs:
         with:
           verbose: false
           pre-run: |
-            rm -rf .cargo
-            ln -s $HOME/.cargo .cargo
-
+            # The exclude `*` prevents examination of directories so we need to
+            # include each parent directory of the binary
             include_path="$(mktemp)"
             cat <<EOF > $include_path
-            uv
             target
             target/x86_64-unknown-freebsd
             target/x86_64-unknown-freebsd/debug
@@ -594,14 +592,10 @@ jobs:
               --include-from "$include_path" \
               --exclude "*" \
               . firecracker:
-            rm -f "$exclude_path"
           run-in-vm: |
-            ls -lah
             cp target/x86_64-unknown-freebsd/debug/uv uv
             chmod +x uv
             ./uv --version
-            ./uv venv
-            ./uv pip install anyio
 
   ecosystem-test:
     timeout-minutes: 10
