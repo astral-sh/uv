@@ -1214,7 +1214,7 @@ impl RunCommand {
         if target.eq_ignore_ascii_case("-") {
             // Spawn the Python process with piped stdin
             let mut child = Command::new("python3")
-                .stdin(Stdio::piped())  // Pipe parent's stdin to the child process
+                .stdin(Stdio::piped()) // Pipe parent's stdin to the child process
                 .stdout(Stdio::inherit()) // Use parent's stdout
                 .stderr(Stdio::inherit()) // Use parent's stderr
                 .spawn()?; // Spawn the child process
@@ -1224,11 +1224,15 @@ impl RunCommand {
                 // Spawning a blocking task to read stdin and send it to the child process
                 let buffer = tokio::task::spawn_blocking(move || {
                     let mut buffer = Vec::new();
-                    stdin().read_to_end(&mut buffer).expect("Failed to read from stdin");
+                    stdin()
+                        .read_to_end(&mut buffer)
+                        .expect("Failed to read from stdin");
                     buffer
                 })
                 .await
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Task join error: {}", e)))?;
+                .map_err(|e| {
+                    io::Error::new(io::ErrorKind::Other, format!("Task join error: {}", e))
+                })?;
 
                 // Writing buffer to the child's stdin asynchronously
                 child_stdin.write_all(&buffer).await?;
