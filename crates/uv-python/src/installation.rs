@@ -142,6 +142,7 @@ impl PythonInstallation {
 
         let installed = ManagedPythonInstallation::new(path)?;
         installed.ensure_externally_managed()?;
+        installed.ensure_canonical_executables()?;
 
         Ok(Self {
             source: PythonSource::Managed,

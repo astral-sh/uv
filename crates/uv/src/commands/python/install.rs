@@ -167,6 +167,7 @@ pub(crate) async fn install(
                 // Ensure the installations have externally managed markers
                 let managed = ManagedPythonInstallation::new(path.clone())?;
                 managed.ensure_externally_managed()?;
+                managed.ensure_canonical_executables()?;
             }
             Err(err) => {
                 errors.push((key, err));

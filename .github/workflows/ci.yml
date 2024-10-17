@@ -718,6 +718,46 @@ jobs:
         run: |
           ./uv pip install -v anyio
 
+  integration-test-free-threaded-windows:
+    timeout-minutes: 10
+    needs: build-binary-windows
+    name: "integration test | free-threaded on windows"
+    runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 2000000
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: "Install free-threaded Python via uv"
+        run: |
+          ./uv python install -v 3.13t
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p 3.13t --python-preference only-managed
+
+      - name: "Check version"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/Scripts/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13t python -c ""
+
   integration-test-pypy-linux:
     timeout-minutes: 10
     needs: build-binary-linux
