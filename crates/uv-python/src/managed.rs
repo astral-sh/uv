@@ -7,7 +7,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use uv_state::{StateBucket, StateStore};
 
@@ -40,6 +40,15 @@ pub enum Error {
     ExtractError(#[from] uv_extract::Error),
     #[error("Failed to copy to: {0}", to.user_display())]
     CopyError {
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Missing expected Python executable at {}", _0.user_display())]
+    MissingExecutable(PathBuf),
+    #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
+    CanonicalizeExecutable {
+        from: PathBuf,
         to: PathBuf,
         #[source]
         err: io::Error,
@@ -321,6 +330,48 @@ impl ManagedPythonInstallation {
             PythonRequest::Version(version) => version.matches_version(&self.version()),
             PythonRequest::Key(request) => request.satisfied_by_key(self.key()),
         }
+    }
+
+    /// Ensure the environment contains the canonical Python executable names.
+    pub fn ensure_canonical_executables(&self) -> Result<(), Error> {
+        let python = self.executable();
+
+        // Workaround for python-build-standalone v20241016 which is missing the standard
+        // `python.exe` executable in free-threaded distributions on Windows.
+        //
+        // See https://github.com/astral-sh/uv/issues/8298
+        if !python.try_exists()? {
+            match self.key.variant {
+                PythonVariant::Default => return Err(Error::MissingExecutable(python.clone())),
+                PythonVariant::Freethreaded => {
+                    // This is the alternative executable name for the freethreaded variant
+                    let python_in_dist = self.python_dir().join(format!(
+                        "python{}.{}t{}",
+                        self.key.major,
+                        self.key.minor,
+                        std::env::consts::EXE_SUFFIX
+                    ));
+                    debug!(
+                        "Creating link {} -> {}",
+                        python.user_display(),
+                        python_in_dist.user_display()
+                    );
+                    uv_fs::symlink_copy_fallback_file(&python_in_dist, &python).map_err(|err| {
+                        if err.kind() == io::ErrorKind::NotFound {
+                            Error::MissingExecutable(python_in_dist.clone())
+                        } else {
+                            Error::CanonicalizeExecutable {
+                                from: python_in_dist,
+                                to: python,
+                                err,
+                            }
+                        }
+                    })?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Ensure the environment is marked as externally managed with the
