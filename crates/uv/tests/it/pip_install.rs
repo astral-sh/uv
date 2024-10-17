@@ -2335,7 +2335,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: project @ file://[TEMP_DIR]/
+      Caused by: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Failed to resolve requirements from `setup.py` build
       Caused by: No solution found when resolving: `setuptools>=40.8.0`
       Caused by: Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
@@ -5731,7 +5731,7 @@ fn require_hashes_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -6216,7 +6216,7 @@ fn verify_hashes_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:

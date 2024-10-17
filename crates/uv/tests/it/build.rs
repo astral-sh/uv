@@ -1553,7 +1553,7 @@ fn sha() -> Result<()> {
     Building source distribution...
     error: Failed to install requirements from `build-system.requires`
       Caused by: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: setuptools==68.2.2
+      Caused by: Failed to download `setuptools==68.2.2`
       Caused by: Hash mismatch for `setuptools==68.2.2`
 
     Expected:
