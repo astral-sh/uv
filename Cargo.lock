@@ -5281,7 +5281,6 @@ dependencies = [
  "same-file",
  "schemars",
  "serde",
- "serde-untagged",
  "tempfile",
  "thiserror",
  "tokio",
