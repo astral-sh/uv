@@ -416,6 +416,30 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
+    // Running a script with `--group` should warn.
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+      × No solution found when resolving script dependencies:
+      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    // If the script can't be resolved, we should reference the script.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "add",
+        # ]
+        # ///
+       "#
+    })?;
+
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @r###"
     success: false
     exit_code: 1
@@ -920,6 +944,161 @@ fn run_with_editable() -> Result<()> {
     Audited 3 packages in [TIME]
       × Invalid `--with` requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#,
+    )?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        try:
+            import anyio
+            print("imported `anyio`")
+        except ImportError:
+            print("failed to import `anyio`")
+
+        try:
+            import iniconfig
+            print("imported `iniconfig`")
+        except ImportError:
+            print("failed to import `iniconfig`")
+
+        try:
+            import typing_extensions
+            print("imported `typing_extensions`")
+        except ImportError:
+            print("failed to import `typing_extensions`")
+       "#
+    })?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    failed to import `anyio`
+    failed to import `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--only-group").arg("bar").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    failed to import `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--no-project").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    warning: `--group foo` has no effect when used alongside `--no-project`
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--group").arg("bar").arg("--no-project").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    warning: `--group` has no effect when used alongside `--no-project`
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("dev").arg("--no-project").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    warning: `--group dev` has no effect when used alongside `--no-project`
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--dev").arg("--no-project").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    warning: `--dev` has no effect when used alongside `--no-project`
     "###);
 
     Ok(())
