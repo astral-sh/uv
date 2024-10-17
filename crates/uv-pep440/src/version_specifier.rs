@@ -390,7 +390,7 @@ impl VersionSpecifier {
         &self.operator
     }
 
-    /// Get the version, e.g. `<=` in `<= 2.0.0`
+    /// Get the version, e.g. `2.0.0` in `<= 2.0.0`
     pub fn version(&self) -> &Version {
         &self.version
     }
