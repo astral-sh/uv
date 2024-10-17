@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use reqwest::{Client, ClientBuilder, Response};
+use reqwest::{Client, ClientBuilder, Proxy, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
@@ -249,10 +249,25 @@ impl<'a> BaseClientBuilder<'a> {
             .tls_built_in_root_certs(false);
 
         // If necessary, accept invalid certificates.
-        let client_builder = match security {
+        let mut client_builder = match security {
             Security::Secure => client_builder,
             Security::Insecure => client_builder.danger_accept_invalid_certs(true),
         };
+
+        if let Ok(proxy) = std::env::var("UV_ALL_PROXY") {
+            tracing::debug!("UV_ALL_PROXY set, using proxy: {}", proxy);
+            client_builder =
+                client_builder.proxy(Proxy::all(&proxy).expect("Failed to create proxy"));
+        }
+
+        if let Ok(ca_cert) = std::env::var("UV_CA_CERT") {
+            // read it in PEM format
+            let ca_cert = fs_err::read(&ca_cert).expect("Failed to read UV_CA_CERT path");
+            let cert =
+                reqwest::Certificate::from_pem(&ca_cert).expect("Failed to parse UV_CA_CERT");
+            tracing::debug!("UV_CA_CERT set, using CA certificate");
+            client_builder = client_builder.add_root_certificate(cert);
+        }
 
         let client_builder = if self.native_tls || ssl_cert_file_exists {
             client_builder.tls_built_in_native_certs(true)
