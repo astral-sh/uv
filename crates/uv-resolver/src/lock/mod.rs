@@ -31,8 +31,8 @@ use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{
-    redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
-    RequirementSource, ResolverMarkerEnvironment,
+    redact_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement, RequirementSource,
+    ResolverMarkerEnvironment,
 };
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{InstallTarget, Workspace};
@@ -3097,7 +3097,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     let mut url = git_dist.git.repository().clone();
 
     // Redact the credentials.
-    redact_git_credentials(&mut url);
+    redact_credentials(&mut url);
 
     // Clear out any existing state.
     url.set_fragment(None);
@@ -3686,11 +3686,11 @@ fn normalize_requirement(
             url,
         } => {
             // Redact the credentials.
-            redact_git_credentials(&mut repository);
+            redact_credentials(&mut repository);
 
             // Redact the PEP 508 URL.
             let mut url = url.to_url();
-            redact_git_credentials(&mut url);
+            redact_credentials(&mut url);
             let url = VerbatimUrl::from_url(url);
 
             Ok(Requirement {
@@ -3751,11 +3751,36 @@ fn normalize_requirement(
                 origin: None,
             })
         }
-        _ => Ok(Requirement {
+        RequirementSource::Registry {
+            specifier,
+            mut index,
+        } => {
+            if let Some(index) = index.as_mut() {
+                redact_credentials(index);
+            }
+            Ok(Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                marker: requirement.marker,
+                source: RequirementSource::Registry { specifier, index },
+                origin: None,
+            })
+        }
+        RequirementSource::Url {
+            location,
+            subdirectory,
+            ext,
+            url,
+        } => Ok(Requirement {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
-            source: requirement.source,
+            source: RequirementSource::Url {
+                location,
+                subdirectory,
+                ext,
+                url,
+            },
             origin: None,
         }),
     }

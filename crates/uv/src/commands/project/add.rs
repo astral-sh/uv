@@ -23,7 +23,7 @@ use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
-use uv_pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
+use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
@@ -448,7 +448,7 @@ pub(crate) async fn add(
                     GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
 
                     // Redact the credentials.
-                    redact_git_credentials(&mut git);
+                    redact_credentials(&mut git);
                 };
                 Some(Source::Git {
                     git,
