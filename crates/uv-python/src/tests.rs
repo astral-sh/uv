@@ -14,6 +14,8 @@ use uv_static::EnvVars;
 
 use uv_cache::Cache;
 
+use crate::discovery::Error as DiscoveryError;
+use crate::virtualenv::Error as VirtualEnvError;
 use crate::{
     discovery::{find_best_python_installation, find_python_installation, EnvironmentPreference},
     PythonPreference,
@@ -1069,6 +1071,34 @@ fn find_python_skips_broken_active_python() -> Result<()> {
         "3.12.0",
         // TODO(zanieb): We should skip this python, why don't we?
         "We should prefer the active environment"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn find_python_skips_workdir_broken_venv() -> Result<()> {
+    let context = TestContext::new()?;
+    // .venv without pyvenv.cfg
+    context.workdir.child(".venv").create_dir_all()?;
+
+    // without virtualenv
+    let python = context.run(|| {
+        find_python_installation(
+            &PythonRequest::parse("3.12"),
+            EnvironmentPreference::Any,
+            PythonPreference::Managed,
+            &context.cache,
+        )
+    });
+    assert!(
+        !matches!(
+            python,
+            Err(DiscoveryError::VirtualEnv(
+                VirtualEnvError::MissingPyVenvCfg(_)
+            ))
+        ),
+        "We should skip the .venv without pyvenv.cfg"
     );
 
     Ok(())
