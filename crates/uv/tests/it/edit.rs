@@ -4595,6 +4595,7 @@ fn fail_to_add_revert_project() -> Result<()> {
     error: Failed to prepare distributions
       Caused by: Failed to download and build `pytorch==1.0.2`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stderr]
     Traceback (most recent call last):
