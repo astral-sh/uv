@@ -4593,7 +4593,7 @@ fn fail_to_add_revert_project() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: pytorch==1.0.2
+      Caused by: Failed to download and build `pytorch==1.0.2`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
     [stderr]
