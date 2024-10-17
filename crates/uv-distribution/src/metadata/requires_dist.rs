@@ -278,7 +278,8 @@ mod test {
           |
         8 | tqdm = true
           |        ^^^^
-        invalid type: boolean `true`, expected an array or map
+        invalid type: boolean `true`, expected a single source (as a map) or list of sources
+
         "###);
     }
 
@@ -301,7 +302,6 @@ mod test {
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         expected at most one of `rev`, `tag`, or `branch`
-
         "###);
     }
 
@@ -319,10 +319,10 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        error: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
-          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |                                                ^^^
         unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `index`, `workspace`, `marker`
         "###);
     }
@@ -399,14 +399,12 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        error: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
-          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |                ^^^^^^^^^^^^^^^^^
         invalid value: string "§invalid#+#*Ä", expected relative URL without a base
 
-
-        in `url`
         "###);
     }
 
