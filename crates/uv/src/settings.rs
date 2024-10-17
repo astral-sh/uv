@@ -252,6 +252,8 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
+            group,
+            only_group,
             module: _,
             only_dev,
             no_editable,
@@ -280,8 +282,7 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            // TODO(zanieb): Support `--group` here
-            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, vec![], vec![]),
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             editable: EditableMode::from_args(no_editable),
             with,
             with_editable,
