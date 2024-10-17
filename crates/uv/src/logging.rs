@@ -19,6 +19,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 use tracing_tree::time::Uptime;
 use tracing_tree::HierarchicalLayer;
+#[cfg(feature = "tracing-durations-export")]
+use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
@@ -187,7 +189,7 @@ pub(crate) fn setup_duration() -> anyhow::Result<(
     Option<DurationsLayer<Registry>>,
     Option<DurationsLayerDropGuard>,
 )> {
-    if let Ok(location) = std::env::var("TRACING_DURATIONS_FILE") {
+    if let Ok(location) = std::env::var(EnvVars::TRACING_DURATIONS_FILE) {
         let location = std::path::PathBuf::from(location);
         if let Some(parent) = location.parent() {
             fs_err::create_dir_all(parent)

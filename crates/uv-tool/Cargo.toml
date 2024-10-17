@@ -9,6 +9,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
@@ -23,6 +26,7 @@ uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-settings = { workspace = true }
 uv-state = { workspace = true }
+uv-static = { workspace = true }
 uv-virtualenv = { workspace = true }
 
 dirs-sys = { workspace = true }

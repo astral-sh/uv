@@ -1,0 +1,9 @@
+# Fails with: uv pip install -p 3.12 -r numpy-numba.in
+# As of 2024-10-14:
+# llvmlite==0.36.0
+# numba==0.53.1
+# numpy==2.1.2
+# setuptools==75.1.0
+
+numpy>=1.24,<2.1.2
+sparse<0.15.4

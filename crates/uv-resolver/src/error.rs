@@ -6,12 +6,6 @@ use indexmap::IndexSet;
 use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
 use rustc_hash::FxHashMap;
 
-use tracing::trace;
-use uv_distribution_types::{BuiltDist, IndexLocations, IndexUrl, InstalledDist, SourceDist};
-use uv_normalize::PackageName;
-use uv_pep440::Version;
-use uv_pep508::MarkerTree;
-
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
@@ -21,6 +15,15 @@ use crate::pubgrub::{
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
+use crate::Options;
+use tracing::trace;
+use uv_distribution_types::{
+    BuiltDist, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist, SourceDist,
+};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
+use uv_static::EnvVars;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -51,6 +54,19 @@ pub enum ResolveError {
         urls: Vec<String>,
         fork_markers: MarkerTree,
     },
+
+    #[error("Requirements contain conflicting indexes for package `{0}`:\n- {}", _1.join("\n- "))]
+    ConflictingIndexesUniversal(PackageName, Vec<String>),
+
+    #[error("Requirements contain conflicting indexes for package `{package_name}` in split `{fork_markers:?}`:\n- {}", indexes.join("\n- "))]
+    ConflictingIndexesFork {
+        package_name: PackageName,
+        indexes: Vec<String>,
+        fork_markers: MarkerTree,
+    },
+
+    #[error("Requirements contain conflicting indexes for package `{0}`: `{1}` vs. `{2}`")]
+    ConflictingIndexes(PackageName, String, String),
 
     #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
     DisallowedUrl(PackageName, String),
@@ -112,11 +128,13 @@ pub struct NoSolutionError {
     selector: CandidateSelector,
     python_requirement: PythonRequirement,
     index_locations: IndexLocations,
+    index_capabilities: IndexCapabilities,
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
     markers: ResolverMarkers,
     workspace_members: BTreeSet<PackageName>,
+    options: Options,
 }
 
 impl NoSolutionError {
@@ -128,11 +146,13 @@ impl NoSolutionError {
         selector: CandidateSelector,
         python_requirement: PythonRequirement,
         index_locations: IndexLocations,
+        index_capabilities: IndexCapabilities,
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
         markers: ResolverMarkers,
         workspace_members: BTreeSet<PackageName>,
+        options: Options,
     ) -> Self {
         Self {
             error,
@@ -141,11 +161,13 @@ impl NoSolutionError {
             selector,
             python_requirement,
             index_locations,
+            index_capabilities,
             unavailable_packages,
             incomplete_packages,
             fork_urls,
             markers,
             workspace_members,
+            options,
         }
     }
 
@@ -213,7 +235,8 @@ impl std::fmt::Display for NoSolutionError {
         // Transform the error tree for reporting
         let mut tree = self.error.clone();
         simplify_derivation_tree_markers(&self.python_requirement, &mut tree);
-        let should_display_tree = std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some()
+        let should_display_tree = std::env::var_os(EnvVars::UV_INTERNAL__SHOW_DERIVATION_TREE)
+            .is_some()
             || tracing::enabled!(tracing::Level::TRACE);
 
         if should_display_tree {
@@ -243,12 +266,14 @@ impl std::fmt::Display for NoSolutionError {
             &tree,
             &self.selector,
             &self.index_locations,
+            &self.index_capabilities,
             &self.available_indexes,
             &self.unavailable_packages,
             &self.incomplete_packages,
             &self.fork_urls,
             &self.markers,
             &self.workspace_members,
+            self.options,
             &mut additional_hints,
         );
         for hint in additional_hints {
@@ -268,7 +293,7 @@ fn display_tree(
     display_tree_inner(error, &mut lines, 0);
     lines.reverse();
 
-    if std::env::var_os("UV_INTERNAL__SHOW_DERIVATION_TREE").is_some() {
+    if std::env::var_os(EnvVars::UV_INTERNAL__SHOW_DERIVATION_TREE).is_some() {
         eprintln!("{name}\n{}", lines.join("\n"));
     } else {
         trace!("{name}\n{}", lines.join("\n"));

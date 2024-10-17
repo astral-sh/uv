@@ -143,7 +143,7 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
         // (note: the Windows trampoline binaries natively support relative paths to executable)
         if shebang_length > 127 || executable.contains(' ') || relocatable {
             let prefix = if relocatable {
-                r#""$(CDPATH= cd -- "$(dirname -- "$0")" && echo "$PWD")"/"#
+                r#""$(dirname -- "$(realpath -- "$0")")"/"#
             } else {
                 ""
             };
@@ -1019,7 +1019,7 @@ mod test {
         let os_name = "posix";
         assert_eq!(
             format_shebang(executable, os_name, true),
-            "#!/bin/sh\n'''exec' \"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && echo \"$PWD\")\"/'python3' \"$0\" \"$@\"\n' '''"
+            "#!/bin/sh\n'''exec' \"$(dirname -- \"$(realpath -- \"$0\")\")\"/'python3' \"$0\" \"$@\"\n' '''"
         );
 
         // Except on Windows...

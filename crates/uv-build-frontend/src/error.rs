@@ -57,6 +57,8 @@ static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    Lowering(#[from] uv_distribution::MetadataError),
     #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]

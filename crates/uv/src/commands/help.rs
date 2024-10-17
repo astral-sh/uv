@@ -13,6 +13,7 @@ use which::which;
 use super::ExitStatus;
 use crate::printer::Printer;
 use uv_cli::Cli;
+use uv_static::EnvVars;
 
 // hidden subcommands to show in the help command
 const SHOW_HIDDEN_COMMANDS: &[&str] = &["generate-shell-completion"];
@@ -221,7 +222,7 @@ impl Pager {
     /// Supports the `PAGER` environment variable, otherwise checks for `less` and `more` in the
     /// search path.
     fn try_from_env() -> Option<Pager> {
-        if let Some(pager) = std::env::var_os("PAGER") {
+        if let Some(pager) = std::env::var_os(EnvVars::PAGER) {
             if !pager.is_empty() {
                 return Pager::from_str(&pager.to_string_lossy()).ok();
             }

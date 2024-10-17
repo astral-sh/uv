@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 use uv_fs::Simplified;
+#[cfg(not(windows))]
+use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
 pub use crate::combine::*;
@@ -179,7 +181,7 @@ fn config_dir() -> Option<PathBuf> {
     // On Linux and macOS, use, e.g., /home/alice/.config.
     #[cfg(not(windows))]
     {
-        std::env::var_os("XDG_CONFIG_HOME")
+        std::env::var_os(EnvVars::XDG_CONFIG_HOME)
             .and_then(dirs_sys::is_absolute_path)
             .or_else(|| dirs_sys::home_dir().map(|path| path.join(".config")))
     }

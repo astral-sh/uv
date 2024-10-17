@@ -1,5 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
+use uv_static::EnvVars;
 
 use crate::Cache;
 use clap::Parser;
@@ -17,7 +18,7 @@ pub struct CacheArgs {
         long,
         short,
         alias = "no-cache-dir",
-        env = "UV_NO_CACHE",
+        env = EnvVars::UV_NO_CACHE,
         value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub no_cache: bool,
@@ -26,7 +27,7 @@ pub struct CacheArgs {
     ///
     /// Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
     /// Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
-    #[arg(global = true, long, env = "UV_CACHE_DIR")]
+    #[arg(global = true, long, env = EnvVars::UV_CACHE_DIR)]
     pub cache_dir: Option<PathBuf>,
 }
 

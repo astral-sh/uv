@@ -3,6 +3,9 @@ name = "uv-performance-memory-allocator"
 version = "0.1.0"
 publish = false
 
+[lib]
+doctest = false
+
 [dependencies]
 
 [target.'cfg(all(target_os = "windows"))'.dependencies]

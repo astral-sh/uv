@@ -1,7 +1,8 @@
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{human_readable_bytes, ExitStatus};
 use crate::printer::Printer;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
+use console::Term;
 use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::sync::Arc;
@@ -69,13 +70,26 @@ pub(crate) async fn publish(
         &oidc_client.client(),
     )
     .await?;
+
     let (username, password) = if let Some(password) = trusted_publishing_token {
         (Some("__token__".to_string()), Some(password.into()))
     } else {
-        (username, password)
+        if username.is_none() && password.is_none() {
+            prompt_username_and_password()?
+        } else {
+            (username, password)
+        }
     };
 
-    for (file, filename) in files {
+    if password.is_some() && username.is_none() {
+        bail!(
+            "Attempted to publish with a password, but no username. Either provide a username \
+            with `--user` (`UV_PUBLISH_USERNAME`), or use `--token` (`UV_PUBLISH_TOKEN`) instead \
+            of a password."
+        );
+    }
+
+    for (file, raw_filename, filename) in files {
         let size = fs_err::metadata(&file)?.len();
         let (bytes, unit) = human_readable_bytes(size);
         writeln!(
@@ -87,6 +101,7 @@ pub(crate) async fn publish(
         let reporter = PublishReporter::single(printer);
         let uploaded = upload(
             &file,
+            &raw_filename,
             &filename,
             &publish_url,
             &upload_client.client(),
@@ -108,4 +123,17 @@ pub(crate) async fn publish(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
+    let term = Term::stderr();
+    if !term.is_term() {
+        return Ok((None, None));
+    }
+    let username_prompt = "Enter username ('__token__' if using a token): ";
+    let password_prompt = "Enter password: ";
+    let username = uv_console::input(username_prompt, &term).context("Failed to read username")?;
+    let password =
+        uv_console::password(password_prompt, &term).context("Failed to read password")?;
+    Ok((Some(username), Some(password)))
 }

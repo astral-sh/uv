@@ -1238,6 +1238,15 @@ impl MarkerTree {
         MarkerTreeDebugGraph { marker: self }
     }
 
+    /// Formats a [`MarkerTree`] in its "raw" representation.
+    ///
+    /// This is useful for debugging when one wants to look at a
+    /// representation of a `MarkerTree` that is precisely identical
+    /// to its internal representation.
+    pub fn debug_raw(&self) -> MarkerTreeDebugRaw<'_> {
+        MarkerTreeDebugRaw { marker: self }
+    }
+
     fn fmt_graph(&self, f: &mut fmt::Formatter<'_>, level: usize) -> fmt::Result {
         match self.kind() {
             MarkerTreeKind::True => return write!(f, "true"),
@@ -1338,6 +1347,24 @@ pub struct MarkerTreeDebugGraph<'a> {
 impl<'a> fmt::Debug for MarkerTreeDebugGraph<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.marker.fmt_graph(f, 0)
+    }
+}
+
+/// Formats a [`MarkerTree`] using its raw internals.
+///
+/// This is very verbose and likely only useful if you're working
+/// on the internals of this crate.
+///
+/// This type is created by the [`MarkerTree::debug_raw`] routine.
+#[derive(Clone)]
+pub struct MarkerTreeDebugRaw<'a> {
+    marker: &'a MarkerTree,
+}
+
+impl<'a> fmt::Debug for MarkerTreeDebugRaw<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let node = INTERNER.shared.node(self.marker.0);
+        f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
     }
 }
 
@@ -2693,6 +2720,41 @@ mod test {
         assert!(!is_disjoint("'Windows' in os_name", "'Windows' in os_name"));
         assert!(!is_disjoint("'Linux' in os_name", "os_name not in 'Linux'"));
         assert!(!is_disjoint("'Linux' not in os_name", "os_name in 'Linux'"));
+
+        assert!(!is_disjoint(
+            "os_name == 'Linux' and os_name != 'OSX'",
+            "os_name == 'Linux'"
+        ));
+        assert!(is_disjoint(
+            "os_name == 'Linux' and os_name != 'OSX'",
+            "os_name == 'OSX'"
+        ));
+
+        assert!(!is_disjoint(
+            "extra == 'Linux' and extra != 'OSX'",
+            "extra == 'Linux'"
+        ));
+        assert!(is_disjoint(
+            "extra == 'Linux' and extra != 'OSX'",
+            "extra == 'OSX'"
+        ));
+
+        assert!(!is_disjoint(
+            "extra == 'x1' and extra != 'x2'",
+            "extra == 'x1'"
+        ));
+        assert!(is_disjoint(
+            "extra == 'x1' and extra != 'x2'",
+            "extra == 'x2'"
+        ));
+    }
+
+    #[test]
+    fn is_disjoint_commutative() {
+        let m1 = m("extra == 'Linux' and extra != 'OSX'");
+        let m2 = m("extra == 'Linux'");
+        assert!(!m2.is_disjoint(&m1));
+        assert!(!m1.is_disjoint(&m2));
     }
 
     #[test]

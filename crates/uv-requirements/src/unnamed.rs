@@ -9,6 +9,7 @@ use serde::Deserialize;
 use tracing::debug;
 use url::Host;
 
+use crate::Error;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -22,22 +23,8 @@ use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
-#[derive(Debug, thiserror::Error)]
-pub enum NamedRequirementsError {
-    #[error(transparent)]
-    Distribution(#[from] uv_distribution::Error),
-
-    #[error(transparent)]
-    DistributionTypes(#[from] uv_distribution_types::Error),
-
-    #[error(transparent)]
-    WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
-}
-
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
-    /// The requirements for the project.
-    requirements: Vec<UnnamedRequirement<VerbatimParsedUrl>>,
     /// Whether to check hashes for distributions.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -47,15 +34,13 @@ pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
 }
 
 impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
-    /// Instantiate a new [`NamedRequirementsResolver`] for a given set of requirements.
+    /// Instantiate a new [`NamedRequirementsResolver`].
     pub fn new(
-        requirements: Vec<UnnamedRequirement<VerbatimParsedUrl>>,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
-            requirements,
             hasher,
             index,
             database,
@@ -72,15 +57,16 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
     }
 
     /// Resolve any unnamed requirements in the specification.
-    pub async fn resolve(self) -> Result<Vec<Requirement>, NamedRequirementsError> {
+    pub async fn resolve(
+        self,
+        requirements: impl Iterator<Item = UnnamedRequirement<VerbatimParsedUrl>>,
+    ) -> Result<Vec<Requirement>, Error> {
         let Self {
-            requirements,
             hasher,
             index,
             database,
         } = self;
         requirements
-            .into_iter()
             .map(|requirement| async {
                 Self::resolve_requirement(requirement, hasher, index, &database)
                     .await
@@ -97,7 +83,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'a, Context>,
-    ) -> Result<uv_pep508::Requirement<VerbatimParsedUrl>, NamedRequirementsError> {
+    ) -> Result<uv_pep508::Requirement<VerbatimParsedUrl>, Error> {
         // If the requirement is a wheel, extract the package name from the wheel filename.
         //
         // Ex) `anyio-4.3.0-py3-none-any.whl`

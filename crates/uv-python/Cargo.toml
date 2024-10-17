@@ -9,6 +9,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
@@ -26,6 +29,7 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-state = { workspace = true }
+uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
@@ -53,12 +57,8 @@ tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
 
-[target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
-rustix = { workspace = true }
-
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
-winsafe = { workspace = true }
 windows-registry = { workspace = true }
 windows-result = { workspace = true }
 

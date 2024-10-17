@@ -3,7 +3,8 @@ use crate::Metadata;
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use uv_configuration::SourceStrategy;
+use uv_configuration::{LowerBound, SourceStrategy};
+use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::pyproject::ToolUvSources;
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
@@ -37,7 +38,9 @@ impl RequiresDist {
     pub async fn from_project_maybe_workspace(
         metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
+        locations: &IndexLocations,
         sources: SourceStrategy,
+        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
@@ -48,17 +51,39 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(metadata, &project_workspace, sources)
+        Self::from_project_workspace(
+            metadata,
+            &project_workspace,
+            locations,
+            sources,
+            lower_bound,
+        )
     }
 
     fn from_project_workspace(
         metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
+        // Collect any `tool.uv.index` entries.
+        let empty = vec![];
+        let project_indexes = match source_strategy {
+            SourceStrategy::Enabled => project_workspace
+                .current_project()
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.index.as_deref())
+                .unwrap_or(&empty),
+            SourceStrategy::Disabled => &empty,
+        };
+
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let sources = match source_strategy {
+        let project_sources = match source_strategy {
             SourceStrategy::Enabled => project_workspace
                 .current_project()
                 .pyproject_toml()
@@ -90,8 +115,11 @@ impl RequiresDist {
                             requirement,
                             &metadata.name,
                             project_workspace.project_root(),
-                            sources,
+                            project_sources,
+                            project_indexes,
+                            locations,
                             project_workspace.workspace(),
+                            lower_bound,
                         )
                         .map(move |requirement| match requirement {
                             Ok(requirement) => Ok(requirement.into_inner()),
@@ -122,8 +150,11 @@ impl RequiresDist {
                         requirement,
                         &metadata.name,
                         project_workspace.project_root(),
-                        sources,
+                        project_sources,
+                        project_indexes,
+                        locations,
                         project_workspace.workspace(),
+                        lower_bound,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
@@ -166,7 +197,8 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-    use uv_configuration::SourceStrategy;
+    use uv_configuration::{LowerBound, SourceStrategy};
+    use uv_distribution_types::IndexLocations;
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -192,7 +224,9 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
-            SourceStrategy::Enabled,
+            &IndexLocations::default(),
+            SourceStrategy::default(),
+            LowerBound::default(),
         )?)
     }
 

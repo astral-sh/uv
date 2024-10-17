@@ -25,6 +25,7 @@ use crate::generate_options_reference::Args as GenerateOptionsReferenceArgs;
 #[cfg(feature = "render")]
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
+use uv_static::EnvVars;
 
 mod clear_compile;
 mod compile;
@@ -77,7 +78,7 @@ async fn run() -> Result<()> {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
-    let (duration_layer, _guard) = if let Ok(location) = env::var("TRACING_DURATIONS_FILE") {
+    let (duration_layer, _guard) = if let Ok(location) = env::var(EnvVars::TRACING_DURATIONS_FILE) {
         let location = PathBuf::from(location);
         if let Some(parent) = location.parent() {
             fs_err::tokio::create_dir_all(&parent)

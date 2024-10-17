@@ -2,6 +2,7 @@ pub mod windows;
 
 use std::path::{Path, PathBuf};
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 /// Shells for which virtualenv activation scripts are available.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -37,22 +38,22 @@ impl Shell {
     /// If `SHELL` is set, but contains a value that doesn't correspond to one of the supported
     /// shell types, then return `None`.
     pub fn from_env() -> Option<Shell> {
-        if std::env::var_os("NU_VERSION").is_some() {
+        if std::env::var_os(EnvVars::NU_VERSION).is_some() {
             Some(Shell::Nushell)
-        } else if std::env::var_os("FISH_VERSION").is_some() {
+        } else if std::env::var_os(EnvVars::FISH_VERSION).is_some() {
             Some(Shell::Fish)
-        } else if std::env::var_os("BASH_VERSION").is_some() {
+        } else if std::env::var_os(EnvVars::BASH_VERSION).is_some() {
             Some(Shell::Bash)
-        } else if std::env::var_os("ZSH_VERSION").is_some() {
+        } else if std::env::var_os(EnvVars::ZSH_VERSION).is_some() {
             Some(Shell::Zsh)
-        } else if std::env::var_os("KSH_VERSION").is_some() {
+        } else if std::env::var_os(EnvVars::KSH_VERSION).is_some() {
             Some(Shell::Ksh)
-        } else if let Some(env_shell) = std::env::var_os("SHELL") {
+        } else if let Some(env_shell) = std::env::var_os(EnvVars::SHELL) {
             Shell::from_shell_path(env_shell)
         } else if cfg!(windows) {
             // Command Prompt relies on PROMPT for its appearance whereas PowerShell does not.
             // See: https://stackoverflow.com/a/66415037.
-            if std::env::var_os("PROMPT").is_some() {
+            if std::env::var_os(EnvVars::PROMPT).is_some() {
                 Some(Shell::Cmd)
             } else {
                 // Fallback to PowerShell if the PROMPT environment variable is not set.
@@ -113,7 +114,7 @@ impl Shell {
                 // `.zshenv` to use.
                 //
                 // See: https://github.com/rust-lang/rustup/blob/fede22fea7b160868cece632bd213e6d72f8912f/src/cli/self_update/shell.rs#L197
-                let zsh_dot_dir = std::env::var("ZDOTDIR")
+                let zsh_dot_dir = std::env::var(EnvVars::ZDOTDIR)
                     .ok()
                     .filter(|dir| !dir.is_empty())
                     .map(PathBuf::from);
@@ -146,7 +147,7 @@ impl Shell {
                 // login and non-login shells. However, we must respect Fish's logic, which reads
                 // from `$XDG_CONFIG_HOME/fish/config.fish` if set, and `~/.config/fish/config.fish`
                 // otherwise.
-                if let Some(xdg_home_dir) = std::env::var("XDG_CONFIG_HOME")
+                if let Some(xdg_home_dir) = std::env::var(EnvVars::XDG_CONFIG_HOME)
                     .ok()
                     .filter(|dir| !dir.is_empty())
                     .map(PathBuf::from)
@@ -172,7 +173,7 @@ impl Shell {
     /// Returns `true` if the given path is on the `PATH` in this shell.
     pub fn contains_path(path: &Path) -> bool {
         let home_dir = home::home_dir();
-        std::env::var_os("PATH")
+        std::env::var_os(EnvVars::PATH)
             .as_ref()
             .iter()
             .flat_map(std::env::split_paths)

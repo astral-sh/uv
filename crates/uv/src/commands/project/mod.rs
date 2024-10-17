@@ -5,14 +5,15 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
+use uv_configuration::{
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Index, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_git::ResolvedRepositoryReference;
@@ -27,9 +28,7 @@ use uv_python::{
     VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
-use uv_requirements::{
-    NamedRequirementsError, NamedRequirementsResolver, RequirementsSpecification,
-};
+use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
     ResolverMarkers,
@@ -169,7 +168,7 @@ pub(crate) enum ProjectError {
     Name(#[from] uv_normalize::InvalidNameError),
 
     #[error(transparent)]
-    NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
+    Requirements(#[from] uv_requirements::Error),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -525,24 +524,40 @@ pub(crate) async fn get_or_init_environment(
             let venv = workspace.venv();
 
             // Avoid removing things that are not virtual environments
-            if venv.exists() && !venv.join("pyvenv.cfg").exists() {
-                return Err(ProjectError::InvalidProjectEnvironmentDir(
-                    venv,
-                    "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
-                ));
-            }
+            let should_remove = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
+                // It's a virtual environment we can remove it
+                (_, Ok(true)) => true,
+                // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
+                (Ok(false), Ok(false)) => false,
+                // If it's not a virtual environment, bail
+                (Ok(true), Ok(false)) => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        venv,
+                        "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                    ));
+                }
+                // Similarly, if we can't _tell_ if it exists we should bail
+                (_, Err(err)) | (Err(err), _) => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        venv,
+                        format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
+                    ));
+                }
+            };
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
-            match fs_err::remove_dir_all(&venv) {
-                Ok(()) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Removed virtual environment at: {}",
-                        venv.user_display().cyan()
-                    )?;
+            if should_remove {
+                match fs_err::remove_dir_all(&venv) {
+                    Ok(()) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed virtual environment at: {}",
+                            venv.user_display().cyan()
+                        )?;
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.into()),
             }
 
             writeln!(
@@ -594,7 +609,7 @@ pub(crate) async fn resolve_names(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Vec<Requirement>, NamedRequirementsError> {
+) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
         requirements
@@ -633,8 +648,10 @@ pub(crate) async fn resolve_names(
     } = settings;
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -688,6 +705,7 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         *exclude_newer,
+        LowerBound::Allow,
         *sources,
         concurrency,
     );
@@ -695,13 +713,12 @@ pub(crate) async fn resolve_names(
     // Resolve the unnamed requirements.
     requirements.extend(
         NamedRequirementsResolver::new(
-            unnamed,
             &hasher,
             &state.index,
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
         .with_reporter(ResolverReporter::from(printer))
-        .resolve()
+        .resolve(unnamed.into_iter())
         .await?,
     );
 
@@ -781,8 +798,10 @@ pub(crate) async fn resolve_environment<'a>(
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -844,7 +863,9 @@ pub(crate) async fn resolve_environment<'a>(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -868,6 +889,7 @@ pub(crate) async fn resolve_environment<'a>(
         build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Allow,
         sources,
         concurrency,
     );
@@ -939,8 +961,10 @@ pub(crate) async fn sync_environment(
     let tags = venv.interpreter().tags()?;
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -974,7 +998,9 @@ pub(crate) async fn sync_environment(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -998,6 +1024,7 @@ pub(crate) async fn sync_environment(
         build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Allow,
         sources,
         concurrency,
     );
@@ -1127,8 +1154,10 @@ pub(crate) async fn update_environment(
     }
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -1176,7 +1205,9 @@ pub(crate) async fn update_environment(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -1200,6 +1231,7 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         *exclude_newer,
+        LowerBound::Allow,
         *sources,
         concurrency,
     );
@@ -1336,7 +1368,7 @@ fn warn_on_requirements_txt_setting(
         warn_user_once!("Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file.");
     } else {
         if let Some(index_url) = index_url {
-            if settings.index_locations.index() != Some(index_url) {
+            if settings.index_locations.default_index().map(Index::url) != Some(index_url) {
                 warn_user_once!(
                     "Ignoring `--index-url` from requirements file: `{index_url}`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file."
                 );
@@ -1345,8 +1377,8 @@ fn warn_on_requirements_txt_setting(
         for extra_index_url in extra_index_urls {
             if !settings
                 .index_locations
-                .extra_index()
-                .contains(extra_index_url)
+                .implicit_indexes()
+                .any(|index| index.url() == extra_index_url)
             {
                 warn_user_once!(
                     "Ignoring `--extra-index-url` from requirements file: `{extra_index_url}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`"
@@ -1355,7 +1387,11 @@ fn warn_on_requirements_txt_setting(
             }
         }
         for find_link in find_links {
-            if !settings.index_locations.flat_index().contains(find_link) {
+            if !settings
+                .index_locations
+                .flat_indexes()
+                .any(|index| index.url() == find_link)
+            {
                 warn_user_once!(
                     "Ignoring `--find-links` from requirements file: `{find_link}`. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file.`"
                 );

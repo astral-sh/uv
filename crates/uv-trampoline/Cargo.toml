@@ -5,6 +5,9 @@ authors = ["Nathaniel J. Smith <njs@pobox.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
 
+[lib]
+doctest = false
+
 # Need to optimize etc. or else build fails
 [profile.dev]
 lto = true

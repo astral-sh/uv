@@ -3,13 +3,14 @@ use uv_configuration::IndexStrategy;
 use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
     pub resolution_mode: ResolutionMode,
     pub prerelease_mode: PrereleaseMode,
     pub dependency_mode: DependencyMode,
     pub exclude_newer: Option<ExcludeNewer>,
     pub index_strategy: IndexStrategy,
+    pub flexibility: Flexibility,
 }
 
 /// Builder for [`Options`].
@@ -20,6 +21,7 @@ pub struct OptionsBuilder {
     dependency_mode: DependencyMode,
     exclude_newer: Option<ExcludeNewer>,
     index_strategy: IndexStrategy,
+    flexibility: Flexibility,
 }
 
 impl OptionsBuilder {
@@ -63,6 +65,13 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the [`Flexibility`].
+    #[must_use]
+    pub fn flexibility(mut self, flexibility: Flexibility) -> Self {
+        self.flexibility = flexibility;
+        self
+    }
+
     /// Builds the options.
     pub fn build(self) -> Options {
         Options {
@@ -71,6 +80,19 @@ impl OptionsBuilder {
             dependency_mode: self.dependency_mode,
             exclude_newer: self.exclude_newer,
             index_strategy: self.index_strategy,
+            flexibility: self.flexibility,
         }
     }
+}
+
+/// Whether the [`Options`] are configurable or fixed.
+///
+/// Applies to the [`ResolutionMode`], [`PrereleaseMode`], and [`DependencyMode`] fields.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum Flexibility {
+    /// The setting is configurable.
+    #[default]
+    Configurable,
+    /// The setting is fixed.
+    Fixed,
 }

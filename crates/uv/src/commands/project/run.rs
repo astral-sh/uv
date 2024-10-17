@@ -7,27 +7,33 @@ use std::path::{Path, PathBuf};
 
 use anstream::eprint;
 use anyhow::{anyhow, bail, Context};
+use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
+use url::Url;
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
+    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
+use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
-use uv_scripts::Pep723Script;
+use uv_scripts::Pep723Item;
+use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
 
@@ -50,8 +56,8 @@ use crate::settings::ResolverInstallerSettings;
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     project_dir: &Path,
-    script: Option<Pep723Script>,
-    command: RunCommand,
+    script: Option<Pep723Item>,
+    command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     locked: bool,
@@ -105,11 +111,29 @@ pub(crate) async fn run(
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
     let script_interpreter = if let Some(script) = script {
-        writeln!(
-            printer.stderr(),
-            "Reading inline script metadata from: {}",
-            script.path.user_display().cyan()
-        )?;
+        match &script {
+            Pep723Item::Script(script) => {
+                writeln!(
+                    printer.stderr(),
+                    "Reading inline script metadata from `{}`",
+                    script.path.user_display().cyan()
+                )?;
+            }
+            Pep723Item::Stdin(_) => {
+                writeln!(
+                    printer.stderr(),
+                    "Reading inline script metadata from `{}`",
+                    "stdin".cyan()
+                )?;
+            }
+            Pep723Item::Remote(_) => {
+                writeln!(
+                    printer.stderr(),
+                    "Reading inline script metadata from {}",
+                    "remote URL".cyan()
+                )?;
+            }
+        }
 
         let (source, python_request) = if let Some(request) = python.as_deref() {
             // (1) Explicit request from user
@@ -124,7 +148,7 @@ pub(crate) async fn run(
         } else {
             // (3) `Requires-Python` in the script
             let request = script
-                .metadata
+                .metadata()
                 .requires_python
                 .as_ref()
                 .map(|requires_python| {
@@ -153,7 +177,7 @@ pub(crate) async fn run(
         .await?
         .into_interpreter();
 
-        if let Some(requires_python) = script.metadata.requires_python.as_ref() {
+        if let Some(requires_python) = script.metadata().requires_python.as_ref() {
             if !requires_python.contains(interpreter.python_version()) {
                 let err = match source {
                     PythonRequestSource::UserRequest => {
@@ -180,13 +204,34 @@ pub(crate) async fn run(
             }
         }
 
+        // Determine the working directory for the script.
+        let script_dir = match &script {
+            Pep723Item::Script(script) => std::path::absolute(&script.path)?
+                .parent()
+                .expect("script path has no parent")
+                .to_owned(),
+            Pep723Item::Stdin(..) | Pep723Item::Remote(..) => std::env::current_dir()?,
+        };
+        let script = script.into_metadata();
+
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-        if let Some(dependencies) = script.metadata.dependencies {
-            // // Collect any `tool.uv.sources` from the script.
+        if let Some(dependencies) = script.dependencies {
+            // Collect any `tool.uv.index` from the script.
+            let empty = Vec::default();
+            let script_indexes = match settings.sources {
+                SourceStrategy::Enabled => script
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.indexes.as_deref())
+                    .unwrap_or(&empty),
+                SourceStrategy::Disabled => &empty,
+            };
+
+            // Collect any `tool.uv.sources` from the script.
             let empty = BTreeMap::default();
             let script_sources = match settings.sources {
                 SourceStrategy::Enabled => script
-                    .metadata
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
@@ -194,16 +239,17 @@ pub(crate) async fn run(
                     .unwrap_or(&empty),
                 SourceStrategy::Disabled => &empty,
             };
-            let script_path = std::path::absolute(script.path)?;
-            let script_dir = script_path.parent().expect("script path has no parent");
 
             let requirements = dependencies
                 .into_iter()
                 .flat_map(|requirement| {
                     LoweredRequirement::from_non_workspace_requirement(
                         requirement,
-                        script_dir,
+                        script_dir.as_ref(),
                         script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
                     )
                     .map_ok(LoweredRequirement::into_inner)
                 })
@@ -500,6 +546,8 @@ pub(crate) async fn run(
                     project.workspace(),
                     venv.interpreter(),
                     settings.as_ref().into(),
+                    LowerBound::Allow,
+                    &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -547,7 +595,6 @@ pub(crate) async fn run(
                     install_options,
                     Modifications::Sufficient,
                     settings.as_ref().into(),
-                    &state,
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
                     } else {
@@ -708,7 +755,7 @@ pub(crate) async fn run(
                         diagnostics::build(dist, err);
                         return Ok(ExitStatus::Failure);
                     }
-                    Err(ProjectError::Operation(operations::Error::Named(err))) => {
+                    Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
                         let err = miette::Report::msg(format!("{err}"))
                             .context("Invalid `--with` requirement");
                         eprint!("{err:?}");
@@ -751,6 +798,73 @@ pub(crate) async fn run(
         .as_ref()
         .map_or_else(|| &base_interpreter, |env| env.interpreter());
 
+    // Check if any run command is given.
+    // If not, print the available scripts for the current interpreter.
+    let Some(command) = command else {
+        writeln!(
+            printer.stdout(),
+            "Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.\n"
+        )?;
+
+        #[allow(clippy::map_identity)]
+        let commands = interpreter
+            .scripts()
+            .read_dir()
+            .ok()
+            .into_iter()
+            .flatten()
+            .map(|entry| match entry {
+                Ok(entry) => Ok(entry),
+                Err(err) => {
+                    // If we can't read the entry, fail.
+                    // This could be a symptom of a more serious problem.
+                    warn!("Failed to read entry: {}", err);
+                    Err(err)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|entry| {
+                entry
+                    .file_type()
+                    .is_ok_and(|file_type| file_type.is_file() || file_type.is_symlink())
+            })
+            .map(|entry| entry.path())
+            .filter(|path| is_executable(path))
+            .map(|path| {
+                if cfg!(windows) {
+                    // Remove the extensions.
+                    path.with_extension("")
+                } else {
+                    path
+                }
+            })
+            .map(|path| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .filter(|command| {
+                !command.starts_with("activate") && !command.starts_with("deactivate")
+            })
+            .sorted()
+            .collect_vec();
+
+        if !commands.is_empty() {
+            writeln!(
+                printer.stdout(),
+                "The following commands are available in the environment:\n"
+            )?;
+            for command in commands {
+                writeln!(printer.stdout(), "- {command}")?;
+            }
+        }
+        let help = format!("See `{}` for more information.", "uv run --help".bold());
+        writeln!(printer.stdout(), "\n{help}")?;
+        return Ok(ExitStatus::Error);
+    };
+
     debug!("Running `{command}`");
     let mut process = command.as_command(interpreter);
 
@@ -763,17 +877,17 @@ pub(crate) async fn run(
             .chain(std::iter::once(base_interpreter.scripts()))
             .map(PathBuf::from)
             .chain(
-                std::env::var_os("PATH")
+                std::env::var_os(EnvVars::PATH)
                     .as_ref()
                     .iter()
                     .flat_map(std::env::split_paths),
             ),
     )?;
-    process.env("PATH", new_path);
+    process.env(EnvVars::PATH, new_path);
 
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
-        process.env("VIRTUAL_ENV", interpreter.sys_prefix().as_os_str());
+        process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     };
 
     // Spawn and wait for completion
@@ -878,6 +992,8 @@ pub(crate) enum RunCommand {
     PythonZipapp(PathBuf, Vec<OsString>),
     /// Execute a `python` script provided via `stdin`.
     PythonStdin(Vec<u8>),
+    /// Execute a Python script provided via a remote URL.
+    PythonRemote(tempfile::NamedTempFile, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -888,10 +1004,11 @@ impl RunCommand {
     /// Return the name of the target executable, for display purposes.
     fn display_executable(&self) -> Cow<'_, str> {
         match self {
-            Self::Python(_) => Cow::Borrowed("python"),
-            Self::PythonScript(..)
+            Self::Python(_)
+            | Self::PythonScript(..)
             | Self::PythonPackage(..)
             | Self::PythonZipapp(..)
+            | Self::PythonRemote(..)
             | Self::Empty => Cow::Borrowed("python"),
             Self::PythonModule(..) => Cow::Borrowed("python -m"),
             Self::PythonGuiScript(..) => Cow::Borrowed("pythonw"),
@@ -913,6 +1030,12 @@ impl RunCommand {
             | Self::PythonZipapp(target, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg(target);
+                process.args(args);
+                process
+            }
+            Self::PythonRemote(target, args) => {
+                let mut process = Command::new(interpreter.sys_executable());
+                process.arg(target.path());
                 process.args(args);
                 process
             }
@@ -1004,7 +1127,7 @@ impl std::fmt::Display for RunCommand {
                 }
                 Ok(())
             }
-            Self::PythonStdin(_) => {
+            Self::PythonStdin(..) | Self::PythonRemote(..) => {
                 write!(f, "python -c")?;
                 Ok(())
             }
@@ -1024,15 +1147,57 @@ impl std::fmt::Display for RunCommand {
 }
 
 impl RunCommand {
-    pub(crate) fn from_args(
+    /// Determine the [`RunCommand`] for a given set of arguments.
+    pub(crate) async fn from_args(
         command: &ExternalCommand,
         module: bool,
         script: bool,
+        connectivity: Connectivity,
+        native_tls: bool,
     ) -> anyhow::Result<Self> {
         let (target, args) = command.split();
         let Some(target) = target else {
             return Ok(Self::Empty);
         };
+
+        let target_path = PathBuf::from(target);
+
+        // Determine whether the user provided a remote script.
+        if target_path.starts_with("http://") || target_path.starts_with("https://") {
+            // Only continue if we are absolutely certain no local file exists.
+            //
+            // We don't do this check on Windows since the file path would
+            // be invalid anyway, and thus couldn't refer to a local file.
+            if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
+                let url = Url::parse(&target.to_string_lossy())?;
+
+                let file_stem = url
+                    .path_segments()
+                    .and_then(Iterator::last)
+                    .and_then(|segment| segment.strip_suffix(".py"))
+                    .unwrap_or("script");
+                let file = tempfile::Builder::new()
+                    .prefix(file_stem)
+                    .suffix(".py")
+                    .tempfile()?;
+
+                let client = BaseClientBuilder::new()
+                    .connectivity(connectivity)
+                    .native_tls(native_tls)
+                    .build();
+                let response = client.client().get(url.clone()).send().await?;
+
+                // Stream the response to the file.
+                let mut writer = file.as_file();
+                let mut reader = response.bytes_stream();
+                while let Some(chunk) = reader.next().await {
+                    use std::io::Write;
+                    writer.write_all(&chunk?)?;
+                }
+
+                return Ok(Self::PythonRemote(file, args.to_vec()));
+            }
+        }
 
         if module {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
@@ -1040,7 +1205,6 @@ impl RunCommand {
             return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         }
 
-        let target_path = PathBuf::from(target);
         let metadata = target_path.metadata();
         let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
         let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);

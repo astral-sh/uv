@@ -11,6 +11,7 @@ use std::path::Path;
 use std::slice;
 
 use anyhow::Context;
+use uv_static::EnvVars;
 use winreg::enums::{RegType, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
 use winreg::{RegKey, RegValue};
 
@@ -44,13 +45,13 @@ fn apply_windows_path_var(path: Vec<u16>) -> anyhow::Result<()> {
     let environment = root.open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)?;
 
     if path.is_empty() {
-        environment.delete_value("PATH")?;
+        environment.delete_value(EnvVars::PATH)?;
     } else {
         let reg_value = RegValue {
             bytes: to_winreg_bytes(path),
             vtype: RegType::REG_EXPAND_SZ,
         };
-        environment.set_raw_value("PATH", &reg_value)?;
+        environment.set_raw_value(EnvVars::PATH, &reg_value)?;
     }
 
     Ok(())
@@ -65,7 +66,7 @@ fn get_windows_path_var() -> anyhow::Result<Option<Vec<u16>>> {
         .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)
         .context("Failed to open `Environment` key")?;
 
-    let reg_value = environment.get_raw_value("PATH");
+    let reg_value = environment.get_raw_value(EnvVars::PATH);
     match reg_value {
         Ok(reg_value) => {
             if let Some(reg_value) = from_winreg_value(&reg_value) {

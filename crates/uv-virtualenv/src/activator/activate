@@ -85,9 +85,9 @@ PATH="$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH"
 export PATH
 
 if [ "x{{ VIRTUAL_PROMPT }}" != x ] ; then
-    VIRTUAL_ENV_PROMPT="{{ VIRTUAL_PROMPT }}"
+    VIRTUAL_ENV_PROMPT="({{ VIRTUAL_PROMPT }}) "
 else
-    VIRTUAL_ENV_PROMPT=$(basename "$VIRTUAL_ENV")
+    VIRTUAL_ENV_PROMPT="($(basename "$VIRTUAL_ENV")) "
 fi
 export VIRTUAL_ENV_PROMPT
 
@@ -99,7 +99,7 @@ fi
 
 if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
     _OLD_VIRTUAL_PS1="${PS1-}"
-    PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    PS1="${VIRTUAL_ENV_PROMPT}${PS1-}"
     export PS1
 fi
 

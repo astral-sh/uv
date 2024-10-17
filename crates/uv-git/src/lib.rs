@@ -1,7 +1,7 @@
 use url::Url;
 
 pub use crate::credentials::{store_credentials_from_url, GIT_STORE};
-pub use crate::git::GitReference;
+pub use crate::git::{GitReference, GIT};
 pub use crate::resolver::{
     GitResolver, GitResolverError, RepositoryReference, ResolvedRepositoryReference,
 };

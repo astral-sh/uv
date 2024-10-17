@@ -49,6 +49,30 @@ cargo run python install
 
 The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
 
+### Snapshot testing
+
+uv uses [insta](https://insta.rs/) for snapshot testing. It's recommended (but not necessary) to use
+`cargo-insta` for a better snapshot review experience. See the
+[installation guide](https://insta.rs/docs/cli/) for more information.
+
+In tests, you can use `uv_snapshot!` macro to simplify creating snapshots for uv commands. For
+example:
+
+```rust
+#[test]
+fn test_add() {
+    let context = TestContext::new("3.12");
+    uv_snapshot!(context.filters(), context.add().arg("requests"), @"");
+}
+```
+
+To run and review a specific snapshot test:
+
+```shell
+cargo test --package <package> --test <test> -- <test_name> -- --exact
+cargo insta review
+```
+
 ### Local testing
 
 You can invoke your development version of uv with `cargo run -- <args>`. For example:

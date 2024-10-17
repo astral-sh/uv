@@ -17,6 +17,7 @@ use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
@@ -156,7 +157,7 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Check for the presence of an `SSL_CERT_FILE`.
-        let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
+        let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
             let path_exists = Path::new(&path).exists();
             if !path_exists {
                 warn_user_once!(
@@ -169,9 +170,9 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let timeout = env::var("UV_HTTP_TIMEOUT")
-            .or_else(|_| env::var("UV_REQUEST_TIMEOUT"))
-            .or_else(|_| env::var("HTTP_TIMEOUT"))
+        let timeout = env::var(EnvVars::UV_HTTP_TIMEOUT)
+            .or_else(|_| env::var(EnvVars::UV_REQUEST_TIMEOUT))
+            .or_else(|_| env::var(EnvVars::HTTP_TIMEOUT))
             .and_then(|value| {
                 value.parse::<u64>()
                     .map(Duration::from_secs)
@@ -260,7 +261,7 @@ impl<'a> BaseClientBuilder<'a> {
         };
 
         // Configure mTLS.
-        let client_builder = if let Some(ssl_client_cert) = env::var_os("SSL_CLIENT_CERT") {
+        let client_builder = if let Some(ssl_client_cert) = env::var_os(EnvVars::SSL_CLIENT_CERT) {
             match read_identity(&ssl_client_cert) {
                 Ok(identity) => client_builder.identity(identity),
                 Err(err) => {

@@ -210,9 +210,18 @@ Then restart the shell or source the shell config file.
 
 If you need to remove uv from your system, just remove the `uv` and `uvx` binaries:
 
-```console
-$ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
-```
+=== "macOS and Linux"
+
+    ```console
+    $ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
+    ```
+
+=== "Windows"
+
+    ```powershell
+    $ rm $HOME\.cargo\bin\uv.exe
+    $ rm $HOME\.cargo\bin\uvx.exe
+    ```
 
 !!! tip
 

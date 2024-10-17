@@ -1,0 +1,5 @@
+# Run with Python 3.10.
+# Passes with pip-tools, fails with uv
+
+dill<0.3.9,>=0.2.2
+apache-beam<=2.49.0

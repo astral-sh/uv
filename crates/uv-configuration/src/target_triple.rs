@@ -2,6 +2,7 @@ use tracing::debug;
 
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::{Arch, Os, Platform};
+use uv_static::EnvVars;
 
 /// The supported target triples. Each triple consists of an architecture, vendor, and operating
 /// system.
@@ -321,7 +322,7 @@ impl TargetTriple {
 
 /// Return the macOS deployment target as parsed from the environment.
 fn macos_deployment_target() -> Option<(u16, u16)> {
-    let version = std::env::var("MACOSX_DEPLOYMENT_TARGET").ok()?;
+    let version = std::env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET).ok()?;
     let mut parts = version.split('.');
 
     // Parse the major version (e.g., `12` in `12.0`).

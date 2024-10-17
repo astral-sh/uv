@@ -9,15 +9,14 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, SourceStrategy, TrustedHost,
+    LowerBound, NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution_types::{DependencyMetadata, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::Requirement;
@@ -229,8 +228,10 @@ async fn venv_impl(
     let interpreter = python.into_interpreter();
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     if managed {
@@ -278,8 +279,10 @@ async fn venv_impl(
         let interpreter = venv.interpreter();
 
         // Add all authenticated sources to the cache.
-        for url in index_locations.urls() {
-            store_credentials_from_url(url);
+        for index in index_locations.allowed_indexes() {
+            if let Some(credentials) = index.credentials() {
+                uv_auth::store_credentials(index.raw_url(), credentials);
+            }
         }
 
         // Instantiate a client.
@@ -299,7 +302,7 @@ async fn venv_impl(
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
             let client = FlatIndexClient::new(&client, cache);
             let entries = client
-                .fetch(index_locations.flat_index())
+                .fetch(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(
@@ -342,6 +345,7 @@ async fn venv_impl(
             &build_options,
             &build_hasher,
             exclude_newer,
+            LowerBound::Allow,
             sources,
             concurrency,
         );

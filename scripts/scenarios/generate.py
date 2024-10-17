@@ -51,11 +51,11 @@ LOCK_TEMPLATE = TEMPLATES / "lock.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "requirements.txt"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
-TESTS = PROJECT_ROOT / "crates" / "uv" / "tests"
+TESTS = PROJECT_ROOT / "crates" / "uv" / "tests" / "it"
 INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
 COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
 LOCK_TESTS = TESTS / "lock_scenarios.rs"
-TESTS_COMMON_MOD_RS = TESTS / "common/mod.rs"
+TESTS_COMMON_MOD_RS = TESTS / "common" / "mod.rs"
 
 try:
     import packse

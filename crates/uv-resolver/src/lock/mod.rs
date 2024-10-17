@@ -10,7 +10,7 @@ use std::fmt::{Debug, Display};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -20,10 +20,9 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
-    IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Resolution, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -35,14 +34,17 @@ use uv_pypi_types::{
     redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
     RequirementSource, ResolverMarkerEnvironment,
 };
-use uv_types::BuildContext;
+use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{InstallTarget, Workspace};
 
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::{ExcludeNewer, PrereleaseMode, RequiresPython, ResolutionGraph, ResolutionMode};
+use crate::{
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
+    ResolutionMode,
+};
 
 mod requirements_txt;
 mod tree;
@@ -927,6 +929,8 @@ impl Lock {
         indexes: Option<&IndexLocations>,
         build_options: &BuildOptions,
         tags: &Tags,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
         let mut queue: VecDeque<&Package> = VecDeque::new();
@@ -1053,53 +1057,31 @@ impl Lock {
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let remotes = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index_url.redacted()))
+                        Some(UrlString::from(index.url().redacted()))
                     }
                     IndexUrl::Path(_) => None,
                 })
-                .chain(
-                    locations
-                        .flat_index()
-                        .filter_map(|index_url| match index_url {
-                            FlatIndexLocation::Url(_) => {
-                                Some(UrlString::from(index_url.redacted()))
-                            }
-                            FlatIndexLocation::Path(_) => None,
-                        }),
-                )
                 .collect::<BTreeSet<_>>()
         });
 
         let locals = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
-                    IndexUrl::Path(index_url) => {
-                        let path = index_url.to_file_path().ok()?;
+                    IndexUrl::Path(url) => {
+                        let path = url.to_file_path().ok()?;
                         let path = relative_to(&path, workspace.install_path())
                             .or_else(|_| std::path::absolute(path))
                             .ok()?;
                         Some(path)
                     }
                 })
-                .chain(
-                    locations
-                        .flat_index()
-                        .filter_map(|index_url| match index_url {
-                            FlatIndexLocation::Url(_) => None,
-                            FlatIndexLocation::Path(index_url) => {
-                                let path = index_url.to_file_path().ok()?;
-                                let path = relative_to(&path, workspace.install_path())
-                                    .or_else(|_| std::path::absolute(path))
-                                    .ok()?;
-                                Some(path)
-                            }
-                        }),
-                )
                 .collect::<BTreeSet<_>>()
         });
 
@@ -1158,20 +1140,48 @@ impl Lock {
                 build_options,
             )?;
 
-            let Ok(archive) = database
-                .get_or_build_wheel_metadata(&dist, HashPolicy::None)
-                .await
-            else {
-                return Ok(SatisfiesResult::MissingMetadata(
-                    &package.id.name,
-                    &package.id.version,
-                ));
+            // Fetch the metadata for the distribution.
+            let metadata = {
+                let id = dist.version_id();
+                if let Some(archive) =
+                    index
+                        .distributions()
+                        .get(&id)
+                        .as_deref()
+                        .and_then(|response| {
+                            if let MetadataResponse::Found(archive, ..) = response {
+                                Some(archive)
+                            } else {
+                                None
+                            }
+                        })
+                {
+                    // If the metadata is already in the index, return it.
+                    archive.metadata.clone()
+                } else {
+                    // Run the PEP 517 build process to extract metadata from the source distribution.
+                    let archive = database
+                        .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package.id.clone(),
+                            err,
+                        })?;
+
+                    let metadata = archive.metadata.clone();
+
+                    // Insert the metadata into the index.
+                    index
+                        .distributions()
+                        .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                    metadata
+                }
             };
 
             // Validate the `requires-dist` metadata.
             {
-                let expected: BTreeSet<_> = archive
-                    .metadata
+                let expected: BTreeSet<_> = metadata
                     .requires_dist
                     .into_iter()
                     .map(|requirement| normalize_requirement(requirement, workspace))
@@ -1196,8 +1206,7 @@ impl Lock {
 
             // Validate the `dev-dependencies` metadata.
             {
-                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = archive
-                    .metadata
+                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
                     .dev_dependencies
                     .into_iter()
                     .map(|(group, requirements)| {
@@ -1312,8 +1321,6 @@ pub enum SatisfiesResult<'lock> {
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock PathBuf),
-    /// The resolver failed to generate metadata for a given package.
-    MissingMetadata(&'lock PackageName, &'lock Version),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedRequiresDist(
         &'lock PackageName,
@@ -3758,6 +3765,13 @@ fn normalize_requirement(
 #[error(transparent)]
 pub struct LockError(Box<LockErrorKind>);
 
+impl LockError {
+    /// Returns true if the [`LockError`] is a resolver error.
+    pub fn is_resolution(&self) -> bool {
+        matches!(&*self.0, LockErrorKind::Resolution { .. })
+    }
+}
+
 impl<E> From<E> for LockError
 where
     LockErrorKind: From<E>,
@@ -3777,14 +3791,14 @@ where
 enum LockErrorKind {
     /// An error that occurs when multiple packages with the same
     /// ID were found.
-    #[error("found duplicate package `{id}`")]
+    #[error("Found duplicate package `{id}`")]
     DuplicatePackage {
         /// The ID of the conflicting package.
         id: PackageId,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers.
-    #[error("for package `{id}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`")]
     DuplicateDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -3795,7 +3809,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's optional dependencies.
-    #[error("for package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
     DuplicateOptionalDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -3808,7 +3822,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's development dependencies.
-    #[error("for package `{id}:{group}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}:{group}`, found duplicate dependency `{dependency}`")]
     DuplicateDevDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -3820,7 +3834,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when the URL to a file for a wheel or
     /// source dist could not be converted to a structured `url::Url`.
-    #[error("failed to parse wheel or source distribution URL")]
+    #[error("Failed to parse wheel or source distribution URL")]
     InvalidFileUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in its error message.
@@ -3829,10 +3843,10 @@ enum LockErrorKind {
     ),
     /// An error that occurs when the extension can't be determined
     /// for a given wheel or source distribution.
-    #[error("failed to parse file extension; expected one of: {0}")]
+    #[error("Failed to parse file extension; expected one of: {0}")]
     MissingExtension(#[from] ExtensionError),
     /// Failed to parse a git source URL.
-    #[error("failed to parse source git URL")]
+    #[error("Failed to parse source git URL")]
     InvalidGitSourceUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in the message.
@@ -3842,7 +3856,7 @@ enum LockErrorKind {
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a package that isn't in the lockfile.
-    #[error("for package `{id}`, found dependency `{dependency}` with no locked package")]
+    #[error("For package `{id}`, found dependency `{dependency}` with no locked package")]
     UnrecognizedDependency {
         /// The ID of the package that has an unrecognized dependency.
         id: PackageId,
@@ -3852,7 +3866,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
-    #[error("since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
+    #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     Hash {
         /// The ID of the package that has a missing hash.
         id: PackageId,
@@ -3864,7 +3878,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a package is included with an extra name,
     /// but no corresponding base package (i.e., without the extra) exists.
-    #[error("found package `{id}` with extra `{extra}` but no base package")]
+    #[error("Found package `{id}` with extra `{extra}` but no base package")]
     MissingExtraBase {
         /// The ID of the package that has a missing base.
         id: PackageId,
@@ -3885,7 +3899,7 @@ enum LockErrorKind {
     },
     /// An error that occurs from an invalid lockfile where a wheel comes from a non-wheel source
     /// such as a directory.
-    #[error("wheels cannot come from {source_type} sources")]
+    #[error("Wheels cannot come from {source_type} sources")]
     InvalidWheelSource {
         /// The ID of the distribution that has a missing base.
         id: PackageId,
@@ -3894,7 +3908,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a remote
     /// registry, but is missing a URL.
-    #[error("found registry distribution {name}=={version} without a valid URL")]
+    #[error("Found registry distribution `{name}=={version}` without a valid URL")]
     MissingUrl {
         /// The name of the distribution that is missing a URL.
         name: PackageName,
@@ -3903,7 +3917,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a local registry,
     /// but is missing a path.
-    #[error("found registry distribution {name}=={version} without a valid path")]
+    #[error("Found registry distribution `{name}=={version}` without a valid path")]
     MissingPath {
         /// The name of the distribution that is missing a path.
         name: PackageName,
@@ -3912,34 +3926,34 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a registry, but
     /// is missing a filename.
-    #[error("found registry distribution {id} without a valid filename")]
+    #[error("Found registry distribution `{id}` without a valid filename")]
     MissingFilename {
         /// The ID of the distribution that is missing a filename.
         id: PackageId,
     },
     /// An error that occurs when a distribution is included with neither wheels nor a source
     /// distribution.
-    #[error("distribution {id} can't be installed because it doesn't have a source distribution or wheel for the current platform")]
+    #[error("Distribution `{id}` can't be installed because it doesn't have a source distribution or wheel for the current platform")]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
-    #[error("distribution {id} can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    #[error("Distribution `{id}` can't be installed because it is marked as both `--no-binary` and `--no-build`")]
     NoBinaryNoBuild {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-binary`, but no source
     /// distribution is available.
-    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but has no source distribution")]
     NoBinary {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-build`, but no binary
     /// distribution is available.
-    #[error("distribution {id} can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-build` but has no binary distribution")]
     NoBuild {
         /// The ID of the distribution.
         id: PackageId,
@@ -3947,20 +3961,20 @@ enum LockErrorKind {
     /// An error that occurs when a wheel-only distribution is incompatible with the current
     /// platform.
     #[error(
-        "distribution {id} can't be installed because the binary distribution is incompatible with the current platform"
+        "distribution `{id}` can't be installed because the binary distribution is incompatible with the current platform"
     )]
     IncompatibleWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a wheel-only source is marked as `--no-binary`.
-    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
     NoBinaryWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when converting between URLs and paths.
-    #[error("found dependency `{id}` with no locked distribution")]
+    #[error("Found dependency `{id}` with no locked distribution")]
     VerbatimUrl {
         /// The ID of the distribution that has a missing base.
         id: PackageId,
@@ -3969,14 +3983,14 @@ enum LockErrorKind {
         err: VerbatimUrlError,
     },
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not compute relative path between workspace and distribution")]
+    #[error("Could not compute relative path between workspace and distribution")]
     DistributionRelativePath(
         /// The inner error we forward.
         #[source]
         std::io::Error,
     ),
     /// An error that occurs when converting an index URL to a relative path
-    #[error("could not compute relative path between workspace and index")]
+    #[error("Could not compute relative path between workspace and index")]
     IndexRelativePath(
         /// The inner error we forward.
         #[source]
@@ -3985,7 +3999,7 @@ enum LockErrorKind {
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
     #[error(
-        "dependency {name} has missing `version` \
+        "Dependency `{name}` has missing `version` \
          field but has more than one matching package"
     )]
     MissingDependencyVersion {
@@ -3995,7 +4009,7 @@ enum LockErrorKind {
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
     #[error(
-        "dependency {name} has missing `source` \
+        "Dependency `{name}` has missing `source` \
          field but has more than one matching package"
     )]
     MissingDependencySource {
@@ -4003,52 +4017,61 @@ enum LockErrorKind {
         name: PackageName,
     },
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not compute relative path between workspace and requirement")]
+    #[error("Could not compute relative path between workspace and requirement")]
     RequirementRelativePath(
         /// The inner error we forward.
         #[source]
         std::io::Error,
     ),
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not convert between URL and path")]
+    #[error("Could not convert between URL and path")]
     RequirementVerbatimUrl(
         /// The inner error we forward.
         #[source]
         VerbatimUrlError,
     ),
     /// An error that occurs when parsing a registry's index URL.
-    #[error("could not convert between URL and path")]
+    #[error("Could not convert between URL and path")]
     RegistryVerbatimUrl(
         /// The inner error we forward.
         #[source]
         VerbatimUrlError,
     ),
     /// An error that occurs when converting a path to a URL.
-    #[error("failed to convert path to URL")]
+    #[error("Failed to convert path to URL")]
     PathToUrl,
     /// An error that occurs when converting a URL to a path
-    #[error("failed to convert URL to path")]
+    #[error("Failed to convert URL to path")]
     UrlToPath,
     /// An error that occurs when multiple packages with the same
     /// name were found when identifying the root packages.
-    #[error("found multiple packages matching `{name}`")]
+    #[error("Found multiple packages matching `{name}`")]
     MultipleRootPackages {
         /// The ID of the package.
         name: PackageName,
     },
     /// An error that occurs when a root package can't be found.
-    #[error("could not find root package `{name}`")]
+    #[error("Could not find root package `{name}`")]
     MissingRootPackage {
         /// The ID of the package.
         name: PackageName,
     },
+    /// An error that occurs when resolving metadata for a package.
+    #[error("Failed to generate package metadata for `{id}`")]
+    Resolution {
+        /// The ID of the distribution that failed to resolve.
+        id: PackageId,
+        /// The inner error we forward.
+        #[source]
+        err: uv_distribution::Error,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 enum SourceParseError {
     /// An error that occurs when the URL in the source is invalid.
-    #[error("invalid URL in source `{given}`")]
+    #[error("Invalid URL in source `{given}`")]
     InvalidUrl {
         /// The source string given.
         given: String,
@@ -4057,13 +4080,13 @@ enum SourceParseError {
         err: url::ParseError,
     },
     /// An error that occurs when a Git URL is missing a precise commit SHA.
-    #[error("missing SHA in source `{given}`")]
+    #[error("Missing SHA in source `{given}`")]
     MissingSha {
         /// The source string given.
         given: String,
     },
     /// An error that occurs when a Git URL has an invalid SHA.
-    #[error("invalid SHA in source `{given}`")]
+    #[error("Invalid SHA in source `{given}`")]
     InvalidSha {
         /// The source string given.
         given: String,
@@ -4110,286 +4133,4 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_dependency_source_unambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-version = "0.1.0"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_version_unambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-source =  { registry = "https://pypi.org/simple" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_source_version_unambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_source_ambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "a"
-version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-version = "0.1.0"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_version_ambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "a"
-version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-source =  { registry = "https://pypi.org/simple" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_source_version_ambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "a"
-version = "0.1.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn hash_optional_missing() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn hash_optional_present() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn hash_required_present() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { path = "file:///foo/bar" }
-wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn source_direct_no_subdir() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { url = "https://burntsushi.net" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn source_direct_has_subdir() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn source_directory() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { directory = "path/to/dir" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn source_editable() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { editable = "path/to/dir" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-}
+mod tests;

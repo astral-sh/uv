@@ -28,7 +28,7 @@ or developed against, and so stability may vary in practice.
 
 Beyond the Tier 1 and Tier 2 platforms, uv is known to build on i686 Windows, and known _not_ to
 build on aarch64 Windows, but does not consider either platform to be supported at this time. The
-minimum supported Windows version is Windows 10, following
+minimum supported Windows versions are Windows 10 and Windows Server 2016, following
 [Rust's own Tier 1 support](https://blog.rust-lang.org/2024/02/26/Windows-7.html).
 
-uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, and 3.12.
+uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, 3.12, and 3.13.

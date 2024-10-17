@@ -9,10 +9,14 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
+uv-auth = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-distribution-filename = { workspace = true }
@@ -25,6 +29,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 
 anyhow = { workspace = true }
+bitflags = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }

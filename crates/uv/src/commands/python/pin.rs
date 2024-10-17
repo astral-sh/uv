@@ -169,8 +169,12 @@ fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Ver
         return None;
     }
 
-    // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed if not a `Range`.
-    Some(uv_pep440::Version::from_str(&version_request.to_string()).unwrap())
+    // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed if not a `Range`
+    // and does not have a Python variant (e.g., freethreaded) attached.
+    Some(
+        uv_pep440::Version::from_str(&version_request.clone().without_python_variant().to_string())
+            .unwrap(),
+    )
 }
 
 /// Check if pinned request is compatible with the workspace/project's `Requires-Python`.
