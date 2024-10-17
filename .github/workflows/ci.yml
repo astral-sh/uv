@@ -576,16 +576,30 @@ jobs:
         with:
           verbose: false
           pre-run: |
+            rm -rf .cargo
+            ln -s $HOME/.cargo .cargo
+
+            include_path="$(mktemp)"
+            cat <<EOF > $include_path
+            uv
+            target
+            target/x86_64-unknown-freebsd
+            target/x86_64-unknown-freebsd/debug
+            target/x86_64-unknown-freebsd/debug/uv
+            EOF
+
             rsync -r -e "ssh" \
               --relative \
               --copy-links \
-              --include "target/x86_64-unknown-freebsd/debug/uv" \
+              --include-from "$include_path" \
               --exclude "*" \
               . firecracker:
+            rm -f "$exclude_path"
           run-in-vm: |
             ls -lah
             cp target/x86_64-unknown-freebsd/debug/uv uv
             chmod +x uv
+            ./uv --version
             ./uv venv
             ./uv pip install anyio
 
