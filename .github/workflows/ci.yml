@@ -194,6 +194,27 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Cache .fopro-cache
+        uses: actions/cache@v4
+        with:
+          path: .fopro-cache
+          key: ${{ runner.os }}-fopro-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-fopro-
+
+      - name: Install and launch fopro
+        run: |
+          curl -sL https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.sh | bash
+          RUST_LOG=warn ~/.cargo/bin/fopro &
+          echo "UV_ALL_PROXY=localhost:8080" >> $GITHUB_ENV
+          echo "UV_CA_CERT=/tmp/fopro-ca.crt" >> $GITHUB_ENV
+
+      - name: "Download deps"
+        run: |
+          cargo nextest list \
+            --features python-patch \
+            --workspace
+
       - name: "Cargo test"
         run: |
           cargo nextest run \
@@ -239,6 +260,27 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - name: Cache .fopro-cache
+        uses: actions/cache@v4
+        with:
+          path: .fopro-cache
+          key: ${{ runner.os }}-fopro-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-fopro-
+
+      - name: Install and launch fopro
+        run: |
+          curl -sL https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.sh | bash
+          RUST_LOG=warn ~/.cargo/bin/fopro &
+          echo "UV_ALL_PROXY=localhost:8080" >> $GITHUB_ENV
+          echo "UV_CA_CERT=/tmp/fopro-ca.crt" >> $GITHUB_ENV
+
+      - name: "Download deps"
+        run: |
+          cargo nextest list \
+            --features python-patch \
+            --workspace
 
       - name: "Cargo test"
         run: |
@@ -296,9 +338,33 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Cache .fopro-cache
+        uses: actions/cache@v4
+        with:
+          path: .fopro-cache
+          key: ${{ runner.os }}-fopro-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-fopro-
+
+      - name: Install and launch fopro
+        run: |
+          Invoke-WebRequest -Uri https://github.com/bearcove/fopro/releases/download/v2.0.3/fopro-installer.ps1 -OutFile fopro-installer.ps1
+          .\fopro-installer.ps1
+          echo "UV_ALL_PROXY=127.0.0.1:8080" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "UV_CA_CERT=$env:TEMP\fopro-ca.crt" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: "Download deps"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          cargo nextest list --no-default-features --features python,pypi --workspace
+
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
+          $env:RUST_LOG = "warn"
+          Start-Process -FilePath "${{ env.DEV_DRIVE }}\.cargo\bin\fopro.exe" -NoNewWindow
+          $env:RUST_LOG = $null
+          Test-NetConnection -ComputerName 127.0.0.1 -Port 8080
           cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
       - name: "Smoke test"
