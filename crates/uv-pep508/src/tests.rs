@@ -117,6 +117,12 @@ fn basic_examples() {
 }
 
 #[test]
+fn leading_whitespace() {
+    let numpy = Requirement::<Url>::from_str(" numpy").unwrap();
+    assert_eq!(numpy.name.as_ref(), "numpy");
+}
+
+#[test]
 fn parenthesized_single() {
     let numpy = Requirement::<Url>::from_str("numpy ( >=1.19 )").unwrap();
     assert_eq!(numpy.name.as_ref(), "numpy");

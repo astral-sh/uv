@@ -9,7 +9,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevMode, DevSpecification, EditableMode, ExportFormat, ExtrasSpecification,
-    InstallOptions,
+    InstallOptions, LowerBound,
 };
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -98,6 +98,7 @@ pub(crate) async fn export(
         project.workspace(),
         &interpreter,
         settings.as_ref(),
+        LowerBound::Warn,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,

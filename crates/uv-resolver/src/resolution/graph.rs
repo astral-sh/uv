@@ -10,7 +10,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
+    Dist, DistributionMetadata, IndexUrl, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
     VersionOrUrlRef,
 };
 use uv_git::GitResolver;
@@ -88,6 +88,7 @@ struct PackageRef<'a> {
     package_name: &'a PackageName,
     version: &'a Version,
     url: Option<&'a VerbatimParsedUrl>,
+    index: Option<&'a IndexUrl>,
     extra: Option<&'a ExtraName>,
     group: Option<&'a GroupName>,
 }
@@ -284,6 +285,7 @@ impl ResolutionGraph {
                 package_name: from,
                 version: &edge.from_version,
                 url: edge.from_url.as_ref(),
+                index: edge.from_index.as_ref(),
                 extra: edge.from_extra.as_ref(),
                 group: edge.from_dev.as_ref(),
             }]
@@ -292,6 +294,7 @@ impl ResolutionGraph {
             package_name: &edge.to,
             version: &edge.to_version,
             url: edge.to_url.as_ref(),
+            index: edge.to_index.as_ref(),
             extra: edge.to_extra.as_ref(),
             group: edge.to_dev.as_ref(),
         }];
@@ -320,7 +323,7 @@ impl ResolutionGraph {
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
         pins: &FilePins,
-        index: &InMemoryIndex,
+        in_memory: &InMemoryIndex,
         git: &GitResolver,
         package: &'a ResolutionPackage,
         version: &'a Version,
@@ -330,16 +333,18 @@ impl ResolutionGraph {
             extra,
             dev,
             url,
+            index,
         } = &package;
         // Map the package to a distribution.
         let (dist, hashes, metadata) = Self::parse_dist(
             name,
+            index.as_ref(),
             url.as_ref(),
             version,
             pins,
             diagnostics,
             preferences,
-            index,
+            in_memory,
             git,
         )?;
 
@@ -366,7 +371,7 @@ impl ResolutionGraph {
         }
 
         // Add the distribution to the graph.
-        let index = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
+        let node = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
             dist,
             name: name.clone(),
             version: version.clone(),
@@ -381,22 +386,24 @@ impl ResolutionGraph {
                 package_name: name,
                 version,
                 url: url.as_ref(),
+                index: index.as_ref(),
                 extra: extra.as_ref(),
                 group: dev.as_ref(),
             },
-            index,
+            node,
         );
         Ok(())
     }
 
     fn parse_dist(
         name: &PackageName,
+        index: Option<&IndexUrl>,
         url: Option<&VerbatimParsedUrl>,
         version: &Version,
         pins: &FilePins,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
-        index: &InMemoryIndex,
+        in_memory: &InMemoryIndex,
         git: &GitResolver,
     ) -> Result<(ResolvedDist, Vec<HashDigest>, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
@@ -406,14 +413,24 @@ impl ResolutionGraph {
             let version_id = VersionId::from_url(&url.verbatim);
 
             // Extract the hashes.
-            let hashes =
-                Self::get_hashes(name, Some(url), &version_id, version, preferences, index);
+            let hashes = Self::get_hashes(
+                name,
+                index,
+                Some(url),
+                &version_id,
+                version,
+                preferences,
+                in_memory,
+            );
 
             // Extract the metadata.
             let metadata = {
-                let response = index.distributions().get(&version_id).unwrap_or_else(|| {
-                    panic!("Every URL distribution should have metadata: {version_id:?}")
-                });
+                let response = in_memory
+                    .distributions()
+                    .get(&version_id)
+                    .unwrap_or_else(|| {
+                        panic!("Every URL distribution should have metadata: {version_id:?}")
+                    });
 
                 let MetadataResponse::Found(archive) = &*response else {
                     panic!("Every URL distribution should have metadata: {version_id:?}")
@@ -449,17 +466,28 @@ impl ResolutionGraph {
             }
 
             // Extract the hashes.
-            let hashes = Self::get_hashes(name, None, &version_id, version, preferences, index);
+            let hashes = Self::get_hashes(
+                name,
+                index,
+                None,
+                &version_id,
+                version,
+                preferences,
+                in_memory,
+            );
 
             // Extract the metadata.
             let metadata = {
-                index.distributions().get(&version_id).and_then(|response| {
-                    if let MetadataResponse::Found(archive) = &*response {
-                        Some(archive.metadata.clone())
-                    } else {
-                        None
-                    }
-                })
+                in_memory
+                    .distributions()
+                    .get(&version_id)
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive) = &*response {
+                            Some(archive.metadata.clone())
+                        } else {
+                            None
+                        }
+                    })
             };
 
             (dist, hashes, metadata)
@@ -470,11 +498,12 @@ impl ResolutionGraph {
     /// lockfile.
     fn get_hashes(
         name: &PackageName,
+        index: Option<&IndexUrl>,
         url: Option<&VerbatimParsedUrl>,
         version_id: &VersionId,
         version: &Version,
         preferences: &Preferences,
-        index: &InMemoryIndex,
+        in_memory: &InMemoryIndex,
     ) -> Vec<HashDigest> {
         // 1. Look for hashes from the lockfile.
         if let Some(digests) = preferences.match_hashes(name, version) {
@@ -484,7 +513,7 @@ impl ResolutionGraph {
         }
 
         // 2. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
-        if let Some(metadata_response) = index.distributions().get(version_id) {
+        if let Some(metadata_response) = in_memory.distributions().get(version_id) {
             if let MetadataResponse::Found(ref archive) = *metadata_response {
                 let mut digests = archive.hashes.clone();
                 digests.sort_unstable();
@@ -496,7 +525,13 @@ impl ResolutionGraph {
 
         // 3. Look for hashes from the registry, which are served at the package level.
         if url.is_none() {
-            if let Some(versions_response) = index.packages().get(name) {
+            let versions_response = if let Some(index) = index {
+                in_memory.explicit().get(&(name.clone(), index.clone()))
+            } else {
+                in_memory.implicit().get(name)
+            };
+
+            if let Some(versions_response) = versions_response {
                 if let VersionsResponse::Found(ref version_maps) = *versions_response {
                     if let Some(digests) = version_maps
                         .iter()

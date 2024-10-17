@@ -4,7 +4,7 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, DevMode, TargetTriple};
+use uv_configuration::{Concurrency, DevMode, LowerBound, TargetTriple};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
@@ -69,6 +69,7 @@ pub(crate) async fn tree(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        LowerBound::Allow,
         &state,
         Box::new(DefaultResolveLogger),
         connectivity,

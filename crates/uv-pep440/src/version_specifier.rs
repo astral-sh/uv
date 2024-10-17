@@ -228,7 +228,7 @@ impl VersionSpecifiersParseError {
 
 impl std::error::Error for VersionSpecifiersParseError {}
 
-/// A version range such such as `>1.2.3`, `<=4!5.6.7-a8.post9.dev0` or `== 4.1.*`. Parse with
+/// A version range such as `>1.2.3`, `<=4!5.6.7-a8.post9.dev0` or `== 4.1.*`. Parse with
 /// `VersionSpecifier::from_str`
 ///
 /// ```rust

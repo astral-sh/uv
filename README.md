@@ -58,6 +58,12 @@ $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | 
 $ pip install uv
 ```
 
+If installed via the standalone installer, uv can update itself to the latest version:
+
+```console
+$ uv self update
+```
+
 See the [installation documentation](https://docs.astral.sh/uv/getting-started/installation/) for
 details and alternative installation methods.
 

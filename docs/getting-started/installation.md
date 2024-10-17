@@ -83,6 +83,15 @@ options can be passed directly to the install script. For example, to see the av
 $ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
 ```
 
+In ephemeral environments like CI, use `UV_UNMANAGED_INSTALL` to install uv to a specific path while
+preventing the installer from modifying shell profiles or environment variables:
+
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/custom/path" sh
+```
+
+The use of `UV_UNMANAGED_INSTALL` will also disable self-updates (via `uv self update`).
+
 ### PyPI
 
 For convenience, uv is published to [PyPI](https://pypi.org/project/uv/).

@@ -1,10 +1,10 @@
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
 
-use crate::metadata::lowering::LowerBound;
 use std::collections::BTreeMap;
 use std::path::Path;
-use uv_configuration::SourceStrategy;
+use uv_configuration::{LowerBound, SourceStrategy};
+use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::pyproject::ToolUvSources;
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
@@ -38,6 +38,7 @@ impl RequiresDist {
     pub async fn from_project_maybe_workspace(
         metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
+        locations: &IndexLocations,
         sources: SourceStrategy,
         lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
@@ -50,18 +51,39 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(metadata, &project_workspace, sources, lower_bound)
+        Self::from_project_workspace(
+            metadata,
+            &project_workspace,
+            locations,
+            sources,
+            lower_bound,
+        )
     }
 
     fn from_project_workspace(
         metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        locations: &IndexLocations,
         source_strategy: SourceStrategy,
         lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
+        // Collect any `tool.uv.index` entries.
+        let empty = vec![];
+        let project_indexes = match source_strategy {
+            SourceStrategy::Enabled => project_workspace
+                .current_project()
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.index.as_deref())
+                .unwrap_or(&empty),
+            SourceStrategy::Disabled => &empty,
+        };
+
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let sources = match source_strategy {
+        let project_sources = match source_strategy {
             SourceStrategy::Enabled => project_workspace
                 .current_project()
                 .pyproject_toml()
@@ -93,7 +115,9 @@ impl RequiresDist {
                             requirement,
                             &metadata.name,
                             project_workspace.project_root(),
-                            sources,
+                            project_sources,
+                            project_indexes,
+                            locations,
                             project_workspace.workspace(),
                             lower_bound,
                         )
@@ -126,7 +150,9 @@ impl RequiresDist {
                         requirement,
                         &metadata.name,
                         project_workspace.project_root(),
-                        sources,
+                        project_sources,
+                        project_indexes,
+                        locations,
                         project_workspace.workspace(),
                         lower_bound,
                     )
@@ -171,11 +197,11 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-    use uv_configuration::SourceStrategy;
+    use uv_configuration::{LowerBound, SourceStrategy};
+    use uv_distribution_types::IndexLocations;
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
-    use crate::metadata::lowering::LowerBound;
     use crate::RequiresDist;
 
     async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
@@ -198,8 +224,9 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
-            SourceStrategy::Enabled,
-            LowerBound::Warn,
+            &IndexLocations::default(),
+            SourceStrategy::default(),
+            LowerBound::default(),
         )?)
     }
 
@@ -251,7 +278,8 @@ mod test {
           |
         8 | tqdm = true
           |        ^^^^
-        invalid type: boolean `true`, expected an array or map
+        invalid type: boolean `true`, expected a single source (as a map) or list of sources
+
         "###);
     }
 
@@ -274,7 +302,6 @@ mod test {
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         expected at most one of `rev`, `tag`, or `branch`
-
         "###);
     }
 
@@ -292,10 +319,10 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        error: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
-          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |                                                ^^^
         unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `index`, `workspace`, `marker`
         "###);
     }
@@ -372,14 +399,12 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        error: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
-          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |                ^^^^^^^^^^^^^^^^^
         invalid value: string "§invalid#+#*Ä", expected relative URL without a base
 
-
-        in `url`
         "###);
     }
 

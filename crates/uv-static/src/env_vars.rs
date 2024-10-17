@@ -2,10 +2,20 @@
 pub struct EnvVars;
 
 impl EnvVars {
+    /// Equivalent to the `--default-index` argument. Base index URL for searching packages.
+    pub const UV_DEFAULT_INDEX: &'static str = "UV_DEFAULT_INDEX";
+
+    /// Equivalent to the `--index` argument. Additional indexes for searching packages.
+    pub const UV_INDEX: &'static str = "UV_INDEX";
+
     /// Equivalent to the `--index-url` argument. Base index URL for searching packages.
+    ///
+    /// Deprecated: use `UV_DEFAULT_INDEX` instead.
     pub const UV_INDEX_URL: &'static str = "UV_INDEX_URL";
 
     /// Equivalent to the `--extra-index-url` argument. Additional indexes for searching packages.
+    ///
+    /// Deprecated: use `UV_INDEX` instead.
     pub const UV_EXTRA_INDEX_URL: &'static str = "UV_EXTRA_INDEX_URL";
 
     /// Equivalent to the `--find-links` argument. Additional package search locations.
@@ -148,6 +158,16 @@ impl EnvVars {
 
     /// Use to control the stack size used by uv. Typically more relevant for Windows in debug mode.
     pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
+
+    /// Generates the environment variable key for the HTTP Basic authentication username.
+    pub fn index_username(name: &str) -> String {
+        format!("UV_INDEX_{name}_USERNAME")
+    }
+
+    /// Generates the environment variable key for the HTTP Basic authentication password.
+    pub fn index_password(name: &str) -> String {
+        format!("UV_INDEX_{name}_PASSWORD")
+    }
 
     /// Used to set the uv commit hash at build time via `build.rs`.
     pub const UV_COMMIT_HASH: &'static str = "UV_COMMIT_HASH";

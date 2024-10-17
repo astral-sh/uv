@@ -27,10 +27,9 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
-pub use crate::error::{Error, MissingHeaderCause};
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
-use uv_distribution::{LowerBound, RequiresDist};
-use uv_distribution_types::Resolution;
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
+use uv_distribution::RequiresDist;
+use uv_distribution_types::{IndexLocations, Resolution};
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -38,6 +37,8 @@ use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
+
+pub use crate::error::{Error, MissingHeaderCause};
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend {
@@ -244,12 +245,14 @@ impl SourceBuild {
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
+        install_path: &Path,
         fallback_package_name: Option<&PackageName>,
         fallback_package_version: Option<&Version>,
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         version_id: Option<String>,
+        locations: &IndexLocations,
         source_strategy: SourceStrategy,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
@@ -271,7 +274,9 @@ impl SourceBuild {
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
+            install_path,
             fallback_package_name,
+            locations,
             source_strategy,
             &default_backend,
         )
@@ -365,12 +370,14 @@ impl SourceBuild {
             create_pep517_build_environment(
                 &runner,
                 &source_tree,
+                install_path,
                 &venv,
                 &pep517_backend,
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
                 version_id.as_deref(),
+                locations,
                 source_strategy,
                 build_kind,
                 level,
@@ -432,7 +439,9 @@ impl SourceBuild {
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
     async fn extract_pep517_backend(
         source_tree: &Path,
+        install_path: &Path,
         package_name: Option<&PackageName>,
+        locations: &IndexLocations,
         source_strategy: SourceStrategy,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
@@ -464,7 +473,8 @@ impl SourceBuild {
                                 };
                                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                                     requires_dist,
-                                    source_tree,
+                                    install_path,
+                                    locations,
                                     source_strategy,
                                     LowerBound::Allow,
                                 )
@@ -797,12 +807,14 @@ fn escape_path_for_python(path: &Path) -> String {
 async fn create_pep517_build_environment(
     runner: &PythonRunner,
     source_tree: &Path,
+    install_path: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
     version_id: Option<&str>,
+    locations: &IndexLocations,
     source_strategy: SourceStrategy,
     build_kind: BuildKind,
     level: BuildOutput,
@@ -914,7 +926,8 @@ async fn create_pep517_build_environment(
                 };
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
-                    source_tree,
+                    install_path,
+                    locations,
                     source_strategy,
                     LowerBound::Allow,
                 )

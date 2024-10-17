@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{VersionControlError, VersionControlSystem};
+use uv_configuration::{ProjectBuildBackend, VersionControlError, VersionControlSystem};
 use uv_fs::{Simplified, CWD};
 use uv_git::GIT;
 use uv_pep440::Version;
@@ -38,6 +38,7 @@ pub(crate) async fn init(
     package: bool,
     init_kind: InitKind,
     vcs: Option<VersionControlSystem>,
+    build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
     author_from: Option<AuthorFrom>,
     no_pin_python: bool,
@@ -115,6 +116,7 @@ pub(crate) async fn init(
                 package,
                 project_kind,
                 vcs,
+                build_backend,
                 no_readme,
                 author_from,
                 no_pin_python,
@@ -246,6 +248,7 @@ async fn init_project(
     package: bool,
     project_kind: InitProjectKind,
     vcs: Option<VersionControlSystem>,
+    build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
     author_from: Option<AuthorFrom>,
     no_pin_python: bool,
@@ -486,6 +489,7 @@ async fn init_project(
             &requires_python,
             python_request.as_ref(),
             vcs,
+            build_backend,
             author_from,
             no_readme,
             package,
@@ -576,6 +580,7 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
+        build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
@@ -588,6 +593,7 @@ impl InitProjectKind {
                     requires_python,
                     python_request,
                     vcs,
+                    build_backend,
                     author_from,
                     no_readme,
                     package,
@@ -601,6 +607,7 @@ impl InitProjectKind {
                     requires_python,
                     python_request,
                     vcs,
+                    build_backend,
                     author_from,
                     no_readme,
                     package,
@@ -618,6 +625,7 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
+        build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
@@ -644,25 +652,13 @@ impl InitProjectKind {
             pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
 
             // Add a build system
+            let build_backend = build_backend.unwrap_or_default();
             pyproject.push('\n');
-            pyproject.push_str(pyproject_build_system());
-        }
+            pyproject.push_str(&pyproject_build_system(name, build_backend));
+            pyproject_build_backend_prerequisites(name, path, build_backend)?;
 
-        // Create the source structure.
-        if package {
-            // Create `src/{name}/__init__.py`, if it doesn't exist already.
-            let src_dir = path.join("src").join(&*name.as_dist_info_name());
-            let init_py = src_dir.join("__init__.py");
-            if !init_py.try_exists()? {
-                fs_err::create_dir_all(&src_dir)?;
-                fs_err::write(
-                    init_py,
-                    indoc::formatdoc! {r#"
-                    def main() -> None:
-                        print("Hello from {name}!")
-                    "#},
-                )?;
-            }
+            // Generate `src` files
+            generate_package_scripts(name, path, build_backend, false)?;
         } else {
             // Create `hello.py` if it doesn't exist
             // TODO(zanieb): Only create `hello.py` if there are no other Python files?
@@ -710,6 +706,7 @@ impl InitProjectKind {
         requires_python: &RequiresPython,
         python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
+        build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
@@ -726,31 +723,15 @@ impl InitProjectKind {
         let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
 
         // Always include a build system if the project is packaged.
+        let build_backend = build_backend.unwrap_or_default();
         pyproject.push('\n');
-        pyproject.push_str(pyproject_build_system());
+        pyproject.push_str(&pyproject_build_system(name, build_backend));
+        pyproject_build_backend_prerequisites(name, path, build_backend)?;
 
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-        // Create `src/{name}/__init__.py`, if it doesn't exist already.
-        let src_dir = path.join("src").join(&*name.as_dist_info_name());
-        fs_err::create_dir_all(&src_dir)?;
-
-        let init_py = src_dir.join("__init__.py");
-        if !init_py.try_exists()? {
-            fs_err::write(
-                init_py,
-                indoc::formatdoc! {r#"
-                def hello() -> str:
-                    return "Hello from {name}!"
-                "#},
-            )?;
-        }
-
-        // Create a `py.typed` file
-        let py_typed = src_dir.join("py.typed");
-        if !py_typed.try_exists()? {
-            fs_err::write(py_typed, "")?;
-        }
+        // Generate `src` files
+        generate_package_scripts(name, path, build_backend, true)?;
 
         // Write .python-version if it doesn't exist.
         if let Some(python_request) = python_request {
@@ -807,18 +788,63 @@ fn pyproject_project(
         dependencies = []
     "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
-        authors = author.map_or_else(String::new, |author| format!("\nauthors = [\n    {} \n]", author.to_toml_string())),
+        authors = author.map_or_else(String::new, |author| format!("\nauthors = [\n    {}\n]", author.to_toml_string())),
         requires_python = requires_python.specifiers(),
     }
 }
 
 /// Generate the `[build-system]` section of a `pyproject.toml`.
-fn pyproject_build_system() -> &'static str {
-    indoc::indoc! {r#"
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-    "#}
+/// Generate the `[tool.]` section of a `pyproject.toml` where applicable.
+fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBackend) -> String {
+    let module_name = package.as_dist_info_name();
+    match build_backend {
+        // Pure-python backends
+        ProjectBuildBackend::Hatch => indoc::indoc! {r#"
+                [build-system]
+                requires = ["hatchling"]
+                build-backend = "hatchling.build"
+            "#}
+        .to_string(),
+        ProjectBuildBackend::Flit => indoc::indoc! {r#"
+                [build-system]
+                requires = ["flit_core>=3.2,<4"]
+                build-backend = "flit_core.buildapi"
+            "#}
+        .to_string(),
+        ProjectBuildBackend::PDM => indoc::indoc! {r#"
+                [build-system]
+                requires = ["pdm-backend"]
+                build-backend = "pdm.backend"
+            "#}
+        .to_string(),
+        ProjectBuildBackend::Setuptools => indoc::indoc! {r#"
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+            "#}
+        .to_string(),
+        // Binary build backends
+        ProjectBuildBackend::Maturin => indoc::formatdoc! {r#"
+                [tool.maturin]
+                module-name = "{module_name}._core"
+                python-packages = ["{module_name}"]
+                python-source = "src"
+
+                [build-system]
+                requires = ["maturin>=1.0,<2.0"]
+                build-backend = "maturin"
+            "#},
+        ProjectBuildBackend::Scikit => indoc::indoc! {r#"
+                [tool.scikit-build]
+                minimum-version = "build-system.requires"
+                build-dir = "build/{wheel_tag}"
+
+                [build-system]
+                requires = ["scikit-build-core>=0.10", "pybind11"]
+                build-backend = "scikit_build_core.build"
+            "#}
+        .to_string(),
+    }
 }
 
 /// Generate the `[project.scripts]` section of a `pyproject.toml`.
@@ -828,6 +854,198 @@ fn pyproject_project_scripts(package: &PackageName, executable_name: &str, targe
         [project.scripts]
         {executable_name} = "{module_name}:{target}"
     "#}
+}
+
+/// Generate additional files as needed for specific build backends.
+fn pyproject_build_backend_prerequisites(
+    package: &PackageName,
+    path: &Path,
+    build_backend: ProjectBuildBackend,
+) -> Result<()> {
+    let module_name = package.as_dist_info_name();
+    match build_backend {
+        ProjectBuildBackend::Maturin => {
+            // Generate Cargo.toml
+            let build_file = path.join("Cargo.toml");
+            if !build_file.try_exists()? {
+                fs_err::write(
+                    build_file,
+                    indoc::formatdoc! {r#"
+                    [package]
+                    name = "{module_name}"
+                    version = "0.1.0"
+                    edition = "2021"
+
+                    [lib]
+                    name = "_core"
+                    # "cdylib" is necessary to produce a shared library for Python to import from.
+                    crate-type = ["cdylib"]
+
+                    [dependencies]
+                    # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
+                    # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
+                    pyo3 = {{ version = "0.22.4", features = ["extension-module", "abi3-py39"] }}
+                "#},
+                )?;
+            }
+        }
+        ProjectBuildBackend::Scikit => {
+            // Generate CMakeLists.txt
+            let build_file = path.join("CMakeLists.txt");
+            if !build_file.try_exists()? {
+                fs_err::write(
+                    build_file,
+                    indoc::formatdoc! {r#"
+                    cmake_minimum_required(VERSION 3.15)
+                    project(${{SKBUILD_PROJECT_NAME}} LANGUAGES CXX)
+
+                    set(PYBIND11_FINDPYTHON ON)
+                    find_package(pybind11 CONFIG REQUIRED)
+
+                    pybind11_add_module(_core MODULE src/main.cpp)
+                    install(TARGETS _core DESTINATION ${{SKBUILD_PROJECT_NAME}})
+                "#},
+                )?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Generate startup scripts for a package-based application or library.
+fn generate_package_scripts(
+    package: &PackageName,
+    path: &Path,
+    build_backend: ProjectBuildBackend,
+    is_lib: bool,
+) -> Result<()> {
+    let module_name = package.as_dist_info_name();
+
+    let src_dir = path.join("src");
+    let pkg_dir = src_dir.join(&*module_name);
+    fs_err::create_dir_all(&pkg_dir)?;
+
+    // Python script for pure-python packaged apps or libs
+    let pure_python_script = if is_lib {
+        indoc::formatdoc! {r#"
+        def hello() -> str:
+            return "Hello from {package}!"
+        "#}
+    } else {
+        indoc::formatdoc! {r#"
+        def main() -> None:
+            print("Hello from {package}!")
+        "#}
+    };
+
+    // Python script for binary-based packaged apps or libs
+    let binary_call_script = if is_lib {
+        indoc::formatdoc! {r#"
+        from {module_name}._core import hello_from_bin
+
+        def hello() -> str:
+            return hello_from_bin()
+        "#}
+    } else {
+        indoc::formatdoc! {r#"
+        from {module_name}._core import hello_from_bin
+
+        def main() -> None:
+            print(hello_from_bin())
+        "#}
+    };
+
+    // .pyi file for binary script
+    let pyi_contents = indoc::indoc! {r"
+        from __future__ import annotations
+
+        def hello_from_bin() -> str: ...
+    "};
+
+    let package_script = match build_backend {
+        ProjectBuildBackend::Maturin => {
+            // Generate lib.rs
+            let native_src = src_dir.join("lib.rs");
+            if !native_src.try_exists()? {
+                fs_err::write(
+                    native_src,
+                    indoc::formatdoc! {r#"
+                    use pyo3::prelude::*;
+
+                    #[pyfunction]
+                    fn hello_from_bin() -> String {{
+                        return "Hello from {package}!".to_string();
+                    }}
+
+                    /// A Python module implemented in Rust. The name of this function must match
+                    /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
+                    /// import the module.
+                    #[pymodule]
+                    fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {{
+                        m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
+                        Ok(())
+                    }}
+                "#},
+                )?;
+            }
+            // Generate .pyi file
+            let pyi_file = pkg_dir.join("_core.pyi");
+            if !pyi_file.try_exists()? {
+                fs_err::write(pyi_file, pyi_contents)?;
+            };
+            // Return python script calling binary
+            binary_call_script
+        }
+        ProjectBuildBackend::Scikit => {
+            // Generate main.cpp
+            let native_src = src_dir.join("main.cpp");
+            if !native_src.try_exists()? {
+                fs_err::write(
+                    native_src,
+                    indoc::formatdoc! {r#"
+                    #include <pybind11/pybind11.h>
+
+                    std::string hello_from_bin() {{ return "Hello from {package}!"; }}
+
+                    namespace py = pybind11;
+
+                    PYBIND11_MODULE(_core, m) {{
+                      m.doc() = "pybind11 hello module";
+
+                      m.def("hello_from_bin", &hello_from_bin, R"pbdoc(
+                          A function that returns a Hello string.
+                      )pbdoc");
+                    }}
+                "#},
+                )?;
+            }
+            // Generate .pyi file
+            let pyi_file = pkg_dir.join("_core.pyi");
+            if !pyi_file.try_exists()? {
+                fs_err::write(pyi_file, pyi_contents)?;
+            };
+            // Return python script calling binary
+            binary_call_script
+        }
+        _ => pure_python_script,
+    };
+
+    // Create `src/{name}/__init__.py`, if it doesn't exist already.
+    let init_py = pkg_dir.join("__init__.py");
+    if !init_py.try_exists()? {
+        fs_err::write(init_py, package_script)?;
+    }
+
+    // Create `src/{name}/py.typed`, if it doesn't exist already.
+    if is_lib {
+        let py_typed = pkg_dir.join("py.typed");
+        if !py_typed.try_exists()? {
+            fs_err::write(py_typed, "")?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Initialize the version control system at the given path.

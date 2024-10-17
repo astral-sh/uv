@@ -5,17 +5,18 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+
 use owo_colors::OwoColorize;
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_types::{DependencyMetadata, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_install_wheel::linker::LinkMode;
 
-use uv_auth::store_credentials_from_url;
+use uv_auth::store_credentials;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, SourceStrategy, TrustedHost,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, LowerBound, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_fs::Simplified;
@@ -400,8 +401,10 @@ async fn build_package(
     .into_interpreter();
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Read build constraints.
@@ -454,7 +457,9 @@ async fn build_package(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
@@ -481,6 +486,7 @@ async fn build_package(
         build_options,
         &hasher,
         exclude_newer,
+        LowerBound::Allow,
         sources,
         concurrency,
     );
@@ -529,9 +535,9 @@ async fn build_package(
     };
 
     // Prepare some common arguments for the build.
+    let dist = None;
     let subdirectory = None;
     let version_id = source.path().file_name().and_then(|name| name.to_str());
-    let dist = None;
 
     let build_output = match printer {
         Printer::Default | Printer::NoProgress | Printer::Verbose => {
@@ -557,6 +563,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -595,6 +602,7 @@ async fn build_package(
                 .setup_build(
                     &extracted,
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -617,6 +625,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -639,6 +648,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -660,6 +670,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -678,6 +689,7 @@ async fn build_package(
                 .setup_build(
                     source.path(),
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,
@@ -718,6 +730,7 @@ async fn build_package(
                 .setup_build(
                     &extracted,
                     subdirectory,
+                    source.path(),
                     version_id.map(ToString::to_string),
                     dist,
                     sources,

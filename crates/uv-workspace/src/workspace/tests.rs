@@ -43,7 +43,7 @@ async fn albatross_in_example() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
     {
       "project_root": "[ROOT]/albatross-in-example/examples/bird-feeder",
       "project_name": "bird-feeder",
@@ -65,6 +65,7 @@ async fn albatross_in_example() {
           }
         },
         "sources": {},
+        "indexes": [],
         "pyproject_toml": {
           "project": {
             "name": "bird-feeder",
@@ -79,7 +80,7 @@ async fn albatross_in_example() {
         }
       }
     }
-    "#);
+    "###);
     });
 }
 
@@ -94,7 +95,7 @@ async fn albatross_project_in_excluded() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
         {
           "project_root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
           "project_name": "bird-feeder",
@@ -116,6 +117,7 @@ async fn albatross_project_in_excluded() {
               }
             },
             "sources": {},
+            "indexes": [],
             "pyproject_toml": {
               "project": {
                 "name": "bird-feeder",
@@ -130,7 +132,7 @@ async fn albatross_project_in_excluded() {
             }
           }
         }
-        "#);
+        "###);
     });
 }
 
@@ -144,7 +146,7 @@ async fn albatross_root_workspace() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
         {
           "project_root": "[ROOT]/albatross-root-workspace",
           "project_name": "albatross",
@@ -200,6 +202,7 @@ async fn albatross_root_workspace() {
                 }
               ]
             },
+            "indexes": [],
             "pyproject_toml": {
               "project": {
                 "name": "albatross",
@@ -220,6 +223,7 @@ async fn albatross_root_workspace() {
                       }
                     ]
                   },
+                  "index": null,
                   "workspace": {
                     "members": [
                       "packages/*"
@@ -237,7 +241,7 @@ async fn albatross_root_workspace() {
             }
           }
         }
-        "#);
+        "###);
     });
 }
 
@@ -252,7 +256,7 @@ async fn albatross_virtual_workspace() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
         {
           "project_root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
           "project_name": "albatross",
@@ -302,11 +306,13 @@ async fn albatross_virtual_workspace() {
               }
             },
             "sources": {},
+            "indexes": [],
             "pyproject_toml": {
               "project": null,
               "tool": {
                 "uv": {
                   "sources": null,
+                  "index": null,
                   "workspace": {
                     "members": [
                       "packages/*"
@@ -324,7 +330,7 @@ async fn albatross_virtual_workspace() {
             }
           }
         }
-        "#);
+        "###);
     });
 }
 
@@ -338,7 +344,7 @@ async fn albatross_just_project() {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
         {
           "project_root": "[ROOT]/albatross-just-project",
           "project_name": "albatross",
@@ -360,6 +366,7 @@ async fn albatross_just_project() {
               }
             },
             "sources": {},
+            "indexes": [],
             "pyproject_toml": {
               "project": {
                 "name": "albatross",
@@ -374,7 +381,7 @@ async fn albatross_just_project() {
             }
           }
         }
-        "#);
+        "###);
     });
 }
 #[tokio::test]
@@ -456,7 +463,7 @@ async fn exclude_package() -> Result<()> {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
         {
           "project_root": "[ROOT]",
           "project_name": "albatross",
@@ -491,6 +498,7 @@ async fn exclude_package() -> Result<()> {
               }
             },
             "sources": {},
+            "indexes": [],
             "pyproject_toml": {
               "project": {
                 "name": "albatross",
@@ -504,6 +512,7 @@ async fn exclude_package() -> Result<()> {
               "tool": {
                 "uv": {
                   "sources": null,
+                  "index": null,
                   "workspace": {
                     "members": [
                       "packages/*"
@@ -523,7 +532,7 @@ async fn exclude_package() -> Result<()> {
             }
           }
         }
-        "#);
+        "###);
     });
 
     // Rewrite the members to both include and exclude `bird-feeder` by name.
@@ -554,7 +563,7 @@ async fn exclude_package() -> Result<()> {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
         {
           "project_root": "[ROOT]",
           "project_name": "albatross",
@@ -589,6 +598,7 @@ async fn exclude_package() -> Result<()> {
               }
             },
             "sources": {},
+            "indexes": [],
             "pyproject_toml": {
               "project": {
                 "name": "albatross",
@@ -602,6 +612,7 @@ async fn exclude_package() -> Result<()> {
               "tool": {
                 "uv": {
                   "sources": null,
+                  "index": null,
                   "workspace": {
                     "members": [
                       "packages/seeds",
@@ -622,7 +633,7 @@ async fn exclude_package() -> Result<()> {
             }
           }
         }
-        "#);
+        "###);
     });
 
     // Rewrite the exclusion to use the top-level directory (`packages`).
@@ -653,7 +664,7 @@ async fn exclude_package() -> Result<()> {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
         {
           "project_root": "[ROOT]",
           "project_name": "albatross",
@@ -701,6 +712,7 @@ async fn exclude_package() -> Result<()> {
               }
             },
             "sources": {},
+            "indexes": [],
             "pyproject_toml": {
               "project": {
                 "name": "albatross",
@@ -714,6 +726,7 @@ async fn exclude_package() -> Result<()> {
               "tool": {
                 "uv": {
                   "sources": null,
+                  "index": null,
                   "workspace": {
                     "members": [
                       "packages/seeds",
@@ -734,7 +747,7 @@ async fn exclude_package() -> Result<()> {
             }
           }
         }
-        "#);
+        "###);
     });
 
     // Rewrite the exclusion to use the top-level directory with a glob (`packages/*`).
@@ -765,7 +778,7 @@ async fn exclude_package() -> Result<()> {
         {
             ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
         },
-        @r#"
+        @r###"
         {
           "project_root": "[ROOT]",
           "project_name": "albatross",
@@ -787,6 +800,7 @@ async fn exclude_package() -> Result<()> {
               }
             },
             "sources": {},
+            "indexes": [],
             "pyproject_toml": {
               "project": {
                 "name": "albatross",
@@ -800,6 +814,7 @@ async fn exclude_package() -> Result<()> {
               "tool": {
                 "uv": {
                   "sources": null,
+                  "index": null,
                   "workspace": {
                     "members": [
                       "packages/seeds",
@@ -820,7 +835,7 @@ async fn exclude_package() -> Result<()> {
             }
           }
         }
-        "#);
+        "###);
     });
 
     Ok(())

@@ -45,7 +45,7 @@ uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-once-map = { path = "crates/uv-once-map" }
 uv-options-metadata = { path = "crates/uv-options-metadata" }
-uv-pep440 = { path = "crates/uv-pep440", features = ["tracing"] }
+uv-pep440 = { path = "crates/uv-pep440", features = ["tracing", "rkyv"] }
 uv-pep508 = { path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
 uv-platform-tags = { path = "crates/uv-platform-tags" }
 uv-pubgrub = { path = "crates/uv-pubgrub" }
@@ -77,6 +77,7 @@ async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b
 axoupdater = { version = "0.7.2", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.1" }
+bitflags = { version = "2.6.0" }
 boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
 cachedir = { version = "0.3.1" }
@@ -124,7 +125,7 @@ pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "388685a8711092971930986644cfed152d1a1f6c" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "19c77268c0ad5f69d7e12126e0cfacfbba466481" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
@@ -279,7 +280,7 @@ inherits = "release"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.22.1"
+cargo-dist-version = "0.23.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app

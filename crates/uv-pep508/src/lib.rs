@@ -933,7 +933,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
     //
     // See: https://github.com/pypa/pip/blob/111eed14b6e9fba7c78a5ec2b7594812d17b5d2b/src/pip/_internal/utils/filetypes.py#L8
     if requirement_kind.is_none() {
-        if looks_like_archive(cursor.slice(name_start, name_end)) {
+        if looks_like_archive(cursor.slice(name_start, name_end - name_start)) {
             let clone = cursor.clone().at(start);
             return Err(Pep508Error {
                 message: Pep508ErrorSource::UnsupportedRequirement("URL requirement must be preceded by a package name. Add the name of the package before the URL (e.g., `package_name @ https://...`).".to_string()),

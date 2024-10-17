@@ -5,13 +5,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::distribution_database::ManagedClient;
-use crate::error::Error;
-use crate::metadata::{ArchiveMetadata, Metadata};
-use crate::reporter::Facade;
-use crate::source::built_wheel_metadata::BuiltWheelMetadata;
-use crate::source::revision::Revision;
-use crate::{LowerBound, Reporter, RequiresDist};
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::Response;
@@ -37,6 +30,14 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
+
+use crate::distribution_database::ManagedClient;
+use crate::error::Error;
+use crate::metadata::{ArchiveMetadata, Metadata};
+use crate::reporter::Facade;
+use crate::source::built_wheel_metadata::BuiltWheelMetadata;
+use crate::source::revision::Revision;
+use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
@@ -388,8 +389,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             project_root,
+            self.build_context.locations(),
             self.build_context.sources(),
-            LowerBound::Warn,
+            self.build_context.bounds(),
         )
         .await?;
         Ok(requires_dist)
@@ -471,7 +473,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_dist_entry.path(),
                 subdirectory,
                 &cache_shard,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .await?;
 
@@ -584,7 +586,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source,
                 source_dist_entry.path(),
                 subdirectory,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .boxed_local()
             .await?
@@ -615,7 +617,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_dist_entry.path(),
                 subdirectory,
                 &cache_shard,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .await?;
 
@@ -773,7 +775,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_entry.path(),
                 None,
                 &cache_shard,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .await?;
 
@@ -860,12 +862,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(
-                source,
-                source_entry.path(),
-                None,
-                self.build_context.sources(),
-            )
+            .build_metadata(source, source_entry.path(), None, SourceStrategy::Disabled)
             .boxed_local()
             .await?
         {
@@ -903,7 +900,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_entry.path(),
                 None,
                 &cache_shard,
-                self.build_context.sources(),
+                SourceStrategy::Disabled,
             )
             .await?;
 
@@ -1086,7 +1083,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1120,7 +1119,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1149,7 +1150,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1194,7 +1197,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 resource.install_path.as_ref(),
+                self.build_context.locations(),
                 self.build_context.sources(),
+                self.build_context.bounds(),
             )
             .await?,
         ))
@@ -1374,7 +1379,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                Metadata::from_workspace(
+                    metadata,
+                    &path,
+                    self.build_context.locations(),
+                    self.build_context.sources(),
+                    self.build_context.bounds(),
+                )
+                .await?,
             ));
         }
 
@@ -1395,7 +1407,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                    Metadata::from_workspace(
+                        metadata,
+                        &path,
+                        self.build_context.locations(),
+                        self.build_context.sources(),
+                        self.build_context.bounds(),
+                    )
+                    .await?,
                 ));
             }
         }
@@ -1420,7 +1439,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                Metadata::from_workspace(
+                    metadata,
+                    &path,
+                    self.build_context.locations(),
+                    self.build_context.sources(),
+                    self.build_context.bounds(),
+                )
+                .await?,
             ));
         }
 
@@ -1460,7 +1486,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(metadata, fetch.path(), self.build_context.sources()).await?,
+            Metadata::from_workspace(
+                metadata,
+                fetch.path(),
+                self.build_context.locations(),
+                self.build_context.sources(),
+                self.build_context.bounds(),
+            )
+            .await?,
         ))
     }
 
@@ -1679,6 +1712,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
+                source_root,
                 Some(source.to_string()),
                 source.as_dist(),
                 source_strategy,
@@ -1723,6 +1757,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
+                source_root,
                 Some(source.to_string()),
                 source.as_dist(),
                 source_strategy,

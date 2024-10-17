@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.4.23
+
+This release introduces a revamped system for defining package indexes, as an alternative to the existing pip-style
+`--index-url` and `--extra-index-url` configuration options.
+
+You can now define named indexes in your `pyproject.toml` file using the `[[tool.uv.index]]` table:
+
+```toml
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+```
+
+Packages can be pinned to a specific index via `tool.uv.sources`, to ensure that a given package is installed from the
+correct index. For example, to ensure that `torch` is _always_ installed from the `pytorch` index:
+
+```toml
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+```
+
+Indexes can also be marked as `explicit = true` to prevent packages from being installed from that index
+unless explicitly pinned. For example, to ensure that `torch` is installed from the `pytorch` index, but all other
+packages are installed from the default index:
+
+```toml
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+```
+
+To define an additional index outside a `pyproject.toml` file, use the `--index` command-line argument
+(or the `UV_INDEX` environment variable); to replace the default index (PyPI), use the `--default-index` command-line
+argument (or `UV_DEFAULT_INDEX`).
+
+These changes are entirely backwards-compatible with the deprecated `--index-url` and `--extra-index-url` options,
+which continue to work as before.
+
+See the [Index](https://docs.astral.sh/uv/configuration/indexes/) documentation for more.
+
+### Enhancements
+
+- Add index URLs when provided via `uv add --index` or `--default-index` ([#7746](https://github.com/astral-sh/uv/pull/7746))
+- Add support for named and explicit indexes ([#7481](https://github.com/astral-sh/uv/pull/7481))
+- Add templates for popular build backends ([#7857](https://github.com/astral-sh/uv/pull/7857))
+- Allow multiple pinned indexes in `tool.uv.sources` ([#7769](https://github.com/astral-sh/uv/pull/7769))
+- Allow users to incorporate Git tags into dynamic cache keys ([#8259](https://github.com/astral-sh/uv/pull/8259))
+- Pin named indexes in `uv add` ([#7747](https://github.com/astral-sh/uv/pull/7747))
+- Respect named `--index` and `--default-index` values in `tool.uv.sources` ([#7910](https://github.com/astral-sh/uv/pull/7910))
+- Update to latest PubGrub version ([#8245](https://github.com/astral-sh/uv/pull/8245))
+- Enable environment variable authentication for named indexes ([#7741](https://github.com/astral-sh/uv/pull/7741))
+- Avoid showing lower-bound warning outside of explicit lock and sync ([#8234](https://github.com/astral-sh/uv/pull/8234))
+- Improve logging during lock errors ([#8258](https://github.com/astral-sh/uv/pull/8258))
+- Improve styling of `requires-python` warnings ([#8240](https://github.com/astral-sh/uv/pull/8240))
+- Show hint in resolution failure on `Forbidden` (`403`) or `Unauthorized` (`401`) ([#8264](https://github.com/astral-sh/uv/pull/8264))
+- Update to latest `cargo-dist` version (includes new installer features) ([#8270](https://github.com/astral-sh/uv/pull/8270))
+- Warn when patch version in `requires-python` is implicitly `0` ([#7959](https://github.com/astral-sh/uv/pull/7959))
+- Add more context on client errors during range requests ([#8285](https://github.com/astral-sh/uv/pull/8285))
+
+### Bug fixes
+
+- Avoid writing duplicate index URLs with `--emit-index-url` ([#8226](https://github.com/astral-sh/uv/pull/8226))
+- Fix error leading to out-of-bound panic in `uv-pep508` ([#8282](https://github.com/astral-sh/uv/pull/8282))
+- Fix managed distributions of free-threaded Python on Windows ([#8268](https://github.com/astral-sh/uv/pull/8268))
+- Fix selection of free-threaded interpreters during default Python discovery ([#8239](https://github.com/astral-sh/uv/pull/8239))
+- Ignore sources in build requirements for non-source trees ([#8235](https://github.com/astral-sh/uv/pull/8235))
+- Invalid cache when adding lower bound to lockfile ([#8230](https://github.com/astral-sh/uv/pull/8230))
+- Respect index priority when storing credentials ([#8256](https://github.com/astral-sh/uv/pull/8256))
+- Respect relative paths in `uv build` sources ([#8237](https://github.com/astral-sh/uv/pull/8237))
+- Narrow what the pip3.<minor> logic drops from entry points. ([#8273](https://github.com/astral-sh/uv/pull/8273))
+
+### Documentation
+
+- Add some additional notes to `--index-url` docs ([#8267](https://github.com/astral-sh/uv/pull/8267))
+- Add upgrade note to README ([#7937](https://github.com/astral-sh/uv/pull/7937))
+- Remove note that "only a single source may be defined for each dependency" ([#8243](https://github.com/astral-sh/uv/pull/8243))
+
 ## 0.4.22
 
 ### Enhancements

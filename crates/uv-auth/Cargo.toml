@@ -26,6 +26,8 @@ tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
 
+uv-static = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true }

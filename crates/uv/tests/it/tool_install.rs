@@ -1413,7 +1413,7 @@ fn tool_install_uninstallable() {
         .arg("pyenv")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r##"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1421,7 +1421,7 @@ fn tool_install_uninstallable() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: pyenv==0.0.1
+      Caused by: Failed to download and build `pyenv==0.0.1`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
     [stdout]
@@ -1440,7 +1440,7 @@ fn tool_install_uninstallable() {
     #
 
 
-    "##);
+    "###);
 
     // Ensure the tool environment is not created.
     tool_dir.child("pyenv").assert(predicate::path::missing());

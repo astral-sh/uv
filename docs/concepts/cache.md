@@ -41,7 +41,15 @@ should be rebuilt whenever the commit hash changes, you can add the following to
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ git = true }]
+cache-keys = [{ git = { commit = true } }]
+```
+
+If your dynamic metadata incorporates information from the set of Git tags, you can expand the cache
+key to include the tags:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ git = { commit = true, tag = true } }]
 ```
 
 Similarly, if a project reads from a `requirements.txt` to populate its dependencies, you can add

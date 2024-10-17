@@ -7,20 +7,25 @@
 # ///
 
 """
-Test `uv publish` by uploading a new version of astral-test-<test case> to testpypi,
-authenticating by one of various options.
+Test `uv publish` by uploading a new version of astral-test-<test case> to one of
+multiple indexes, exercising different options of passing credentials.
+
+Locally, execute the credentials setting script, then run:
+```shell
+uv run scripts/publish/test_publish.py local
+```
 
 # Setup
 
-**astral-test-token**
+**pypi-token**
 Set the `UV_TEST_PUBLISH_TOKEN` environment variables.
 
-**astral-test-password**
+**pypi-password-env**
 Set the `UV_TEST_PUBLISH_PASSWORD` environment variable.
 This project also uses token authentication since it's the only thing that PyPI
 supports, but they both CLI options.
 
-**astral-test-keyring**
+**pypi-keyring**
 ```console
 uv pip install keyring
 keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
@@ -29,19 +34,19 @@ The query parameter a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
 
-**astral-test-gitlab-pat**
+**pypi-trusted-publishing**
+This one only works in GitHub Actions on astral-sh/uv in `ci.yml` - sorry!
+
+**gitlab**
 The username is astral-test-user, the password is a token.
-Web: https://gitlab.com/astral-test-publish/astral-test-gitlab-pat/-/packages
+Web: https://gitlab.com/astral-test-publish/astral-test-token/-/packages
 Docs: https://docs.gitlab.com/ee/user/packages/pypi_repository/
 
-**astral-test-codeberg**
+**codeberg**
 The username is astral-test-user, the password is a token (the actual account password would also
 work).
-Web: https://codeberg.org/astral-test-user/-/packages/pypi/astral-test-codeberg/0.1.0
+Web: https://codeberg.org/astral-test-user/-/packages/pypi/astral-test-token/0.1.0
 Docs: https://forgejo.org/docs/latest/user/packages/pypi/
-
-**astral-test-trusted-publishing**
-This one only works in GitHub Actions on astral-sh/uv in `ci.yml` - sorry!
 """
 
 import os
@@ -56,26 +61,53 @@ from packaging.utils import parse_sdist_filename, parse_wheel_filename
 
 cwd = Path(__file__).parent
 
+# Map CLI target name to package name.
+# Trusted publishing can only be tested on GitHub Actions, so we have separate local
+# and all targets.
+local_targets = {
+    "pypi-token": "astral-test-token",
+    "pypi-password-env": "astral-test-password",
+    "pypi-keyring": "astral-test-keyring",
+    "gitlab": "astral-test-token",
+    "codeberg": "astral-test-token",
+    "cloudsmith": "astral-test-token",
+}
+all_targets = local_targets | {
+    "pypi-trusted-publishing": "astral-test-trusted-publishing"
+}
+
 project_urls = {
-    "astral-test-token": "https://test.pypi.org/simple/astral-test-token/",
-    "astral-test-password": "https://test.pypi.org/simple/astral-test-password/",
-    "astral-test-keyring": "https://test.pypi.org/simple/astral-test-keyring/",
-    "astral-test-trusted-publishing": "https://test.pypi.org/simple/astral-test-trusted-publishing/",
-    "astral-test-gitlab-pat": "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/astral-test-gitlab-pat",
-    "astral-test-codeberg": "https://codeberg.org/api/packages/astral-test-user/pypi/simple/astral-test-forgejo-codeberg",
+    "astral-test-password": ["https://test.pypi.org/simple/astral-test-password/"],
+    "astral-test-keyring": ["https://test.pypi.org/simple/astral-test-keyring/"],
+    "astral-test-trusted-publishing": [
+        "https://test.pypi.org/simple/astral-test-trusted-publishing/"
+    ],
+    "astral-test-token": [
+        "https://test.pypi.org/simple/astral-test-token/",
+        "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/astral-test-token",
+        "https://codeberg.org/api/packages/astral-test-user/pypi/simple/astral-test-token",
+        "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/astral-test-token/",
+    ],
 }
 
 
 def get_new_version(project_name: str) -> str:
     """Return the next free path version on pypi"""
-    data = httpx.get(project_urls[project_name]).text
+    # To keep the number of packages small we reuse them across targets, so we have to
+    # pick a version that doesn't exist on any target yet
     versions = set()
-    for filename in list(m.group(1) for m in re.finditer(">([^<]+)</a>", data)):
-        if filename.endswith(".whl"):
-            [_name, version, _build, _tags] = parse_wheel_filename(filename)
-        else:
-            [_name, version] = parse_sdist_filename(filename)
-        versions.add(version)
+    for url in project_urls[project_name]:
+        try:
+            data = httpx.get(url).text
+        except httpx.HTTPError as err:
+            raise RuntimeError(f"Failed to fetch {url}") from err
+        href_text = "<a[^>]+>([^<>]+)</a>"
+        for filename in list(m.group(1) for m in re.finditer(href_text, data)):
+            if filename.endswith(".whl"):
+                [_name, version, _build, _tags] = parse_wheel_filename(filename)
+            else:
+                [_name, version] = parse_sdist_filename(filename)
+            versions.add(version)
     max_version = max(versions)
 
     # Bump the path version to obtain an empty version
@@ -97,7 +129,11 @@ def create_project(project_name: str, uv: Path):
     pyproject_toml.write_text(toml)
 
 
-def publish_project(project_name: str, uv: Path):
+def publish_project(target: str, uv: Path):
+    project_name = all_targets[target]
+
+    print(f"\nPublish {project_name} for {target}")
+
     # Create the project
     create_project(project_name, uv)
 
@@ -105,7 +141,7 @@ def publish_project(project_name: str, uv: Path):
     check_call([uv, "build"], cwd=cwd.joinpath(project_name))
 
     # Upload the project
-    if project_name == "astral-test-token":
+    if target == "pypi-token":
         env = os.environ.copy()
         env["UV_PUBLISH_TOKEN"] = os.environ["UV_TEST_PUBLISH_TOKEN"]
         check_call(
@@ -118,7 +154,7 @@ def publish_project(project_name: str, uv: Path):
             cwd=cwd.joinpath(project_name),
             env=env,
         )
-    elif project_name == "astral-test-password":
+    elif target == "pypi-password-env":
         env = os.environ.copy()
         env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_PASSWORD"]
         check_call(
@@ -133,7 +169,7 @@ def publish_project(project_name: str, uv: Path):
             cwd=cwd.joinpath(project_name),
             env=env,
         )
-    elif project_name == "astral-test-keyring":
+    elif target == "pypi-keyring":
         check_call(
             [
                 uv,
@@ -147,7 +183,19 @@ def publish_project(project_name: str, uv: Path):
             ],
             cwd=cwd.joinpath(project_name),
         )
-    elif project_name == "astral-test-gitlab-pat":
+    elif target == "pypi-trusted-publishing":
+        check_call(
+            [
+                uv,
+                "publish",
+                "--publish-url",
+                "https://test.pypi.org/legacy/",
+                "--trusted-publishing",
+                "always",
+            ],
+            cwd=cwd.joinpath(project_name),
+        )
+    elif target == "gitlab":
         env = os.environ.copy()
         env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]
         check_call(
@@ -162,7 +210,7 @@ def publish_project(project_name: str, uv: Path):
             cwd=cwd.joinpath(project_name),
             env=env,
         )
-    elif project_name == "astral-test-codeberg":
+    elif target == "codeberg":
         env = os.environ.copy()
         env["UV_PUBLISH_USERNAME"] = "astral-test-user"
         env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_CODEBERG_TOKEN"]
@@ -176,25 +224,27 @@ def publish_project(project_name: str, uv: Path):
             cwd=cwd.joinpath(project_name),
             env=env,
         )
-    elif project_name == "astral-test-trusted-publishing":
+    elif target == "cloudsmith":
+        env = os.environ.copy()
+        env["UV_PUBLISH_TOKEN"] = os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"]
         check_call(
             [
                 uv,
                 "publish",
                 "--publish-url",
-                "https://test.pypi.org/legacy/",
-                "--trusted-publishing",
-                "always",
+                "https://python.cloudsmith.io/astral-test/astral-test-1/",
             ],
             cwd=cwd.joinpath(project_name),
+            env=env,
         )
     else:
-        raise ValueError(f"Unknown project name: {project_name}")
+        raise ValueError(f"Unknown target: {target}")
 
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument("projects", choices=list(project_urls) + ["all"], nargs="+")
+    target_choices = list(all_targets) + ["local", "all"]
+    parser.add_argument("targets", choices=target_choices, nargs="+")
     parser.add_argument("--uv")
     args = parser.parse_args()
 
@@ -207,12 +257,14 @@ def main():
         executable_suffix = ".exe" if os.name == "nt" else ""
         uv = cwd.parent.parent.joinpath(f"target/debug/uv{executable_suffix}")
 
-    if args.projects == ["all"]:
-        projects = list(project_urls)
+    if args.targets == ["local"]:
+        targets = list(local_targets)
+    elif args.targets == ["all"]:
+        targets = list(all_targets)
     else:
-        projects = args.projects
+        targets = args.targets
 
-    for project_name in projects:
+    for project_name in targets:
         publish_project(project_name, uv)
 
 

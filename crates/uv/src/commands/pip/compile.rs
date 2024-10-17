@@ -4,20 +4,20 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use tracing::debug;
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    LowerBound, NoBinary, NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DependencyMetadata, IndexCapabilities, IndexLocations, NameRequirementSpecification,
-    UnresolvedRequirementSpecification, Verbatim,
+    DependencyMetadata, Index, IndexCapabilities, IndexLocations, NameRequirementSpecification,
+    Origin, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
 use uv_git::GitResolver;
@@ -273,12 +273,26 @@ pub(crate) async fn pip_compile(
     let dev = Vec::default();
 
     // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    let index_locations = index_locations.combine(
+        extra_index_urls
+            .into_iter()
+            .map(Index::from_extra_index_url)
+            .chain(index_url.map(Index::from_index_url))
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        find_links
+            .into_iter()
+            .map(Index::from_find_links)
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        no_index,
+    );
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -301,7 +315,9 @@ pub(crate) async fn pip_compile(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };
 
@@ -347,6 +363,7 @@ pub(crate) async fn pip_compile(
         &build_options,
         &build_hashes,
         exclude_newer,
+        LowerBound::Warn,
         sources,
         concurrency,
     );
@@ -446,20 +463,23 @@ pub(crate) async fn pip_compile(
 
     // If necessary, include the `--index-url` and `--extra-index-url` locations.
     if include_index_url {
-        if let Some(index) = index_locations.index() {
-            writeln!(writer, "--index-url {}", index.verbatim())?;
+        if let Some(index) = index_locations.default_index() {
+            writeln!(writer, "--index-url {}", index.url().verbatim())?;
             wrote_preamble = true;
         }
-        for extra_index in index_locations.extra_index() {
-            writeln!(writer, "--extra-index-url {}", extra_index.verbatim())?;
-            wrote_preamble = true;
+        let mut seen = FxHashSet::default();
+        for extra_index in index_locations.implicit_indexes() {
+            if seen.insert(extra_index.url()) {
+                writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
+                wrote_preamble = true;
+            }
         }
     }
 
     // If necessary, include the `--find-links` locations.
     if include_find_links {
-        for flat_index in index_locations.flat_index() {
-            writeln!(writer, "--find-links {}", flat_index.verbatim())?;
+        for flat_index in index_locations.flat_indexes() {
+            writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
             wrote_preamble = true;
         }
     }

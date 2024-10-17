@@ -248,6 +248,18 @@ impl RequiresPython {
         self.range.lower().as_ref() == Bound::Unbounded
     }
 
+    /// Returns `true` if the `Requires-Python` specifier is set to an exact version
+    /// without specifying a patch version. (e.g. `==3.10`)
+    pub fn is_exact_without_patch(&self) -> bool {
+        match self.range.lower().as_ref() {
+            Bound::Included(version) => {
+                version.release().len() == 2
+                    && self.range.upper().as_ref() == Bound::Included(version)
+            }
+            _ => false,
+        }
+    }
+
     /// Returns the [`RequiresPythonBound`] truncated to the major and minor version.
     pub fn bound_major_minor(&self) -> LowerBound {
         match self.range.lower().as_ref() {

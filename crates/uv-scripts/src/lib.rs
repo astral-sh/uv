@@ -1,13 +1,12 @@
+use memchr::memmem::Finder;
+use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
-
-use memchr::memmem::Finder;
-use serde::Deserialize;
 use thiserror::Error;
-
+use uv_distribution_types::Index;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -263,6 +262,7 @@ pub struct ToolUv {
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
+    pub indexes: Option<Vec<Index>>,
 }
 
 #[derive(Debug, Error)]

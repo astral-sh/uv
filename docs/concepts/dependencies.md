@@ -70,12 +70,11 @@ standards-compliant `project.dependencies` table.
 During development, a project may rely on a package that isn't available on PyPI. The following
 additional sources are supported by uv:
 
+- Index: A package resolved from a specific package index.
 - Git: A Git repository.
 - URL: A remote wheel or source distribution.
 - Path: A local wheel, source distribution, or project directory.
 - Workspace: A member of the current workspace.
-
-Only a single source may be defined for each dependency.
 
 Note that if a non-uv project uses a project with sources as a Git- or path-dependency, only
 `project.dependencies` and `project.optional-dependencies` are respected. Any information provided
@@ -90,6 +89,29 @@ $ uv lock --no-sources
 
 The use of `--no-sources` will also prevent uv from discovering any
 [workspace members](#workspace-member) that could satisfy a given dependency.
+
+### Index
+
+To pin a Python package to a specific index, add a named index to the `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+  "torch",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+```
+
+The `explicit` flag is optional and indicates that the index should _only_ be used for packages that
+explicitly specify it in `tool.uv.sources`. If `explicit` is not set, other packages may be resolved
+from the index, if not found elsewhere.
 
 ### Git
 
@@ -248,7 +270,9 @@ download the source from GitHub on macOS, and fall back to PyPI on all other pla
 
 You can specify multiple sources for a single dependency by providing a list of sources,
 disambiguated by [PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible
-environment markers. For example, to pull in different `httpx` commits on macOS vs. Linux:
+environment markers.
+
+For example, to pull in different `httpx` commits on macOS vs. Linux:
 
 ```toml title="pyproject.toml"
 [project]
@@ -261,6 +285,29 @@ httpx = [
   { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" },
   { git = "https://github.com/encode/httpx", tag = "0.24.1", marker = "sys_platform == 'linux'" },
 ]
+```
+
+This strategy even extends to pulling packages from different indexes based on environment markers.
+For example, to pull `torch` from different PyTorch indexes based on the platform:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["torch"]
+
+[tool.uv.sources]
+torch = [
+  { index = "torch-cu118", marker = "sys_platform == 'darwin'"},
+  { index = "torch-cu124", marker = "sys_platform != 'darwin'"},
+]
+
+[[tool.uv.index]]
+name = "torch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+
+[[tool.uv.index]]
+name = "torch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+
 ```
 
 ## Optional dependencies

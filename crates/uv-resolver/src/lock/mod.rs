@@ -20,10 +20,9 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, IndexLocations,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata, ToUrlError,
-    UrlString,
+    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Resolution, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -32,8 +31,8 @@ use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{
-    redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
-    RequirementSource, ResolverMarkerEnvironment,
+    redact_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement, RequirementSource,
+    ResolverMarkerEnvironment,
 };
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{InstallTarget, Workspace};
@@ -1058,53 +1057,31 @@ impl Lock {
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let remotes = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index_url.redacted()))
+                        Some(UrlString::from(index.url().redacted()))
                     }
                     IndexUrl::Path(_) => None,
                 })
-                .chain(
-                    locations
-                        .flat_index()
-                        .filter_map(|index_url| match index_url {
-                            FlatIndexLocation::Url(_) => {
-                                Some(UrlString::from(index_url.redacted()))
-                            }
-                            FlatIndexLocation::Path(_) => None,
-                        }),
-                )
                 .collect::<BTreeSet<_>>()
         });
 
         let locals = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
-                    IndexUrl::Path(index_url) => {
-                        let path = index_url.to_file_path().ok()?;
+                    IndexUrl::Path(url) => {
+                        let path = url.to_file_path().ok()?;
                         let path = relative_to(&path, workspace.install_path())
                             .or_else(|_| std::path::absolute(path))
                             .ok()?;
                         Some(path)
                     }
                 })
-                .chain(
-                    locations
-                        .flat_index()
-                        .filter_map(|index_url| match index_url {
-                            FlatIndexLocation::Url(_) => None,
-                            FlatIndexLocation::Path(index_url) => {
-                                let path = index_url.to_file_path().ok()?;
-                                let path = relative_to(&path, workspace.install_path())
-                                    .or_else(|_| std::path::absolute(path))
-                                    .ok()?;
-                                Some(path)
-                            }
-                        }),
-                )
                 .collect::<BTreeSet<_>>()
         });
 
@@ -3120,7 +3097,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     let mut url = git_dist.git.repository().clone();
 
     // Redact the credentials.
-    redact_git_credentials(&mut url);
+    redact_credentials(&mut url);
 
     // Clear out any existing state.
     url.set_fragment(None);
@@ -3709,11 +3686,11 @@ fn normalize_requirement(
             url,
         } => {
             // Redact the credentials.
-            redact_git_credentials(&mut repository);
+            redact_credentials(&mut repository);
 
             // Redact the PEP 508 URL.
             let mut url = url.to_url();
-            redact_git_credentials(&mut url);
+            redact_credentials(&mut url);
             let url = VerbatimUrl::from_url(url);
 
             Ok(Requirement {
@@ -3774,11 +3751,36 @@ fn normalize_requirement(
                 origin: None,
             })
         }
-        _ => Ok(Requirement {
+        RequirementSource::Registry {
+            specifier,
+            mut index,
+        } => {
+            if let Some(index) = index.as_mut() {
+                redact_credentials(index);
+            }
+            Ok(Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                marker: requirement.marker,
+                source: RequirementSource::Registry { specifier, index },
+                origin: None,
+            })
+        }
+        RequirementSource::Url {
+            location,
+            subdirectory,
+            ext,
+            url,
+        } => Ok(Requirement {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
-            source: requirement.source,
+            source: RequirementSource::Url {
+                location,
+                subdirectory,
+                ext,
+                url,
+            },
             origin: None,
         }),
     }

@@ -21,10 +21,10 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, TargetTriple, TrustedHost,
-    TrustedPublishing, Upgrade, VersionControlSystem,
+    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, SourceStrategy, TargetTriple,
+    TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
-use uv_distribution_types::{DependencyMetadata, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
@@ -164,6 +164,7 @@ pub(crate) struct InitSettings {
     pub(crate) package: bool,
     pub(crate) kind: InitKind,
     pub(crate) vcs: Option<VersionControlSystem>,
+    pub(crate) build_backend: Option<ProjectBuildBackend>,
     pub(crate) no_readme: bool,
     pub(crate) author_from: Option<AuthorFrom>,
     pub(crate) no_pin_python: bool,
@@ -185,6 +186,7 @@ impl InitSettings {
             lib,
             script,
             vcs,
+            build_backend,
             no_readme,
             author_from,
             no_pin_python,
@@ -208,6 +210,7 @@ impl InitSettings {
             package,
             kind,
             vcs,
+            build_backend,
             no_readme,
             author_from,
             no_pin_python,
@@ -815,6 +818,7 @@ pub(crate) struct AddSettings {
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
+    pub(crate) indexes: Vec<Index>,
     pub(crate) settings: ResolverInstallerSettings,
 }
 
@@ -853,6 +857,51 @@ impl AddSettings {
             DependencyType::Production
         };
 
+        // Track the `--index` and `--default-index` arguments from the command-line.
+        let indexes = installer
+            .index_args
+            .default_index
+            .clone()
+            .and_then(Maybe::into_option)
+            .into_iter()
+            .chain(
+                installer
+                    .index_args
+                    .index
+                    .clone()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Maybe::into_option),
+            )
+            .collect::<Vec<_>>();
+
+        // If the user passed an `--index-url` or `--extra-index-url`, warn.
+        if installer
+            .index_args
+            .index_url
+            .as_ref()
+            .is_some_and(Maybe::is_some)
+        {
+            if script.is_some() {
+                warn_user_once!("Indexes specified via `--index-url` will not be persisted to the script; use `--default-index` instead.");
+            } else {
+                warn_user_once!("Indexes specified via `--index-url` will not be persisted to the `pyproject.toml` file; use `--default-index` instead.");
+            }
+        }
+
+        if installer
+            .index_args
+            .extra_index_url
+            .as_ref()
+            .is_some_and(|extra_index_url| extra_index_url.iter().any(Maybe::is_some))
+        {
+            if script.is_some() {
+                warn_user_once!("Indexes specified via `--extra-index-url` will not be persisted to the script; use `--index` instead.");
+            } else {
+                warn_user_once!("Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead.");
+            }
+        }
+
         Self {
             locked,
             frozen,
@@ -870,6 +919,7 @@ impl AddSettings {
             editable: flag(editable, no_editable),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
+            indexes,
             settings: ResolverInstallerSettings::combine(
                 resolver_installer_options(installer, build),
                 filesystem,
@@ -1927,9 +1977,19 @@ impl From<ResolverOptions> for ResolverSettings {
     fn from(value: ResolverOptions) -> Self {
         Self {
             index_locations: IndexLocations::new(
-                value.index_url,
-                value.extra_index_url.unwrap_or_default(),
-                value.find_links.unwrap_or_default(),
+                value
+                    .index
+                    .into_iter()
+                    .flatten()
+                    .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
+                    .chain(value.index_url.into_iter().map(Index::from))
+                    .collect(),
+                value
+                    .find_links
+                    .into_iter()
+                    .flatten()
+                    .map(Index::from)
+                    .collect(),
                 value.no_index.unwrap_or_default(),
             ),
             resolution: value.resolution.unwrap_or_default(),
@@ -2054,9 +2114,19 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
     fn from(value: ResolverInstallerOptions) -> Self {
         Self {
             index_locations: IndexLocations::new(
-                value.index_url,
-                value.extra_index_url.unwrap_or_default(),
-                value.find_links.unwrap_or_default(),
+                value
+                    .index
+                    .into_iter()
+                    .flatten()
+                    .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
+                    .chain(value.index_url.into_iter().map(Index::from))
+                    .collect(),
+                value
+                    .find_links
+                    .into_iter()
+                    .flatten()
+                    .map(Index::from)
+                    .collect(),
                 value.no_index.unwrap_or_default(),
             ),
             resolution: value.resolution.unwrap_or_default(),
@@ -2161,6 +2231,7 @@ impl PipSettings {
             break_system_packages,
             target,
             prefix,
+            index,
             index_url,
             extra_index_url,
             no_index,
@@ -2212,6 +2283,7 @@ impl PipSettings {
         } = pip.unwrap_or_default();
 
         let ResolverInstallerOptions {
+            index: top_level_index,
             index_url: top_level_index_url,
             extra_index_url: top_level_extra_index_url,
             no_index: top_level_no_index,
@@ -2243,9 +2315,10 @@ impl PipSettings {
         // preferring the latter.
         //
         // For example, prefer `tool.uv.pip.index-url` over `tool.uv.index-url`.
+        let index = index.combine(top_level_index);
+        let no_index = no_index.combine(top_level_no_index);
         let index_url = index_url.combine(top_level_index_url);
         let extra_index_url = extra_index_url.combine(top_level_extra_index_url);
-        let no_index = no_index.combine(top_level_no_index);
         let find_links = find_links.combine(top_level_find_links);
         let index_strategy = index_strategy.combine(top_level_index_strategy);
         let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
@@ -2268,11 +2341,21 @@ impl PipSettings {
 
         Self {
             index_locations: IndexLocations::new(
-                args.index_url.combine(index_url),
-                args.extra_index_url
-                    .combine(extra_index_url)
-                    .unwrap_or_default(),
-                args.find_links.combine(find_links).unwrap_or_default(),
+                args.index
+                    .into_iter()
+                    .flatten()
+                    .chain(args.extra_index_url.into_iter().flatten().map(Index::from))
+                    .chain(args.index_url.into_iter().map(Index::from))
+                    .chain(index.into_iter().flatten())
+                    .chain(extra_index_url.into_iter().flatten().map(Index::from))
+                    .chain(index_url.into_iter().map(Index::from))
+                    .collect(),
+                args.find_links
+                    .combine(find_links)
+                    .into_iter()
+                    .flatten()
+                    .map(Index::from)
+                    .collect(),
                 args.no_index.combine(no_index).unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(
