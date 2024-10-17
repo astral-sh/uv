@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.24
+
+### Bug fixes
+
+- Fix Python executable name in Windows free-threaded Python distributions ([#8310](https://github.com/astral-sh/uv/pull/8310))
+- Redact index credentials from lockfile sources ([#8307](https://github.com/astral-sh/uv/pull/8307))
+- Respect `UV_INDEX_` rather than `UV_HTTP_BASIC_` as documented ([#8306](https://github.com/astral-sh/uv/pull/8306))
+- Improve sources deserialization errors ([#8308](https://github.com/astral-sh/uv/pull/8308))
+
+### Documentation
+
+- Correct pytorch-to-torch reference in docs ([#8291](https://github.com/astral-sh/uv/pull/8291))
+
 ## 0.4.23
 
 This release introduces a revamped system for defining package indexes, as an alternative to the existing pip-style
@@ -14,7 +27,7 @@ url = "https://download.pytorch.org/whl/cpu"
 ```
 
 Packages can be pinned to a specific index via `tool.uv.sources`, to ensure that a given package is installed from the
-correct index. For example, to ensure that `torch` is _always_ installed from the `pytorch` index:
+correct index. For example, to ensure that `torch` is *always* installed from the `pytorch` index:
 
 ```toml
 [tool.uv.sources]
