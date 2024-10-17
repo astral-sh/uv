@@ -56,20 +56,20 @@ disambiguated by environment markers:
 
 ```toml title="pyproject.toml"
 [project]
-dependencies = ["pytorch"]
+dependencies = ["torch"]
 
 [tool.uv.sources]
-pytorch = [
-  { index = "torch-cu118", marker = "sys_platform == 'darwin'"},
-  { index = "torch-cu124", marker = "sys_platform != 'darwin'"},
+torch = [
+  { index = "pytorch-cu118", marker = "sys_platform == 'darwin'"},
+  { index = "pytorch-cu124", marker = "sys_platform != 'darwin'"},
 ]
 
 [[tool.uv.index]]
-name = "torch-cu118"
+name = "pytorch-cu118"
 url = "https://download.pytorch.org/whl/cu118"
 
 [[tool.uv.index]]
-name = "torch-cu124"
+name = "pytorch-cu124"
 url = "https://download.pytorch.org/whl/cu124"
 ```
 
