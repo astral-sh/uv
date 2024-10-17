@@ -477,6 +477,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         index,
                         &version,
                         term_intersection.unwrap_positive(),
+                        state
+                            .pubgrub
+                            .partial_solution
+                            .unchanging_term_for_package(&state.next),
                         &state.python_requirement,
                         &request_sink,
                         &self.index,
