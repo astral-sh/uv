@@ -26,7 +26,7 @@ version, you can see that Python 3.10 to 3.13 on MacOS, Linux and Windows are su
   system package manager.
 
        Example: When `uv pip install mysqlclient==2.2.4` fails on Ubuntu, you need to run
-       `sudo apt instal default-libmysqlclient-dev build-essential pkg-config` to install the MySQL
+       `sudo apt install default-libmysqlclient-dev build-essential pkg-config` to install the MySQL
        headers ([https://pypi.org/project/mysqlclient/2.2.4/](https://pypi.org/project/mysqlclient/2.2.4/#Linux))
 
 - If the build error mentions a failing import, consider
