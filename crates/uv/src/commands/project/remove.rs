@@ -6,7 +6,8 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    Concurrency, DevMode, DevSpecification, EditableMode, ExtrasSpecification, InstallOptions,
+    LowerBound,
 };
 use uv_fs::Simplified;
 use uv_pep508::PackageName;
@@ -113,12 +114,21 @@ pub(crate) async fn remove(
                     );
                 }
             }
-            DependencyType::Optional(ref group) => {
-                let deps = toml.remove_optional_dependency(&package, group)?;
+            DependencyType::Optional(ref extra) => {
+                let deps = toml.remove_optional_dependency(&package, extra)?;
                 if deps.is_empty() {
                     warn_if_present(&package, &toml);
                     anyhow::bail!(
                         "The dependency `{package}` could not be found in `optional-dependencies`"
+                    );
+                }
+            }
+            DependencyType::Group(ref group) => {
+                let deps = toml.remove_dependency_group_requirement(&package, group)?;
+                if deps.is_empty() {
+                    warn_if_present(&package, &toml);
+                    anyhow::bail!(
+                        "The dependency `{package}` could not be found in `dependency-groups`"
                     );
                 }
             }
@@ -205,7 +215,7 @@ pub(crate) async fn remove(
         &venv,
         &lock,
         &extras,
-        dev,
+        &DevSpecification::from(dev),
         EditableMode::Editable,
         install_options,
         Modifications::Exact,
@@ -248,6 +258,9 @@ fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
                 warn_user!(
                     "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
                 );
+            }
+            DependencyType::Group(_) => {
+                // TODO(zanieb): Once we support `remove --group`, add a warning here.
             }
         }
     }

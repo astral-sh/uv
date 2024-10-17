@@ -749,6 +749,10 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>The project environment will not be synced.</p>
 
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Add the requirements to the specified local dependency group.</p>
+
+<p>These requirements will not be included in the published metadata for the project.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -1081,6 +1085,8 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>The project environment will not be synced.</p>
 
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Remove the packages from the specified local dependency group</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -1401,6 +1407,10 @@ uv sync [OPTIONS]
 
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
 
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -1536,6 +1546,12 @@ uv sync [OPTIONS]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 </dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
+
+</dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
 
 <p>The project itself will also be omitted.</p>
 

@@ -19,10 +19,10 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, SourceStrategy, TargetTriple,
-    TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    BuildOptions, Concurrency, ConfigSettings, DevMode, DevSpecification, EditableMode,
+    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
+    KeyringProviderType, NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall,
+    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_install_wheel::linker::LinkMode;
@@ -690,7 +690,7 @@ pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
@@ -711,6 +711,8 @@ impl SyncSettings {
             dev,
             no_dev,
             only_dev,
+            group,
+            only_group,
             no_editable,
             inexact,
             exact,
@@ -738,7 +740,7 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            dev: DevSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
                 no_install_project,
@@ -825,6 +827,7 @@ impl AddSettings {
             requirements,
             dev,
             optional,
+            group,
             editable,
             no_editable,
             extra,
@@ -843,8 +846,10 @@ impl AddSettings {
             python,
         } = args;
 
-        let dependency_type = if let Some(group) = optional {
-            DependencyType::Optional(group)
+        let dependency_type = if let Some(extra) = optional {
+            DependencyType::Optional(extra)
+        } else if let Some(group) = group {
+            DependencyType::Group(group)
         } else if dev {
             DependencyType::Dev
         } else {
@@ -946,6 +951,7 @@ impl RemoveSettings {
             dev,
             optional,
             packages,
+            group,
             no_sync,
             locked,
             frozen,
@@ -957,8 +963,10 @@ impl RemoveSettings {
             python,
         } = args;
 
-        let dependency_type = if let Some(group) = optional {
-            DependencyType::Optional(group)
+        let dependency_type = if let Some(extra) = optional {
+            DependencyType::Optional(extra)
+        } else if let Some(group) = group {
+            DependencyType::Group(group)
         } else if dev {
             DependencyType::Dev
         } else {

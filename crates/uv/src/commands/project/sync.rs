@@ -8,13 +8,13 @@ use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
+    Concurrency, Constraints, DevSpecification, EditableMode, ExtrasSpecification,
     HashCheckingMode, InstallOptions, LowerBound,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
     LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
@@ -43,7 +43,7 @@ pub(crate) async fn sync(
     frozen: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevSpecification,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -154,7 +154,7 @@ pub(crate) async fn sync(
         &venv,
         &lock,
         &extras,
-        dev,
+        &dev,
         editable,
         install_options,
         modifications,
@@ -178,7 +178,7 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: DevMode,
+    dev: &DevSpecification,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -251,13 +251,6 @@ pub(super) async fn do_sync(
             ));
         }
     }
-
-    // Include development dependencies, if requested.
-    let dev = match dev {
-        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
-        DevMode::Exclude => DevSpecification::Exclude,
-        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
-    };
 
     // Determine the tags to use for resolution.
     let tags = venv.interpreter().tags()?;
