@@ -134,12 +134,12 @@ name = "internal"
 url = "https://example.com/simple"
 ```
 
-From there, you can set the `UV_HTTP_BASIC_INTERNAL_USERNAME` and `UV_HTTP_BASIC_INTERNAL_PASSWORD`
+From there, you can set the `UV_INDEX_INTERNAL_USERNAME` and `UV_INDEX_INTERNAL_PASSWORD`
 environment variables, where `INTERNAL` is the uppercase version of the index name:
 
 ```sh
-export UV_HTTP_BASIC_INTERNAL_USERNAME=public
-export UV_HTTP_BASIC_INTERNAL_PASSWORD=koala
+export UV_INDEX_INTERNAL_USERNAME=public
+export UV_INDEX_INTERNAL_PASSWORD=koala
 ```
 
 By providing credentials via environment variables, you can avoid storing sensitive information in

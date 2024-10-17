@@ -160,13 +160,13 @@ impl EnvVars {
     pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
 
     /// Generates the environment variable key for the HTTP Basic authentication username.
-    pub fn http_basic_username(name: &str) -> String {
-        format!("UV_HTTP_BASIC_{name}_USERNAME")
+    pub fn index_username(name: &str) -> String {
+        format!("UV_INDEX_{name}_USERNAME")
     }
 
     /// Generates the environment variable key for the HTTP Basic authentication password.
-    pub fn http_basic_password(name: &str) -> String {
-        format!("UV_HTTP_BASIC_{name}_PASSWORD")
+    pub fn index_password(name: &str) -> String {
+        format!("UV_INDEX_{name}_PASSWORD")
     }
 
     /// Used to set the uv commit hash at build time via `build.rs`.
@@ -183,12 +183,6 @@ impl EnvVars {
 
     /// Used to set the uv tag distance from head at build time via `build.rs`.
     pub const UV_LAST_TAG_DISTANCE: &'static str = "UV_LAST_TAG_DISTANCE";
-
-    /// Used in tests for testing providing credentials via environment variables.
-    pub const UV_HTTP_BASIC_PROXY_USERNAME: &'static str = "UV_HTTP_BASIC_PROXY_USERNAME";
-
-    /// Used in tests for testing providing credentials via environment variables.
-    pub const UV_HTTP_BASIC_PROXY_PASSWORD: &'static str = "UV_HTTP_BASIC_PROXY_PASSWORD";
 
     /// Used to set the spawning/parent interpreter when using --system in the test suite.
     pub const UV_INTERNAL__PARENT_INTERPRETER: &'static str = "UV_INTERNAL__PARENT_INTERPRETER";
