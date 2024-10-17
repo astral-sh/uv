@@ -65,16 +65,19 @@ See the [Index](https://docs.astral.sh/uv/configuration/indexes/) documentation 
 - Show hint in resolution failure on `Forbidden` (`403`) or `Unauthorized` (`401`) ([#8264](https://github.com/astral-sh/uv/pull/8264))
 - Update to latest `cargo-dist` version (includes new installer features) ([#8270](https://github.com/astral-sh/uv/pull/8270))
 - Warn when patch version in `requires-python` is implicitly `0` ([#7959](https://github.com/astral-sh/uv/pull/7959))
+- Add more context on client errors during range requests ([#8285](https://github.com/astral-sh/uv/pull/8285))
 
 ### Bug fixes
 
 - Avoid writing duplicate index URLs with `--emit-index-url` ([#8226](https://github.com/astral-sh/uv/pull/8226))
+- Fix error leading to out-of-bound panic in `uv-pep508` ([#8282](https://github.com/astral-sh/uv/pull/8282))
 - Fix managed distributions of free-threaded Python on Windows ([#8268](https://github.com/astral-sh/uv/pull/8268))
 - Fix selection of free-threaded interpreters during default Python discovery ([#8239](https://github.com/astral-sh/uv/pull/8239))
 - Ignore sources in build requirements for non-source trees ([#8235](https://github.com/astral-sh/uv/pull/8235))
 - Invalid cache when adding lower bound to lockfile ([#8230](https://github.com/astral-sh/uv/pull/8230))
 - Respect index priority when storing credentials ([#8256](https://github.com/astral-sh/uv/pull/8256))
 - Respect relative paths in `uv build` sources ([#8237](https://github.com/astral-sh/uv/pull/8237))
+- Narrow what the pip3.<minor> logic drops from entry points. ([#8273](https://github.com/astral-sh/uv/pull/8273))
 
 ### Documentation
 
