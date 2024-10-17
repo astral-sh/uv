@@ -191,7 +191,8 @@ pub struct BuildBackendError {
 
 impl Display for BuildBackendError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({})", self.message, self.exit_code)?;
+        writeln!(f, "{} ({})", self.message, self.exit_code)?;
+        write!(f, "See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions")?;
 
         let mut non_empty = false;
 
