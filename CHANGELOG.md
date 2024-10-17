@@ -2,6 +2,52 @@
 
 ## 0.4.23
 
+This release introduces a revamped system for defining package indexes, as an alternative to the existing pip-style
+`--index-url` and `--extra-index-url` configuration options.
+
+You can now define named indexes in your `pyproject.toml` file using the `[[tool.uv.index]]` table:
+
+```toml
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+```
+
+Packages can be pinned to a specific index via `tool.uv.sources`, to ensure that a given package is installed from the
+correct index. For example, to ensure that `torch` is _always_ installed from the `pytorch` index:
+
+```toml
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+```
+
+Indexes can also be marked as `explicit = true` to prevent packages from being installed from that index
+unless explicitly pinned. For example, to ensure that `torch` is installed from the `pytorch` index, but all other
+packages are installed from the default index:
+
+```toml
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+```
+
+To define an additional index outside a `pyproject.toml` file, use the `--index` command-line argument
+(or the `UV_INDEX` environment variable); to replace the default index (PyPI), use the `--default-index` command-line
+argument (or `UV_DEFAULT_INDEX`).
+
+These changes are entirely backwards-compatible with the deprecated `--index-url` and `--extra-index-url` options,
+which continue to work as before.
+
+See the [Index](https://docs.astral.sh/uv/configuration/indexes/) documentation for more.
+
 ### Enhancements
 
 - Add index URLs when provided via `uv add --index` or `--default-index` ([#7746](https://github.com/astral-sh/uv/pull/7746))
