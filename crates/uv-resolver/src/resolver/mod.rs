@@ -13,7 +13,7 @@ use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use pubgrub::{Incompatibility, Range, State};
+use pubgrub::{Incompatibility, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -804,7 +804,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// Visit the set of [`PubGrubPackage`] candidates prior to selection. This allows us to fetch
     /// metadata for all packages in parallel.
     fn pre_visit<'data>(
-        packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
+        packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Ranges<Version>)>,
         urls: &Urls,
         indexes: &Indexes,
         python_requirement: &PythonRequirement,
@@ -849,7 +849,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         index: Option<&IndexUrl>,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         pins: &mut FilePins,
         preferences: &Preferences,
         fork_urls: &ForkUrls,
@@ -899,7 +899,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn choose_version_url(
         &self,
         name: &PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         url: &VerbatimParsedUrl,
         python_requirement: &PythonRequirement,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
@@ -996,7 +996,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         name: &PackageName,
         index: Option<&IndexUrl>,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         package: &PubGrubPackage,
         preferences: &Preferences,
         fork_markers: &ResolverMarkers,
@@ -1366,7 +1366,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 dev: group.clone(),
                                 marker: marker.clone(),
                             }),
-                            version: Range::singleton(version.clone()),
+                            version: Ranges::singleton(version.clone()),
                             specifier: None,
                             url: None,
                         });
@@ -1389,7 +1389,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 dev: None,
                                 marker: marker.and_then(MarkerTree::contents),
                             }),
-                            version: Range::singleton(version.clone()),
+                            version: Ranges::singleton(version.clone()),
                             specifier: None,
                             url: None,
                         })
@@ -1417,7 +1417,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         dev: None,
                                         marker: marker.cloned(),
                                     }),
-                                    version: Range::singleton(version.clone()),
+                                    version: Ranges::singleton(version.clone()),
                                     specifier: None,
                                     url: None,
                                 })
@@ -1443,7 +1443,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         dev: dev.cloned(),
                                         marker: marker.cloned(),
                                     }),
-                                    version: Range::singleton(version.clone()),
+                                    version: Ranges::singleton(version.clone()),
                                     specifier: None,
                                     url: None,
                                 })
@@ -2223,7 +2223,7 @@ impl ForkState {
                                         Ok(PubGrubSpecifier::from_pep440_specifier(&specifier)?)
                                     })
                             })
-                            .fold_ok(Range::full(), |range, specifier| {
+                            .fold_ok(Ranges::full(), |range, specifier| {
                                 range.intersection(&specifier.into())
                             })?;
 
@@ -2295,14 +2295,14 @@ impl ForkState {
             | IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(requires_python, kind)),
         ) = reason
         {
-            let python_version: Range<Version> =
+            let python_version: Ranges<Version> =
                 PubGrubSpecifier::from_release_specifiers(&requires_python)?.into();
 
             let package = &self.next;
             self.pubgrub
                 .add_incompatibility(Incompatibility::from_dependency(
                     package.clone(),
-                    Range::singleton(version.clone()),
+                    Ranges::singleton(version.clone()),
                     (
                         PubGrubPackage::from(PubGrubPackageInner::Python(match kind {
                             PythonRequirementKind::Installed => PubGrubPython::Installed,
@@ -2609,7 +2609,7 @@ pub(crate) enum Request {
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
-    Prefetch(PackageName, Range<Version>, PythonRequirement),
+    Prefetch(PackageName, Ranges<Version>, PythonRequirement),
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {

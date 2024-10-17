@@ -1,7 +1,7 @@
 use std::iter;
 
 use itertools::Itertools;
-use pubgrub::Range;
+use pubgrub::Ranges;
 use tracing::warn;
 
 use uv_normalize::{ExtraName, PackageName};
@@ -17,7 +17,7 @@ use crate::{PubGrubSpecifier, ResolveError};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
-    pub(crate) version: Range<Version>,
+    pub(crate) version: Ranges<Version>,
 
     /// The original version specifiers from the requirement.
     pub(crate) specifier: Option<VersionSpecifiers>,
@@ -87,7 +87,7 @@ impl PubGrubDependency {
 #[derive(Debug, Clone)]
 pub(crate) struct PubGrubRequirement {
     pub(crate) package: PubGrubPackage,
-    pub(crate) version: Range<Version>,
+    pub(crate) version: Ranges<Version>,
     pub(crate) specifier: Option<VersionSpecifiers>,
     pub(crate) url: Option<VerbatimParsedUrl>,
 }
@@ -165,7 +165,7 @@ impl PubGrubRequirement {
                 extra,
                 requirement.marker.clone(),
             ),
-            version: Range::full(),
+            version: Ranges::full(),
             specifier: None,
             url: Some(VerbatimParsedUrl {
                 parsed_url,

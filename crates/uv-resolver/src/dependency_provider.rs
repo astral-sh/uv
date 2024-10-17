@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use pubgrub::{Dependencies, DependencyProvider, Range};
+use pubgrub::{Dependencies, DependencyProvider, Ranges};
 
 use uv_pep440::Version;
 
@@ -15,7 +15,7 @@ pub(crate) struct UvDependencyProvider;
 impl DependencyProvider for UvDependencyProvider {
     type P = PubGrubPackage;
     type V = Version;
-    type VS = Range<Version>;
+    type VS = Ranges<Version>;
     type M = UnavailableReason;
 
     fn prioritize(&self, _package: &Self::P, _range: &Self::VS) -> Self::Priority {

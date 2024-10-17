@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use pubgrub::Range;
+use pubgrub::Ranges;
 use std::fmt::{Display, Formatter};
 use tracing::{debug, trace};
 
@@ -75,7 +75,7 @@ impl CandidateSelector {
     pub(crate) fn select<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
@@ -83,6 +83,8 @@ impl CandidateSelector {
         markers: &ResolverMarkers,
     ) -> Option<Candidate<'a>> {
         let is_excluded = exclusions.contains(package_name);
+
+        dbg!(std::mem::size_of::<Ranges<Version>>());
 
         // Check for a preference from a lockfile or a previous fork  that satisfies the range and
         // is allowed.
@@ -126,7 +128,7 @@ impl CandidateSelector {
     fn get_preferred<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
@@ -202,7 +204,7 @@ impl CandidateSelector {
         &'a self,
         preferences: impl Iterator<Item = (Option<&'a MarkerTree>, &'a Version)>,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
         is_excluded: bool,
@@ -277,7 +279,7 @@ impl CandidateSelector {
     /// Check for an installed distribution that satisfies the current range and is allowed.
     fn get_installed<'a, InstalledPackages: InstalledPackagesProvider>(
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         installed_packages: &'a InstalledPackages,
     ) -> Option<Candidate<'a>> {
         let installed_dists = installed_packages.get_packages(package_name);
@@ -315,7 +317,7 @@ impl CandidateSelector {
     pub(crate) fn select_no_preference<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         markers: &ResolverMarkers,
     ) -> Option<Candidate> {
@@ -421,7 +423,7 @@ impl CandidateSelector {
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         allow_prerelease: bool,
     ) -> Option<Candidate<'a>> {
         let mut steps = 0usize;

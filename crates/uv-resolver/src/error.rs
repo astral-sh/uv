@@ -3,7 +3,7 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
-use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
+use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Ranges, Reporter};
 use rustc_hash::FxHashMap;
 
 use crate::candidate_selector::CandidateSelector;
@@ -117,7 +117,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
     }
 }
 
-pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
+pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>;
 
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 #[derive(Debug)]
@@ -286,7 +286,7 @@ impl std::fmt::Display for NoSolutionError {
 
 #[allow(clippy::print_stderr)]
 fn display_tree(
-    error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    error: &DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>,
     name: &str,
 ) {
     let mut lines = Vec::new();
@@ -301,7 +301,7 @@ fn display_tree(
 }
 
 fn display_tree_inner(
-    error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    error: &DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>,
     lines: &mut Vec<String>,
     depth: usize,
 ) {
@@ -340,7 +340,7 @@ fn display_tree_inner(
 /// Given a [`DerivationTree`], collapse any `NoVersion` incompatibilities for workspace members
 /// to avoid saying things like "only <workspace-member>==0.1.0 is available".
 fn collapse_no_versions_of_workspace_members(
-    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    tree: &mut DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>,
     workspace_members: &BTreeSet<PackageName>,
 ) {
     match tree {
@@ -408,7 +408,7 @@ fn collapse_no_versions_of_workspace_members(
 /// We cannot say `C depends on A>=2 and A>=1 depends on B so C depends on B` because there is a
 /// hole in the range — `A>=1,<3` is not a subset of `A>=2,<3`.
 fn collapse_redundant_depends_on_no_versions(
-    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    tree: &mut DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>,
 ) {
     match tree {
         DerivationTree::External(_) => {}
@@ -441,9 +441,9 @@ fn collapse_redundant_depends_on_no_versions(
 
 /// Helper for [`collapse_redundant_depends_on_no_versions`].
 fn collapse_redundant_depends_on_no_versions_inner(
-    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    tree: &mut DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>,
     package: &PubGrubPackage,
-    versions: &Range<Version>,
+    versions: &Ranges<Version>,
 ) {
     match tree {
         DerivationTree::External(_) => {}
@@ -501,7 +501,7 @@ fn collapse_redundant_depends_on_no_versions_inner(
 /// noise.
 fn simplify_derivation_tree_markers(
     python_requirement: &PythonRequirement,
-    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    tree: &mut DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>,
 ) {
     match tree {
         DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
@@ -541,7 +541,7 @@ fn simplify_derivation_tree_markers(
 /// unavailable for the same reason to avoid repeating the same message for every unavailable
 /// version.
 fn collapse_unavailable_versions(
-    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    tree: &mut DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>,
 ) {
     match tree {
         DerivationTree::External(_) => {}
@@ -644,7 +644,7 @@ fn collapse_unavailable_versions(
 /// requires your project, we can conclude that your projects's requirements are
 /// unsatisfiable."
 fn drop_root_dependency_on_project(
-    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+    tree: &mut DerivationTree<PubGrubPackage, Ranges<Version>, UnavailableReason>,
     project: &PackageName,
 ) {
     match tree {

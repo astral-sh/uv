@@ -1,4 +1,4 @@
-use pubgrub::Range;
+use pubgrub::Ranges;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::sync::OnceLock;
 use tracing::instrument;
@@ -156,7 +156,7 @@ impl VersionMap {
     /// for each version.
     pub(crate) fn iter(
         &self,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
     ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator {
         // Performance optimization: If we only have a single version, return that version directly.
         if let Some(version) = range.as_singleton() {

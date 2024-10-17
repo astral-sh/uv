@@ -5,7 +5,7 @@ use std::ops::Bound;
 
 use indexmap::IndexSet;
 use owo_colors::OwoColorize;
-use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
+use pubgrub::{DerivationTree, Derived, External, Map, Ranges, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
 use uv_configuration::IndexStrategy;
@@ -34,14 +34,14 @@ pub(crate) struct PubGrubReportFormatter<'a> {
     pub(crate) workspace_members: &'a BTreeSet<PackageName>,
 }
 
-impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
+impl ReportFormatter<PubGrubPackage, Ranges<Version>, UnavailableReason>
     for PubGrubReportFormatter<'_>
 {
     type Output = String;
 
     fn format_external(
         &self,
-        external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
+        external: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
     ) -> Self::Output {
         match external {
             External::NotRoot(package, version) => {
@@ -71,7 +71,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
 
                 let set = self.simplify_set(set, package);
 
-                if set.as_ref() == &Range::full() {
+                if set.as_ref() == &Ranges::full() {
                     format!("there are no versions of {package}")
                 } else if set.as_singleton().is_some() {
                     format!("there is no version of {package}{set}")
@@ -149,7 +149,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
     }
 
     /// Try to print terms of an incompatibility in a human-readable way.
-    fn format_terms(&self, terms: &Map<PubGrubPackage, Term<Range<Version>>>) -> String {
+    fn format_terms(&self, terms: &Map<PubGrubPackage, Term<Ranges<Version>>>) -> String {
         let mut terms_vec: Vec<_> = terms.iter().collect();
         // We avoid relying on hashmap iteration order here by always sorting
         // by package first.
@@ -217,9 +217,9 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
     /// Simplest case, we just combine two external incompatibilities.
     fn explain_both_external(
         &self,
-        external1: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
-        external2: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
-        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        external1: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        external2: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Ranges<Version>>>,
     ) -> String {
         let external = self.format_both_external(external1, external2);
         let terms = self.format_terms(current_terms);
@@ -235,10 +235,10 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
     fn explain_both_ref(
         &self,
         ref_id1: usize,
-        derived1: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
+        derived1: &Derived<PubGrubPackage, Ranges<Version>, UnavailableReason>,
         ref_id2: usize,
-        derived2: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
-        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        derived2: &Derived<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Ranges<Version>>>,
     ) -> String {
         // TODO: order should be chosen to make it more logical.
 
@@ -262,9 +262,9 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
     fn explain_ref_and_external(
         &self,
         ref_id: usize,
-        derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
-        external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
-        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        derived: &Derived<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        external: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Ranges<Version>>>,
     ) -> String {
         // TODO: order should be chosen to make it more logical.
 
@@ -284,8 +284,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
     /// Add an external cause to the chain of explanations.
     fn and_explain_external(
         &self,
-        external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
-        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        external: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Ranges<Version>>>,
     ) -> String {
         let external = self.format_external(external);
         let terms = self.format_terms(current_terms);
@@ -301,8 +301,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
     fn and_explain_ref(
         &self,
         ref_id: usize,
-        derived: &Derived<PubGrubPackage, Range<Version>, UnavailableReason>,
-        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        derived: &Derived<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Ranges<Version>>>,
     ) -> String {
         let derived = self.format_terms(&derived.terms);
         let current = self.format_terms(current_terms);
@@ -318,9 +318,9 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
     /// Add an already explained incompat to the chain of explanations.
     fn and_explain_prior_and_external(
         &self,
-        prior_external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
-        external: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
-        current_terms: &Map<PubGrubPackage, Term<Range<Version>>>,
+        prior_external: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        external: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        current_terms: &Map<PubGrubPackage, Term<Ranges<Version>>>,
     ) -> String {
         let external = self.format_both_external(prior_external, external);
         let terms = self.format_terms(current_terms);
@@ -411,7 +411,7 @@ impl PubGrubReportFormatter<'_> {
     fn compatible_range<'a>(
         &'a self,
         package: &'a PubGrubPackage,
-        range: &'a Range<Version>,
+        range: &'a Ranges<Version>,
     ) -> PackageRange<'a> {
         PackageRange::compatibility(package, range, Some(self))
     }
@@ -420,7 +420,7 @@ impl PubGrubReportFormatter<'_> {
     fn dependency_range<'a>(
         &'a self,
         package: &'a PubGrubPackage,
-        range: &'a Range<Version>,
+        range: &'a Ranges<Version>,
     ) -> PackageRange<'a> {
         PackageRange::dependency(package, range, Some(self))
     }
@@ -429,7 +429,7 @@ impl PubGrubReportFormatter<'_> {
     fn availability_range<'a>(
         &'a self,
         package: &'a PubGrubPackage,
-        range: &'a Range<Version>,
+        range: &'a Ranges<Version>,
     ) -> PackageRange<'a> {
         PackageRange::availability(package, range, Some(self))
     }
@@ -437,8 +437,8 @@ impl PubGrubReportFormatter<'_> {
     /// Format two external incompatibilities, combining them if possible.
     fn format_both_external(
         &self,
-        external1: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
-        external2: &External<PubGrubPackage, Range<Version>, UnavailableReason>,
+        external1: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        external2: &External<PubGrubPackage, Ranges<Version>, UnavailableReason>,
     ) -> String {
         match (external1, external2) {
             (
@@ -483,13 +483,13 @@ impl PubGrubReportFormatter<'_> {
     /// Simplify a [`Range`] of versions using the available versions for a package.
     fn simplify_set<'a>(
         &self,
-        set: &'a Range<Version>,
+        set: &'a Ranges<Version>,
         package: &PubGrubPackage,
-    ) -> Cow<'a, Range<Version>> {
+    ) -> Cow<'a, Ranges<Version>> {
         let Some(name) = package.name() else {
             return Cow::Borrowed(set);
         };
-        if set == &Range::full() {
+        if set == &Ranges::full() {
             Cow::Borrowed(set)
         } else {
             Cow::Owned(set.simplify(self.available_versions.get(name).into_iter().flatten()))
@@ -622,7 +622,7 @@ impl PubGrubReportFormatter<'_> {
     fn index_hints(
         package: &PubGrubPackage,
         name: &PackageName,
-        set: &Range<Version>,
+        set: &Ranges<Version>,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
         index_capabilities: &IndexCapabilities,
@@ -746,7 +746,7 @@ impl PubGrubReportFormatter<'_> {
         &self,
         package: &PubGrubPackage,
         name: &PackageName,
-        set: &Range<Version>,
+        set: &Ranges<Version>,
         selector: &CandidateSelector,
         markers: &ResolverMarkers,
         hints: &mut IndexSet<PubGrubHint>,
@@ -810,7 +810,7 @@ pub(crate) enum PubGrubHint {
     PrereleaseRequested {
         package: PubGrubPackage,
         // excluded from `PartialEq` and `Hash`
-        range: Range<Version>,
+        range: Ranges<Version>,
     },
     /// Requirements were unavailable due to lookups in the index being disabled and no extra
     /// index was provided via `--find-links`
@@ -869,9 +869,9 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         package: PubGrubPackage,
         // excluded from `PartialEq` and `Hash`
-        package_set: Range<Version>,
+        package_set: Ranges<Version>,
         // excluded from `PartialEq` and `Hash`
-        package_requires_python: Range<Version>,
+        package_requires_python: Ranges<Version>,
     },
     /// A non-workspace package depends on a workspace package, which is likely shadowing a
     /// transitive dependency.
@@ -886,7 +886,7 @@ pub(crate) enum PubGrubHint {
     UncheckedIndex {
         package: PubGrubPackage,
         // excluded from `PartialEq` and `Hash`
-        range: Range<Version>,
+        range: Ranges<Version>,
         // excluded from `PartialEq` and `Hash`
         found_index: IndexUrl,
         // excluded from `PartialEq` and `Hash`
@@ -1272,7 +1272,7 @@ impl std::fmt::Display for PubGrubHint {
 /// A [`Term`] and [`PubGrubPackage`] combination for display.
 struct PackageTerm<'a> {
     package: &'a PubGrubPackage,
-    term: &'a Term<Range<Version>>,
+    term: &'a Term<Ranges<Version>>,
     formatter: &'a PubGrubReportFormatter<'a>,
 }
 
@@ -1305,7 +1305,7 @@ impl PackageTerm<'_> {
     /// Create a new [`PackageTerm`] from a [`PubGrubPackage`] and a [`Term`].
     fn new<'a>(
         package: &'a PubGrubPackage,
-        term: &'a Term<Range<Version>>,
+        term: &'a Term<Ranges<Version>>,
         formatter: &'a PubGrubReportFormatter<'a>,
     ) -> PackageTerm<'a> {
         PackageTerm {
@@ -1344,7 +1344,7 @@ enum PackageRangeKind {
 #[derive(Debug)]
 struct PackageRange<'a> {
     package: &'a PubGrubPackage,
-    range: &'a Range<Version>,
+    range: &'a Ranges<Version>,
     kind: PackageRangeKind,
     formatter: Option<&'a PubGrubReportFormatter<'a>>,
 }
@@ -1352,7 +1352,7 @@ struct PackageRange<'a> {
 impl PackageRange<'_> {
     fn compatibility<'a>(
         package: &'a PubGrubPackage,
-        range: &'a Range<Version>,
+        range: &'a Ranges<Version>,
         formatter: Option<&'a PubGrubReportFormatter<'a>>,
     ) -> PackageRange<'a> {
         PackageRange {
@@ -1365,7 +1365,7 @@ impl PackageRange<'_> {
 
     fn dependency<'a>(
         package: &'a PubGrubPackage,
-        range: &'a Range<Version>,
+        range: &'a Ranges<Version>,
         formatter: Option<&'a PubGrubReportFormatter<'a>>,
     ) -> PackageRange<'a> {
         PackageRange {
@@ -1378,7 +1378,7 @@ impl PackageRange<'_> {
 
     fn availability<'a>(
         package: &'a PubGrubPackage,
-        range: &'a Range<Version>,
+        range: &'a Ranges<Version>,
         formatter: Option<&'a PubGrubReportFormatter<'a>>,
     ) -> PackageRange<'a> {
         PackageRange {
@@ -1421,10 +1421,10 @@ impl PackageRange<'_> {
 
 /// Create a range with improved segments for reporting the available versions for a package.
 fn update_availability_range(
-    range: &Range<Version>,
+    range: &Ranges<Version>,
     available_versions: &BTreeSet<Version>,
-) -> Range<Version> {
-    let mut new_range = Range::empty();
+) -> Ranges<Version> {
+    let mut new_range = Ranges::empty();
 
     // Construct an available range to help guide simplification. Note this is not strictly correct,
     // as the available range should have many holes in it. However, for this use-case it should be
@@ -1433,7 +1433,7 @@ fn update_availability_range(
         match (available_versions.first(), available_versions.last()) {
             // At least one version is available
             (Some(first), Some(last)) => {
-                let range = Range::<Version>::from_range_bounds((
+                let range = Ranges::<Version>::from_range_bounds((
                     Bound::Included(first.clone()),
                     Bound::Included(last.clone()),
                 ));
@@ -1447,12 +1447,12 @@ fn update_availability_range(
             // return `Some`.
             (Some(_), None) | (None, Some(_)) => unreachable!(),
             // No versions are available; nothing to do
-            (None, None) => return Range::empty(),
+            (None, None) => return Ranges::empty(),
         };
 
     for segment in range.iter() {
         let (lower, upper) = segment;
-        let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
+        let segment_range = Ranges::from_range_bounds((lower.clone(), upper.clone()));
 
         // Drop the segment if it's disjoint with the available range, e.g., if the segment is
         // `foo>999`, and the the available versions are all `<10` it's useless to show.
@@ -1467,12 +1467,12 @@ fn update_availability_range(
             // available range. This avoids replacing `foo<100` with `foo>1,<2`, instead using
             // `foo<2` to avoid extra noise.
             if matches!(lower, Bound::Unbounded) {
-                new_range = new_range.union(&Range::from_range_bounds((
+                new_range = new_range.union(&Ranges::from_range_bounds((
                     Bound::Unbounded,
                     Bound::Included(last_available.clone()),
                 )));
             } else if matches!(upper, Bound::Unbounded) {
-                new_range = new_range.union(&Range::from_range_bounds((
+                new_range = new_range.union(&Ranges::from_range_bounds((
                     Bound::Included(first_available.clone()),
                     Bound::Unbounded,
                 )));
@@ -1501,7 +1501,7 @@ fn update_availability_range(
         // Note this repeated-union construction is not particularly efficient, but there's not
         // better API exposed by PubGrub. Since we're just generating an error message, it's
         // probably okay, but we should investigate a better upstream API.
-        new_range = new_range.union(&Range::from_range_bounds((lower, upper)));
+        new_range = new_range.union(&Ranges::from_range_bounds((lower, upper)));
     }
 
     new_range
@@ -1574,7 +1574,7 @@ impl PackageRange<'_> {
     fn depends_on<'a>(
         &'a self,
         package: &'a PubGrubPackage,
-        range: &'a Range<Version>,
+        range: &'a Ranges<Version>,
     ) -> DependsOn<'a> {
         DependsOn {
             package: self,
@@ -1601,7 +1601,7 @@ impl<'a> DependsOn<'a> {
     /// Adds an additional dependency.
     ///
     /// Note this overwrites previous calls to `DependsOn::and`.
-    fn and(mut self, package: &'a PubGrubPackage, range: &'a Range<Version>) -> DependsOn<'a> {
+    fn and(mut self, package: &'a PubGrubPackage, range: &'a Ranges<Version>) -> DependsOn<'a> {
         self.dependency2 = Some(PackageRange {
             package,
             range,

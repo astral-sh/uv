@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use pubgrub::Range;
+use pubgrub::Ranges;
 use std::cmp::Ordering;
 use std::collections::Bound;
 use std::ops::Deref;
@@ -73,7 +73,7 @@ impl RequiresPython {
         let range = specifiers
             .into_iter()
             .map(PubGrubSpecifier::from_release_specifiers)
-            .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
+            .fold_ok(None, |range: Option<Ranges<Version>>, requires_python| {
                 if let Some(range) = range {
                     Some(range.intersection(&requires_python.into()))
                 } else {
@@ -509,9 +509,9 @@ impl Default for RequiresPythonRange {
     }
 }
 
-impl From<RequiresPythonRange> for Range<Version> {
+impl From<RequiresPythonRange> for Ranges<Version> {
     fn from(value: RequiresPythonRange) -> Self {
-        Range::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
+        Ranges::from_range_bounds::<(Bound<Version>, Bound<Version>), _>((
             value.0.into(),
             value.1.into(),
         ))

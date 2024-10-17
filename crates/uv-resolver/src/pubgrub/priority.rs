@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 
-use pubgrub::Range;
+use pubgrub::Ranges;
 use rustc_hash::FxHashMap;
 
 use crate::fork_urls::ForkUrls;
@@ -27,7 +27,7 @@ impl PubGrubPriorities {
     pub(crate) fn insert(
         &mut self,
         package: &PubGrubPackage,
-        version: &Range<Version>,
+        version: &Ranges<Version>,
         urls: &ForkUrls,
     ) {
         let next = self.0.len();
