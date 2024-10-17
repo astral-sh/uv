@@ -635,7 +635,7 @@ impl RegistryClient {
                         headers,
                     )
                     .await
-                    .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                    .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
                     let metadata =
