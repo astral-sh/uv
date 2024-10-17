@@ -577,6 +577,7 @@ fn sync_build_isolation_package() -> Result<()> {
     error: Failed to prepare distributions
       Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stderr]
     Traceback (most recent call last):
@@ -668,6 +669,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     error: Failed to prepare distributions
       Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stderr]
     Traceback (most recent call last):
@@ -687,6 +689,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     error: Failed to prepare distributions
       Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stderr]
     Traceback (most recent call last):

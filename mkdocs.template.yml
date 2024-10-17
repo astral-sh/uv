@@ -129,6 +129,7 @@ nav:
       - reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
+      - Build Failures: reference/build_failures.md
       - Resolver: reference/resolver-internals.md
       - Benchmarks: reference/benchmarks.md
       - Versioning: reference/versioning.md
