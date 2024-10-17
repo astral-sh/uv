@@ -9,7 +9,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use crate::resolver::ResolverMarkers;
 use crate::ResolveError;
 
-/// See [`crate::resolver::SolveState`].
+/// See [`crate::resolver::ForkState`].
 #[derive(Default, Debug, Clone)]
 pub(crate) struct ForkUrls(FxHashMap<PackageName, VerbatimParsedUrl>);
 

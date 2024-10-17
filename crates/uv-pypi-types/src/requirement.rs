@@ -318,8 +318,8 @@ pub enum RequirementSource {
     /// The requirement has a version specifier, such as `foo >1,<2`.
     Registry {
         specifier: VersionSpecifiers,
-        /// Choose a version from the index with this name.
-        index: Option<String>,
+        /// Choose a version from the index at the given URL.
+        index: Option<Url>,
     },
     // TODO(konsti): Track and verify version specifier from `project.dependencies` matches the
     // version in remote location.
@@ -607,7 +607,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<String>,
+        index: Option<Url>,
     },
 }
 
@@ -827,50 +827,4 @@ pub fn redact_git_credentials(url: &mut Url) {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use uv_pep508::{MarkerTree, VerbatimUrl};
-
-    use crate::{Requirement, RequirementSource};
-
-    #[test]
-    fn roundtrip() {
-        let requirement = Requirement {
-            name: "foo".parse().unwrap(),
-            extras: vec![],
-            marker: MarkerTree::TRUE,
-            source: RequirementSource::Registry {
-                specifier: ">1,<2".parse().unwrap(),
-                index: None,
-            },
-            origin: None,
-        };
-
-        let raw = toml::to_string(&requirement).unwrap();
-        let deserialized: Requirement = toml::from_str(&raw).unwrap();
-        assert_eq!(requirement, deserialized);
-
-        let path = if cfg!(windows) {
-            "C:\\home\\ferris\\foo"
-        } else {
-            "/home/ferris/foo"
-        };
-        let requirement = Requirement {
-            name: "foo".parse().unwrap(),
-            extras: vec![],
-            marker: MarkerTree::TRUE,
-            source: RequirementSource::Directory {
-                install_path: PathBuf::from(path),
-                editable: false,
-                r#virtual: false,
-                url: VerbatimUrl::from_absolute_path(path).unwrap(),
-            },
-            origin: None,
-        };
-
-        let raw = toml::to_string(&requirement).unwrap();
-        let deserialized: Requirement = toml::from_str(&raw).unwrap();
-        assert_eq!(requirement, deserialized);
-    }
-}
+mod tests;

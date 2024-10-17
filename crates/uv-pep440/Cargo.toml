@@ -14,19 +14,21 @@ authors = { workspace = true }
 [lib]
 name = "uv_pep440"
 crate-type = ["rlib", "cdylib"]
+doctest = false
 
 [lints]
 workspace = true
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-rkyv = { workspace = true }
+rkyv = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 unscanny = { workspace = true }
 
 [dev-dependencies]
 indoc = { version = "2.0.5" }
+tracing = { workspace = true }
 
 [features]
 # Match the API of the published crate, for compatibility.

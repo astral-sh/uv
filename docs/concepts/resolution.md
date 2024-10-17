@@ -357,6 +357,12 @@ To ensure reproducibility, messages for unsatisfiable resolutions will not menti
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
 as if they do not exist.
 
+!!! note
+
+    The `--exclude-newer` option is only applied to packages that are read from a registry (as opposed to, e.g., Git
+    dependencies). Further, when using the `uv pip` interface, uv will not downgrade previously installed packages
+    unless the `--reinstall` flag is provided, in which case uv will perform a new resolution.
+
 ## Source distribution
 
 [PEP 625](https://peps.python.org/pep-0625/) specifies that packages must distribute source

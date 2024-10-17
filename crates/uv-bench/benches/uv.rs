@@ -86,7 +86,8 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, LowerBound,
+        SourceStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -191,6 +192,7 @@ mod resolver {
             &build_options,
             &hashes,
             exclude_newer,
+            LowerBound::default(),
             sources,
             concurrency,
         );

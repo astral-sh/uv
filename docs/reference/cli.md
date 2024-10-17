@@ -54,7 +54,7 @@ Run a command or script.
 
 Ensures that the command runs in a Python environment.
 
-When used with a file ending in `.py`, the file will be treated as a script and run with a Python interpreter, i.e., `uv run file.py` is equivalent to `uv run python file.py`. If the script contains inline dependency metadata, it will be installed into an isolated, ephemeral environment. When used with `-`, the input will be read from stdin, and treated as a Python script.
+When used with a file ending in `.py` or an HTTP(S) URL, the file will be treated as a script and run with a Python interpreter, i.e., `uv run file.py` is equivalent to `uv run python file.py`. For URLs, the script is temporarily downloaded before execution. If the script contains inline dependency metadata, it will be installed into an isolated, ephemeral environment. When used with `-`, the input will be read from stdin, and treated as a Python script.
 
 When used in a project, the project environment will be created and updated before invoking the command.
 
@@ -65,7 +65,7 @@ Arguments following the command (or script) are not interpreted as arguments to 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv run [OPTIONS] <COMMAND>
+uv run [OPTIONS] [COMMAND]
 ```
 
 <h3 class="cli-reference">Options</h3>
@@ -116,6 +116,13 @@ uv run [OPTIONS] <COMMAND>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -135,7 +142,7 @@ uv run [OPTIONS] <COMMAND>
 
 <p>This option is only available when running in a project.</p>
 
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -155,9 +162,16 @@ uv run [OPTIONS] <COMMAND>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -169,7 +183,7 @@ uv run [OPTIONS] <COMMAND>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -440,6 +454,36 @@ uv init [OPTIONS] [PATH]
 
 <p>By default, an application is not intended to be built and distributed as a Python package. The <code>--package</code> option can be used to create an application that is distributable, e.g., if you want to distribute a command-line interface via PyPI.</p>
 
+</dd><dt><code>--author-from</code> <i>author-from</i></dt><dd><p>Fill in the <code>authors</code> field in the <code>pyproject.toml</code>.</p>
+
+<p>By default, uv will attempt to infer the author information from some sources (e.g., Git) (<code>auto</code>). Use <code>--author-from git</code> to only infer from Git configuration. Use <code>--author-from none</code> to avoid inferring the author information.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Fetch the author information from some sources (e.g., Git) automatically</li>
+
+<li><code>git</code>:  Fetch the author information from Git configuration only</li>
+
+<li><code>none</code>:  Do not infer the author information</li>
+</ul>
+</dd><dt><code>--build-backend</code> <i>build-backend</i></dt><dd><p>Initialize a build-backend of choice for the project</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>hatch</code>:  Use <a href='https://pypi.org/project/hatchling'>hatchling</a> as the project build backend</li>
+
+<li><code>flit</code>:  Use <a href='https://pypi.org/project/flit-core'>flit-core</a> as the project build backend</li>
+
+<li><code>pdm</code>:  Use <a href='https://pypi.org/project/pdm-backend'>pdm-backend</a> as the project build backend</li>
+
+<li><code>setuptools</code>:  Use <a href='https://pypi.org/project/setuptools'>setuptools</a> as the project build backend</li>
+
+<li><code>maturin</code>:  Use <a href='https://pypi.org/project/maturin'>maturin</a> as the project build backend</li>
+
+<li><code>scikit</code>:  Use <a href='https://pypi.org/project/scikit-build-core'>scikit-build-core</a> as the project build backend</li>
+</ul>
 </dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$HOME/Library/Caches/uv</code> on macOS, <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
@@ -659,6 +703,13 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--dev</code></dt><dd><p>Add the requirements as development dependencies</p>
 
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
@@ -680,7 +731,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>To add this dependency to an optional group in the current project instead, see <code>--optional</code>.</p>
 
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -700,9 +751,16 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -714,7 +772,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -985,6 +1043,13 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--dev</code></dt><dd><p>Remove the packages from the development dependencies</p>
 
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
@@ -998,7 +1063,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -1018,9 +1083,16 @@ uv remove [OPTIONS] <PACKAGES>...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -1032,7 +1104,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -1287,6 +1359,13 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -1304,7 +1383,7 @@ uv sync [OPTIONS]
 
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
 
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -1324,9 +1403,16 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -1338,7 +1424,7 @@ uv sync [OPTIONS]
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -1597,6 +1683,13 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -1608,7 +1701,7 @@ uv lock [OPTIONS]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -1626,9 +1719,16 @@ uv lock [OPTIONS]
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -1640,7 +1740,7 @@ uv lock [OPTIONS]
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -1873,6 +1973,13 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -1888,7 +1995,7 @@ uv export [OPTIONS]
 
 <p>May be provided more than once.</p>
 
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -1918,9 +2025,16 @@ uv export [OPTIONS]
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -1932,7 +2046,7 @@ uv export [OPTIONS]
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -2028,6 +2142,8 @@ uv export [OPTIONS]
 <p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
 
 </dd><dt><code>--no-hashes</code></dt><dd><p>Omit hashes in the generated output</p>
+
+</dd><dt><code>--no-header</code></dt><dd><p>Exclude the comment header at the top of the generated output file</p>
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
@@ -2183,6 +2299,13 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--depth</code>, <code>-d</code> <i>depth</i></dt><dd><p>Maximum display depth of the dependency tree</p>
 
 <p>[default: 255]</p>
@@ -2197,7 +2320,7 @@ uv tree [OPTIONS]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -2217,9 +2340,16 @@ uv tree [OPTIONS]
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -2231,7 +2361,7 @@ uv tree [OPTIONS]
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -2313,6 +2443,8 @@ uv tree [OPTIONS]
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
 </dd><dt><code>--no-dedupe</code></dt><dd><p>Do not de-duplicate repeated dependencies. Usually, when a package has already displayed its dependencies, further occurrences will not re-display its dependencies, and will include a (*) to indicate it has already been shown. This flag will cause those duplicates to be repeated</p>
+
+</dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
@@ -2558,6 +2690,13 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -2569,7 +2708,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -2589,9 +2728,16 @@ uv tool run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -2603,7 +2749,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -2847,6 +2993,13 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -2858,7 +3011,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -2878,9 +3031,16 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -2892,7 +3052,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -3132,6 +3292,13 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -3143,7 +3310,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -3159,9 +3326,16 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -3173,7 +3347,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -4685,6 +4859,13 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>Used to reflect custom build scripts and commands that wrap <code>uv pip compile</code>.</p>
 
 <p>May also be set with the <code>UV_CUSTOM_COMPILE_COMMAND</code> environment variable.</p>
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -4708,7 +4889,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -4726,9 +4907,16 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -4740,7 +4928,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -5084,6 +5272,13 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>This is equivalent to pip&#8217;s <code>--constraint</code> option.</p>
 
 <p>May also be set with the <code>UV_CONSTRAINT</code> environment variable.</p>
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -5097,7 +5292,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -5113,9 +5308,16 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -5127,7 +5329,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -5421,6 +5623,13 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>This is equivalent to pip&#8217;s <code>--constraint</code> option.</p>
 
 <p>May also be set with the <code>UV_CONSTRAINT</code> environment variable.</p>
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -5431,6 +5640,10 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--editable</code>, <code>-e</code> <i>editable</i></dt><dd><p>Install the editable package based on the provided local file path</p>
 
+</dd><dt><code>--exact</code></dt><dd><p>Perform an exact sync, removing extraneous packages.</p>
+
+<p>By default, installing will make the minimum necessary changes to satisfy the requirements. When enabled, uv will update the environment to exactly match the requirements, removing packages that are not included in the requirements.</p>
+
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -5440,7 +5653,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -5456,9 +5669,16 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -5470,7 +5690,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -6599,6 +6819,13 @@ uv venv [OPTIONS] [PATH]
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -6610,7 +6837,7 @@ uv venv [OPTIONS] [PATH]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -6626,9 +6853,16 @@ uv venv [OPTIONS] [PATH]
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -6640,7 +6874,7 @@ uv venv [OPTIONS] [PATH]
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -6847,6 +7081,13 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -6858,7 +7099,7 @@ uv build [OPTIONS] [SRC]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+</dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -6874,9 +7115,16 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attack can upload a malicious package under the same name to a secondary.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -6888,7 +7136,7 @@ uv build [OPTIONS] [SRC]
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
 </ul>
-</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+</dd><dt><code>--index-url</code>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
@@ -7201,9 +7449,9 @@ uv publish [OPTIONS] [FILES]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint.</p>
+</dd><dt><code>--publish-url</code> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint (not the index URL).</p>
 
-<p>Note that this typically differs from the index URL.</p>
+<p>Note that there are typically different URLs for index access (e.g., <code>https:://.../simple</code>) and index upload.</p>
 
 <p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
 

@@ -44,6 +44,11 @@ impl<T> ForkMap<T> {
         !self.get(package_name, markers).is_empty()
     }
 
+    /// Returns `true` if the map contains any values for a package.
+    pub(crate) fn contains_key(&self, package_name: &PackageName) -> bool {
+        self.0.contains_key(package_name)
+    }
+
     /// Returns a list of values associated with a package that are compatible with the given fork.
     ///
     /// Compatibility implies that the markers on the requirement that contained this value

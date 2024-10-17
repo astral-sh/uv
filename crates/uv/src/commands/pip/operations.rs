@@ -134,13 +134,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !unnamed.is_empty() {
             requirements.extend(
                 NamedRequirementsResolver::new(
-                    unnamed,
                     hasher,
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
-                .resolve()
+                .resolve(unnamed.into_iter())
                 .await?,
             );
         }
@@ -148,14 +147,13 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
-                source_trees,
                 extras,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve()
+            .resolve(source_trees.iter().map(PathBuf::as_path))
             .await?;
 
             // If we resolved a single project, use it for the project name.
@@ -219,13 +217,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !unnamed.is_empty() {
             overrides.extend(
                 NamedRequirementsResolver::new(
-                    unnamed,
                     hasher,
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
-                .resolve()
+                .resolve(unnamed.into_iter())
                 .await?,
             );
         }
@@ -770,10 +767,7 @@ pub(crate) enum Error {
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
-    Lookahead(#[from] uv_requirements::LookaheadError),
-
-    #[error(transparent)]
-    Named(#[from] uv_requirements::NamedRequirementsError),
+    Requirements(#[from] uv_requirements::Error),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),

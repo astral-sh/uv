@@ -1,23 +1,23 @@
 #![allow(clippy::single_match_else)]
 
-use anstream::eprint;
-use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::Path;
+
+use anstream::eprint;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    DependencyMetadata, IndexLocations, NameRequirementSpecification,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
@@ -26,9 +26,10 @@ use uv_pep440::Version;
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
+use uv_requirements::ExtrasResolver;
 use uv_resolver::{
-    FlatIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython, ResolverManifest,
-    ResolverMarkers, SatisfiesResult,
+    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
+    ResolverManifest, ResolverMarkers, SatisfiesResult,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -38,6 +39,7 @@ use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, Summary
 use crate::commands::project::{
     find_requires_python, ProjectError, ProjectInterpreter, SharedState,
 };
+use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
@@ -99,6 +101,9 @@ pub(crate) async fn lock(
     .await?
     .into_interpreter();
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Perform the lock operation.
     match do_safe_lock(
         locked,
@@ -106,6 +111,8 @@ pub(crate) async fn lock(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        LowerBound::Warn,
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -151,6 +158,8 @@ pub(super) async fn do_safe_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
+    bounds: LowerBound,
+    state: &SharedState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -158,17 +167,6 @@ pub(super) async fn do_safe_lock(
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
-    // Use isolate state for universal resolution. When resolving, we don't enforce that the
-    // prioritized distributions match the current platform. So if we lock here, then try to
-    // install from the same state, and we end up performing a resolution during the sync (i.e.,
-    // for the build dependencies of a source distribution), we may try to use incompatible
-    // distributions.
-    // TODO(charlie): In universal resolution, we should still track version compatibility! We
-    // just need to accept versions that are platform-incompatible. That would also make us more
-    // likely to (e.g.) download a wheel that we'll end up using when installing. This would
-    // make it safe to share the state.
-    let state = SharedState::default();
-
     if frozen {
         // Read the existing lockfile, but don't attempt to lock the project.
         let existing = read(workspace)
@@ -187,7 +185,8 @@ pub(super) async fn do_safe_lock(
             interpreter,
             Some(existing),
             settings,
-            &state,
+            bounds,
+            state,
             logger,
             connectivity,
             concurrency,
@@ -213,7 +212,8 @@ pub(super) async fn do_safe_lock(
             interpreter,
             existing,
             settings,
-            &state,
+            bounds,
+            state,
             logger,
             connectivity,
             concurrency,
@@ -238,6 +238,7 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     settings: ResolverSettingsRef<'_>,
+    bounds: LowerBound,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
     connectivity: Connectivity,
@@ -333,7 +334,9 @@ async fn do_lock(
         if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-            warn_user_once!("The workspace `requires-python` value does not contain a lower bound: `{requires_python}`. Set a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+            warn_user_once!("The workspace `requires-python` value (`{requires_python}`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+        } else if requires_python.is_exact_without_patch() {
+            warn_user_once!("The workspace `requires-python` value (`{requires_python}`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `{requires_python}.0`). Did you mean `{requires_python}.*`?");
         }
         requires_python
     } else {
@@ -368,8 +371,10 @@ async fn do_lock(
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -413,7 +418,9 @@ async fn do_lock(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
@@ -437,6 +444,7 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer,
+        bounds,
         sources,
         concurrency,
     );
@@ -460,12 +468,19 @@ async fn do_lock(
             build_options,
             upgrade,
             &options,
+            &hasher,
+            &state.index,
             &database,
             printer,
         )
         .await
         {
             Ok(result) => Some(result),
+            Err(ProjectError::Lock(err)) if err.is_resolution() => {
+                // Resolver errors are not recoverable, as such errors can leave the resolver in a
+                // broken state. Specifically, tasks that fail with an error can be left as pending.
+                return Err(ProjectError::Lock(err));
+            }
             Err(err) => {
                 warn_user!("Failed to validate existing lockfile: {err}");
                 None
@@ -487,8 +502,6 @@ async fn do_lock(
         // The lockfile did not contain enough information to obtain a resolution, fallback
         // to a fresh resolve.
         _ => {
-            debug!("Starting clean resolution");
-
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
@@ -534,8 +547,11 @@ async fn do_lock(
 
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
-                workspace
-                    .members_requirements()
+                ExtrasResolver::new(&hasher, &state.index, database)
+                    .with_reporter(ResolverReporter::from(printer))
+                    .resolve(workspace.members_requirements())
+                    .await?
+                    .into_iter()
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
@@ -635,6 +651,8 @@ impl ValidatedLock {
         build_options: &BuildOptions,
         upgrade: &Upgrade,
         options: &Options,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -759,6 +777,8 @@ impl ValidatedLock {
                 indexes,
                 build_options,
                 interpreter.tags()?,
+                hasher,
+                index,
                 database,
             )
             .await?
@@ -839,12 +859,6 @@ impl ValidatedLock {
             SatisfiesResult::MissingLocalIndex(name, version, index) => {
                 debug!(
                     "Ignoring existing lockfile due to missing local index: `{name}` `{version}` from `{}`", index.display()
-                );
-                Ok(Self::Preferable(lock))
-            }
-            SatisfiesResult::MissingMetadata(name, version) => {
-                debug!(
-                    "Ignoring existing lockfile due to missing metadata for: `{name}=={version}`"
                 );
                 Ok(Self::Preferable(lock))
             }

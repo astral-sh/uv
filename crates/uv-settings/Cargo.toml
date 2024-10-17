@@ -9,6 +9,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
@@ -25,6 +28,7 @@ uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars", "clap"] }
 uv-resolver = { workspace = true, features = ["schemars", "clap"] }
+uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true }

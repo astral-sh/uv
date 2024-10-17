@@ -8,6 +8,7 @@ pub use crate::path::*;
 
 pub mod cachedir;
 mod path;
+pub mod which;
 
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
@@ -324,10 +325,10 @@ impl LockedFile {
                 Ok(Self(file))
             }
             Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures
-                // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
-                // the error when it is `WouldBlock`, which is expected and noisy otherwise.
-                trace!("Try lock error: {err:?}");
+                // Log error code and enum kind to help debugging more exotic failures.
+                if err.kind() != std::io::ErrorKind::WouldBlock {
+                    debug!("Try lock error: {err:?}");
+                }
                 info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),

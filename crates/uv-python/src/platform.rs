@@ -46,6 +46,8 @@ impl FromStr for Libc {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "gnu" => Ok(Self::Some(target_lexicon::Environment::Gnu)),
+            "gnueabi" => Ok(Self::Some(target_lexicon::Environment::Gnueabi)),
+            "gnueabihf" => Ok(Self::Some(target_lexicon::Environment::Gnueabihf)),
             "musl" => Ok(Self::Some(target_lexicon::Environment::Musl)),
             "none" => Ok(Self::None),
             _ => Err(Error::UnknownLibc(s.to_string())),

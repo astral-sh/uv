@@ -6,15 +6,16 @@ use rustc_hash::FxHashSet;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, trace, warn};
-
+use uv_distribution_types::Index;
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use uv_pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::pyproject::{
-    Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
+    Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources, ToolUvWorkspace,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -79,6 +80,10 @@ pub struct Workspace {
     ///
     /// This table is overridden by the project sources.
     sources: BTreeMap<PackageName, Sources>,
+    /// The index table from the workspace `pyproject.toml`.
+    ///
+    /// This table is overridden by the project indexes.
+    indexes: Vec<Index>,
     /// The `pyproject.toml` of the workspace root.
     pyproject_toml: PyProjectToml,
 }
@@ -266,23 +271,12 @@ impl Workspace {
     /// Returns the set of requirements that include all packages in the workspace.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.values().filter_map(|member| {
-            let project = member.pyproject_toml.project.as_ref()?;
-            // Extract the extras available in the project.
-            let extras = project
-                .optional_dependencies
-                .as_ref()
-                .map(|optional_dependencies| {
-                    // It's a `BTreeMap` so the keys are sorted.
-                    optional_dependencies.keys().cloned().collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-
             let url = VerbatimUrl::from_absolute_path(&member.root)
                 .expect("path is valid URL")
                 .with_given(member.root.to_string_lossy());
             Some(Requirement {
-                name: project.name.clone(),
-                extras,
+                name: member.pyproject_toml.project.as_ref()?.name.clone(),
+                extras: vec![],
                 marker: MarkerTree::TRUE,
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {
@@ -413,7 +407,7 @@ impl Workspace {
     pub fn venv(&self) -> PathBuf {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
         fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
-            let value = std::env::var_os("UV_PROJECT_ENVIRONMENT")?;
+            let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
 
             if value.is_empty() {
                 return None;
@@ -430,7 +424,7 @@ impl Workspace {
 
         // Resolve the `VIRTUAL_ENV` variable, if any.
         fn from_virtual_env_variable() -> Option<PathBuf> {
-            let value = std::env::var_os("VIRTUAL_ENV")?;
+            let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
 
             if value.is_empty() {
                 return None;
@@ -499,20 +493,9 @@ impl Workspace {
         &self.sources
     }
 
-    /// Returns an iterator over all sources in the workspace.
-    pub fn iter_sources(&self) -> impl Iterator<Item = &Source> {
-        self.packages
-            .values()
-            .filter_map(|member| {
-                member.pyproject_toml().tool.as_ref().and_then(|tool| {
-                    tool.uv
-                        .as_ref()
-                        .and_then(|uv| uv.sources.as_ref())
-                        .map(ToolUvSources::inner)
-                        .map(|sources| sources.values().flat_map(Sources::iter))
-                })
-            })
-            .flatten()
+    /// The index table from the workspace `pyproject.toml`.
+    pub fn indexes(&self) -> &[Index] {
+        &self.indexes
     }
 
     /// The `pyproject.toml` of the workspace.
@@ -729,11 +712,18 @@ impl Workspace {
             .and_then(|uv| uv.sources)
             .map(ToolUvSources::into_inner)
             .unwrap_or_default();
+        let workspace_indexes = workspace_pyproject_toml
+            .tool
+            .clone()
+            .and_then(|tool| tool.uv)
+            .and_then(|uv| uv.index)
+            .unwrap_or_default();
 
         Ok(Workspace {
             install_path: workspace_root,
             packages: workspace_members,
             sources: workspace_sources,
+            indexes: workspace_indexes,
             pyproject_toml: workspace_pyproject_toml,
         })
     }
@@ -1035,6 +1025,7 @@ impl ProjectWorkspace {
                     // There may be package sources, but we don't need to duplicate them into the
                     // workspace sources.
                     sources: BTreeMap::default(),
+                    indexes: Vec::default(),
                     pyproject_toml: project_pyproject_toml.clone(),
                 },
             });
@@ -1534,834 +1525,4 @@ impl<'env> From<&'env VirtualProject> for InstallTarget<'env> {
 
 #[cfg(test)]
 #[cfg(unix)] // Avoid path escaping for the unit tests
-mod tests {
-    use std::env;
-
-    use std::path::Path;
-
-    use anyhow::Result;
-    use assert_fs::fixture::ChildPath;
-    use assert_fs::prelude::*;
-    use insta::assert_json_snapshot;
-
-    use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
-
-    async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
-        let root_dir = env::current_dir()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("scripts")
-            .join("workspaces");
-        let project =
-            ProjectWorkspace::discover(&root_dir.join(folder), &DiscoveryOptions::default())
-                .await
-                .unwrap();
-        let root_escaped = regex::escape(root_dir.to_string_lossy().as_ref());
-        (project, root_escaped)
-    }
-
-    async fn temporary_test(folder: &Path) -> (ProjectWorkspace, String) {
-        let project = ProjectWorkspace::discover(folder, &DiscoveryOptions::default())
-            .await
-            .unwrap();
-        let root_escaped = regex::escape(folder.to_string_lossy().as_ref());
-        (project, root_escaped)
-    }
-
-    #[tokio::test]
-    async fn albatross_in_example() {
-        let (project, root_escaped) =
-            workspace_test("albatross-in-example/examples/bird-feeder").await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-        assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-        {
-          "project_root": "[ROOT]/albatross-in-example/examples/bird-feeder",
-          "project_name": "bird-feeder",
-          "workspace": {
-            "install_path": "[ROOT]/albatross-in-example/examples/bird-feeder",
-            "packages": {
-              "bird-feeder": {
-                "root": "[ROOT]/albatross-in-example/examples/bird-feeder",
-                "project": {
-                  "name": "bird-feeder",
-                  "version": "1.0.0",
-                  "requires-python": ">=3.12",
-                  "dependencies": [
-                    "anyio>=4.3.0,<5"
-                  ],
-                  "optional-dependencies": null
-                },
-                "pyproject_toml": "[PYPROJECT_TOML]"
-              }
-            },
-            "sources": {},
-            "pyproject_toml": {
-              "project": {
-                "name": "bird-feeder",
-                "version": "1.0.0",
-                "requires-python": ">=3.12",
-                "dependencies": [
-                  "anyio>=4.3.0,<5"
-                ],
-                "optional-dependencies": null
-              },
-              "tool": null
-            }
-          }
-        }
-        "###);
-        });
-    }
-
-    #[tokio::test]
-    async fn albatross_project_in_excluded() {
-        let (project, root_escaped) =
-            workspace_test("albatross-project-in-excluded/excluded/bird-feeder").await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-            assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-            {
-              "project_root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
-              "project_name": "bird-feeder",
-              "workspace": {
-                "install_path": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
-                "packages": {
-                  "bird-feeder": {
-                    "root": "[ROOT]/albatross-project-in-excluded/excluded/bird-feeder",
-                    "project": {
-                      "name": "bird-feeder",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "anyio>=4.3.0,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  }
-                },
-                "sources": {},
-                "pyproject_toml": {
-                  "project": {
-                    "name": "bird-feeder",
-                    "version": "1.0.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
-                      "anyio>=4.3.0,<5"
-                    ],
-                    "optional-dependencies": null
-                  },
-                  "tool": null
-                }
-              }
-            }
-            "###);
-        });
-    }
-
-    #[tokio::test]
-    async fn albatross_root_workspace() {
-        let (project, root_escaped) = workspace_test("albatross-root-workspace").await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-            assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-            {
-              "project_root": "[ROOT]/albatross-root-workspace",
-              "project_name": "albatross",
-              "workspace": {
-                "install_path": "[ROOT]/albatross-root-workspace",
-                "packages": {
-                  "albatross": {
-                    "root": "[ROOT]/albatross-root-workspace",
-                    "project": {
-                      "name": "albatross",
-                      "version": "0.1.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "bird-feeder",
-                        "tqdm>=4,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  },
-                  "bird-feeder": {
-                    "root": "[ROOT]/albatross-root-workspace/packages/bird-feeder",
-                    "project": {
-                      "name": "bird-feeder",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.8",
-                      "dependencies": [
-                        "anyio>=4.3.0,<5",
-                        "seeds"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  },
-                  "seeds": {
-                    "root": "[ROOT]/albatross-root-workspace/packages/seeds",
-                    "project": {
-                      "name": "seeds",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "idna==3.6"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  }
-                },
-                "sources": {
-                  "bird-feeder": [
-                    {
-                      "workspace": true
-                    }
-                  ]
-                },
-                "pyproject_toml": {
-                  "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
-                      "bird-feeder",
-                      "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
-                  },
-                  "tool": {
-                    "uv": {
-                      "sources": {
-                        "bird-feeder": [
-                          {
-                            "workspace": true
-                          }
-                        ]
-                      },
-                      "workspace": {
-                        "members": [
-                          "packages/*"
-                        ],
-                        "exclude": null
-                      },
-                      "managed": null,
-                      "package": null,
-                      "dev-dependencies": null,
-                      "environments": null,
-                      "override-dependencies": null,
-                      "constraint-dependencies": null
-                    }
-                  }
-                }
-              }
-            }
-            "###);
-        });
-    }
-
-    #[tokio::test]
-    async fn albatross_virtual_workspace() {
-        let (project, root_escaped) =
-            workspace_test("albatross-virtual-workspace/packages/albatross").await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-            assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-            {
-              "project_root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
-              "project_name": "albatross",
-              "workspace": {
-                "install_path": "[ROOT]/albatross-virtual-workspace",
-                "packages": {
-                  "albatross": {
-                    "root": "[ROOT]/albatross-virtual-workspace/packages/albatross",
-                    "project": {
-                      "name": "albatross",
-                      "version": "0.1.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "bird-feeder",
-                        "tqdm>=4,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  },
-                  "bird-feeder": {
-                    "root": "[ROOT]/albatross-virtual-workspace/packages/bird-feeder",
-                    "project": {
-                      "name": "bird-feeder",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "anyio>=4.3.0,<5",
-                        "seeds"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  },
-                  "seeds": {
-                    "root": "[ROOT]/albatross-virtual-workspace/packages/seeds",
-                    "project": {
-                      "name": "seeds",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "idna==3.6"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  }
-                },
-                "sources": {},
-                "pyproject_toml": {
-                  "project": null,
-                  "tool": {
-                    "uv": {
-                      "sources": null,
-                      "workspace": {
-                        "members": [
-                          "packages/*"
-                        ],
-                        "exclude": null
-                      },
-                      "managed": null,
-                      "package": null,
-                      "dev-dependencies": null,
-                      "environments": null,
-                      "override-dependencies": null,
-                      "constraint-dependencies": null
-                    }
-                  }
-                }
-              }
-            }
-            "###);
-        });
-    }
-
-    #[tokio::test]
-    async fn albatross_just_project() {
-        let (project, root_escaped) = workspace_test("albatross-just-project").await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-            assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-            {
-              "project_root": "[ROOT]/albatross-just-project",
-              "project_name": "albatross",
-              "workspace": {
-                "install_path": "[ROOT]/albatross-just-project",
-                "packages": {
-                  "albatross": {
-                    "root": "[ROOT]/albatross-just-project",
-                    "project": {
-                      "name": "albatross",
-                      "version": "0.1.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "tqdm>=4,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  }
-                },
-                "sources": {},
-                "pyproject_toml": {
-                  "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
-                      "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
-                  },
-                  "tool": null
-                }
-              }
-            }
-            "###);
-        });
-    }
-    #[tokio::test]
-    async fn exclude_package() -> Result<()> {
-        let root = tempfile::TempDir::new()?;
-        let root = ChildPath::new(root.path());
-
-        // Create the root.
-        root.child("pyproject.toml").write_str(
-            r#"
-                [project]
-                name = "albatross"
-                version = "0.1.0"
-                requires-python = ">=3.12"
-                dependencies = ["tqdm>=4,<5"]
-
-                [tool.uv.workspace]
-                members = ["packages/*"]
-                exclude = ["packages/bird-feeder"]
-
-                [build-system]
-                requires = ["hatchling"]
-                build-backend = "hatchling.build"
-                "#,
-        )?;
-        root.child("albatross").child("__init__.py").touch()?;
-
-        // Create an included package (`seeds`).
-        root.child("packages")
-            .child("seeds")
-            .child("pyproject.toml")
-            .write_str(
-                r#"
-                [project]
-                name = "seeds"
-                version = "1.0.0"
-                requires-python = ">=3.12"
-                dependencies = ["idna==3.6"]
-
-                [build-system]
-                requires = ["hatchling"]
-                build-backend = "hatchling.build"
-                "#,
-            )?;
-        root.child("packages")
-            .child("seeds")
-            .child("seeds")
-            .child("__init__.py")
-            .touch()?;
-
-        // Create an excluded package (`bird-feeder`).
-        root.child("packages")
-            .child("bird-feeder")
-            .child("pyproject.toml")
-            .write_str(
-                r#"
-                [project]
-                name = "bird-feeder"
-                version = "1.0.0"
-                requires-python = ">=3.12"
-                dependencies = ["anyio>=4.3.0,<5"]
-
-                [build-system]
-                requires = ["hatchling"]
-                build-backend = "hatchling.build"
-                "#,
-            )?;
-        root.child("packages")
-            .child("bird-feeder")
-            .child("bird_feeder")
-            .child("__init__.py")
-            .touch()?;
-
-        let (project, root_escaped) = temporary_test(root.as_ref()).await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-            assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-            {
-              "project_root": "[ROOT]",
-              "project_name": "albatross",
-              "workspace": {
-                "install_path": "[ROOT]",
-                "packages": {
-                  "albatross": {
-                    "root": "[ROOT]",
-                    "project": {
-                      "name": "albatross",
-                      "version": "0.1.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "tqdm>=4,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  },
-                  "seeds": {
-                    "root": "[ROOT]/packages/seeds",
-                    "project": {
-                      "name": "seeds",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "idna==3.6"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  }
-                },
-                "sources": {},
-                "pyproject_toml": {
-                  "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
-                      "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
-                  },
-                  "tool": {
-                    "uv": {
-                      "sources": null,
-                      "workspace": {
-                        "members": [
-                          "packages/*"
-                        ],
-                        "exclude": [
-                          "packages/bird-feeder"
-                        ]
-                      },
-                      "managed": null,
-                      "package": null,
-                      "dev-dependencies": null,
-                      "environments": null,
-                      "override-dependencies": null,
-                      "constraint-dependencies": null
-                    }
-                  }
-                }
-              }
-            }
-            "###);
-        });
-
-        // Rewrite the members to both include and exclude `bird-feeder` by name.
-        root.child("pyproject.toml").write_str(
-            r#"
-                [project]
-                name = "albatross"
-                version = "0.1.0"
-                requires-python = ">=3.12"
-                dependencies = ["tqdm>=4,<5"]
-
-                [tool.uv.workspace]
-                members = ["packages/seeds", "packages/bird-feeder"]
-                exclude = ["packages/bird-feeder"]
-
-                [build-system]
-                requires = ["hatchling"]
-                build-backend = "hatchling.build"
-                "#,
-        )?;
-
-        // `bird-feeder` should still be excluded.
-        let (project, root_escaped) = temporary_test(root.as_ref()).await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-            assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-            {
-              "project_root": "[ROOT]",
-              "project_name": "albatross",
-              "workspace": {
-                "install_path": "[ROOT]",
-                "packages": {
-                  "albatross": {
-                    "root": "[ROOT]",
-                    "project": {
-                      "name": "albatross",
-                      "version": "0.1.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "tqdm>=4,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  },
-                  "seeds": {
-                    "root": "[ROOT]/packages/seeds",
-                    "project": {
-                      "name": "seeds",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "idna==3.6"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  }
-                },
-                "sources": {},
-                "pyproject_toml": {
-                  "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
-                      "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
-                  },
-                  "tool": {
-                    "uv": {
-                      "sources": null,
-                      "workspace": {
-                        "members": [
-                          "packages/seeds",
-                          "packages/bird-feeder"
-                        ],
-                        "exclude": [
-                          "packages/bird-feeder"
-                        ]
-                      },
-                      "managed": null,
-                      "package": null,
-                      "dev-dependencies": null,
-                      "environments": null,
-                      "override-dependencies": null,
-                      "constraint-dependencies": null
-                    }
-                  }
-                }
-              }
-            }
-            "###);
-        });
-
-        // Rewrite the exclusion to use the top-level directory (`packages`).
-        root.child("pyproject.toml").write_str(
-            r#"
-                [project]
-                name = "albatross"
-                version = "0.1.0"
-                requires-python = ">=3.12"
-                dependencies = ["tqdm>=4,<5"]
-
-                [tool.uv.workspace]
-                members = ["packages/seeds", "packages/bird-feeder"]
-                exclude = ["packages"]
-
-                [build-system]
-                requires = ["hatchling"]
-                build-backend = "hatchling.build"
-                "#,
-        )?;
-
-        // `bird-feeder` should now be included.
-        let (project, root_escaped) = temporary_test(root.as_ref()).await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-            assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-            {
-              "project_root": "[ROOT]",
-              "project_name": "albatross",
-              "workspace": {
-                "install_path": "[ROOT]",
-                "packages": {
-                  "albatross": {
-                    "root": "[ROOT]",
-                    "project": {
-                      "name": "albatross",
-                      "version": "0.1.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "tqdm>=4,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  },
-                  "bird-feeder": {
-                    "root": "[ROOT]/packages/bird-feeder",
-                    "project": {
-                      "name": "bird-feeder",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "anyio>=4.3.0,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  },
-                  "seeds": {
-                    "root": "[ROOT]/packages/seeds",
-                    "project": {
-                      "name": "seeds",
-                      "version": "1.0.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "idna==3.6"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  }
-                },
-                "sources": {},
-                "pyproject_toml": {
-                  "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
-                      "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
-                  },
-                  "tool": {
-                    "uv": {
-                      "sources": null,
-                      "workspace": {
-                        "members": [
-                          "packages/seeds",
-                          "packages/bird-feeder"
-                        ],
-                        "exclude": [
-                          "packages"
-                        ]
-                      },
-                      "managed": null,
-                      "package": null,
-                      "dev-dependencies": null,
-                      "environments": null,
-                      "override-dependencies": null,
-                      "constraint-dependencies": null
-                    }
-                  }
-                }
-              }
-            }
-            "###);
-        });
-
-        // Rewrite the exclusion to use the top-level directory with a glob (`packages/*`).
-        root.child("pyproject.toml").write_str(
-            r#"
-                [project]
-                name = "albatross"
-                version = "0.1.0"
-                requires-python = ">=3.12"
-                dependencies = ["tqdm>=4,<5"]
-
-                [tool.uv.workspace]
-                members = ["packages/seeds", "packages/bird-feeder"]
-                exclude = ["packages/*"]
-
-                [build-system]
-                requires = ["hatchling"]
-                build-backend = "hatchling.build"
-                "#,
-        )?;
-
-        // `bird-feeder` and `seeds` should now be excluded.
-        let (project, root_escaped) = temporary_test(root.as_ref()).await;
-        let filters = vec![(root_escaped.as_str(), "[ROOT]")];
-        insta::with_settings!({filters => filters}, {
-            assert_json_snapshot!(
-            project,
-            {
-                ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
-            },
-            @r###"
-            {
-              "project_root": "[ROOT]",
-              "project_name": "albatross",
-              "workspace": {
-                "install_path": "[ROOT]",
-                "packages": {
-                  "albatross": {
-                    "root": "[ROOT]",
-                    "project": {
-                      "name": "albatross",
-                      "version": "0.1.0",
-                      "requires-python": ">=3.12",
-                      "dependencies": [
-                        "tqdm>=4,<5"
-                      ],
-                      "optional-dependencies": null
-                    },
-                    "pyproject_toml": "[PYPROJECT_TOML]"
-                  }
-                },
-                "sources": {},
-                "pyproject_toml": {
-                  "project": {
-                    "name": "albatross",
-                    "version": "0.1.0",
-                    "requires-python": ">=3.12",
-                    "dependencies": [
-                      "tqdm>=4,<5"
-                    ],
-                    "optional-dependencies": null
-                  },
-                  "tool": {
-                    "uv": {
-                      "sources": null,
-                      "workspace": {
-                        "members": [
-                          "packages/seeds",
-                          "packages/bird-feeder"
-                        ],
-                        "exclude": [
-                          "packages/*"
-                        ]
-                      },
-                      "managed": null,
-                      "package": null,
-                      "dev-dependencies": null,
-                      "environments": null,
-                      "override-dependencies": null,
-                      "constraint-dependencies": null
-                    }
-                  }
-                }
-              }
-            }
-            "###);
-        });
-
-        Ok(())
-    }
-}
+mod tests;

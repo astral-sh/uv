@@ -30,6 +30,7 @@ use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFile
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{Metadata23, MetadataError};
+use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
 pub use trusted_publishing::TrustedPublishingToken;
@@ -81,8 +82,12 @@ pub enum PublishSendError {
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
     #[error("Upload failed with status {0}")]
     StatusNoBody(StatusCode, #[source] reqwest::Error),
-    #[error("Upload failed with status code {0}: {1}")]
+    #[error("Upload failed with status code {0}. Server says: {1}")]
     Status(StatusCode, String),
+    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?")]
+    MethodNotAllowedNoBody,
+    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}")]
+    MethodNotAllowed(String),
     /// The registry returned a "403 Forbidden".
     #[error("Permission denied (status code {0}): {1}")]
     PermissionDenied(StatusCode, String),
@@ -193,9 +198,15 @@ impl PublishSendError {
     }
 }
 
+/// Collect the source distributions and wheels for publishing.
+///
+/// Returns the path, the raw filename and the parsed filename. The raw filename is a fixup for
+/// <https://github.com/astral-sh/uv/issues/8030> caused by
+/// <https://github.com/pypa/setuptools/issues/3777> in combination with
+/// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
 pub fn files_for_publishing(
     paths: Vec<String>,
-) -> Result<Vec<(PathBuf, DistFilename)>, PublishError> {
+) -> Result<Vec<(PathBuf, String, DistFilename)>, PublishError> {
     let mut seen = FxHashSet::default();
     let mut files = Vec::new();
     for path in paths {
@@ -207,15 +218,19 @@ pub fn files_for_publishing(
             if !seen.insert(dist.clone()) {
                 continue;
             }
-            let Some(filename) = dist.file_name().and_then(|filename| filename.to_str()) else {
+            let Some(filename) = dist
+                .file_name()
+                .and_then(|filename| filename.to_str())
+                .map(ToString::to_string)
+            else {
                 continue;
             };
             if filename == ".gitignore" {
                 continue;
             }
-            let filename = DistFilename::try_from_normalized_filename(filename)
+            let dist_filename = DistFilename::try_from_normalized_filename(&filename)
                 .ok_or_else(|| PublishError::InvalidFilename(dist.clone()))?;
-            files.push((dist, filename));
+            files.push((dist, filename, dist_filename));
         }
     }
     // TODO(konsti): Should we sort those files, e.g. wheels before sdists because they are more
@@ -243,7 +258,7 @@ pub async fn check_trusted_publishing(
                 return Ok(None);
             }
             // If we aren't in GitHub Actions, we can't use trusted publishing.
-            if env::var("GITHUB_ACTIONS") != Ok("true".to_string()) {
+            if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
                 return Ok(None);
             }
             // We could check for credentials from the keyring or netrc the auth middleware first, but
@@ -262,7 +277,7 @@ pub async fn check_trusted_publishing(
         }
         TrustedPublishing::Always => {
             debug!("Using trusted publishing for GitHub Actions");
-            if env::var("GITHUB_ACTIONS") != Ok("true".to_string()) {
+            if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
                 warn_user_once!(
                     "Trusted publishing was requested, but you're not in GitHub Actions."
                 );
@@ -282,6 +297,7 @@ pub async fn check_trusted_publishing(
 /// Implements a custom retry flow since the request isn't cloneable.
 pub async fn upload(
     file: &Path,
+    raw_filename: &str,
     filename: &DistFilename,
     registry: &Url,
     client: &ClientWithMiddleware,
@@ -300,6 +316,7 @@ pub async fn upload(
         attempt += 1;
         let (request, idx) = build_request(
             file,
+            raw_filename,
             filename,
             registry,
             client,
@@ -484,6 +501,7 @@ async fn form_metadata(
 /// Returns the request and the reporter progress bar id.
 async fn build_request(
     file: &Path,
+    raw_filename: &str,
     filename: &DistFilename,
     registry: &Url,
     client: &ClientWithMiddleware,
@@ -505,7 +523,8 @@ async fn build_request(
     // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
     // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
     let file_reader = Body::wrap_stream(ReaderStream::new(reader));
-    let part = Part::stream(file_reader).file_name(filename.to_string());
+    // See [`files_for_publishing`] on `raw_filename`
+    let part = Part::stream(file_reader).file_name(raw_filename.to_string());
     form = form.part("content", part);
 
     let url = if let Some(username) = username {
@@ -577,18 +596,32 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|content_type| content_type.to_str().ok())
         .map(ToString::to_string);
-    let upload_error = response
-        .bytes()
-        .await
-        .map_err(|err| PublishSendError::StatusNoBody(status_code, err))?;
+    let upload_error = response.bytes().await.map_err(|err| {
+        if status_code == StatusCode::METHOD_NOT_ALLOWED {
+            PublishSendError::MethodNotAllowedNoBody
+        } else {
+            PublishSendError::StatusNoBody(status_code, err)
+        }
+    })?;
     let upload_error = String::from_utf8_lossy(&upload_error);
 
-    trace!("Response content for non-200 for {registry}: {upload_error}");
+    trace!("Response content for non-200 response for {registry}: {upload_error}");
 
     debug!("Upload error response: {upload_error}");
+
+    // That's most likely the simple index URL, not the upload URL.
+    if status_code == StatusCode::METHOD_NOT_ALLOWED {
+        return Err(PublishSendError::MethodNotAllowed(
+            PublishSendError::extract_error_message(
+                upload_error.to_string(),
+                content_type.as_deref(),
+            ),
+        ));
+    }
+
     // Detect existing file errors the way twine does.
     // https://github.com/pypa/twine/blob/c512bbf166ac38239e58545a39155285f8747a7b/twine/commands/upload.py#L34-L72
-    if status_code == 403 {
+    if status_code == StatusCode::FORBIDDEN {
         if upload_error.contains("overwrite artifact") {
             // Artifactory (https://jfrog.com/artifactory/)
             Ok(false)
@@ -601,10 +634,10 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
                 ),
             ))
         }
-    } else if status_code == 409 {
+    } else if status_code == StatusCode::CONFLICT {
         // conflict, pypiserver (https://pypi.org/project/pypiserver)
         Ok(false)
-    } else if status_code == 400
+    } else if status_code == StatusCode::BAD_REQUEST
         && (upload_error.contains("updating asset") || upload_error.contains("already been taken"))
     {
         // Nexus Repository OSS (https://www.sonatype.com/nexus-repository-oss)
@@ -622,275 +655,4 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::{build_request, form_metadata, Reporter};
-    use insta::{assert_debug_snapshot, assert_snapshot};
-    use itertools::Itertools;
-    use std::path::PathBuf;
-    use std::sync::Arc;
-    use url::Url;
-    use uv_client::BaseClientBuilder;
-    use uv_distribution_filename::DistFilename;
-
-    struct DummyReporter;
-
-    impl Reporter for DummyReporter {
-        fn on_progress(&self, _name: &str, _id: usize) {}
-        fn on_download_start(&self, _name: &str, _size: Option<u64>) -> usize {
-            0
-        }
-        fn on_download_progress(&self, _id: usize, _inc: u64) {}
-        fn on_download_complete(&self, _id: usize) {}
-    }
-
-    /// Snapshot the data we send for an upload request for a source distribution.
-    #[tokio::test]
-    async fn upload_request_source_dist() {
-        let filename = "tqdm-999.0.0.tar.gz";
-        let file = PathBuf::from("../../scripts/links/").join(filename);
-        let filename = DistFilename::try_from_normalized_filename(filename).unwrap();
-
-        let form_metadata = form_metadata(&file, &filename).await.unwrap();
-
-        let formatted_metadata = form_metadata
-            .iter()
-            .map(|(k, v)| format!("{k}: {v}"))
-            .join("\n");
-        assert_snapshot!(&formatted_metadata, @r###"
-        :action: file_upload
-        sha256_digest: 89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
-        protocol_version: 1
-        metadata_version: 2.3
-        name: tqdm
-        version: 999.0.0
-        filetype: sdist
-        pyversion: source
-        description: # tqdm
-
-        [![PyPI - Version](https://img.shields.io/pypi/v/tqdm.svg)](https://pypi.org/project/tqdm)
-        [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/tqdm.svg)](https://pypi.org/project/tqdm)
-
-        -----
-
-        **Table of Contents**
-
-        - [Installation](#installation)
-        - [License](#license)
-
-        ## Installation
-
-        ```console
-        pip install tqdm
-        ```
-
-        ## License
-
-        `tqdm` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
-
-        description_content_type: text/markdown
-        author_email: Charlie Marsh <charlie.r.marsh@gmail.com>
-        requires_python: >=3.8
-        classifiers: Development Status :: 4 - Beta
-        classifiers: Programming Language :: Python
-        classifiers: Programming Language :: Python :: 3.8
-        classifiers: Programming Language :: Python :: 3.9
-        classifiers: Programming Language :: Python :: 3.10
-        classifiers: Programming Language :: Python :: 3.11
-        classifiers: Programming Language :: Python :: 3.12
-        classifiers: Programming Language :: Python :: Implementation :: CPython
-        classifiers: Programming Language :: Python :: Implementation :: PyPy
-        project_urls: Documentation, https://github.com/unknown/tqdm#readme
-        project_urls: Issues, https://github.com/unknown/tqdm/issues
-        project_urls: Source, https://github.com/unknown/tqdm
-        "###);
-
-        let (request, _) = build_request(
-            &file,
-            &filename,
-            &Url::parse("https://example.org/upload").unwrap(),
-            &BaseClientBuilder::new().build().client(),
-            Some("ferris"),
-            Some("F3RR!S"),
-            &form_metadata,
-            Arc::new(DummyReporter),
-        )
-        .await
-        .unwrap();
-
-        insta::with_settings!({
-            filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
-        }, {
-            assert_debug_snapshot!(&request, @r###"
-            RequestBuilder {
-                inner: RequestBuilder {
-                    method: POST,
-                    url: Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "example.org",
-                            ),
-                        ),
-                        port: None,
-                        path: "/upload",
-                        query: None,
-                        fragment: None,
-                    },
-                    headers: {
-                        "content-type": "multipart/form-data; boundary=[...]",
-                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                        "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
-                    },
-                },
-                ..
-            }
-            "###);
-        });
-    }
-
-    /// Snapshot the data we send for an upload request for a wheel.
-    #[tokio::test]
-    async fn upload_request_wheel() {
-        let filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
-        let file = PathBuf::from("../../scripts/links/").join(filename);
-        let filename = DistFilename::try_from_normalized_filename(filename).unwrap();
-
-        let form_metadata = form_metadata(&file, &filename).await.unwrap();
-
-        let formatted_metadata = form_metadata
-            .iter()
-            .map(|(k, v)| format!("{k}: {v}"))
-            .join("\n");
-        assert_snapshot!(&formatted_metadata, @r###"
-        :action: file_upload
-        sha256_digest: 0d88ca657bc6b64995ca416e0c59c71af85cc10015d940fa446c42a8b485ee1c
-        protocol_version: 1
-        metadata_version: 2.1
-        name: tqdm
-        version: 4.66.1
-        filetype: bdist_wheel
-        pyversion: py3
-        summary: Fast, Extensible Progress Meter
-        description_content_type: text/x-rst
-        maintainer_email: tqdm developers <devs@tqdm.ml>
-        license: MPL-2.0 AND MIT
-        keywords: progressbar,progressmeter,progress,bar,meter,rate,eta,console,terminal,time
-        requires_python: >=3.7
-        classifiers: Development Status :: 5 - Production/Stable
-        classifiers: Environment :: Console
-        classifiers: Environment :: MacOS X
-        classifiers: Environment :: Other Environment
-        classifiers: Environment :: Win32 (MS Windows)
-        classifiers: Environment :: X11 Applications
-        classifiers: Framework :: IPython
-        classifiers: Framework :: Jupyter
-        classifiers: Intended Audience :: Developers
-        classifiers: Intended Audience :: Education
-        classifiers: Intended Audience :: End Users/Desktop
-        classifiers: Intended Audience :: Other Audience
-        classifiers: Intended Audience :: System Administrators
-        classifiers: License :: OSI Approved :: MIT License
-        classifiers: License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)
-        classifiers: Operating System :: MacOS
-        classifiers: Operating System :: MacOS :: MacOS X
-        classifiers: Operating System :: Microsoft
-        classifiers: Operating System :: Microsoft :: MS-DOS
-        classifiers: Operating System :: Microsoft :: Windows
-        classifiers: Operating System :: POSIX
-        classifiers: Operating System :: POSIX :: BSD
-        classifiers: Operating System :: POSIX :: BSD :: FreeBSD
-        classifiers: Operating System :: POSIX :: Linux
-        classifiers: Operating System :: POSIX :: SunOS/Solaris
-        classifiers: Operating System :: Unix
-        classifiers: Programming Language :: Python
-        classifiers: Programming Language :: Python :: 3
-        classifiers: Programming Language :: Python :: 3.7
-        classifiers: Programming Language :: Python :: 3.8
-        classifiers: Programming Language :: Python :: 3.9
-        classifiers: Programming Language :: Python :: 3.10
-        classifiers: Programming Language :: Python :: 3.11
-        classifiers: Programming Language :: Python :: 3 :: Only
-        classifiers: Programming Language :: Python :: Implementation
-        classifiers: Programming Language :: Python :: Implementation :: IronPython
-        classifiers: Programming Language :: Python :: Implementation :: PyPy
-        classifiers: Programming Language :: Unix Shell
-        classifiers: Topic :: Desktop Environment
-        classifiers: Topic :: Education :: Computer Aided Instruction (CAI)
-        classifiers: Topic :: Education :: Testing
-        classifiers: Topic :: Office/Business
-        classifiers: Topic :: Other/Nonlisted Topic
-        classifiers: Topic :: Software Development :: Build Tools
-        classifiers: Topic :: Software Development :: Libraries
-        classifiers: Topic :: Software Development :: Libraries :: Python Modules
-        classifiers: Topic :: Software Development :: Pre-processors
-        classifiers: Topic :: Software Development :: User Interfaces
-        classifiers: Topic :: System :: Installation/Setup
-        classifiers: Topic :: System :: Logging
-        classifiers: Topic :: System :: Monitoring
-        classifiers: Topic :: System :: Shells
-        classifiers: Topic :: Terminals
-        classifiers: Topic :: Utilities
-        requires_dist: colorama ; platform_system == "Windows"
-        requires_dist: pytest >=6 ; extra == 'dev'
-        requires_dist: pytest-cov ; extra == 'dev'
-        requires_dist: pytest-timeout ; extra == 'dev'
-        requires_dist: pytest-xdist ; extra == 'dev'
-        requires_dist: ipywidgets >=6 ; extra == 'notebook'
-        requires_dist: slack-sdk ; extra == 'slack'
-        requires_dist: requests ; extra == 'telegram'
-        project_urls: homepage, https://tqdm.github.io
-        project_urls: repository, https://github.com/tqdm/tqdm
-        project_urls: changelog, https://tqdm.github.io/releases
-        project_urls: wiki, https://github.com/tqdm/tqdm/wiki
-        "###);
-
-        let (request, _) = build_request(
-            &file,
-            &filename,
-            &Url::parse("https://example.org/upload").unwrap(),
-            &BaseClientBuilder::new().build().client(),
-            Some("ferris"),
-            Some("F3RR!S"),
-            &form_metadata,
-            Arc::new(DummyReporter),
-        )
-        .await
-        .unwrap();
-
-        insta::with_settings!({
-            filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
-        }, {
-            assert_debug_snapshot!(&request, @r###"
-            RequestBuilder {
-                inner: RequestBuilder {
-                    method: POST,
-                    url: Url {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "example.org",
-                            ),
-                        ),
-                        port: None,
-                        path: "/upload",
-                        query: None,
-                        fragment: None,
-                    },
-                    headers: {
-                        "content-type": "multipart/form-data; boundary=[...]",
-                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                        "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
-                    },
-                },
-                ..
-            }
-            "###);
-        });
-    }
-}
+mod tests;

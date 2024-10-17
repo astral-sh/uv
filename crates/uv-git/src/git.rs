@@ -4,6 +4,7 @@
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
+use std::sync::LazyLock;
 
 use crate::sha::GitOid;
 use crate::GitSha;
@@ -11,13 +12,18 @@ use anyhow::{anyhow, Context, Result};
 use cargo_util::{paths, ProcessBuilder};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
+
 use tracing::debug;
 use url::Url;
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 /// A file indicates that if present, `git reset` has been done and a repo
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".ok";
+
+/// A global cache of the result of `which git`.
+pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
 
 /// A reference to commit or commit-ish.
 #[derive(
@@ -157,7 +163,7 @@ impl GitRepository {
     /// Opens an existing Git repository at `path`.
     pub(crate) fn open(path: &Path) -> Result<GitRepository> {
         // Make sure there is a Git repository at the specified path.
-        ProcessBuilder::new("git")
+        ProcessBuilder::new(GIT.as_ref()?)
             .arg("rev-parse")
             .cwd(path)
             .exec_with_output()?;
@@ -176,7 +182,7 @@ impl GitRepository {
         // opts.external_template(false);
 
         // Initialize the repository.
-        ProcessBuilder::new("git")
+        ProcessBuilder::new(GIT.as_ref()?)
             .arg("init")
             .cwd(path)
             .exec_with_output()?;
@@ -188,7 +194,7 @@ impl GitRepository {
 
     /// Parses the object ID of the given `refname`.
     fn rev_parse(&self, refname: &str) -> Result<GitOid> {
-        let result = ProcessBuilder::new("git")
+        let result = ProcessBuilder::new(GIT.as_ref()?)
             .arg("rev-parse")
             .arg(refname)
             .cwd(&self.path)
@@ -294,7 +300,7 @@ impl GitDatabase {
 
     /// Get a short OID for a `revision`, usually 7 chars or more if ambiguous.
     pub(crate) fn to_short_id(&self, revision: GitOid) -> Result<String> {
-        let output = ProcessBuilder::new("git")
+        let output = ProcessBuilder::new(GIT.as_ref()?)
             .arg("rev-parse")
             .arg("--short")
             .arg(revision.as_str())
@@ -371,7 +377,7 @@ impl GitCheckout {
         // Perform a local clone of the repository, which will attempt to use
         // hardlinks to set up the repository. This should speed up the clone operation
         // quite a bit if it works.
-        ProcessBuilder::new("git")
+        ProcessBuilder::new(GIT.as_ref()?)
             .arg("clone")
             .arg("--local")
             // Make sure to pass the local file path and not a file://... url. If given a url,
@@ -417,7 +423,7 @@ impl GitCheckout {
         debug!("reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
-        ProcessBuilder::new("git")
+        ProcessBuilder::new(GIT.as_ref()?)
             .arg("reset")
             .arg("--hard")
             .arg(self.revision.as_str())
@@ -425,7 +431,7 @@ impl GitCheckout {
             .exec_with_output()?;
 
         // Update submodules (`git submodule update --recursive`).
-        ProcessBuilder::new("git")
+        ProcessBuilder::new(GIT.as_ref()?)
             .arg("submodule")
             .arg("update")
             .arg("--recursive")
@@ -591,7 +597,7 @@ fn fetch_with_cli(
     refspecs: &[String],
     tags: bool,
 ) -> Result<()> {
-    let mut cmd = ProcessBuilder::new("git");
+    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
     cmd.arg("fetch");
     if tags {
         cmd.arg("--tags");
@@ -604,13 +610,13 @@ fn fetch_with_cli(
         // rebase`), the GIT_DIR is set by git and will point to the wrong
         // location (this takes precedence over the cwd). Make sure this is
         // unset so git will look at cwd for the repo.
-        .env_remove("GIT_DIR")
+        .env_remove(EnvVars::GIT_DIR)
         // The reset of these may not be necessary, but I'm including them
         // just to be extra paranoid and avoid any issues.
-        .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_INDEX_FILE")
-        .env_remove("GIT_OBJECT_DIRECTORY")
-        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove(EnvVars::GIT_WORK_TREE)
+        .env_remove(EnvVars::GIT_INDEX_FILE)
+        .env_remove(EnvVars::GIT_OBJECT_DIRECTORY)
+        .env_remove(EnvVars::GIT_ALTERNATE_OBJECT_DIRECTORIES)
         .cwd(&repo.path);
 
     // We capture the output to avoid streaming it to the user's console during clones.
