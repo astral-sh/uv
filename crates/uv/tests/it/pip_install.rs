@@ -237,6 +237,7 @@ dependencies = ["flask==1.0.x"]
     ----- stderr -----
     error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stdout]
     configuration error: `project.dependencies[0]` must be pep508
@@ -2335,7 +2336,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: project @ file://[TEMP_DIR]/
+      Caused by: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Failed to resolve requirements from `setup.py` build
       Caused by: No solution found when resolving: `setuptools>=40.8.0`
       Caused by: Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
@@ -3995,6 +3996,7 @@ fn no_build_isolation() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stderr]
     Traceback (most recent call last):
@@ -4064,6 +4066,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stderr]
     Traceback (most recent call last):
@@ -5731,7 +5734,7 @@ fn require_hashes_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -6216,7 +6219,7 @@ fn verify_hashes_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -7025,6 +7028,7 @@ fn install_build_isolation_package() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stderr]
     Traceback (most recent call last):
@@ -7277,7 +7281,7 @@ fn sklearn() {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r#"
+    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7285,6 +7289,7 @@ fn sklearn() {
     ----- stderr -----
       × Failed to download and build `sklearn==0.0.post12`
       ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+          See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
           [stderr]
           The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
@@ -7304,6 +7309,6 @@ fn sklearn() {
           https://github.com/scikit-learn/sklearn-pypi-package
 
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
-    "#
+    "###
     );
 }

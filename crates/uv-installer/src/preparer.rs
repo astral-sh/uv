@@ -11,7 +11,8 @@ use uv_cache::Cache;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_distribution_types::{
-    BuildableSource, CachedDist, Dist, Hashed, Identifier, Name, RemoteSource,
+    BuildableSource, BuiltDist, CachedDist, Dist, Hashed, Identifier, Name, RemoteSource,
+    SourceDist,
 };
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy, InFlight};
@@ -24,8 +25,12 @@ pub enum Error {
     NoBinary(PackageName),
     #[error("Failed to unzip wheel: {0}")]
     Unzip(Dist, #[source] Box<uv_extract::Error>),
-    #[error("Failed to fetch wheel: {0}")]
-    Fetch(Dist, #[source] Box<uv_distribution::Error>),
+    #[error("Failed to download `{0}`")]
+    Fetch(BuiltDist, #[source] Box<uv_distribution::Error>),
+    #[error("Failed to download and build `{0}`")]
+    FetchAndBuild(SourceDist, #[source] Box<uv_distribution::Error>),
+    #[error("Failed to build `{0}`")]
+    Build(SourceDist, #[source] Box<uv_distribution::Error>),
     /// Should not occur; only seen when another task panicked.
     #[error("The task executor is broken, did some other task panic?")]
     Join(#[from] JoinError),
@@ -150,20 +155,36 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed_local()
-                .map_err(|err| Error::Fetch(dist.clone(), Box::new(err)))
+                .map_err(|err| match &dist {
+                    Dist::Built(dist) => Error::Fetch(dist.clone(), Box::new(err)),
+                    Dist::Source(dist) => {
+                        if dist.is_local() {
+                            Error::Build(dist.clone(), Box::new(err))
+                        } else {
+                            Error::FetchAndBuild(dist.clone(), Box::new(err))
+                        }
+                    }
+                })
                 .await
                 .and_then(|wheel: LocalWheel| {
                     if wheel.satisfies(policy) {
                         Ok(wheel)
                     } else {
-                        Err(Error::Fetch(
-                            dist.clone(),
-                            Box::new(uv_distribution::Error::hash_mismatch(
-                                dist.to_string(),
-                                policy.digests(),
-                                wheel.hashes(),
-                            )),
-                        ))
+                        let err = uv_distribution::Error::hash_mismatch(
+                            dist.to_string(),
+                            policy.digests(),
+                            wheel.hashes(),
+                        );
+                        Err(match &dist {
+                            Dist::Built(dist) => Error::Fetch(dist.clone(), Box::new(err)),
+                            Dist::Source(dist) => {
+                                if dist.is_local() {
+                                    Error::Build(dist.clone(), Box::new(err))
+                                } else {
+                                    Error::FetchAndBuild(dist.clone(), Box::new(err))
+                                }
+                            }
+                        })
                     }
                 })
                 .map(CachedDist::from);

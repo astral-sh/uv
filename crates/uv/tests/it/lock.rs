@@ -5298,7 +5298,7 @@ fn lock_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: idna==3.6
+      Caused by: Failed to download `idna==3.6`
       Caused by: Hash mismatch for `idna==3.6`
 
     Expected:
@@ -6143,7 +6143,7 @@ fn lock_redact_https() -> Result<()> {
 
     ----- stderr -----
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: Failed to download `iniconfig==2.0.0`
       Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     "###);
 
@@ -6155,7 +6155,7 @@ fn lock_redact_https() -> Result<()> {
 
     ----- stderr -----
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: Failed to download `iniconfig==2.0.0`
       Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     "###);
 
@@ -6194,7 +6194,7 @@ fn lock_redact_https() -> Result<()> {
 
     ----- stderr -----
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: iniconfig==2.0.0
+      Caused by: Failed to download `iniconfig==2.0.0`
       Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     "###);
 
