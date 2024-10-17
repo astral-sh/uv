@@ -97,7 +97,10 @@ def get_new_version(project_name: str) -> str:
     # pick a version that doesn't exist on any target yet
     versions = set()
     for url in project_urls[project_name]:
-        data = httpx.get(url).text
+        try:
+            data = httpx.get(url).text
+        except httpx.HTTPError as err:
+            raise RuntimeError(f"Failed to fetch {url}") from err
         href_text = "<a[^>]+>([^<>]+)</a>"
         for filename in list(m.group(1) for m in re.finditer(href_text, data)):
             if filename.endswith(".whl"):
