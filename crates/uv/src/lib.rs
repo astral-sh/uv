@@ -117,17 +117,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         None
     } else if matches!(&*cli.command, Commands::Tool(_)) {
         // For commands that operate at the user-level, ignore local configuration.
-        FilesystemOptions::user()?
+        FilesystemOptions::system()?.combine(FilesystemOptions::user()?)
     } else if let Ok(workspace) =
         Workspace::discover(&project_dir, &DiscoveryOptions::default()).await
     {
         let project = FilesystemOptions::find(workspace.install_path())?;
+        let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
-        project.combine(user)
+        project.combine(system).combine(user)
     } else {
         let project = FilesystemOptions::find(&project_dir)?;
+        let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
-        project.combine(user)
+        project.combine(system).combine(user)
     };
 
     // Parse the external command, if necessary.
