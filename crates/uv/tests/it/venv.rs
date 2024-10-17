@@ -51,6 +51,28 @@ fn create_venv() {
 }
 
 #[test]
+fn create_venv_313() {
+    let context = TestContext::new_with_versions(&["3.13"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.13"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
 fn create_venv_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
