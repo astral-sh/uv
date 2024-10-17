@@ -56,6 +56,7 @@ impl Error {
         match &*self.kind {
             // The server doesn't support range requests (as reported by the `HEAD` check).
             ErrorKind::AsyncHttpRangeReader(
+                _,
                 AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
             ) => {
                 return true;
@@ -63,6 +64,7 @@ impl Error {
 
             // The server doesn't support range requests (it doesn't return the necessary headers).
             ErrorKind::AsyncHttpRangeReader(
+                _,
                 AsyncHttpRangeReaderError::ContentLengthMissing
                 | AsyncHttpRangeReaderError::ContentRangeMissing,
             ) => {
@@ -187,8 +189,8 @@ pub enum ErrorKind {
     #[error("Received some unexpected HTML from {url}")]
     BadHtml { source: html::Error, url: Url },
 
-    #[error(transparent)]
-    AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
+    #[error("Failed to read zip with range requests: `{0}`")]
+    AsyncHttpRangeReader(Url, #[source] AsyncHttpRangeReaderError),
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),
