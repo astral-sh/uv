@@ -13,8 +13,8 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
-    InstallOptions, LowerBound, SourceStrategy,
+    Concurrency, Constraints, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
+    GroupsSpecification, InstallOptions, LowerBound, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -807,22 +807,25 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = DevSpecification::from(DevMode::Exclude);
+            let dev = DevGroupsSpecification::from(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = DevSpecification::from(DevMode::Include);
+            let dev = DevGroupsSpecification::from(DevMode::Include);
             (extras, dev)
         }
         DependencyType::Optional(ref extra_name) => {
             let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
-            let dev = DevSpecification::from(DevMode::Exclude);
+            let dev = DevGroupsSpecification::from(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Group(ref group_name) => {
             let extras = ExtrasSpecification::None;
-            let dev = DevSpecification::Include(vec![group_name.clone()]);
+            let dev =
+                DevGroupsSpecification::from(GroupsSpecification::Include(
+                    vec![group_name.clone()],
+                ));
             (extras, dev)
         }
     };
