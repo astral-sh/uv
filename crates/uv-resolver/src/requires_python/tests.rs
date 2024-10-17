@@ -156,3 +156,25 @@ fn is_exact_without_patch() {
         assert_eq!(requires_python.is_exact_without_patch(), expected);
     }
 }
+
+#[test]
+fn is_tilde_exact_without_patch() {
+    let test_cases = [
+        ("~=3.11", true),
+        ("~=2.7", true),
+        ("~=3.10, <3.11", false),
+        ("~=3.10, <=3.11", false),
+        ("~=3.11.0", false),
+        ("==3.12", false),
+        (">=3.12", false),
+        (">3.10", false),
+        ("<4.0", false),
+        (">=3.10, <3.11", false),
+        ("", false),
+    ];
+    for (version, expected) in test_cases {
+        let version_specifiers = VersionSpecifiers::from_str(version).unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+        assert_eq!(requires_python.is_tilde_exact_without_patch(), expected);
+    }
+}

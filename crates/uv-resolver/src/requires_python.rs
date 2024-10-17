@@ -5,7 +5,7 @@ use std::collections::Bound;
 use std::ops::Deref;
 
 use uv_distribution_filename::WheelFilename;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_pubgrub::PubGrubSpecifier;
 
@@ -258,6 +258,15 @@ impl RequiresPython {
             }
             _ => false,
         }
+    }
+
+    /// Returns `true` if the `Requires-Python` specifier is set to a tilde-equal version
+    /// without specifying a patch version. (e.g. `~=3.11`)
+    pub fn is_tilde_exact_without_patch(&self) -> bool {
+        self.specifiers.len() == 1
+            && self.specifiers.iter().next().map_or(false, |spec| {
+                *spec.operator() == Operator::TildeEqual && spec.version().release().len() == 2
+            })
     }
 
     /// Returns the [`RequiresPythonBound`] truncated to the major and minor version.
