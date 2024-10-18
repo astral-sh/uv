@@ -6,16 +6,17 @@
 //!
 //! Then lowers them into a dependency specification.
 
-use glob::Pattern;
-use owo_colors::OwoColorize;
-use serde::de::SeqAccess;
-use serde::{de::IntoDeserializer, Deserialize, Deserializer, Serialize};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{collections::BTreeMap, mem};
+
+use glob::Pattern;
+use owo_colors::OwoColorize;
+use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
+
 use uv_distribution_types::Index;
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
@@ -45,7 +46,7 @@ pub struct PyProjectToml {
     /// Tool-specific metadata.
     pub tool: Option<Tool>,
     /// Non-project dependency groups, as defined in PEP 735.
-    pub dependency_groups: Option<BTreeMap<GroupName, Vec<String>>>,
+    pub dependency_groups: Option<BTreeMap<GroupName, Vec<DependencyGroupSpecifier>>>,
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
@@ -111,6 +112,73 @@ impl Eq for PyProjectToml {}
 impl AsRef<[u8]> for PyProjectToml {
     fn as_ref(&self) -> &[u8] {
         self.raw.as_bytes()
+    }
+}
+
+/// A specifier item in a [PEP 735](https://peps.python.org/pep-0735/) Dependency Group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+pub enum DependencyGroupSpecifier {
+    /// A PEP 508-compatible requirement string.
+    Requirement(String),
+    /// A reference to another dependency group.
+    IncludeGroup {
+        /// The name of the group to include.
+        include_group: GroupName,
+    },
+    /// A Dependency Object Specifier.
+    Object(BTreeMap<String, String>),
+}
+
+impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = DependencyGroupSpecifier;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string or a map with the `include-group` key")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(DependencyGroupSpecifier::Requirement(value.to_owned()))
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut map_data = BTreeMap::new();
+                while let Some((key, value)) = map.next_entry()? {
+                    map_data.insert(key, value);
+                }
+
+                if map_data.is_empty() {
+                    return Err(serde::de::Error::custom("missing field `include-group`"));
+                }
+
+                if let Some(include_group) = map_data
+                    .get("include-group")
+                    .map(String::as_str)
+                    .map(GroupName::from_str)
+                    .transpose()
+                    .map_err(serde::de::Error::custom)?
+                {
+                    Ok(DependencyGroupSpecifier::IncludeGroup { include_group })
+                } else {
+                    Ok(DependencyGroupSpecifier::Object(map_data))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
     }
 }
 
