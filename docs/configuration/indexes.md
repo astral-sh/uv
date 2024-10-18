@@ -150,7 +150,7 @@ Alternatively, credentials can be embedded directly in the index definition:
 ```toml
 [[tool.uv.index]]
 name = "internal"
-url = "https://public:koala@https://pypi-proxy.corp.dev/simple"
+url = "https://public:koala@pypi-proxy.corp.dev/simple"
 ```
 
 For security purposes, credentials are _never_ stored in the `uv.lock` file; as such, uv _must_ have

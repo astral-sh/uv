@@ -6501,7 +6501,7 @@ fn lock_redact_index_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
 
         [[package]]
         name = "iniconfig"
