@@ -51,6 +51,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{diagnostics, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
+use dotenvy::dotenv_override;
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -72,6 +73,7 @@ pub(crate) async fn run(
     editable: EditableMode,
     python: Option<String>,
     settings: ResolverInstallerSettings,
+    load_dotenv: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -867,6 +869,14 @@ pub(crate) async fn run(
 
     debug!("Running `{command}`");
     let mut process = command.as_command(interpreter);
+
+    // Load the `.env` into the environment if the flag or ENV is set.
+    // This is done before setting the PATH or VIRTUAL_ENV environment variables
+    // to ensure they are not overwritten
+    if load_dotenv {
+        debug!("Loading `.env` file");
+        dotenv_override().ok();
+    };
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
