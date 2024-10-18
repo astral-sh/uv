@@ -1629,9 +1629,13 @@ where
         Ok(code) => code.into(),
         Err(err) => {
             let mut causes = err.chain();
-            eprintln!("{}: {}", "error".red().bold(), causes.next().unwrap());
+            eprintln!(
+                "{}: {}",
+                "error".red().bold(),
+                causes.next().unwrap().to_string().trim()
+            );
             for err in causes {
-                eprintln!("  {}: {}", "Caused by".red().bold(), err);
+                eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
             }
             ExitStatus::Error.into()
         }

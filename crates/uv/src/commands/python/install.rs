@@ -235,7 +235,12 @@ pub(crate) async fn install(
                 key.green()
             )?;
             for err in anyhow::Error::new(err).chain() {
-                writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+                writeln!(
+                    printer.stderr(),
+                    "  {}: {}",
+                    "Caused by".red().bold(),
+                    err.to_string().trim()
+                )?;
             }
         }
         return Ok(ExitStatus::Failure);

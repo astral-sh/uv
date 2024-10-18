@@ -299,11 +299,20 @@ async fn build_impl(
             Err(err) => {
                 let mut causes = err.chain();
 
-                let message = format!("{}: {}", "error".red().bold(), causes.next().unwrap());
+                let message = format!(
+                    "{}: {}",
+                    "error".red().bold(),
+                    causes.next().unwrap().to_string().trim()
+                );
                 writeln!(printer.stderr(), "{}", source.annotate(&message))?;
 
                 for err in causes {
-                    writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+                    writeln!(
+                        printer.stderr(),
+                        "  {}: {}",
+                        "Caused by".red().bold(),
+                        err.to_string().trim()
+                    )?;
                 }
             }
         }
