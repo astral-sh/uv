@@ -2066,6 +2066,10 @@ uv export [OPTIONS]
 <p>If a <code>uv.lock</code> does not exist, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -2204,6 +2208,12 @@ uv export [OPTIONS]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 </dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
+
+</dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
 
 <p>The project itself will also be omitted.</p>
 
