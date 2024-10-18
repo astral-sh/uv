@@ -2538,6 +2538,7 @@ fn init_library_flit() -> Result<()> {
 
 /// Run `uv init --app --package --build-backend maturin` to create a packaged application project
 #[test]
+#[cfg(feature = "crates-io")]
 fn init_app_build_backend_maturin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2808,6 +2809,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
 
 /// Run `uv init --lib --build-backend maturin` to create a packaged application project
 #[test]
+#[cfg(feature = "crates-io")]
 fn init_lib_build_backend_maturin() -> Result<()> {
     let context = TestContext::new("3.12");
 
