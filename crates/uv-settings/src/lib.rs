@@ -62,12 +62,11 @@ impl FilesystemOptions {
     }
 
     pub fn system() -> Result<Option<Self>, Error> {
-        if let Some(file) = system_config_file() {
-            let options = read_file(&file)?;
-            Ok(Some(Self(options)))
-        } else {
-            Ok(None)
-        }
+        let Some(file) = system_config_file() else {
+            return Ok(None);
+        };
+        debug!("Found system configuration in: `{}`", file.display());
+        Ok(Some(Self(read_file(&file)?)))
     }
 
     /// Find the [`FilesystemOptions`] for the given path.
