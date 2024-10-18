@@ -131,8 +131,8 @@ rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2"] }
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913", features = ["multipart"] }
-reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
+reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121", features = ["multipart"] }
+reqwest-retry = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { git = "https://github.com/gribouille/netrc", rev = "544f3890b621f0dc30fcefb4f804269c160ce2e9" }
@@ -182,7 +182,7 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 ignored = ["flate2", "xz2"]
 
 [patch.crates-io]
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
+reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"
