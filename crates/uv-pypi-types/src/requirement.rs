@@ -70,43 +70,6 @@ impl Requirement {
         self.source.is_editable()
     }
 
-    /// Remove any sensitive credentials from the requirement.
-    #[must_use]
-    pub fn redact(self) -> Requirement {
-        match self.source {
-            RequirementSource::Git {
-                mut repository,
-                reference,
-                precise,
-                subdirectory,
-                url,
-            } => {
-                // Redact the repository URL, but allow `git@`.
-                redact_credentials(&mut repository);
-
-                // Redact the PEP 508 URL.
-                let mut url = url.to_url();
-                redact_credentials(&mut url);
-                let url = VerbatimUrl::from_url(url);
-
-                Self {
-                    name: self.name,
-                    extras: self.extras,
-                    marker: self.marker,
-                    source: RequirementSource::Git {
-                        repository,
-                        reference,
-                        precise,
-                        subdirectory,
-                        url,
-                    },
-                    origin: self.origin,
-                }
-            }
-            _ => self,
-        }
-    }
-
     /// Convert the requirement to a [`Requirement`] relative to the given path.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         Ok(Self {
@@ -614,7 +577,15 @@ enum RequirementSourceWire {
 impl From<RequirementSource> for RequirementSourceWire {
     fn from(value: RequirementSource) -> Self {
         match value {
-            RequirementSource::Registry { specifier, index } => Self::Registry { specifier, index },
+            RequirementSource::Registry {
+                specifier,
+                mut index,
+            } => {
+                if let Some(index) = index.as_mut() {
+                    redact_credentials(index);
+                }
+                Self::Registry { specifier, index }
+            }
             RequirementSource::Url {
                 subdirectory,
                 location,
@@ -625,7 +596,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 subdirectory: subdirectory
                     .as_deref()
                     .and_then(Path::to_str)
-                    .map(str::to_string),
+                    .map(ToString::to_string),
             },
             RequirementSource::Git {
                 repository,
