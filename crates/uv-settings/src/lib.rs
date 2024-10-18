@@ -63,13 +63,8 @@ impl FilesystemOptions {
 
     pub fn system() -> Result<Option<Self>, Error> {
         if let Some(file) = system_config_file() {
-            match read_file(&file) {
-                Ok(options) => {
-                    debug!("Found system configuration in: `{}`", file.display());
-                    Ok(Some(Self(options)))
-                }
-                Err(err) => Err(err),
-            }
+            let options = read_file(&file)?;
+            Ok(Some(Self(options)))
         } else {
             Ok(None)
         }
@@ -269,9 +264,10 @@ mod test {
     use std::env;
     use std::path::Path;
 
+    #[cfg(not(windows))]
     #[test]
     fn test_locate_system_config_xdg() {
-        // Construct the path to the uv.toml file in the tests/fixture directory
+        // Construct the path to the uv.toml file in the tests/fixtures directory
         let td = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
             .join("fixtures");

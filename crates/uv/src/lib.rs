@@ -129,7 +129,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         let project = FilesystemOptions::find(&project_dir)?;
         let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
-        project.combine(system).combine(user)
+        project.combine(user).combine(system)
     };
 
     // Parse the external command, if necessary.
