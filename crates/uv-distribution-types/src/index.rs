@@ -158,7 +158,10 @@ impl FromStr for Index {
                 return Err(IndexSourceError::EmptyName);
             }
 
-            if name.chars().all(char::is_alphanumeric) {
+            if name
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+            {
                 let url = IndexUrl::from_str(url)?;
                 return Ok(Self {
                     name: Some(name.to_string()),
