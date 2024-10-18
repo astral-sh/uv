@@ -24,14 +24,37 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error("Failed to parse entry: `{0}`")]
     LoweringError(PackageName, #[source] Box<LoweringError>),
-    #[error("Failed to parse entry in `{0}`: `{1}`")]
+    #[error("Failed to parse entry in group `{0}`: `{1}`")]
     GroupLoweringError(GroupName, PackageName, #[source] Box<LoweringError>),
-    #[error("Failed to parse entry in `{0}`: `{1}`")]
+    #[error("Failed to parse entry in group `{0}`: `{1}`")]
     GroupParseError(
         GroupName,
         String,
         #[source] Box<Pep508Error<VerbatimParsedUrl>>,
     ),
+    #[error("Failed to find group `{0}` included by `{1}`")]
+    GroupNotFound(GroupName, GroupName),
+    #[error("Detected a cycle in `dependency-groups`: {0}")]
+    DependencyGroupCycle(Cycle),
+}
+
+/// A cycle in the `dependency-groups` table.
+#[derive(Debug)]
+pub struct Cycle(Vec<GroupName>);
+
+/// Display a cycle, e.g., `a -> b -> c -> a`.
+impl std::fmt::Display for Cycle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let [first, rest @ ..] = self.0.as_slice() else {
+            return Ok(());
+        };
+        write!(f, "`{first}`")?;
+        for group in rest {
+            write!(f, " -> `{group}`")?;
+        }
+        write!(f, " -> `{first}`")?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]

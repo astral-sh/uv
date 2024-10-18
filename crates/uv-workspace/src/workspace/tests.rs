@@ -9,7 +9,7 @@ use insta::assert_json_snapshot;
 
 use uv_normalize::GroupName;
 
-use crate::pyproject::PyProjectToml;
+use crate::pyproject::{DependencyGroupSpecifier, PyProjectToml};
 use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
 
 async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
@@ -857,16 +857,34 @@ async fn exclude_package() -> Result<()> {
 fn read_dependency_groups() {
     let toml = r#"
 [dependency-groups]
-test = ["a"]
+foo = ["a", {include-group = "bar"}]
+bar = ["b"]
 "#;
 
     let result =
         PyProjectToml::from_string(toml.to_string()).expect("Deserialization should succeed");
+
     let groups = result
         .dependency_groups
         .expect("`dependency-groups` should be present");
-    let test = groups
-        .get(&GroupName::from_str("test").unwrap())
-        .expect("Group `test` should be present");
-    assert_eq!(test, &["a".to_string()]);
+    let foo = groups
+        .get(&GroupName::from_str("foo").unwrap())
+        .expect("Group `foo` should be present");
+    assert_eq!(
+        foo,
+        &[
+            DependencyGroupSpecifier::Requirement("a".to_string()),
+            DependencyGroupSpecifier::IncludeGroup {
+                include_group: GroupName::from_str("bar").unwrap(),
+            }
+        ]
+    );
+
+    let bar = groups
+        .get(&GroupName::from_str("bar").unwrap())
+        .expect("Group `bar` should be present");
+    assert_eq!(
+        bar,
+        &[DependencyGroupSpecifier::Requirement("b".to_string())]
+    );
 }
