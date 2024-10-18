@@ -1423,6 +1423,7 @@ fn tool_install_uninstallable() {
     error: Failed to prepare distributions
       Caused by: Failed to download and build `pyenv==0.0.1`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
 
     [stdout]
     running bdist_wheel
