@@ -266,8 +266,8 @@ impl<'env> TreeDisplay<'env> {
             match node {
                 Node::Root(_) => line,
                 Node::Dependency(_, _) => line,
-                Node::OptionalDependency(_, _, extra) => format!("{line} (extra: {extra})"),
-                Node::DevDependency(_, _, group) => format!("{line} (group: {group})"),
+                Node::OptionalDependency(extra, _, _) => format!("{line} (extra: {extra})"),
+                Node::DevDependency(group, _, _) => format!("{line} (group: {group})"),
             }
         };
 
@@ -290,10 +290,10 @@ impl<'env> TreeDisplay<'env> {
             .map(|edge| match edge.weight() {
                 Edge::Prod(dependency) => Node::Dependency(self.graph[edge.target()], dependency),
                 Edge::Optional(extra, dependency) => {
-                    Node::OptionalDependency(self.graph[edge.target()], dependency, extra)
+                    Node::OptionalDependency(extra, self.graph[edge.target()], dependency)
                 }
                 Edge::Dev(group, dependency) => {
-                    Node::DevDependency(self.graph[edge.target()], dependency, group)
+                    Node::DevDependency(group, self.graph[edge.target()], dependency)
                 }
             })
             .collect::<Vec<_>>();
@@ -400,8 +400,8 @@ impl<'env> Edge<'env> {
 enum Node<'env> {
     Root(&'env PackageId),
     Dependency(&'env PackageId, &'env Dependency),
-    OptionalDependency(&'env PackageId, &'env Dependency, &'env ExtraName),
-    DevDependency(&'env PackageId, &'env Dependency, &'env GroupName),
+    OptionalDependency(&'env ExtraName, &'env PackageId, &'env Dependency),
+    DevDependency(&'env GroupName, &'env PackageId, &'env Dependency),
 }
 
 impl<'env> Node<'env> {
@@ -409,8 +409,8 @@ impl<'env> Node<'env> {
         match self {
             Self::Root(id) => id,
             Self::Dependency(id, _) => id,
-            Self::OptionalDependency(id, _, _) => id,
-            Self::DevDependency(id, _, _) => id,
+            Self::OptionalDependency(_, id, _) => id,
+            Self::DevDependency(_, id, _) => id,
         }
     }
 
@@ -418,8 +418,8 @@ impl<'env> Node<'env> {
         match self {
             Self::Root(_) => None,
             Self::Dependency(_, dep) => Some(&dep.extra),
-            Self::OptionalDependency(_, dep, _) => Some(&dep.extra),
-            Self::DevDependency(_, dep, _) => Some(&dep.extra),
+            Self::OptionalDependency(_, _, dep) => Some(&dep.extra),
+            Self::DevDependency(_, _, dep) => Some(&dep.extra),
         }
     }
 }
