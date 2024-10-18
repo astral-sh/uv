@@ -1080,6 +1080,8 @@ impl ExportSettings {
             dev,
             no_dev,
             only_dev,
+            group,
+            only_group,
             header,
             no_header,
             no_editable,
@@ -1104,8 +1106,7 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            // TODO(zanieb): Support `--group` here
-            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, vec![], vec![]),
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
             install_options: InstallOptions::new(

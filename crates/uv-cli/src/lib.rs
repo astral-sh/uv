@@ -3275,6 +3275,20 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
+    /// Include dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
+
     /// Exclude the comment header at the top of the generated output file.
     #[arg(long, overrides_with("header"))]
     pub no_header: bool,
