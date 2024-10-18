@@ -1141,16 +1141,17 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         .output()
         .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
 
-    let mut snapshot = apply_filters(
-        format!(
-            "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
-            output.status.success(),
-            output.status.code().unwrap_or(!0),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        ),
-        filters,
+    let mut snapshot = format!(
+        "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
+        output.status.success(),
+        output.status.code().unwrap_or(!0),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
+
+    dbg!(&snapshot);
+
+    snapshot = apply_filters(snapshot, filters);
 
     // This is a heuristic filter meant to try and make *most* of our tests
     // pass whether it's on Windows or Unix. In particular, there are some very
