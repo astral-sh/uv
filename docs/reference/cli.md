@@ -4200,6 +4200,9 @@ uv python install [OPTIONS] [TARGETS]...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--install-dir</code>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory where Python will be installed</p>
+
+<p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4677,6 +4680,9 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--install-dir</code>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory where Python is installed</p>
+
+<p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>

@@ -592,6 +592,7 @@ impl PythonListSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonInstallSettings {
+    pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
 }
@@ -600,9 +601,17 @@ impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let PythonInstallArgs { targets, reinstall } = args;
+        let PythonInstallArgs {
+            install_dir,
+            targets,
+            reinstall,
+        } = args;
 
-        Self { targets, reinstall }
+        Self {
+            install_dir,
+            targets,
+            reinstall,
+        }
     }
 }
 
@@ -610,6 +619,7 @@ impl PythonInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonUninstallSettings {
+    pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) all: bool,
 }
@@ -621,9 +631,17 @@ impl PythonUninstallSettings {
         args: PythonUninstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let PythonUninstallArgs { targets, all } = args;
+        let PythonUninstallArgs {
+            install_dir,
+            targets,
+            all,
+        } = args;
 
-        Self { targets, all }
+        Self {
+            install_dir,
+            targets,
+            all,
+        }
     }
 }
 
