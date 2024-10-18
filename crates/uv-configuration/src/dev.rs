@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use either::Either;
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 
@@ -24,6 +26,15 @@ impl DevMode {
     /// Returns `true` if the specification allows for production dependencies.
     pub fn prod(&self) -> bool {
         matches!(self, Self::Exclude | Self::Include)
+    }
+
+    /// Returns the flag that was used to request development dependencies.
+    pub fn as_flag(&self) -> &'static str {
+        match self {
+            Self::Exclude => "--no-dev",
+            Self::Include => "--dev",
+            Self::Only => "--only-dev",
+        }
     }
 }
 
@@ -62,6 +73,23 @@ impl GroupsSpecification {
     /// Returns `true` if the specification allows for production dependencies.
     pub fn prod(&self) -> bool {
         matches!(self, Self::Exclude | Self::Include(_))
+    }
+
+    /// Returns the option that was used to request the groups, if any.
+    pub fn as_flag(&self) -> Option<Cow<'_, str>> {
+        match self {
+            Self::Exclude => None,
+            Self::Include(groups) => match groups.as_slice() {
+                [] => None,
+                [group] => Some(Cow::Owned(format!("--group {group}"))),
+                [..] => Some(Cow::Borrowed("--group")),
+            },
+            Self::Only(groups) => match groups.as_slice() {
+                [] => None,
+                [group] => Some(Cow::Owned(format!("--only-group {group}"))),
+                [..] => Some(Cow::Borrowed("--only-group")),
+            },
+        }
     }
 }
 
@@ -137,6 +165,10 @@ impl DevGroupsSpecification {
 
     pub fn dev_mode(&self) -> Option<&DevMode> {
         self.dev.as_ref()
+    }
+
+    pub fn groups(&self) -> &GroupsSpecification {
+        &self.groups
     }
 }
 
