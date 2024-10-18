@@ -1112,6 +1112,7 @@ pub fn run_and_format<T: AsRef<str>>(
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
+#[allow(clippy::print_stderr)]
 pub fn run_and_format_with_status<T: AsRef<str>>(
     mut command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
@@ -1141,13 +1142,21 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         .output()
         .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
 
+    eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    eprintln!(
+        "----- stdout -----\n{}\n----- stderr -----\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    eprintln!("────────────────────────────────────────────────────────────────────────────────\n");
+
     let mut snapshot = apply_filters(
         format!(
             "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
             output.status.success(),
             output.status.code().unwrap_or(!0),
             String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            String::from_utf8_lossy(&output.stderr),
         ),
         filters,
     );
