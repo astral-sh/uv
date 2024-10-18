@@ -119,7 +119,7 @@ ignored = [
 ]
 
 [features]
-default = ["python", "pypi", "git", "performance", "external"]
+default = ["python", "pypi", "git", "performance", "crates-io"]
 # Use better memory allocators, etc. — also turns-on self-update.
 performance = [
     "performance-memory-allocator",
@@ -137,7 +137,7 @@ python-patch = []
 pypi = []
 # Introduces a dependency on Git.
 git = []
-# Introduces a dependency on other external servers.
-external = []
+# Introduces a dependency on other crates.io servers.
+crates-io = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]
