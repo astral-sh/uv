@@ -63,7 +63,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           while ($true) {
-            cargo nextest run --no-default-features --features python,pypi --workspace --failure-output immediate-final --fail-fast -j 20 --final-status-level slow uv_run_isolate
+            cargo nextest run --no-default-features --features python,pypi --workspace --failure-output immediate-final --fail-fast -j 20 --final-status-level slow uv_run_isolate test_albatross_root_workspace_albatross
 
             if (!$?) {
                 exit 1
