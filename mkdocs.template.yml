@@ -78,36 +78,36 @@ extra:
     - icon: fontawesome/brands/x-twitter
       link: https://x.com/astral_sh
 nav:
-  - Introduction: index.md
-  - Getting started:
+  - イントロダクション: index.md
+  - はじめに:
       - getting-started/index.md
-      - Installation: getting-started/installation.md
-      - First steps: getting-started/first-steps.md
-      - Features: getting-started/features.md
-      - Getting help: getting-started/help.md
-  - Guides:
+      - インストール: getting-started/installation.md
+      - ファーストステップ: getting-started/first-steps.md
+      - 特徴: getting-started/features.md
+      - ヘルプ: getting-started/help.md
+  - ガイド:
       - guides/index.md
-      - Installing Python: guides/install-python.md
-      - Running scripts: guides/scripts.md
-      - Using tools: guides/tools.md
-      - Working on projects: guides/projects.md
-      - Publishing packages: guides/publish.md
-  - Concepts:
+      - Python のインストール: guides/install-python.md
+      - スクリプト: guides/scripts.md
+      - ツール: guides/tools.md
+      - プロジェクト: guides/projects.md
+      - パッケージ発行: guides/publish.md
+  - コンセプト:
       - concepts/index.md
-      - Projects: concepts/projects.md
-      - Dependencies: concepts/dependencies.md
-      - Workspaces: concepts/workspaces.md
-      - Tools: concepts/tools.md
-      - Python versions: concepts/python-versions.md
-      - Resolution: concepts/resolution.md
-      - Caching: concepts/cache.md
-  - Configuration:
+      - プロジェクト: concepts/projects.md
+      - 依存関係: concepts/dependencies.md
+      - ワークスペース: concepts/workspaces.md
+      - ツール: concepts/tools.md
+      - Python バージョン: concepts/python-versions.md
+      - 依存関係の解決: concepts/resolution.md
+      - キャッシュ: concepts/cache.md
+  - 設定:
       - configuration/index.md
-      - Configuration files: configuration/files.md
-      - Environment variables: configuration/environment.md
-      - Authentication: configuration/authentication.md
-      - Package indexes: configuration/indexes.md
-  - Integration guides:
+      - 設定ファイル: configuration/files.md
+      - 環境変数: configuration/environment.md
+      - 認証: configuration/authentication.md
+      - パッケージインデックス: configuration/indexes.md
+  - インテグレーションガイド:
       - guides/integration/index.md
       - Docker: guides/integration/docker.md
       - Jupyter: guides/integration/jupyter.md
@@ -115,24 +115,24 @@ nav:
       - GitLab CI/CD: guides/integration/gitlab.md
       - Pre-commit: guides/integration/pre-commit.md
       - FastAPI: guides/integration/fastapi.md
-      - Alternative indexes: guides/integration/alternative-indexes.md
-      - Dependency bots: guides/integration/dependency-bots.md
-  - The pip interface:
+      - 代替インデックス: guides/integration/alternative-indexes.md
+      - 依存関係ボット: guides/integration/dependency-bots.md
+  - pip インターフェース:
       - pip/index.md
-      - Using environments: pip/environments.md
-      - Managing packages: pip/packages.md
-      - Inspecting packages: pip/inspection.md
-      - Declaring dependencies: pip/dependencies.md
-      - Locking environments: pip/compile.md
-      - Compatibility with pip: pip/compatibility.md
-  - Reference:
+      - 仮想環境: pip/environments.md
+      - パッケージ管理: pip/packages.md
+      - インスペクト: pip/inspection.md
+      - 依存関係の宣言: pip/dependencies.md
+      - 環境のロック: pip/compile.md
+      - pip との互換性: pip/compatibility.md
+  - リファレンス:
       - reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
-      - Resolver: reference/resolver-internals.md
-      - Benchmarks: reference/benchmarks.md
-      - Versioning: reference/versioning.md
-      - Platform support: reference/platforms.md
+      - リゾルバ: reference/resolver-internals.md
+      - ベンチマーク: reference/benchmarks.md
+      - バージョニング: reference/versioning.md
+      - プラットフォームサポート: reference/platforms.md
 validation:
   omitted_files: warn
   absolute_links: warn
