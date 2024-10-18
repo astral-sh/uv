@@ -62,6 +62,8 @@ jobs:
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
+          $env:UV_LINK_MODE = "copy"
+
           while ($true) {
             cargo nextest run --no-default-features --features python,pypi --workspace --failure-output immediate-final --fail-fast -j 20 --final-status-level slow albatross workspace
 
