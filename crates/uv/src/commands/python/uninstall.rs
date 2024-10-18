@@ -195,7 +195,7 @@ async fn do_uninstall(
                 printer.stderr(),
                 "Failed to uninstall {}: {}",
                 key.green(),
-                err
+                err.to_string().trim()
             )?;
         }
         return Ok(ExitStatus::Failure);

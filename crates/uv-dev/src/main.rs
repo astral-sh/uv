@@ -129,7 +129,7 @@ async fn main() -> ExitCode {
     if let Err(err) = result {
         eprintln!("{}", "uv-dev failed".red().bold());
         for err in err.chain() {
-            eprintln!("  {}: {}", "Caused by".red().bold(), err);
+            eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
         }
         ExitCode::FAILURE
     } else {
