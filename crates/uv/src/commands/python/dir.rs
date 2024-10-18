@@ -7,7 +7,7 @@ use uv_python::managed::ManagedPythonInstallations;
 
 /// Show the toolchain directory.
 pub(crate) fn dir() -> anyhow::Result<()> {
-    let installed_toolchains = ManagedPythonInstallations::from_settings()
+    let installed_toolchains = ManagedPythonInstallations::from_settings(None)
         .context("Failed to initialize toolchain settings")?;
     println!(
         "{}",
