@@ -195,6 +195,7 @@ fn user_config_dir() -> Option<PathBuf> {
     }
 }
 
+#[cfg(not(windows))]
 fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
     // On Linux/MacOS systems, read the XDG_CONFIG_DIRS environment variable
 
@@ -220,7 +221,7 @@ fn system_config_file() -> Option<PathBuf> {
     // On Windows, use, e.g., C:\ProgramData
     #[cfg(windows)]
     {
-        Some(PathBuf::from("C:\\ProgramData\\uv\\uv.toml"))
+        return Some(PathBuf::from("C:\\ProgramData\\uv\\uv.toml"));
     }
 
     #[cfg(not(windows))]
