@@ -194,6 +194,12 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: "Download deps"
+        run: |
+          cargo nextest list \
+            --features python-patch \
+            --workspace
+
       - name: "Cargo test"
         run: |
           cargo nextest run \
@@ -239,6 +245,12 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - name: "Download deps"
+        run: |
+          cargo nextest list \
+            --features python-patch \
+            --workspace
 
       - name: "Cargo test"
         run: |
@@ -295,6 +307,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+
+      - name: "Download deps"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          cargo nextest list --no-default-features --features python,pypi --workspace
 
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
