@@ -1530,25 +1530,19 @@ where
             if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand)
             {
                 match subcommand.as_str() {
-                    "compile" | "lock" => {
+                    "compile" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip compile".to_string()),
                         );
                     }
-                    "sync" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip sync".to_string()),
-                        );
-                    }
-                    "install" | "add" => {
+                    "install" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip install".to_string()),
                         );
                     }
-                    "uninstall" | "remove" => {
+                    "uninstall" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip uninstall".to_string()),
@@ -1570,12 +1564,6 @@ where
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip show".to_string()),
-                        );
-                    }
-                    "tree" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip tree".to_string()),
                         );
                     }
                     _ => {}
