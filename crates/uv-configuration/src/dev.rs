@@ -1,5 +1,7 @@
+use std::borrow::Cow;
+
 use either::Either;
-use uv_normalize::GroupName;
+use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum DevMode {
@@ -13,31 +15,53 @@ pub enum DevMode {
 }
 
 impl DevMode {
-    /// Determine the [`DevMode`] policy from the command-line arguments.
-    pub fn from_args(dev: bool, no_dev: bool, only_dev: bool) -> Self {
-        if only_dev {
-            Self::Only
-        } else if no_dev {
-            Self::Exclude
-        } else if dev {
-            Self::Include
-        } else {
-            Self::default()
+    /// Iterate over the group names to include.
+    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
+        match self {
+            Self::Exclude => Either::Left(std::iter::empty()),
+            Self::Include | Self::Only => Either::Right(std::iter::once(&*DEV_DEPENDENCIES)),
+        }
+    }
+
+    /// Returns `true` if the specification allows for production dependencies.
+    pub fn prod(&self) -> bool {
+        matches!(self, Self::Exclude | Self::Include)
+    }
+
+    /// Returns the flag that was used to request development dependencies.
+    pub fn as_flag(&self) -> &'static str {
+        match self {
+            Self::Exclude => "--no-dev",
+            Self::Include => "--dev",
+            Self::Only => "--only-dev",
         }
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum DevSpecification<'group> {
-    /// Include dev dependencies from the specified group.
-    Include(&'group [GroupName]),
-    /// Do not include dev dependencies.
-    Exclude,
-    /// Include dev dependencies from the specified group, and exclude all non-dev dependencies.
-    Only(&'group [GroupName]),
+#[derive(Debug, Clone)]
+pub struct DevGroupsSpecification {
+    /// Legacy option for `dependency-group.dev` and `tool.uv.dev-dependencies`.
+    ///
+    /// Requested via the `--dev`, `--no-dev`, and `--only-dev` flags.
+    dev: Option<DevMode>,
+
+    /// The groups to include.
+    ///
+    /// Requested via the `--group` and `--only-group` options.
+    groups: GroupsSpecification,
 }
 
-impl<'group> DevSpecification<'group> {
+#[derive(Debug, Clone)]
+pub enum GroupsSpecification {
+    /// Include dependencies from the specified groups.
+    Include(Vec<GroupName>),
+    /// Do not include dependencies from groups.
+    Exclude,
+    /// Only include dependencies from the specified groups, exclude all other dependencies.
+    Only(Vec<GroupName>),
+}
+
+impl GroupsSpecification {
     /// Returns an [`Iterator`] over the group names to include.
     pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
         match self {
@@ -49,5 +73,116 @@ impl<'group> DevSpecification<'group> {
     /// Returns `true` if the specification allows for production dependencies.
     pub fn prod(&self) -> bool {
         matches!(self, Self::Exclude | Self::Include(_))
+    }
+
+    /// Returns the option that was used to request the groups, if any.
+    pub fn as_flag(&self) -> Option<Cow<'_, str>> {
+        match self {
+            Self::Exclude => None,
+            Self::Include(groups) => match groups.as_slice() {
+                [] => None,
+                [group] => Some(Cow::Owned(format!("--group {group}"))),
+                [..] => Some(Cow::Borrowed("--group")),
+            },
+            Self::Only(groups) => match groups.as_slice() {
+                [] => None,
+                [group] => Some(Cow::Owned(format!("--only-group {group}"))),
+                [..] => Some(Cow::Borrowed("--only-group")),
+            },
+        }
+    }
+}
+
+impl DevGroupsSpecification {
+    /// Returns an [`Iterator`] over the group names to include.
+    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
+        match self.dev {
+            None => Either::Left(self.groups.iter()),
+            Some(ref dev_mode) => Either::Right(self.groups.iter().chain(dev_mode.iter())),
+        }
+    }
+
+    /// Determine the [`DevGroupsSpecification`] policy from the command-line arguments.
+    pub fn from_args(
+        dev: bool,
+        no_dev: bool,
+        only_dev: bool,
+        group: Vec<GroupName>,
+        only_group: Vec<GroupName>,
+    ) -> Self {
+        let dev_mode = if only_dev {
+            Some(DevMode::Only)
+        } else if no_dev {
+            Some(DevMode::Exclude)
+        } else if dev {
+            Some(DevMode::Include)
+        } else {
+            None
+        };
+
+        let groups = if !group.is_empty() {
+            if matches!(dev_mode, Some(DevMode::Only)) {
+                unreachable!("cannot specify both `--only-dev` and `--group`")
+            };
+            GroupsSpecification::Include(group)
+        } else if !only_group.is_empty() {
+            if matches!(dev_mode, Some(DevMode::Include)) {
+                unreachable!("cannot specify both `--dev` and `--only-group`")
+            };
+            GroupsSpecification::Only(only_group)
+        } else {
+            GroupsSpecification::Exclude
+        };
+
+        Self {
+            dev: dev_mode,
+            groups,
+        }
+    }
+
+    /// Return a new [`DevGroupsSpecification`] with development dependencies included by default.
+    ///
+    /// This is appropriate in projects, where the `dev` group is synced by default.
+    #[must_use]
+    pub fn with_default_dev(self) -> Self {
+        match self.dev {
+            Some(_) => self,
+            None => match self.groups {
+                // Only include the default `dev` group if `--only-group` wasn't used
+                GroupsSpecification::Only(_) => self,
+                GroupsSpecification::Exclude | GroupsSpecification::Include(_) => Self {
+                    dev: Some(DevMode::Include),
+                    ..self
+                },
+            },
+        }
+    }
+
+    /// Returns `true` if the specification allows for production dependencies.
+    pub fn prod(&self) -> bool {
+        (self.dev.is_none() || self.dev.as_ref().is_some_and(DevMode::prod)) && self.groups.prod()
+    }
+
+    pub fn dev_mode(&self) -> Option<&DevMode> {
+        self.dev.as_ref()
+    }
+
+    pub fn groups(&self) -> &GroupsSpecification {
+        &self.groups
+    }
+}
+
+impl From<DevMode> for DevGroupsSpecification {
+    fn from(dev: DevMode) -> Self {
+        Self {
+            dev: Some(dev),
+            groups: GroupsSpecification::Exclude,
+        }
+    }
+}
+
+impl From<GroupsSpecification> for DevGroupsSpecification {
+    fn from(groups: GroupsSpecification) -> Self {
+        Self { dev: None, groups }
     }
 }

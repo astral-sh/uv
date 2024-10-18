@@ -15,7 +15,7 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -2611,6 +2611,20 @@ pub struct RunArgs {
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
+    /// Include dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
+
     /// Run a Python module.
     ///
     /// Equivalent to `python -m <module>`.
@@ -2788,6 +2802,20 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
+    /// Include dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
+
     /// Install any editable dependencies, including the project and any workspace members, as
     /// non-editable.
     #[arg(long)]
@@ -2946,7 +2974,7 @@ pub struct AddArgs {
     pub requirements: Vec<PathBuf>,
 
     /// Add the requirements as development dependencies.
-    #[arg(long, conflicts_with("optional"))]
+    #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
     pub dev: bool,
 
     /// Add the requirements to the specified optional dependency group.
@@ -2956,8 +2984,14 @@ pub struct AddArgs {
     ///
     /// To enable an optional dependency group for this requirement instead, see
     /// `--extra`.
-    #[arg(long, conflicts_with("dev"))]
+    #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
     pub optional: Option<ExtraName>,
+
+    /// Add the requirements to the specified local dependency group.
+    ///
+    /// These requirements will not be included in the published metadata for the project.
+    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    pub group: Option<GroupName>,
 
     /// Add the requirements as editable.
     #[arg(long, overrides_with = "no_editable")]
@@ -3064,12 +3098,16 @@ pub struct RemoveArgs {
     pub packages: Vec<PackageName>,
 
     /// Remove the packages from the development dependencies.
-    #[arg(long, conflicts_with("optional"))]
+    #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
     pub dev: bool,
 
     /// Remove the packages from the specified optional dependency group.
-    #[arg(long, conflicts_with("dev"))]
+    #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
     pub optional: Option<ExtraName>,
+
+    /// Remove the packages from the specified local dependency group.
+    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    pub group: Option<GroupName>,
 
     /// Avoid syncing the virtual environment after re-locking the project.
     #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
@@ -3250,6 +3288,20 @@ pub struct ExportArgs {
     /// The project itself will also be omitted.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
+
+    /// Include dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
 
     /// Exclude the comment header at the top of the generated output file.
     #[arg(long, overrides_with("header"))]
