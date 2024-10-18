@@ -62,21 +62,16 @@ impl FilesystemOptions {
     }
 
     pub fn system() -> Result<Option<Self>, Error> {
-        let dir = system_config_dir();
-        let root = dir.join("uv");
-        let file = root.join("uv.toml");
-
-        debug!(
-            "Searching for system configuration in: `{}`",
-            file.display()
-        );
-        match read_file(&file) {
-            Ok(options) => {
-                debug!("Found system configuration in: `{}`", file.display());
-                Ok(Some(Self(options)))
+        if let Some(file) = system_config_file() {
+            match read_file(&file) {
+                Ok(options) => {
+                    debug!("Found system configuration in: `{}`", file.display());
+                    Ok(Some(Self(options)))
+                }
+                Err(err) => Err(err),
             }
-            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err),
+        } else {
+            Ok(None)
         }
     }
 
@@ -206,20 +201,45 @@ fn user_config_dir() -> Option<PathBuf> {
     }
 }
 
-/// Returns the path to the system configuration directory.
+fn locate_system_config_xdg() -> Option<PathBuf> {
+    // On Linux/MacOS systems, read the XDG_CONFIG_DIRS environment variable
+    if let Ok(config_dirs) = std::env::var("XDG_CONFIG_DIRS") {
+        for dir in config_dirs.split(':').take_while(|s| !s.is_empty()) {
+            let uv_toml_path = Path::new(dir).join("uv").join("uv.toml");
+
+            if uv_toml_path.is_file() {
+                return Some(uv_toml_path);
+            }
+        }
+    }
+    None
+}
+
+/// Returns the path to the system configuration file.
 ///
-/// Right now this defaults to "/etc/" in *nix systems and "C:\ProgramData" on Windows.
-fn system_config_dir() -> PathBuf {
+/// Unix-like systems: This uses the `XDG_CONFIG_DIRS` environment variable in *nix systems.
+/// If the var is not present it will check /etc/xdg/uv/uv.toml and then /etc/uv/uv.toml.
+/// Windows: "C:\ProgramData\uv\uv.toml" is used.
+fn system_config_file() -> Option<PathBuf> {
     // On Windows, use, e.g., C:\ProgramData
     #[cfg(windows)]
     {
-        PathBuf::from("C:\\ProgramData")
+        PathBuf::from("C:\\ProgramData\\uv\\uv.toml")
     }
 
-    // On Linux and macOS, use /etc/uv/uv.toml.
     #[cfg(not(windows))]
     {
-        PathBuf::from("/etc")
+        if let Some(path) = locate_system_config_xdg() {
+            return Some(path);
+        }
+        // Fallback to /etc/xdg/uv/uv.toml then /etc/uv/uv.toml if XDG_CONFIG_DIRS is not set or no
+        // valid path is found
+        for candidate in ["/etc/xdg/uv/uv.toml", "/etc/uv/uv.toml"] {
+            if Path::new(candidate).is_file() {
+                return Some(PathBuf::from(candidate));
+            }
+        }
+        None
     }
 }
 
@@ -241,4 +261,50 @@ pub enum Error {
 
     #[error("Failed to parse: `{0}`")]
     UvToml(String, #[source] toml::de::Error),
+}
+
+#[cfg(test)]
+mod test {
+    use crate::locate_system_config_xdg;
+    use std::env;
+    use std::path::Path;
+
+    #[test]
+    fn test_locate_system_config_xdg() {
+        // Construct the path to the uv.toml file in the tests/fixture directory
+        let td = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures");
+        let tf = td.join("uv").join("uv.toml");
+
+        let cur_dir = env::current_dir().unwrap();
+        {
+            env::set_current_dir(&td).unwrap();
+
+            // Empty string
+            env::set_var("XDG_CONFIG_DIRS", "");
+            assert_eq!(locate_system_config_xdg(), None);
+
+            // Single colon
+            env::set_var("XDG_CONFIG_DIRS", ":");
+            assert_eq!(locate_system_config_xdg(), None);
+        }
+
+        env::set_current_dir(&cur_dir).unwrap();
+        assert_eq!(locate_system_config_xdg(), None);
+
+        // Set the environment variable to the directory containing the uv.toml file
+        env::set_var("XDG_CONFIG_DIRS", td.clone());
+
+        // Assert that the system_config_file function returns the correct path
+        assert_eq!(locate_system_config_xdg().unwrap(), tf);
+
+        let first_td = td.join("first");
+        let first_tf = first_td.join("uv").join("uv.toml");
+        env::set_var(
+            "XDG_CONFIG_DIRS",
+            format!("{}:{}", first_td.to_string_lossy(), td.to_string_lossy()),
+        );
+        assert_eq!(locate_system_config_xdg().unwrap(), first_tf);
+    }
 }
