@@ -1,7 +1,5 @@
-# Benchmarks
+# ベンチマーク
 
-uv's performance is continually benchmarked against previous releases, and regularly compared to
-other tools in the space, like pip and Poetry.
+uvのパフォーマンスは、以前のリリースと継続的にベンチマークされており、pipやPoetryなどの他のツールと定期的に比較されています。
 
-The latest benchmarks and details on the benchmarking process can be found in the
-[GitHub repository](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md).
+最新のベンチマークとベンチマークプロセスの詳細は、[GitHubリポジトリ](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md)で確認できます。

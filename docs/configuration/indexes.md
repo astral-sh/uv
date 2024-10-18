@@ -1,30 +1,22 @@
-# Package indexes
+# パッケージインデックス
 
-By default, uv uses the [Python Package Index (PyPI)](https://pypi.org) for dependency resolution
-and package installation. However, uv can be configured to use other package indexes, including
-private indexes, via the `[[tool.uv.index]]` configuration option (and `--index`, the analogous
-command-line option).
+デフォルトでは、uvは依存関係の解決とパッケージのインストールに[Python Package Index (PyPI)](https://pypi.org)を使用します。ただし、uvは`[[tool.uv.index]]`構成オプション（およびコマンドラインオプションの`--index`）を介して、プライベートインデックスを含む他のパッケージインデックスを使用するように構成できます。
 
-## Defining an index
+## インデックスの定義
 
-To include an additional index when resolving dependencies, add a `[[tool.uv.index]]` entry to your
-`pyproject.toml`:
+依存関係を解決する際に追加のインデックスを含めるには、`pyproject.toml`に`[[tool.uv.index]]`エントリを追加します：
 
 ```toml
 [[tool.uv.index]]
-# Optional name for the index.
+# インデックスのオプションの名前。
 name = "pytorch"
-# Required URL for the index.
+# インデックスの必須URL。
 url = "https://download.pytorch.org/whl/cpu"
 ```
 
-Indexes are prioritized in the order in which they’re defined, such that the first index listed in
-the configuration file is the first index consulted when resolving dependencies, with indexes
-provided via the command line taking precedence over those in the configuration file.
+インデックスは定義された順序で優先され、構成ファイルに最初にリストされたインデックスが依存関係を解決する際に最初に参照され、コマンドラインで提供されたインデックスは構成ファイル内のインデックスよりも優先されます。
 
-By default, uv includes the Python Package Index (PyPI) as the "default" index, i.e., the index used
-when a package is not found on any other index. To exclude PyPI from the list of indexes, set
-`default = true` on another index entry (or use the `--default-index` command-line option):
+デフォルトでは、uvはPython Package Index (PyPI)を「デフォルト」インデックスとして含めます。これは、他のインデックスにパッケージが見つからない場合に使用されるインデックスです。PyPIをインデックスのリストから除外するには、別のインデックスエントリに`default = true`を設定します（またはコマンドラインオプションの`--default-index`を使用します）：
 
 ```toml
 [[tool.uv.index]]
@@ -33,14 +25,11 @@ url = "https://download.pytorch.org/whl/cpu"
 default = true
 ```
 
-The default index is always treated as lowest priority, regardless of its position in the list of
-indexes.
+デフォルトのインデックスは、リスト内の位置に関係なく、常に最も低い優先度として扱われます。
 
-## Pinning a package to an index
+## パッケージをインデックスに固定する
 
-A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
-For example, to ensure that `torch` is _always_ installed from the `pytorch` index, add the
-following to your `pyproject.toml`:
+パッケージは、`tool.uv.sources`エントリでインデックスを指定することにより、特定のインデックスに固定できます。たとえば、`torch`が常に`pytorch`インデックスからインストールされるようにするには、次の内容を`pyproject.toml`に追加します：
 
 ```toml
 [tool.uv.sources]
@@ -51,8 +40,7 @@ name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 ```
 
-Similarly, to pull from a different index based on the platform, you can provide a list of sources
-disambiguated by environment markers:
+同様に、プラットフォームに基づいて異なるインデックスから取得するには、環境マーカーで区別されたソースのリストを提供できます：
 
 ```toml title="pyproject.toml"
 [project]
@@ -73,9 +61,7 @@ name = "pytorch-cu124"
 url = "https://download.pytorch.org/whl/cu124"
 ```
 
-An index can be marked as `explicit = true` to prevent packages from being installed from that index
-unless explicitly pinned to it. For example, to ensure that `torch` is installed from the `pytorch`
-index, but all other packages are installed from PyPI, add the following to your `pyproject.toml`:
+パッケージがそのインデックスに明示的に固定されていない限り、そのインデックスからパッケージがインストールされないようにするには、インデックスを`explicit = true`としてマークできます。たとえば、`torch`が`pytorch`インデックスからインストールされることを保証し、他のすべてのパッケージがPyPIからインストールされるようにするには、次の内容を`pyproject.toml`に追加します：
 
 ```toml
 [tool.uv.sources]
@@ -87,46 +73,29 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 ```
 
-Named indexes referenced via `tool.uv.sources` must be defined within the project's `pyproject.toml`
-file; indexes provided via the command-line, environment variables, or user-level configuration will
-not be recognized.
+`tool.uv.sources`を介して参照される名前付きインデックスは、プロジェクトの`pyproject.toml`ファイル内で定義されている必要があります。コマンドライン、環境変数、またはユーザーレベルの構成を介して提供されたインデックスは認識されません。
 
-## Searching across multiple indexes
+## 複数のインデックスを横断して検索する
 
-By default, uv will stop at the first index on which a given package is available, and limit
-resolutions to those present on that first index (`first-match`).
+デフォルトでは、uvは指定されたパッケージが利用可能な最初のインデックスで停止し、その最初のインデックスに存在する解決策に制限します（`first-match`）。
 
-For example, if an internal index is specified via `[[tool.uv.index]]`, uv's behavior is such that
-if a package exists on that internal index, it will _always_ be installed from that internal index,
-and never from PyPI. The intent is to prevent "dependency confusion" attacks, in which an attacker
-publishes a malicious package on PyPI with the same name as an internal package, thus causing the
-malicious package to be installed instead of the internal package. See, for example,
-[the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/) from
-December 2022.
+たとえば、`[[tool.uv.index]]`を介して内部インデックスが指定されている場合、uvの動作は、パッケージがその内部インデックスに存在する場合、常にその内部インデックスからインストールされ、PyPIからはインストールされないというものです。これは、攻撃者が内部パッケージと同じ名前の悪意のあるパッケージをPyPIに公開し、その結果、内部パッケージの代わりに悪意のあるパッケージがインストールされる「依存関係の混乱」攻撃を防ぐことを目的としています。たとえば、2022年12月の[torchtriton攻撃](https://pytorch.org/blog/compromised-nightly-dependency/)を参照してください。
 
-Users can opt in to alternate index behaviors via the`--index-strategy` command-line option, or the
-`UV_INDEX_STRATEGY` environment variable, which supports the following values:
+ユーザーは、`--index-strategy`コマンドラインオプションまたは`UV_INDEX_STRATEGY`環境変数を介して、代替のインデックス動作を選択できます。これには次の値がサポートされています：
 
-- `first-match` (default): Search for each package across all indexes, limiting the candidate
-  versions to those present in the first index that contains the package.
-- `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
-  a compatible version, even if newer versions are available on other indexes.
-- `unsafe-best-match`: Search for each package across all indexes, and select the best version from
-  the combined set of candidate versions.
+- `first-match`（デフォルト）：すべてのインデックスで各パッケージを検索し、パッケージを含む最初のインデックスに存在する候補バージョンに制限します。
+- `unsafe-first-match`：すべてのインデックスで各パッケージを検索しますが、他のインデックスに新しいバージョンが存在する場合でも、互換性のあるバージョンを含む最初のインデックスを優先します。
+- `unsafe-best-match`：すべてのインデックスで各パッケージを検索し、候補バージョンの組み合わせセットから最適なバージョンを選択します。
 
-While `unsafe-best-match` is the closest to pip's behavior, it exposes users to the risk of
-"dependency confusion" attacks.
+`unsafe-best-match`はpipの動作に最も近いですが、「依存関係の混乱」攻撃のリスクにさらされます。
 
-## Providing credentials
+## 資格情報の提供
 
-Most private registries require authentication to access packages, typically via a username and
-password (or access token).
+ほとんどのプライベートレジストリは、パッケージにアクセスするために認証を必要とし、通常はユーザー名とパスワード（またはアクセストークン）を使用します。
 
-To authenticate with a provide index, either provide credentials via environment variables or embed
-them in the URL.
+プライベートインデックスで認証するには、環境変数を介して資格情報を提供するか、URLに埋め込みます。
 
-For example, given an index named `internal` that requires a username (`public`) and password
-(`koala`), define the index (without credentials) in your `pyproject.toml`:
+たとえば、ユーザー名（`public`）とパスワード（`koala`）を必要とする`internal`という名前のインデックスがある場合、資格情報なしでインデックスを`pyproject.toml`に定義します：
 
 ```toml
 [[tool.uv.index]]
@@ -134,18 +103,16 @@ name = "internal"
 url = "https://example.com/simple"
 ```
 
-From there, you can set the `UV_INDEX_INTERNAL_USERNAME` and `UV_INDEX_INTERNAL_PASSWORD`
-environment variables, where `INTERNAL` is the uppercase version of the index name:
+その後、`INTERNAL`がインデックス名の大文字バージョンである`UV_INDEX_INTERNAL_USERNAME`および`UV_INDEX_INTERNAL_PASSWORD`環境変数を設定できます：
 
 ```sh
 export UV_INDEX_INTERNAL_USERNAME=public
 export UV_INDEX_INTERNAL_PASSWORD=koala
 ```
 
-By providing credentials via environment variables, you can avoid storing sensitive information in
-the plaintext `pyproject.toml` file.
+環境変数を介して資格情報を提供することで、プレーンテキストの`pyproject.toml`ファイルに機密情報を保存することを避けることができます。
 
-Alternatively, credentials can be embedded directly in the index definition:
+または、資格情報をインデックス定義に直接埋め込むこともできます：
 
 ```toml
 [[tool.uv.index]]
@@ -153,24 +120,15 @@ name = "internal"
 url = "https://public:koala@https://pypi-proxy.corp.dev/simple"
 ```
 
-For security purposes, credentials are _never_ stored in the `uv.lock` file; as such, uv _must_ have
-access to the authenticated URL at installation time.
+セキュリティ上の理由から、資格情報は`uv.lock`ファイルに保存されることはなく、インストール時に認証されたURLにアクセスできる必要があります。
 
-## `--index-url` and `--extra-index-url`
+## `--index-url`および`--extra-index-url`
 
-In addition to the `[[tool.uv.index]]` configuration option, uv supports pip-style `--index-url` and
-`--extra-index-url` command-line options for compatibility, where `--index-url` defines the default
-index and `--extra-index-url` defines additional indexes.
+`[[tool.uv.index]]`構成オプションに加えて、uvは互換性のためにpipスタイルの`--index-url`および`--extra-index-url`コマンドラインオプションをサポートしており、`--index-url`はデフォルトのインデックスを定義し、`--extra-index-url`は追加のインデックスを定義します。
 
-These options can be used in conjunction with the `[[tool.uv.index]]` configuration option, and
-follow the same prioritization rules:
+これらのオプションは`[[tool.uv.index]]`構成オプションと組み合わせて使用することができ、同じ優先順位ルールに従います：
 
-- The default index is always treated as lowest priority, whether defined via the legacy
-  `--index-url` argument, the recommended `--default-index` argument, or a `[[tool.uv.index]]` entry
-  with `default = true`.
-- Indexes are consulted in the order in which they’re defined, either via the legacy
-  `--extra-index-url` argument, the recommended `--index` argument, or `[[tool.uv.index]]` entries.
+- デフォルトのインデックスは、レガシーの`--index-url`引数、推奨される`--default-index`引数、または`default = true`が設定された`[[tool.uv.index]]`エントリを介して定義されているかどうかに関係なく、常に最も低い優先度として扱われます。
+- インデックスは、レガシーの`--extra-index-url`引数、推奨される`--index`引数、または`[[tool.uv.index]]`エントリを介して定義された順序で参照されます。
 
-In effect, `--index-url` and `--extra-index-url` can be thought of as unnamed `[[tool.uv.index]]`
-entries, with `default = true` enabled for the former. In that context, `--index-url` maps to
-`--default-index`, and `--extra-index-url` maps to `--index`.
+実際には、`--index-url`および`--extra-index-url`は名前のない`[[tool.uv.index]]`エントリと見なすことができ、前者には`default = true`が有効になっています。この文脈では、`--index-url`は`--default-index`に対応し、`--extra-index-url`は`--index`に対応します。

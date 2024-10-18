@@ -1,79 +1,56 @@
-# Using alternative package indexes
+# 代替パッケージインデックスの使用
 
-While uv uses the official Python Package Index (PyPI) by default, it also supports alternative
-package indexes. Most alternative indexes require various forms of authentication, which requires
-some initial setup.
+uvはデフォルトで公式のPythonパッケージインデックス（PyPI）を使用しますが、代替パッケージインデックスもサポートしています。ほとんどの代替インデックスはさまざまな形式の認証を必要とし、初期設定が必要です。
 
 !!! important
 
-    Please read the documentation on [using multiple indexes](../../pip/compatibility.md#packages-that-exist-on-multiple-indexes)
-    in uv — the default behavior is different from pip to prevent dependency confusion attacks, but
-    this means that uv may not find the versions of a package as you'd expect.
+    uvで[複数のインデックスを使用する](../../pip/compatibility.md#packages-that-exist-on-multiple-indexes)ドキュメントを読んでください。デフォルトの動作は依存関係の混乱攻撃を防ぐためにpipとは異なりますが、これによりuvが期待通りにパッケージのバージョンを見つけられない場合があります。
 
 ## Azure Artifacts
 
-uv can install packages from
-[Azure DevOps Artifacts](https://learn.microsoft.com/en-us/azure/devops/artifacts/start-using-azure-artifacts?view=azure-devops&tabs=nuget%2Cnugetserver).
-Authenticate to a feed using a
-[Personal Access Token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)
-(PAT) or interactively using the [`keyring`](https://github.com/jaraco/keyring) package.
+uvは[Azure DevOps Artifacts](https://learn.microsoft.com/en-us/azure/devops/artifacts/start-using-azure-artifacts?view=azure-devops&tabs=nuget%2Cnugetserver)からパッケージをインストールできます。
+[Personal Access Token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows)（PAT）を使用してフィードに認証するか、[`keyring`](https://github.com/jaraco/keyring)パッケージを使用して対話的に認証します。
 
-### Using a PAT
+### PATの使用
 
-If there is a PAT available (eg
-[`$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
-credentials can be provided via the "Basic" HTTP authentication scheme. Include the PAT in the
-password field of the URL. A username must be included as well, but can be any string.
+PATが利用可能な場合（例：[Azureパイプラインの`$(System.AccessToken)`](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)）、資格情報は「Basic」HTTP認証スキームを介して提供できます。URLのパスワードフィールドにPATを含めます。ユーザー名も含める必要がありますが、任意の文字列で構いません。
 
-For example, with the token stored in the `$ADO_PAT` environment variable, set the index URL with:
+たとえば、トークンが`$ADO_PAT`環境変数に格納されている場合、次のようにインデックスURLを設定します：
 
 ```console
 $ export UV_EXTRA_INDEX_URL=https://dummy:$ADO_PAT@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
-### Using `keyring`
+### `keyring`の使用
 
-If there is not a PAT available, authenticate to Artifacts using the
-[`keyring`](https://github.com/jaraco/keyring) package with
-[the `artifacts-keyring` plugin](https://github.com/Microsoft/artifacts-keyring). Because these two
-packages are required to authenticate to Azure Artifacts, they must be pre-installed from a source
-other than Artifacts.
+PATが利用できない場合、[`keyring`](https://github.com/jaraco/keyring)パッケージと[the `artifacts-keyring` plugin](https://github.com/Microsoft/artifacts-keyring)を使用してArtifactsに認証します。これらの2つのパッケージはAzure Artifactsに認証するために必要であり、Artifacts以外のソースから事前にインストールする必要があります。
 
-The `artifacts-keyring` plugin wraps
-[the Azure Artifacts Credential Provider tool](https://github.com/microsoft/artifacts-credprovider).
-The credential provider supports a few different authentication modes including interactive login —
-see [the tool's documentation](https://github.com/microsoft/artifacts-credprovider) for information
-on configuration.
+`artifacts-keyring`プラグインは[Azure Artifacts Credential Providerツール](https://github.com/microsoft/artifacts-credprovider)をラップします。資格情報プロバイダーは、対話的なログインを含むいくつかの異なる認証モードをサポートしています。設定に関する情報は[ツールのドキュメント](https://github.com/microsoft/artifacts-credprovider)を参照してください。
 
-uv only supports using the `keyring` package in
-[subprocess mode](https://github.com/astral-sh/uv/blob/main/PIP_COMPATIBILITY.md#registry-authentication).
-The `keyring` executable must be in the `PATH`, i.e., installed globally or in the active
-environment. The `keyring` CLI requires a username in the URL, so the index URL must include the
-default username `VssSessionToken`.
+uvは[subprocessモード](https://github.com/astral-sh/uv/blob/main/PIP_COMPATIBILITY.md#registry-authentication)で`keyring`パッケージを使用することのみをサポートしています。`keyring`実行可能ファイルは`PATH`に含まれている必要があります。つまり、グローバルにインストールするか、アクティブな環境にインストールする必要があります。`keyring` CLIはURLにユーザー名を必要とするため、インデックスURLにはデフォルトのユーザー名`VssSessionToken`を含める必要があります。
 
 ```console
-$ # Pre-install keyring and the Artifacts plugin from the public PyPI
+$ # 公開PyPIからkeyringとArtifactsプラグインを事前インストール
 $ uv tool install keyring --with artifacts-keyring
 
-$ # Enable keyring authentication
+$ # keyring認証を有効にする
 $ export UV_KEYRING_PROVIDER=subprocess
 
-$ # Configure the index URL with the username
+$ # ユーザー名でインデックスURLを設定
 $ export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
 ```
 
 ## AWS CodeArtifact
 
-uv can install packages from
-[AWS CodeArtifact](https://docs.aws.amazon.com/codeartifact/latest/ug/using-python.html).
+uvは[AWS CodeArtifact](https://docs.aws.amazon.com/codeartifact/latest/ug/using-python.html)からパッケージをインストールできます。
 
-The authorization token can be retrieved using the `awscli` tool.
+認証トークンは`awscli`ツールを使用して取得できます。
 
 !!! note
 
-    This guide assumes the AWS CLI has previously been authenticated.
+    このガイドは、AWS CLIが事前に認証されていることを前提としています。
 
-First, declare some constants for your CodeArtifact repository:
+まず、CodeArtifactリポジトリの定数を宣言します：
 
 ```bash
 export AWS_DOMAIN="<your-domain>"
@@ -82,7 +59,7 @@ export AWS_REGION="<your-region>"
 export AWS_CODEARTIFACT_REPOSITORY="<your-repository>"
 ```
 
-Then, retrieve a token from the `awscli`:
+次に、`awscli`からトークンを取得します：
 
 ```bash
 export AWS_CODEARTIFACT_TOKEN="$(
@@ -94,28 +71,26 @@ export AWS_CODEARTIFACT_TOKEN="$(
 )"
 ```
 
-And configure the index URL:
+そして、インデックスURLを設定します：
 
 ```bash
 export UV_EXTRA_INDEX_URL="https://aws:${AWS_CODEARTIFACT_TOKEN}@${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${AWS_CODEARTIFACT_REPOSITORY}/simple/"
 ```
 
-### Publishing packages
+### パッケージの公開
 
-If you also want to publish your own packages to AWS CodeArtifact, you can use `uv publish` as
-described in the [publishing guide](../publish.md). You will need to set `UV_PUBLISH_URL` separately
-from the credentials:
+AWS CodeArtifactに独自のパッケージを公開する場合は、[公開ガイド](../publish.md)に記載されているように`uv publish`を使用できます。資格情報とは別に`UV_PUBLISH_URL`を設定する必要があります：
 
 ```bash
-# Configure uv to use AWS CodeArtifact
+# uvをAWS CodeArtifactに設定
 export UV_PUBLISH_URL="https://${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${AWS_CODEARTIFACT_REPOSITORY}/"
 export UV_PUBLISH_USERNAME=aws
 export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
 
-# Publish the package
+# パッケージを公開
 uv publish
 ```
 
-## Other indexes
+## その他のインデックス
 
-uv is also known to work with JFrog's Artifactory and the Google Cloud Artifact Registry.
+uvはJFrogのArtifactoryおよびGoogle Cloud Artifact Registryとも連携することが知られています。

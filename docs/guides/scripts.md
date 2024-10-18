@@ -1,19 +1,14 @@
-# Running scripts
+# スクリプトの実行
 
-A Python script is a file intended for standalone execution, e.g., with `python <script>.py`. Using
-uv to execute scripts ensures that script dependencies are managed without manually managing
-environments.
+Pythonスクリプトは、`python <script>.py`で実行することを意図したファイルです。uvを使用してスクリプトを実行することで、スクリプトの依存関係が手動で環境を管理することなく管理されます。
 
 !!! note
 
-    If you are not familiar with Python environments: every Python installation has an environment
-    that packages can be installed in. Typically, creating [_virtual_ environments](https://docs.python.org/3/library/venv.html) is recommended to
-    isolate packages required by each script. uv automatically manages virtual environments for you
-    and prefers a [declarative](#declaring-script-dependencies) approach to dependencies.
+    Python環境に慣れていない場合：すべてのPythonインストールには、パッケージをインストールできる環境があります。通常、各スクリプトに必要なパッケージを分離するために[仮想環境](https://docs.python.org/3/library/venv.html)を作成することが推奨されます。uvは仮想環境を自動的に管理し、依存関係を[宣言的](#declaring-script-dependencies)に管理することを好みます。
 
-## Running a script without dependencies
+## 依存関係のないスクリプトの実行
 
-If your script has no dependencies, you can execute it with `uv run`:
+スクリプトに依存関係がない場合は、`uv run`を使用して実行できます：
 
 ```python title="example.py"
 print("Hello world")
@@ -26,7 +21,7 @@ Hello world
 
 <!-- TODO(zanieb): Once we have a `python` shim, note you can execute it with `python` here -->
 
-Similarly, if your script depends on a module in the standard library, there's nothing more to do:
+同様に、スクリプトが標準ライブラリのモジュールに依存している場合も、特に追加の手順は必要ありません：
 
 ```python title="example.py"
 import os
@@ -39,7 +34,7 @@ $ uv run example.py
 /Users/astral
 ```
 
-Arguments may be provided to the script:
+スクリプトに引数を渡すこともできます：
 
 ```python title="example.py"
 import sys
@@ -55,13 +50,13 @@ $ uv run example.py hello world!
 hello world!
 ```
 
-Additionally, your script can be read directly from stdin:
+さらに、スクリプトを標準入力から直接読み取ることもできます：
 
 ```console
 $ echo 'print("hello world!")' | uv run -
 ```
 
-Or, if your shell supports [here-documents](https://en.wikipedia.org/wiki/Here_document):
+または、シェルが[ヒアドキュメント](https://en.wikipedia.org/wiki/Here_document)をサポートしている場合：
 
 ```bash
 uv run - <<EOF
@@ -69,27 +64,20 @@ print("hello world!")
 EOF
 ```
 
-Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will
-install the current project before running the script. If your script does not depend on the
-project, use the `--no-project` flag to skip this:
+`uv run`を_プロジェクト_（つまり、`pyproject.toml`があるディレクトリ）で使用する場合、スクリプトを実行する前に現在のプロジェクトをインストールします。スクリプトがプロジェクトに依存していない場合は、`--no-project`フラグを使用してこれをスキップします：
 
 ```console
-$ # Note, it is important that the flag comes _before_ the script
+$ # フラグはスクリプトの前に置くことが重要です
 $ uv run --no-project example.py
 ```
 
-See the [projects guide](./projects.md) for more details on working in projects.
+プロジェクトでの作業の詳細については、[プロジェクトガイド](./projects.md)を参照してください。
 
-## Running a script with dependencies
+## 依存関係のあるスクリプトの実行
 
-When your script requires other packages, they must be installed into the environment that the
-script runs in. uv prefers to create these environments on-demand instead of using a long-lived
-virtual environment with manually managed dependencies. This requires explicit declaration of
-dependencies that are required for the script. Generally, it's recommended to use a
-[project](./projects.md) or [inline metadata](#declaring-script-dependencies) to declare
-dependencies, but uv supports requesting dependencies per invocation as well.
+スクリプトが他のパッケージを必要とする場合、それらのパッケージはスクリプトが実行される環境にインストールする必要があります。uvはこれらの環境をオンデマンドで作成することを好み、手動で管理する長期的な仮想環境を使用しません。これには、スクリプトに必要な依存関係を明示的に宣言する必要があります。一般的には、依存関係を宣言するために[プロジェクト](./projects.md)や[インラインメタデータ](#declaring-script-dependencies)を使用することが推奨されますが、uvは呼び出しごとに依存関係を要求することもサポートしています。
 
-For example, the following script requires `rich`.
+例えば、次のスクリプトは`rich`を必要とします。
 
 ```python title="example.py"
 import time
@@ -99,7 +87,7 @@ for i in track(range(20), description="For example:"):
     time.sleep(0.05)
 ```
 
-If executed without specifying a dependency, this script will fail:
+依存関係を指定せずに実行すると、このスクリプトは失敗します：
 
 ```console
 $ uv run --no-project example.py
@@ -109,47 +97,42 @@ Traceback (most recent call last):
 ModuleNotFoundError: No module named 'rich'
 ```
 
-Request the dependency using the `--with` option:
+`--with`オプションを使用して依存関係を要求します：
 
 ```console
 $ uv run --with rich example.py
 For example: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:01
 ```
 
-Constraints can be added to the requested dependency if specific versions are needed:
+特定のバージョンが必要な場合は、依存関係に制約を追加できます：
 
 ```console
 $ uv run --with 'rich>12,<13' example.py
 ```
 
-Multiple dependencies can be requested by repeating with `--with` option.
+複数の依存関係を要求するには、`--with`オプションを繰り返します。
 
-Note that if `uv run` is used in a _project_, these dependencies will be included _in addition_ to
-the project's dependencies. To opt-out of this behavior, use the `--no-project` flag.
+`uv run`が_プロジェクト_で使用される場合、これらの依存関係はプロジェクトの依存関係に追加されます。この動作をオプトアウトするには、`--no-project`フラグを使用します。
 
-## Creating a Python script
+## Pythonスクリプトの作成
 
-Python recently added a standard format for
-[inline script metadata](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata).
-It allows for selecting Python versions and defining dependencies. Use `uv init --script` to
-initialize scripts with the inline metadata:
+Pythonは最近、[インラインスクリプトメタデータ](https://packaging.python.org/en/latest/specifications/inline-script-metadata/#inline-script-metadata)の標準フォーマットを追加しました。これにより、Pythonバージョンの選択や依存関係の定義が可能になります。`uv init --script`を使用して、インラインメタデータを含むスクリプトを初期化します：
 
 ```console
 $ uv init --script example.py --python 3.12
 ```
 
-## Declaring script dependencies
+## スクリプトの依存関係の宣言
 
-The inline metadata format allows the dependencies for a script to be declared in the script itself.
+インラインメタデータフォーマットを使用すると、スクリプト自体に依存関係を宣言できます。
 
-uv supports adding and updating inline script metadata for you. Use `uv add --script` to declare the
-dependencies for the script:
+uvはインラインスクリプトメタデータの追加と更新をサポートしています。`uv add --script`を使用してスクリプトの依存関係を宣言します：
 
 ```console
 $ uv add --script example.py 'requests<3' 'rich'
 ```
 
-This will add a `script` section at the top of the script declaring the dependencies using TOML:
+これにより、依存関係をTOML形式で宣言する`script`セクションがスクリプトの先頭に追加されます：
 
 ```python title="example.py"
 # /// script
@@ -167,7 +150,7 @@ data = resp.json()
 pprint([(k, v["title"]) for k, v in data.items()][:10])
 ```
 
-uv will automatically create an environment with the dependencies necessary to run the script, e.g.:
+uvはスクリプトを実行するために必要な依存関係を持つ環境を自動的に作成します。例えば：
 
 ```console
 $ uv run example.py
@@ -187,9 +170,9 @@ $ uv run example.py
 
 !!! important
 
-    When using inline script metadata, even if `uv run` is [used in a _project_](../concepts/projects.md#running-scripts), the project's dependencies will be ignored. The `--no-project` flag is not required.
+    インラインスクリプトメタデータを使用する場合、`uv run`が[プロジェクトで使用される](../concepts/projects.md#running-scripts)場合でも、プロジェクトの依存関係は無視されます。`--no-project`フラグは必要ありません。
 
-uv also respects Python version requirements:
+uvはPythonバージョンの要件も尊重します：
 
 ```python title="example.py"
 # /// script
@@ -197,27 +180,22 @@ uv also respects Python version requirements:
 # dependencies = []
 # ///
 
-# Use some syntax added in Python 3.12
+# Python 3.12で追加された構文を使用
 type Point = tuple[float, float]
 print(Point)
 ```
 
 !!! note
 
-    The `dependencies` field must be provided even if empty.
+    `dependencies`フィールドは空であっても提供する必要があります。
 
-`uv run` will search for and use the required Python version. The Python version will download if it
-is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
-more details.
+`uv run`は必要なPythonバージョンを検索して使用します。Pythonバージョンがインストールされていない場合はダウンロードされます。詳細については、[Pythonバージョン](../concepts/python-versions.md)に関するドキュメントを参照してください。
 
-## Improving reproducibility
+## 再現性の向上
 
-uv supports an `exclude-newer` field in the `tool.uv` section of inline script metadata to limit uv
-to only considering distributions released before a specific date. This is useful for improving the
-reproducibility of your script when run at a later point in time.
+uvは、スクリプトのインラインメタデータの`tool.uv`セクションで`exclude-newer`フィールドをサポートしており、特定の日付より後にリリースされたディストリビューションを考慮しないようにuvを制限します。これは、後でスクリプトを実行する際の再現性を向上させるために役立ちます。
 
-The date must be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
-(e.g., `2006-12-02T02:07:43Z`).
+日付は[RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html)タイムスタンプ（例：`2006-12-02T02:07:43Z`）として指定する必要があります。
 
 ```python title="example.py"
 # /// script
@@ -233,9 +211,9 @@ import requests
 print(requests.__version__)
 ```
 
-## Using different Python versions
+## 異なるPythonバージョンの使用
 
-uv allows arbitrary Python versions to be requested on each script invocation, for example:
+uvは各スクリプトの呼び出しごとに任意のPythonバージョンを要求することを許可します。例えば：
 
 ```python title="example.py"
 import sys
@@ -244,23 +222,22 @@ print(".".join(map(str, sys.version_info[:3])))
 ```
 
 ```console
-$ # Use the default Python version, may differ on your machine
+$ # デフォルトのPythonバージョンを使用します。マシンによって異なる場合があります
 $ uv run example.py
 3.12.6
 ```
 
 ```console
-$ # Use a specific Python version
+$ # 特定のPythonバージョンを使用します
 $ uv run --python 3.10 example.py
 3.10.15
 ```
 
-See the [Python version request](../concepts/python-versions.md#requesting-a-version) documentation
-for more details on requesting Python versions.
+Pythonバージョンの要求に関する詳細については、[Pythonバージョンの要求](../concepts/python-versions.md#requesting-a-version)のドキュメントを参照してください。
 
-## Using GUI scripts
+## GUIスクリプトの使用
 
-On Windows `uv` will run your script ending with `.pyw` extension using `pythonw`:
+Windowsでは、uvは`.pyw`拡張子で終わるスクリプトを`pythonw`を使用して実行します：
 
 ```python title="example.pyw"
 from tkinter import Tk, ttk
@@ -277,9 +254,9 @@ root.mainloop()
 PS> uv run example.pyw
 ```
 
-![Run Result](../assets/uv_gui_script_hello_world.png){: style="height:50px;width:150px"}
+![実行結果](../assets/uv_gui_script_hello_world.png){: style="height:50px;width:150px"}
 
-Similarly, it works with dependencies as well:
+同様に、依存関係がある場合も動作します：
 
 ```python title="example_pyqt.pyw"
 import sys
@@ -304,10 +281,10 @@ sys.exit(app.exec_())
 PS> uv run --with PyQt5 example_pyqt.pyw
 ```
 
-![Run Result](../assets/uv_gui_script_hello_world_pyqt.png){: style="height:50px;width:150px"}
+![実行結果](../assets/uv_gui_script_hello_world_pyqt.png){: style="height:50px;width:150px"}
 
-## Next steps
+## 次のステップ
 
-To learn more about `uv run`, see the [command reference](../reference/cli.md#uv-run).
+`uv run`の詳細については、[コマンドリファレンス](../reference/cli.md#uv-run)を参照してください。
 
-Or, read on to learn how to [run and install tools](./tools.md) with uv.
+または、uvで[ツールを実行およびインストール](./tools.md)する方法を学んでください。

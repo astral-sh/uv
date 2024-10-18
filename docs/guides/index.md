@@ -1,21 +1,20 @@
-# Guides overview
+# ガイドの概要
 
-Check out one of the core guides to get started:
+以下のコアガイドのいずれかをチェックして、始めてください：
 
-- [Installing Python versions](./install-python.md)
-- [Running scripts and declaring dependencies](./scripts.md)
-- [Running and installing applications as tools](./tools.md)
-- [Creating and working on projects](./projects.md)
+- [Pythonバージョンのインストール](./install-python.md)
+- [スクリプトの実行と依存関係の宣言](./scripts.md)
+- [ツールとしてアプリケーションを実行およびインストール](./tools.md)
+- [プロジェクトの作成と作業](./projects.md)
 
-Learn how to integrate uv with other software:
+uvを他のソフトウェアと統合する方法を学びましょう：
 
-- [Using in Docker images](./integration/docker.md)
-- [Using with Jupyter](./integration/jupyter.md)
-- [Using with pre-commit](./integration/pre-commit.md)
-- [Using in GitHub Actions](./integration/github.md)
-- [Using in GitLab CI/CD](./integration/gitlab.md)
-- [Using with alternative package indexes](./integration/alternative-indexes.md)
-- [Building a FastAPI application](./integration/fastapi.md)
+- [Dockerイメージでの使用](./integration/docker.md)
+- [Jupyterとの使用](./integration/jupyter.md)
+- [pre-commitとの使用](./integration/pre-commit.md)
+- [GitHub Actionsでの使用](./integration/github.md)
+- [GitLab CI/CDでの使用](./integration/gitlab.md)
+- [代替パッケージインデックスとの使用](./integration/alternative-indexes.md)
+- [FastAPIアプリケーションの構築](./integration/fastapi.md)
 
-Or, explore the [concept documentation](../concepts/index.md) for comprehensive breakdown of each
-feature.
+または、各機能の包括的な内訳については[概念ドキュメント](../concepts/index.md)を参照してください。

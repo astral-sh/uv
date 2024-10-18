@@ -1,33 +1,25 @@
-# Configuration files
+# 設定ファイル
 
-uv supports persistent configuration files at both the project- and user-level.
+uvは、プロジェクトレベルおよびユーザーレベルでの永続的な設定ファイルをサポートしています。
 
-Specifically, uv will search for a `pyproject.toml` or `uv.toml` file in the current directory, or
-in the nearest parent directory.
+具体的には、uvは現在のディレクトリまたは最も近い親ディレクトリに`pyproject.toml`または`uv.toml`ファイルを検索します。
 
 !!! note
 
-    For `tool` commands, which operate at the user level, local configuration
-    files will be ignored. Instead, uv will exclusively read from user-level configuration
-    (e.g., `~/.config/uv/uv.toml`).
+    ユーザーレベルで動作する`tool`コマンドの場合、ローカル設定ファイルは無視されます。代わりに、uvはユーザーレベルの設定（例：`~/.config/uv/uv.toml`）のみを読み取ります。
 
-In workspaces, uv will begin its search at the workspace root, ignoring any configuration defined in
-workspace members. Since the workspace is locked as a single unit, configuration is shared across
-all members.
+ワークスペースでは、uvはワークスペースメンバーに定義された設定を無視して、ワークスペースルートで検索を開始します。ワークスペースは単一のユニットとしてロックされているため、設定はすべてのメンバー間で共有されます。
 
-If a `pyproject.toml` file is found, uv will read configuration from the `[tool.uv]` table. For
-example, to set a persistent index URL, add the following to a `pyproject.toml`:
+`pyproject.toml`ファイルが見つかった場合、uvは`[tool.uv]`テーブルから設定を読み取ります。例えば、永続的なインデックスURLを設定するには、次の内容を`pyproject.toml`に追加します：
 
 ```toml title="pyproject.toml"
 [tool.uv]
 index-url = "https://test.pypi.org/simple"
 ```
 
-(If there is no such table, the `pyproject.toml` file will be ignored, and uv will continue
-searching in the directory hierarchy.)
+（そのようなテーブルがない場合、`pyproject.toml`ファイルは無視され、uvはディレクトリ階層内での検索を続行します。）
 
-uv will also search for `uv.toml` files, which follow an identical structure, but omit the
-`[tool.uv]` prefix. For example:
+uvはまた、`[tool.uv]`プレフィックスを省略した同一の構造を持つ`uv.toml`ファイルも検索します。例えば：
 
 ```toml title="uv.toml"
 index-url = "https://test.pypi.org/simple"
@@ -35,50 +27,29 @@ index-url = "https://test.pypi.org/simple"
 
 !!! note
 
-    `uv.toml` files take precedence over `pyproject.toml` files, so if both `uv.toml` and
-    `pyproject.toml` files are present in a directory, configuration will be read from `uv.toml`, and
-    `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
+    `uv.toml`ファイルは`pyproject.toml`ファイルよりも優先されるため、ディレクトリに`uv.toml`と`pyproject.toml`の両方が存在する場合、設定は`uv.toml`から読み取られ、付随する`pyproject.toml`の`[tool.uv]`セクションは無視されます。
 
-uv will also discover user-level configuration at `~/.config/uv/uv.toml` (or
-`$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows. User-level
-configuration must use the `uv.toml` format, rather than the `pyproject.toml` format, as a
-`pyproject.toml` is intended to define a Python _project_.
+uvはまた、macOSおよびLinuxでは`~/.config/uv/uv.toml`（または`$XDG_CONFIG_HOME/uv/uv.toml`）、Windowsでは`%APPDATA%\uv\uv.toml`でユーザーレベルの設定を発見します。ユーザーレベルの設定は`pyproject.toml`形式ではなく、`uv.toml`形式を使用する必要があります。`pyproject.toml`はPythonの_プロジェクト_を定義することを意図しているためです。
 
-If both project- and user-level configuration are found, the settings will be merged, with the
-project-level configuration taking precedence. Specifically, if a string, number, or boolean is
-present in both tables, the project-level value will be used, and the user-level value will be
-ignored. If an array is present in both tables, the arrays will be concatenated, with the
-project-level settings appearing earlier in the merged array.
+プロジェクトレベルおよびユーザーレベルの設定の両方が見つかった場合、設定はマージされ、プロジェクトレベルの設定が優先されます。具体的には、文字列、数値、またはブール値が両方のテーブルに存在する場合、プロジェクトレベルの値が使用され、ユーザーレベルの値は無視されます。配列が両方のテーブルに存在する場合、配列は連結され、プロジェクトレベルの設定がマージされた配列の前に表示されます。
 
-Settings provided via environment variables take precedence over persistent configuration, and
-settings provided via the command line take precedence over both.
+環境変数を介して提供される設定は永続的な設定よりも優先され、コマンドラインを介して提供される設定は両方よりも優先されます。
 
-uv accepts a `--no-config` command-line argument which, when provided, disables the discovery of any
-persistent configuration.
+uvは、提供された場合、永続的な設定の発見を無効にする`--no-config`コマンドライン引数を受け入れます。
 
-uv also accepts a `--config-file` command-line argument, which accepts a path to a `uv.toml` to use
-as the configuration file. When provided, this file will be used in place of _any_ discovered
-configuration files (e.g., user-level configuration will be ignored).
+uvはまた、設定ファイルとして使用する`uv.toml`へのパスを受け入れる`--config-file`コマンドライン引数を受け入れます。提供された場合、このファイルは発見された_すべての_設定ファイル（例：ユーザーレベルの設定）に代わって使用されます。
 
-## Settings
+## 設定
 
-See the [settings reference](../reference/settings.md) for an enumeration of the available settings.
+利用可能な設定の列挙については、[設定リファレンス](../reference/settings.md)を参照してください。
 
-## Configuring the pip interface
+## pipインターフェースの設定
 
-A dedicated [`[tool.uv.pip]`](../reference/settings.md#pip) section is provided for configuring
-_just_ the `uv pip` command line interface. Settings in this section will not apply to `uv` commands
-outside the `uv pip` namespace. However, many of the settings in this section have corollaries in
-the top-level namespace which _do_ apply to the `uv pip` interface unless they are overridden by a
-value in the `uv.pip` section.
+専用の[`[tool.uv.pip]`](../reference/settings.md#pip)セクションは、`uv pip`コマンドラインインターフェースの_み_を設定するために提供されています。このセクションの設定は、`uv pip`名前空間外の`uv`コマンドには適用されません。ただし、このセクションの設定の多くは、`uv.pip`セクションの値によってオーバーライドされない限り、`uv pip`インターフェースにも適用されるトップレベルの名前空間に対応するものがあります。
 
-The `uv.pip` settings are designed to adhere closely to pip's interface and are declared separately
-to retain compatibility while allowing the global settings to use alternate designs (e.g.,
-`--no-build`).
+`uv.pip`設定はpipのインターフェースに密接に従うように設計されており、グローバル設定が代替デザイン（例：`--no-build`）を使用できるようにするために別々に宣言されています。
 
-As an example, setting the `index-url` under `[tool.uv.pip]`, as in the following `pyproject.toml`,
-would only affect the `uv pip` subcommands (e.g., `uv pip install`, but not `uv sync`, `uv lock`, or
-`uv run`):
+例えば、次の`pyproject.toml`のように`[tool.uv.pip]`の下に`index-url`を設定すると、`uv pip`サブコマンド（例：`uv pip install`）のみに影響し、`uv sync`、`uv lock`、`uv run`には影響しません：
 
 ```toml title="pyproject.toml"
 [tool.uv.pip]

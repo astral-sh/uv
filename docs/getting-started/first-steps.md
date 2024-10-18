@@ -1,21 +1,18 @@
-# First steps with uv
+# uvの最初のステップ
 
-After [installing uv](./installation.md), you can check that uv is available by running the `uv`
-command:
+[uvのインストール](./installation.md)後、`uv`コマンドを実行してuvが利用可能かどうかを確認できます：
 
 ```console
 $ uv
-An extremely fast Python package manager.
+非常に高速なPythonパッケージマネージャー。
 
-Usage: uv [OPTIONS] <COMMAND>
+使用法: uv [オプション] <コマンド>
 
 ...
 ```
 
-You should see a help menu listing the available commands.
+利用可能なコマンドを一覧表示するヘルプメニューが表示されるはずです。
 
-## Next steps
+## 次のステップ
 
-Now that you've confirmed uv is installed, check out an [overview of features](./features.md), learn
-how to [get help](./help.md) if you run into any problems, or jump to the
-[guides](../guides/index.md) to start using uv.
+uvがインストールされていることを確認したら、[機能の概要](./features.md)を確認し、問題が発生した場合は[ヘルプの取得方法](./help.md)を学び、uvの使用を開始するために[ガイド](../guides/index.md)にジャンプしてください。

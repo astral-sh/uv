@@ -1,11 +1,11 @@
-# Reference
+# リファレンス
 
-The reference section provides information about specific parts of uv:
+リファレンスセクションでは、uvの特定の部分に関する情報を提供します：
 
-- [Commands](./cli.md): A reference for uv's command line interface.
-- [Settings](./settings.md): A reference for uv's configuration schema.
-- [Resolver](./resolver-internals.md): Details about the internals of uv's resolver.
-- [Versioning](./versioning.md): uv's versioning policy.
-- [Platform support](./platforms.md): uv's supported operating systems and architectures.
+- [コマンド](./cli.md): uvのコマンドラインインターフェースのリファレンス。
+- [設定](./settings.md): uvの設定スキーマのリファレンス。
+- [リゾルバ](./resolver-internals.md): uvのリゾルバの内部に関する詳細。
+- [バージョニング](./versioning.md): uvのバージョニングポリシー。
+- [プラットフォームサポート](./platforms.md): uvのサポートされているオペレーティングシステムとアーキテクチャ。
 
-Looking for a broader overview? Check out the [concepts](../concepts/index.md) documentation.
+より広範な概要をお探しですか？ [概念](../concepts/index.md)のドキュメントをチェックしてください。

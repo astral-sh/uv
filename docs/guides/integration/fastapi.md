@@ -1,18 +1,17 @@
-# Using uv with FastAPI
+# FastAPIでuvを使用する
 
-[FastAPI](https://github.com/fastapi/fastapi) is a modern, high-performance Python web framework.
-You can use uv to manage your FastAPI project, including installing dependencies, managing
-environments, running FastAPI applications, and more.
+[FastAPI](https://github.com/fastapi/fastapi)は、モダンで高性能なPythonウェブフレームワークです。
+uvを使用してFastAPIプロジェクトを管理することができます。これには、依存関係のインストール、環境の管理、
+FastAPIアプリケーションの実行などが含まれます。
 
 !!! note
 
-    You can view the source code for this guide in the [uv-fastapi-example](https://github.com/astral-sh/uv-fastapi-example) repository.
+    このガイドのソースコードは[uv-fastapi-example](https://github.com/astral-sh/uv-fastapi-example)リポジトリで確認できます。
 
-## Migrating an existing FastAPI project
+## 既存のFastAPIプロジェクトの移行
 
-As an example, consider the sample application defined in the
-[FastAPI documentation](https://fastapi.tiangolo.com/tutorial/bigger-applications/), structured as
-follows:
+例として、[FastAPIドキュメント](https://fastapi.tiangolo.com/tutorial/bigger-applications/)で定義されているサンプルアプリケーションを考えてみます。
+構造は次のようになっています：
 
 ```plaintext
 project
@@ -29,22 +28,21 @@ project
         └── admin.py
 ```
 
-To use uv with this application, inside the `project` directory run:
+このアプリケーションでuvを使用するには、`project`ディレクトリ内で次のコマンドを実行します：
 
 ```console
 $ uv init --app
 ```
 
-This creates an [Application project](../../concepts/projects.md#applications) with a
-`pyproject.toml` file.
+これにより、`pyproject.toml`ファイルを含む[アプリケーションプロジェクト](../../concepts/projects.md#applications)が作成されます。
 
-Then, add a dependency on FastAPI:
+次に、FastAPIの依存関係を追加します：
 
 ```console
 $ uv add fastapi --extra standard
 ```
 
-You should now have the following structure:
+これで、次のような構造になります：
 
 ```plaintext
 project
@@ -62,7 +60,7 @@ project
         └── admin.py
 ```
 
-And the contents of the `pyproject.toml` file should look something like this:
+`pyproject.toml`ファイルの内容は次のようになります：
 
 ```toml title="pyproject.toml"
 [project]
@@ -76,54 +74,52 @@ dependencies = [
 ]
 ```
 
-From there, you can run the FastAPI application with:
+ここから、FastAPIアプリケーションを次のコマンドで実行できます：
 
 ```console
 $ uv run fastapi dev
 ```
 
-`uv run` will automatically resolve and lock the project dependencies (i.e., create a `uv.lock`
-alongside the `pyproject.toml`), create a virtual environment, and run the command in that
-environment.
+`uv run`はプロジェクトの依存関係を自動的に解決し、ロックし（つまり、`pyproject.toml`の隣に`uv.lock`を作成）、
+仮想環境を作成し、その環境でコマンドを実行します。
 
-Test the app by opening http://127.0.0.1:8000/?token=jessica in a web browser.
+http://127.0.0.1:8000/?token=jessica をウェブブラウザで開いてアプリケーションをテストします。
 
-## Deployment
+## デプロイ
 
-To deploy the FastAPI application with Docker, you can use the following `Dockerfile`:
+FastAPIアプリケーションをDockerでデプロイするには、次の`Dockerfile`を使用できます：
 
 ```dockerfile title="Dockerfile"
 FROM python:3.12-slim
 
-# Install uv.
+# uvをインストールします。
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy the application into the container.
+# アプリケーションをコンテナにコピーします。
 COPY . /app
 
-# Install the application dependencies.
+# アプリケーションの依存関係をインストールします。
 WORKDIR /app
 RUN uv sync --frozen --no-cache
 
-# Run the application.
+# アプリケーションを実行します。
 CMD ["/app/.venv/bin/fastapi", "run", "app/main.py", "--port", "80", "--host", "0.0.0.0"]
 ```
 
-Build the Docker image with:
+次のコマンドでDockerイメージをビルドします：
 
 ```console
 $ docker build -t fastapi-app .
 ```
 
-Run the Docker container locally with:
+次のコマンドでDockerコンテナをローカルで実行します：
 
 ```console
 $ docker run -p 8000:80 fastapi-app
 ```
 
-Navigate to http://127.0.0.1:8000/?token=jessica in your browser to verify that the app is running
-correctly.
+ブラウザでhttp://127.0.0.1:8000/?token=jessica にアクセスして、アプリケーションが正しく動作していることを確認します。
 
 !!! tip
 
-    For more on using uv with Docker, see the [Docker guide](./docker.md).
+    Dockerでuvを使用する方法については、[Dockerガイド](./docker.md)を参照してください。

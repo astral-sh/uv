@@ -1,14 +1,12 @@
-# Declaring dependencies
+# 依存関係の宣言
 
-It is best practice to declare dependencies in a static file instead of modifying environments with
-ad-hoc installations. Once dependencies are defined, they can be [locked](./compile.md) to create a
-consistent, reproducible environment.
+依存関係を静的ファイルに宣言することは、アドホックなインストールで環境を変更する代わりに、ベストプラクティスです。依存関係が定義されたら、それらを[ロック](./compile.md)して、一貫性のある再現可能な環境を作成できます。
 
-## Using `pyproject.toml`
+## `pyproject.toml` を使用する
 
-The `pyproject.toml` file is the Python standard for defining configuration for a project.
+`pyproject.toml` ファイルは、プロジェクトの設定を定義するためのPython標準です。
 
-To define project dependencies in a `pyproject.toml` file:
+`pyproject.toml` ファイルにプロジェクトの依存関係を定義するには:
 
 ```toml title="pyproject.toml"
 [project]
@@ -18,7 +16,7 @@ dependencies = [
 ]
 ```
 
-To define optional dependencies in a `pyproject.toml` file:
+`pyproject.toml` ファイルにオプションの依存関係を定義するには:
 
 ```toml title="pyproject.toml"
 [project.optional-dependencies]
@@ -28,26 +26,20 @@ cli = [
 ]
 ```
 
-Each of the keys defines an "extra", which can be installed using the `--extra` and `--all-extras`
-flags or `package[<extra>]` syntax. See the documentation on
-[installing packages](./packages.md#installing-packages-from-files) for more details.
+各キーは「エクストラ」を定義しており、`--extra` および `--all-extras` フラグや `package[<extra>]` 構文を使用してインストールできます。詳細については、[パッケージのインストール](./packages.md#installing-packages-from-files)に関するドキュメントを参照してください。
 
-See the official
-[`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for
-more details on getting started with a `pyproject.toml`.
+`pyproject.toml` の使用を開始するための詳細については、公式の
+[`pyproject.toml` ガイド](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)を参照してください。
 
-## Using `requirements.in`
+## `requirements.in` を使用する
 
-It is also common to use a lightweight `requirements.txt` format to declare the dependencies for the
-project. Each requirement is defined on its own line. Commonly, this file is called
-`requirements.in` to distinguish it from `requirements.txt` which is used for the locked
-dependencies.
+プロジェクトの依存関係を宣言するために、軽量な `requirements.txt` 形式を使用することも一般的です。各要件は独自の行で定義されます。通常、このファイルは `requirements.txt` から区別するために `requirements.in` と呼ばれます。
 
-To define dependencies in a `requirements.in` file:
+`requirements.in` ファイルに依存関係を定義するには:
 
 ```python title="requirements.in"
 httpx
 ruff>=0.3.0
 ```
 
-Optional dependencies groups are not supported in this format.
+この形式ではオプションの依存関係グループはサポートされていません。

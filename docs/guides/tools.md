@@ -1,13 +1,12 @@
-# Using tools
+# ツールの使用
 
-Many Python packages provide applications that can be used as tools. uv has specialized support for
-easily invoking and installing tools.
+多くのPythonパッケージは、ツールとして使用できるアプリケーションを提供しています。uvは、ツールを簡単に呼び出し、インストールするための専門的なサポートを提供します。
 
-## Running tools
+## ツールの実行
 
-The `uvx` command invokes a tool without installing it.
+`uvx`コマンドは、ツールをインストールせずに呼び出します。
 
-For example, to run `ruff`:
+例えば、`ruff`を実行するには：
 
 ```console
 $ uvx ruff
@@ -15,15 +14,15 @@ $ uvx ruff
 
 !!! note
 
-    This is exactly equivalent to:
+    これは正確には次のコマンドと同等です：
 
     ```console
     $ uv tool run ruff
     ```
 
-    `uvx` is provided as an alias for convenience.
+    `uvx`は便宜上のエイリアスとして提供されています。
 
-Arguments can be provided after the tool name:
+ツール名の後に引数を指定できます：
 
 ```console
 $ uvx pycowsay hello from uv
@@ -39,168 +38,150 @@ $ uvx pycowsay hello from uv
 
 ```
 
-Tools are installed into temporary, isolated environments when using `uvx`.
+`uvx`を使用する場合、ツールは一時的で隔離された環境にインストールされます。
 
 !!! note
 
-    If you are running a tool in a [_project_](../concepts/projects.md) and the tool requires that
-    your project is installed, e.g., when using `pytest` or `mypy`, you'll want to use
-    [`uv run`](./projects.md#running-commands) instead of `uvx`. Otherwise, the tool will be run in
-    a virtual environment that is isolated from your project.
+    ツールを[_プロジェクト_](../concepts/projects.md)で実行し、ツールがプロジェクトのインストールを必要とする場合（例：`pytest`や`mypy`を使用する場合）、`uvx`の代わりに[`uv run`](./projects.md#running-commands)を使用することをお勧めします。そうしないと、ツールはプロジェクトから隔離された仮想環境で実行されます。
 
-    If your project has a flat structure, e.g., instead of using a `src` directory for modules,
-    the project itself does not need to be installed and `uvx` is fine. In this case, using
-    `uv run` is only beneficial if you want to pin the version of the tool in the project's
-    dependencies.
+    プロジェクトがフラットな構造を持っている場合（例：モジュールに`src`ディレクトリを使用せず、プロジェクト自体がインストールを必要としない場合）、`uvx`を使用しても問題ありません。この場合、ツールのバージョンをプロジェクトの依存関係に固定したい場合にのみ`uv run`を使用することが有益です。
 
-## Commands with different package names
+## パッケージ名が異なるコマンド
 
-When `uvx ruff` is invoked, uv installs the `ruff` package which provides the `ruff` command.
-However, sometimes the package and command names differ.
+`uvx ruff`が呼び出されると、uvは`ruff`コマンドを提供する`ruff`パッケージをインストールします。ただし、パッケージ名とコマンド名が異なる場合があります。
 
-The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is
-provided by `httpie`:
+`--from`オプションを使用して、特定のパッケージからコマンドを呼び出すことができます。例：`httpie`が提供する`http`：
 
 ```console
 $ uvx --from httpie http
 ```
 
-## Requesting specific versions
+## 特定のバージョンの要求
 
-To run a tool at a specific version, use `command@<version>`:
+特定のバージョンでツールを実行するには、`command@<version>`を使用します：
 
 ```console
 $ uvx ruff@0.3.0 check
 ```
 
-To run a tool at the latest version, use `command@latest`:
+最新バージョンでツールを実行するには、`command@latest`を使用します：
 
 ```console
 $ uvx ruff@latest check
 ```
 
-The `--from` option can also be used to specify package versions, as above:
+`--from`オプションを使用してパッケージバージョンを指定することもできます。上記のように：
 
 ```console
 $ uvx --from 'ruff==0.3.0' ruff check
 ```
 
-Or, to constrain to a range of versions:
+または、バージョン範囲を制約するには：
 
 ```console
 $ uvx --from 'ruff>0.2.0,<0.3.0' ruff check
 ```
 
-Note the `@` syntax cannot be used for anything other than an exact version.
+`@`構文は正確なバージョン以外には使用できないことに注意してください。
 
-## Requesting different sources
+## 異なるソースの要求
 
-The `--from` option can also be used to install from alternative sources.
+`--from`オプションを使用して、代替ソースからインストールすることもできます。
 
-For example, to pull from git:
+例えば、gitから取得するには：
 
 ```console
 $ uvx --from git+https://github.com/httpie/cli httpie
 ```
 
-## Commands with plugins
+## プラグインを持つコマンド
 
-Additional dependencies can be included, e.g., to include `mkdocs-material` when running `mkdocs`:
+追加の依存関係を含めることができます。例：`mkdocs`を実行する際に`mkdocs-material`を含めるには：
 
 ```console
 $ uvx --with mkdocs-material mkdocs --help
 ```
 
-## Installing tools
+## ツールのインストール
 
-If a tool is used often, it is useful to install it to a persistent environment and add it to the
-`PATH` instead of invoking `uvx` repeatedly.
+ツールを頻繁に使用する場合、`uvx`を繰り返し呼び出す代わりに、永続的な環境にインストールし、`PATH`に追加することが便利です。
 
 !!! tip
 
-    `uvx` is a convenient alias for `uv tool run`. All of the other commands for interacting with
-    tools require the full `uv tool` prefix.
+    `uvx`は`uv tool run`の便利なエイリアスです。他のツールと対話するためのコマンドはすべて`uv tool`プレフィックスが必要です。
 
-To install `ruff`:
+`ruff`をインストールするには：
 
 ```console
 $ uv tool install ruff
 ```
 
-When a tool is installed, its executables are placed in a `bin` directory in the `PATH` which allows
-the tool to be run without uv. If it's not on the `PATH`, a warning will be displayed and
-`uv tool update-shell` can be used to add it to the `PATH`.
+ツールがインストールされると、その実行可能ファイルは`PATH`にある`bin`ディレクトリに配置され、uvなしでツールを実行できるようになります。`PATH`にない場合は警告が表示され、`uv tool update-shell`を使用して`PATH`に追加できます。
 
-After installing `ruff`, it should be available:
+`ruff`をインストールした後、次のように利用可能になります：
 
 ```console
 $ ruff --version
 ```
 
-Unlike `uv pip install`, installing a tool does not make its modules available in the current
-environment. For example, the following command will fail:
+`uv pip install`とは異なり、ツールをインストールしてもそのモジュールは現在の環境で利用できません。例えば、次のコマンドは失敗します：
 
 ```console
 $ python -c "import ruff"
 ```
 
-This isolation is important for reducing interactions and conflicts between dependencies of tools,
-scripts, and projects.
+この隔離は、ツール、スクリプト、およびプロジェクトの依存関係間の相互作用と競合を減らすために重要です。
 
-Unlike `uvx`, `uv tool install` operates on a _package_ and will install all executables provided by
-the tool.
+`uvx`とは異なり、`uv tool install`は_パッケージ_に対して操作を行い、ツールが提供するすべての実行可能ファイルをインストールします。
 
-For example, the following will install the `http`, `https`, and `httpie` executables:
+例えば、次のコマンドは`http`、`https`、および`httpie`の実行可能ファイルをインストールします：
 
 ```console
 $ uv tool install httpie
 ```
 
-Additionally, package versions can be included without `--from`:
+さらに、パッケージバージョンを`--from`なしで含めることができます：
 
 ```console
 $ uv tool install 'httpie>0.1.0'
 ```
 
-And, similarly, for package sources:
+同様に、パッケージソースについても：
 
 ```console
 $ uv tool install git+https://github.com/httpie/cli
 ```
 
-As with `uvx`, installations can include additional packages:
+`uvx`と同様に、インストールには追加のパッケージを含めることができます：
 
 ```console
 $ uv tool install mkdocs --with mkdocs-material
 ```
 
-## Upgrading tools
+## ツールのアップグレード
 
-To upgrade a tool, use `uv tool upgrade`:
+ツールをアップグレードするには、`uv tool upgrade`を使用します：
 
 ```console
 $ uv tool upgrade ruff
 ```
 
-Tool upgrades will respect the version constraints provided when installing the tool. For example,
-`uv tool install ruff >=0.3,<0.4` followed by `uv tool upgrade ruff` will upgrade Ruff to the latest
-version in the range `>=0.3,<0.4`.
+ツールのアップグレードは、ツールのインストール時に提供されたバージョン制約を尊重します。例えば、`uv tool install ruff >=0.3,<0.4`の後に`uv tool upgrade ruff`を実行すると、Ruffは`>=0.3,<0.4`の範囲内の最新バージョンにアップグレードされます。
 
-To instead replace the version constraints, re-install the tool with `uv tool install`:
+バージョン制約を置き換えるには、`uv tool install`を使用してツールを再インストールします：
 
 ```console
 $ uv tool install ruff>=0.4
 ```
 
-To instead upgrade all tools:
+すべてのツールをアップグレードするには：
 
 ```console
 $ uv tool upgrade --all
 ```
 
-## Next steps
+## 次のステップ
 
-To learn more about managing tools with uv, see the [Tools concept](../concepts/tools.md) page and
-the [command reference](../reference/cli.md#uv-tool).
+uvでツールを管理する方法の詳細については、[ツールの概念](../concepts/tools.md)ページと[コマンドリファレンス](../reference/cli.md#uv-tool)を参照してください。
 
-Or, read on to learn how to to [work on projects](./projects.md).
+または、[プロジェクトで作業する](./projects.md)方法を学んでください。

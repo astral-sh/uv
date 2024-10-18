@@ -1,19 +1,17 @@
-# Platform support
+# プラットフォームサポート
 
-uv has Tier 1 support for the following platforms:
+uvは以下のプラットフォームに対してTier 1のサポートを提供しています：
 
 - macOS (Apple Silicon)
 - macOS (x86_64)
 - Linux (x86_64)
 - Windows (x86_64)
 
-uv is continuously built, tested, and developed against its Tier 1 platforms. Inspired by the Rust
-project, Tier 1 can be thought of as
-["guaranteed to work"](https://doc.rust-lang.org/beta/rustc/platform-support.html).
+uvはTier 1プラットフォームに対して継続的にビルド、テスト、および開発されています。Rustプロジェクトに触発され、Tier 1は
+["動作保証"](https://doc.rust-lang.org/beta/rustc/platform-support.html)と考えることができます。
 
-uv has Tier 2 support
-(["guaranteed to build"](https://doc.rust-lang.org/beta/rustc/platform-support.html)) for the
-following platforms:
+uvは以下のプラットフォームに対してTier 2のサポート
+(["ビルド保証"](https://doc.rust-lang.org/beta/rustc/platform-support.html))を提供しています：
 
 - Linux (PPC64)
 - Linux (PPC64LE)
@@ -22,13 +20,9 @@ following platforms:
 - Linux (i686)
 - Linux (s390x)
 
-uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv/) for its Tier 1 and Tier 2
-platforms. However, while Tier 2 platforms are continuously built, they are not continuously tested
-or developed against, and so stability may vary in practice.
+uvはTier 1およびTier 2プラットフォーム向けに[PyPI](https://pypi.org/project/uv/)に事前ビルドされたホイールを提供します。ただし、Tier 2プラットフォームは継続的にビルドされますが、継続的にテストまたは開発されていないため、実際の安定性は異なる場合があります。
 
-Beyond the Tier 1 and Tier 2 platforms, uv is known to build on i686 Windows, and known _not_ to
-build on aarch64 Windows, but does not consider either platform to be supported at this time. The
-minimum supported Windows versions are Windows 10 and Windows Server 2016, following
-[Rust's own Tier 1 support](https://blog.rust-lang.org/2024/02/26/Windows-7.html).
+Tier 1およびTier 2プラットフォーム以外では、uvはi686 Windowsでビルドされることが知られており、aarch64 Windowsではビルドされないことが知られていますが、現時点ではどちらのプラットフォームもサポートされているとは見なされていません。サポートされている最小のWindowsバージョンは、Windows 10およびWindows Server 2016であり、これは
+[RustのTier 1サポート](https://blog.rust-lang.org/2024/02/26/Windows-7.html)に従っています。
 
-uv supports and is tested against Python 3.8, 3.9, 3.10, 3.11, 3.12, and 3.13.
+uvはPython 3.8、3.9、3.10、3.11、3.12、および3.13に対してサポートおよびテストされています。

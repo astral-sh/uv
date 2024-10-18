@@ -1,41 +1,40 @@
 # Using uv in pre-commit
 
-An official pre-commit hook is provided at
-[`astral-sh/uv-pre-commit`](https://github.com/astral-sh/uv-pre-commit).
+公式の pre-commit フックは [`astral-sh/uv-pre-commit`](https://github.com/astral-sh/uv-pre-commit) に提供されています。
 
-To compile requirements via pre-commit, add the following to the `.pre-commit-config.yaml`:
+pre-commit を介して requirements をコンパイルするには、次の内容を `.pre-commit-config.yaml` に追加します:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
-  # uv version.
+  # uv バージョン。
   rev: 0.4.24
   hooks:
-    # Compile requirements
+    # requirements をコンパイル
     - id: pip-compile
       args: [requirements.in, -o, requirements.txt]
 ```
 
-To compile alternative files, modify `args` and `files`:
+別のファイルをコンパイルするには、`args` と `files` を変更します:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
-  # uv version.
+  # uv バージョン。
   rev: 0.4.24
   hooks:
-    # Compile requirements
+    # requirements をコンパイル
     - id: pip-compile
       args: [requirements-dev.in, -o, requirements-dev.txt]
       files: ^requirements-dev\.(in|txt)$
 ```
 
-To run the hook over multiple files at the same time:
+複数のファイルを同時にフックで処理するには:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
-  # uv version.
+  # uv バージョン。
   rev: 0.4.24
   hooks:
-    # Compile requirements
+    # requirements をコンパイル
     - id: pip-compile
       name: pip-compile requirements.in
       args: [requirements.in, -o, requirements.txt]

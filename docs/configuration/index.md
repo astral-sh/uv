@@ -1,11 +1,10 @@
-# Configuration overview
+# 設定の概要
 
-Read about the various ways to configure uv:
+uvの設定方法について読んでください：
 
-- [Using configuration files](./files.md)
-- [Using environment variables](./environment.md)
-- [Configuring authentication](./authentication.md)
-- [Configuring package indexes](./indexes.md)
+- [設定ファイルの使用](./files.md)
+- [環境変数の使用](./environment.md)
+- [認証の設定](./authentication.md)
+- [パッケージインデックスの設定](./indexes.md)
 
-Or, jump to the [settings reference](../reference/settings.md) which enumerates the available
-configuration options.
+または、利用可能な設定オプションを列挙した[設定リファレンス](../reference/settings.md)にジャンプしてください。

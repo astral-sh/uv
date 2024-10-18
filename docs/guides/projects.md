@@ -1,17 +1,17 @@
-# Working on projects
+# プロジェクトでの作業
 
-uv supports managing Python projects, which define their dependencies in a `pyproject.toml` file.
+uvは、`pyproject.toml`ファイルに依存関係を定義するPythonプロジェクトの管理をサポートしています。
 
-## Creating a new project
+## 新しいプロジェクトの作成
 
-You can create a new Python project using the `uv init` command:
+`uv init`コマンドを使用して新しいPythonプロジェクトを作成できます：
 
 ```console
 $ uv init hello-world
 $ cd hello-world
 ```
 
-Alternatively, you can initialize a project in the working directory:
+または、作業ディレクトリでプロジェクトを初期化することもできます：
 
 ```console
 $ mkdir hello-world
@@ -19,7 +19,7 @@ $ cd hello-world
 $ uv init
 ```
 
-uv will create the following files:
+uvは次のファイルを作成します：
 
 ```text
 .
@@ -29,21 +29,19 @@ uv will create the following files:
 └── pyproject.toml
 ```
 
-The `hello.py` file contains a simple "Hello world" program. Try it out with `uv run`:
+`hello.py`ファイルには、シンプルな「Hello world」プログラムが含まれています。`uv run`で試してみてください：
 
 ```console
 $ uv run hello.py
 Hello from hello-world!
 ```
 
-## Project structure
+## プロジェクト構造
 
-A project consists of a few important parts that work together and allow uv to manage your project.
-In addition to the files created by `uv init`, uv will create a virtual environment and `uv.lock`
-file in the root of your project the first time you run a project command, i.e., `uv run`,
-`uv sync`, or `uv lock`.
+プロジェクトは、いくつかの重要な部分で構成されており、これらが連携してuvがプロジェクトを管理できるようにします。
+`uv init`によって作成されたファイルに加えて、uvはプロジェクトコマンド（例：`uv run`、`uv sync`、`uv lock`）を初めて実行するときに、プロジェクトのルートに仮想環境と`uv.lock`ファイルを作成します。
 
-A complete listing would look like:
+完全なリストは次のようになります：
 
 ```text
 .
@@ -60,7 +58,7 @@ A complete listing would look like:
 
 ### `pyproject.toml`
 
-The `pyproject.toml` contains metadata about your project:
+`pyproject.toml`には、プロジェクトに関するメタデータが含まれています：
 
 ```toml title="pyproject.toml"
 [project]
@@ -71,100 +69,83 @@ readme = "README.md"
 dependencies = []
 ```
 
-You'll use this file to specify dependencies, as well as details about the project such as its
-description or license. You can edit this file manually, or use commands like `uv add` and
-`uv remove` to manage your project from the terminal.
+このファイルを使用して依存関係を指定し、プロジェクトの詳細（例：説明やライセンス）を指定します。このファイルは手動で編集することも、`uv add`や`uv remove`などのコマンドを使用してターミナルからプロジェクトを管理することもできます。
 
 !!! tip
 
-    See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
-    for more details on getting started with the `pyproject.toml` format.
+    `pyproject.toml`形式の詳細については、公式の[`pyproject.toml`ガイド](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)を参照してください。
 
-You'll also use this file to specify uv [configuration options](../configuration/files.md) in a
-[`[tool.uv]`](../reference/settings.md) section.
+また、このファイルを使用して、[`[tool.uv]`](../reference/settings.md)セクションでuvの[設定オプション](../configuration/files.md)を指定します。
 
 ### `.python-version`
 
-The `.python-version` file contains the project's default Python version. This file tells uv which
-Python version to use when creating the project's virtual environment.
+`.python-version`ファイルには、プロジェクトのデフォルトのPythonバージョンが含まれています。このファイルは、プロジェクトの仮想環境を作成するときにuvが使用するPythonバージョンを指定します。
 
 ### `.venv`
 
-The `.venv` folder contains your project's virtual environment, a Python environment that is
-isolated from the rest of your system. This is where uv will install your project's dependencies.
+`.venv`フォルダーには、プロジェクトの仮想環境が含まれています。これは、システムの他の部分から分離されたPython環境です。uvはここにプロジェクトの依存関係をインストールします。
 
-See the [project environment](../concepts/projects.md#project-environments) documentation for more
-details.
+詳細については、[プロジェクト環境](../concepts/projects.md#project-environments)のドキュメントを参照してください。
 
 ### `uv.lock`
 
-`uv.lock` is a cross-platform lockfile that contains exact information about your project's
-dependencies. Unlike the `pyproject.toml` which is used to specify the broad requirements of your
-project, the lockfile contains the exact resolved versions that are installed in the project
-environment. This file should be checked into version control, allowing for consistent and
-reproducible installations across machines.
+`uv.lock`は、プロジェクトの依存関係に関する正確な情報を含むクロスプラットフォームのロックファイルです。`pyproject.toml`がプロジェクトの広範な要件を指定するのに対し、ロックファイルにはプロジェクト環境にインストールされる正確な解決バージョンが含まれています。このファイルはバージョン管理にチェックインする必要があり、マシン間で一貫性のある再現可能なインストールを可能にします。
 
-`uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually.
+`uv.lock`は人間が読めるTOMLファイルですが、uvによって管理されるため手動で編集しないでください。
 
-See the [lockfile](../concepts/projects.md#project-lockfile) documentation for more details.
+詳細については、[ロックファイル](../concepts/projects.md#project-lockfile)のドキュメントを参照してください。
 
-## Managing dependencies
+## 依存関係の管理
 
-You can add dependencies to your `pyproject.toml` with the `uv add` command. This will also update
-the lockfile and project environment:
+`uv add`コマンドを使用して、`pyproject.toml`に依存関係を追加できます。これにより、ロックファイルとプロジェクト環境も更新されます：
 
 ```console
 $ uv add requests
 ```
 
-You can also specify version constraints or alternative sources:
+バージョン制約や代替ソースを指定することもできます：
 
 ```console
-$ # Specify a version constraint
+$ # バージョン制約を指定する
 $ uv add 'requests==2.31.0'
 
-$ # Add a git dependency
+$ # Git依存関係を追加する
 $ uv add git+https://github.com/psf/requests
 ```
 
-To remove a package, you can use `uv remove`:
+パッケージを削除するには、`uv remove`を使用します：
 
 ```console
 $ uv remove requests
 ```
 
-To upgrade a package, run `uv lock` with the `--upgrade-package` flag:
+パッケージをアップグレードするには、`--upgrade-package`フラグを使用して`uv lock`を実行します：
 
 ```console
 $ uv lock --upgrade-package requests
 ```
 
-The `--upgrade-package` flag will attempt to update the specified package to the latest compatible
-version, while keeping the rest of the lockfile intact.
+`--upgrade-package`フラグは、ロックファイルの他の部分をそのままにして、指定されたパッケージを最新の互換バージョンに更新しようとします。
 
-See the documentation on [managing dependencies](../concepts/projects.md#managing-dependencies) for
-more details.
+詳細については、[依存関係の管理](../concepts/projects.md#managing-dependencies)のドキュメントを参照してください。
 
-## Running commands
+## コマンドの実行
 
-`uv run` can be used to run arbitrary scripts or commands in your project environment.
+`uv run`を使用して、プロジェクト環境で任意のスクリプトやコマンドを実行できます。
 
-Prior to every `uv run` invocation, uv will verify that the lockfile is up-to-date with the
-`pyproject.toml`, and that the environment is up-to-date with the lockfile, keeping your project
-in-sync without the need for manual intervention. `uv run` guarantees that your command is run in a
-consistent, locked environment.
+`uv run`の呼び出しの前に、uvは`pyproject.toml`とロックファイルが最新であること、および環境がロックファイルと最新であることを確認し、手動の介入なしでプロジェクトを同期状態に保ちます。`uv run`は、コマンドが一貫性のあるロックされた環境で実行されることを保証します。
 
-For example, to use `flask`:
+例えば、`flask`を使用するには：
 
 ```console
 $ uv add flask
 $ uv run -- flask run -p 3000
 ```
 
-Or, to run a script:
+または、スクリプトを実行するには：
 
 ```python title="example.py"
-# Require a project dependency
+# プロジェクト依存関係を必要とする
 import flask
 
 print("hello world")
@@ -174,8 +155,7 @@ print("hello world")
 $ uv run example.py
 ```
 
-Alternatively, you can use `uv sync` to manually update the environment then activate it before
-executing a command:
+または、`uv sync`を使用して環境を手動で更新し、コマンドを実行する前にアクティブ化します：
 
 ```console
 $ uv sync
@@ -186,18 +166,15 @@ $ python example.py
 
 !!! note
 
-    The virtual environment must be active to run scripts and commands in the project without `uv run`. Virtual environment activation differs per shell and platform.
+    プロジェクトで`uv run`を使用せずにスクリプトやコマンドを実行するには、仮想環境がアクティブである必要があります。仮想環境のアクティベーションは、シェルやプラットフォームによって異なります。
 
-See the documentation on [running commands](../concepts/projects.md#running-commands) and
-[running scripts](../concepts/projects.md#running-scripts) in projects for more details.
+詳細については、プロジェクトでの[コマンドの実行](../concepts/projects.md#running-commands)および[スクリプトの実行](../concepts/projects.md#running-scripts)のドキュメントを参照してください。
 
-## Building distributions
+## 配布物のビルド
 
-`uv build` can be used to build source distributions and binary distributions (wheel) for your
-project.
+`uv build`を使用して、プロジェクトのソースディストリビューションおよびバイナリディストリビューション（ホイール）をビルドできます。
 
-By default, `uv build` will build the project in the current directory, and place the built
-artifacts in a `dist/` subdirectory:
+デフォルトでは、`uv build`は現在のディレクトリでプロジェクトをビルドし、ビルドされたアーティファクトを`dist/`サブディレクトリに配置します：
 
 ```console
 $ uv build
@@ -206,12 +183,10 @@ hello-world-0.1.0-py3-none-any.whl
 hello-world-0.1.0.tar.gz
 ```
 
-See the documentation on [building projects](../concepts/projects.md#building-projects) for more
-details.
+詳細については、[プロジェクトのビルド](../concepts/projects.md#building-projects)のドキュメントを参照してください。
 
-## Next steps
+## 次のステップ
 
-To learn more about working on projects with uv, see the [Projects concept](../concepts/projects.md)
-page and the [command reference](../reference/cli.md#uv).
+uvでのプロジェクト作業の詳細については、[プロジェクトの概念](../concepts/projects.md)ページおよび[コマンドリファレンス](../reference/cli.md#uv)を参照してください。
 
-Or, read on to learn how to [publish your project as a package](./publish.md).
+または、[プロジェクトをパッケージとして公開する](./publish.md)方法を学んでください。

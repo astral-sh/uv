@@ -1,290 +1,180 @@
-# Resolution
+# 解決
 
-Resolution is the process of taking a list of requirements and converting them to a list of package
-versions that fulfill the requirements. Resolution requires recursively searching for compatible
-versions of packages, ensuring that the requested requirements are fulfilled and that the
-requirements of the requested packages are compatible.
+解決は、要件のリストを取得し、それらの要件を満たすパッケージバージョンのリストに変換するプロセスです。解決には、要求された要件が満たされ、要求されたパッケージの要件が互換性があることを確認するために、互換性のあるパッケージバージョンを再帰的に検索する必要があります。
 
-## Dependencies
+## 依存関係
 
-Most projects and packages have dependencies. Dependencies are other packages that are needed in
-order for the current package to work. A package defines its dependencies as _requirements_, roughly
-a combination of a package name and acceptable versions. The dependencies defined by the current
-project are called _direct dependencies_. The requirements added by each dependency of the current
-project are called _indirect_ or _transitive dependencies_.
+ほとんどのプロジェクトやパッケージには依存関係があります。依存関係は、現在のパッケージが動作するために必要な他のパッケージです。パッケージは、パッケージ名と許容されるバージョンの組み合わせである_要件_として依存関係を定義します。現在のプロジェクトによって定義された依存関係は_直接依存関係_と呼ばれます。現在のプロジェクトの各依存関係によって追加された要件は_間接_または_推移的依存関係_と呼ばれます。
 
 !!! note
 
-    See the [dependency specifiers
-    page](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
-    in the Python Packaging documentation for details about dependencies.
+    依存関係の詳細については、Python Packagingのドキュメントの[依存関係指定子ページ](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)を参照してください。
 
-## Basic examples
+## 基本的な例
 
-To help demonstrate the resolution process, consider the following dependencies:
+解決プロセスを説明するために、次の依存関係を考えてみましょう：
 
 <!-- prettier-ignore -->
-- The project depends on `foo` and `bar`.
-- `foo` has one version, 1.0.0:
-    - `foo 1.0.0` depends on `lib>=1.0.0`.
-- `bar` has one version, 1.0.0:
-    - `bar 1.0.0` depends on `lib>=2.0.0`.
-- `lib` has two versions, 1.0.0 and 2.0.0. Both versions have no dependencies.
+- プロジェクトは`foo`と`bar`に依存しています。
+- `foo`には1つのバージョン、1.0.0があります：
+    - `foo 1.0.0`は`lib>=1.0.0`に依存しています。
+- `bar`には1つのバージョン、1.0.0があります：
+    - `bar 1.0.0`は`lib>=2.0.0`に依存しています。
+- `lib`には2つのバージョン、1.0.0と2.0.0があります。どちらのバージョンにも依存関係はありません。
 
-In this example, the resolver must find a set of package versions which satisfies the project
-requirements. Since there is only one version of both `foo` and `bar`, those will be used. The
-resolution must also include the transitive dependencies, so a version of `lib` must be chosen.
-`foo 1.0.0` allows all of the available versions of `lib`, but `bar 1.0.0` requires `lib>=2.0.0` so
-`lib 2.0.0` must be used.
+この例では、リゾルバはプロジェクトの要件を満たすパッケージバージョンのセットを見つける必要があります。`foo`と`bar`のバージョンは1つしかないため、それらが使用されます。解決には推移的依存関係も含まれる必要があるため、`lib`のバージョンを選択する必要があります。`foo 1.0.0`は利用可能なすべてのバージョンの`lib`を許可しますが、`bar 1.0.0`は`lib>=2.0.0`を必要とするため、`lib 2.0.0`を使用する必要があります。
 
-In some resolutions, there is more than one solution. Consider the following dependencies:
+一部の解決では、複数の解決策があります。次の依存関係を考えてみましょう：
 
 <!-- prettier-ignore -->
-- The project depends on `foo` and `bar`.
-- `foo` has two versions, 1.0.0 and 2.0.0:
-    - `foo 1.0.0` has no dependencies.
-    - `foo 2.0.0` depends on `lib==2.0.0`.
-- `bar` has two versions, 1.0.0 and 2.0.0:
-    - `bar 1.0.0` has no dependencies.
-    - `bar 2.0.0` depends on `lib==1.0.0`
-- `lib` has two versions, 1.0.0 and 2.0.0. Both versions have no dependencies.
+- プロジェクトは`foo`と`bar`に依存しています。
+- `foo`には2つのバージョン、1.0.0と2.0.0があります：
+    - `foo 1.0.0`には依存関係はありません。
+    - `foo 2.0.0`は`lib==2.0.0`に依存しています。
+- `bar`には2つのバージョン、1.0.0と2.0.0があります：
+    - `bar 1.0.0`には依存関係はありません。
+    - `bar 2.0.0`は`lib==1.0.0`に依存しています。
+- `lib`には2つのバージョン、1.0.0と2.0.0があります。どちらのバージョンにも依存関係はありません。
 
-In this example, some version of both `foo` and `bar` must be picked, however, determining which
-version requires considering the dependencies of each version of `foo` and `bar`. `foo 2.0.0` and
-`bar 2.0.0` cannot be installed together because they conflict on their required version of `lib`,
-so the resolver must select either `foo 1.0.0` or `bar 1.0.0`. Both are valid solutions, and
-different resolution algorithms may give either result.
+この例では、`foo`と`bar`のいずれかのバージョンを選択する必要がありますが、どのバージョンを選択するかは`foo`と`bar`の各バージョンの依存関係を考慮する必要があります。`foo 2.0.0`と`bar 2.0.0`は、`lib`の必要なバージョンが競合するため、一緒にインストールすることはできません。そのため、リゾルバは`foo 1.0.0`または`bar 1.0.0`のいずれかを選択する必要があります。どちらも有効な解決策であり、異なる解決アルゴリズムはどちらの結果を与えることもあります。
 
-## Platform markers
+## プラットフォームマーカー
 
-Markers allow attaching an expression to requirements that indicate when the dependency should be
-used. For example `bar; python_version<"3.9"` can be used to only require `bar` on Python 3.8 and
-older.
+マーカーを使用すると、依存関係にいつ使用するかを示す式を添付できます。たとえば、`bar; python_version<"3.9"`を使用して、Python 3.8およびそれ以前のバージョンでのみ`bar`を必要とすることができます。
 
-Markers are used to adjust a package's dependencies depending on the current environment or
-platform. For example, markers can be used to change dependencies based on the operating system, the
-CPU architecture, the Python version, the Python implementation, and more.
+マーカーは、現在の環境やプラットフォームに応じてパッケージの依存関係を調整するために使用されます。たとえば、マーカーを使用して、オペレーティングシステム、CPUアーキテクチャ、Pythonバージョン、Python実装などに基づいて依存関係を変更できます。
 
 !!! note
 
-    See the [environment
-    markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers)
-    section in the Python Packaging documentation for more details about markers.
+    マーカーの詳細については、Python Packagingのドキュメントの[環境マーカー](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers)セクションを参照してください。
 
-Markers are important for resolution because their values change the required dependencies.
-Typically, Python package resolvers use the markers of the _current_ platform to determine which
-dependencies to use since the package is often being _installed_ on the current platform. However,
-for _locking_ dependencies this is problematic — the lockfile would only work for developers using
-the same platform the lockfile was created on. To solve this problem, platform-independent, or
-"universal" resolvers exist.
+マーカーは、依存関係の値を変更するため、解決にとって重要です。通常、Pythonパッケージリゾルバは、パッケージが現在のプラットフォームにインストールされているため、_現在の_プラットフォームのマーカーを使用してどの依存関係を使用するかを決定します。ただし、依存関係を_ロック_する場合、これは問題です。ロックファイルは、ロックファイルが作成されたプラットフォームと同じプラットフォームを使用する開発者にのみ機能します。この問題を解決するために、プラットフォームに依存しない、または「ユニバーサル」リゾルバが存在します。
 
-uv supports both [platform-specific](#platform-specific-resolution) and
-[universal](#universal-resolution) resolution.
+uvは、[プラットフォーム固有](#platform-specific-resolution)および[ユニバーサル](#universal-resolution)の解決をサポートしています。
 
-## Universal resolution
+## ユニバーサル解決
 
-uv's lockfile (`uv.lock`) is created with a universal resolution and is portable across platforms.
-This ensures that dependencies are locked for everyone working on the project, regardless of
-operating system, architecture, and Python version. The uv lockfile is created and modified by
-[project](../concepts/projects.md) commands such as `uv lock`, `uv sync`, and `uv add`.
+uvのロックファイル（`uv.lock`）はユニバーサル解決で作成され、プラットフォーム間で移植可能です。これにより、オペレーティングシステム、アーキテクチャ、Pythonバージョンに関係なく、プロジェクトに取り組むすべての人の依存関係がロックされます。uvのロックファイルは、`uv lock`、`uv sync`、`uv add`などの[プロジェクト](../concepts/projects.md)コマンドによって作成および変更されます。
 
-universal resolution is also available in uv's pip interface, i.e.,
-[`uv pip compile`](../pip/compile.md), with the `--universal` flag. The resulting requirements file
-will contain markers to indicate which platform each dependency is relevant for.
+ユニバーサル解決は、`--universal`フラグを使用して、uvのpipインターフェース（つまり、[`uv pip compile`](../pip/compile.md)）でも利用できます。結果の要件ファイルには、各依存関係がどのプラットフォームに関連するかを示すマーカーが含まれます。
 
-During universal resolution, a package may be listed multiple times with different versions or URLs
-if different versions are needed for different platforms — the markers determine which version will
-be used. A universal resolution is often more constrained than a platform-specific resolution, since
-we need to take the requirements for all markers into account.
+ユニバーサル解決中に、異なるプラットフォームに異なるバージョンが必要な場合、パッケージは異なるバージョンまたはURLで複数回リストされることがあります。マーカーはどのバージョンが使用されるかを決定します。ユニバーサル解決は、すべてのマーカーの要件を考慮する必要があるため、プラットフォーム固有の解決よりも制約が多いことがよくあります。
 
-During universal resolution, a minimum Python version must be specified. Project commands read the
-minimum required version from `project.requires-python` in the `pyproject.toml`. When using the pip
-interface, provide a value with the `--python-version` option, otherwise the current Python version
-will be treated as a lower bound. For example, `--universal --python-version 3.9` writes a universal
-resolution for Python 3.9 and later.
+ユニバーサル解決中に、最小のPythonバージョンを指定する必要があります。プロジェクトコマンドは、`pyproject.toml`の`project.requires-python`から最小必要バージョンを読み取ります。pipインターフェースを使用する場合は、`--python-version`オプションで値を指定します。指定しない場合、現在のPythonバージョンが下限として扱われます。たとえば、`--universal --python-version 3.9`は、Python 3.9以降のユニバーサル解決を記述します。
 
-Setting the minimum Python version is important because all package versions we select have to be
-compatible with the Python version range. For example, a universal resolution of `numpy<2` with
-`--python-version 3.8` resolves to `numpy==1.24.4`, while `--python-version 3.9` resolves to
-`numpy==1.26.4`, as `numpy` releases after 1.26.4 require at Python 3.9+. Note that we only consider
-the lower bound of any Python requirement, upper bounds are always ignored.
+最小のPythonバージョンを設定することは重要です。すべてのパッケージバージョンは、Pythonバージョン範囲と互換性がある必要があります。たとえば、`numpy<2`のユニバーサル解決で`--python-version 3.8`を指定すると、`numpy==1.24.4`に解決されますが、`--python-version 3.9`を指定すると、`numpy==1.26.4`に解決されます。`numpy`の1.26.4以降のリリースはPython 3.9+を必要とするためです。上限は常に無視されます。
 
-## Platform-specific resolution
+## プラットフォーム固有の解決
 
-By default, uv's pip interface, i.e., [`uv pip compile`](../pip/compile.md), produces a resolution
-that is platform-specific, like `pip-tools`. There is no way to use platform-specific resolution in
-the uv's project interface.
+デフォルトでは、uvのpipインターフェース（つまり、[`uv pip compile`](../pip/compile.md)）は、`pip-tools`のようにプラットフォーム固有の解決を生成します。uvのプロジェクトインターフェースでは、プラットフォーム固有の解決を使用する方法はありません。
 
-uv also supports resolving for specific, alternate platforms and Python versions with the
-`--python-platform` and `--python-version` options. For example, if using Python 3.12 on macOS,
-`uv pip compile --python-platform linux --python-version 3.10 requirements.in` can be used to
-produce a resolution for Python 3.10 on Linux instead. Unlike universal resolution, during
-platform-specific resolution, the provided `--python-version` is the exact python version to use,
-not a lower bound.
+uvは、`--python-platform`および`--python-version`オプションを使用して、特定の代替プラットフォームおよびPythonバージョンの解決もサポートしています。たとえば、macOSでPython 3.12を使用している場合、`uv pip compile --python-platform linux --python-version 3.10 requirements.in`を使用して、Linux上のPython 3.10の解決を生成できます。ユニバーサル解決とは異なり、プラットフォーム固有の解決中に提供された`--python-version`は、下限ではなく、使用する正確なPythonバージョンです。
 
 !!! note
 
-    Python's environment markers expose far more information about the current machine
-    than can be expressed by a simple `--python-platform` argument. For example, the `platform_version` marker
-    on macOS includes the time at which the kernel was built, which can (in theory) be encoded in
-    package requirements. uv's resolver makes a best-effort attempt to generate a resolution that is
-    compatible with any machine running on the target `--python-platform`, which should be sufficient for
-    most use cases, but may lose fidelity for complex package and platform combinations.
+    Pythonの環境マーカーは、現在のマシンに関する情報を、単純な`--python-platform`引数で表現できる以上に公開します。たとえば、macOSの`platform_version`マーカーには、カーネルがビルドされた時刻が含まれており、理論的にはパッケージ要件にエンコードできます。uvのリゾルバは、ターゲット`--python-platform`で実行される任意のマシンと互換性のある解決を生成するために最善の努力を行いますが、複雑なパッケージとプラットフォームの組み合わせでは忠実度が低下する可能性があります。
 
-## Dependency preferences
+## 依存関係の優先順位
 
-If resolution output file exists, i.e. a uv lockfile (`uv.lock`) or a requirements output file
-(`requirements.txt`), uv will _prefer_ the dependency versions listed there. Similarly, if
-installing a package into a virtual environment, uv will prefer the already installed version if
-present. This means that locked or installed versions will not change unless an incompatible version
-is requested or an upgrade is explicitly requested with `--upgrade`.
+解決出力ファイル（つまり、uvのロックファイル（`uv.lock`）または要件出力ファイル（`requirements.txt`））が存在する場合、uvはそこにリストされている依存関係のバージョンを_優先_します。同様に、仮想環境にパッケージをインストールする場合、uvはすでにインストールされているバージョンを優先します。これにより、互換性のないバージョンが要求されるか、`--upgrade`で明示的にアップグレードが要求されない限り、ロックされたバージョンやインストールされたバージョンは変更されません。
 
-## Resolution strategy
+## 解決戦略
 
-By default, uv tries to use the latest version of each package. For example,
-`uv pip install flask>=2.0.0` will install the latest version of Flask, e.g., 3.0.0. If
-`flask>=2.0.0` is a dependency of the project, only `flask` 3.0.0 will be used. This is important,
-for example, because running tests will not check that the project is actually compatible with its
-stated lower bound of `flask` 2.0.0.
+デフォルトでは、uvは各パッケージの最新バージョンを使用しようとします。たとえば、`uv pip install flask>=2.0.0`はFlaskの最新バージョン（例：3.0.0）をインストールします。`flask>=2.0.0`がプロジェクトの依存関係である場合、`flask` 3.0.0のみが使用されます。これは重要です。たとえば、テストを実行しても、プロジェクトが実際に`flask` 2.0.0の下限と互換性があるかどうかを確認しないためです。
 
-With `--resolution lowest`, uv will install the lowest possible version for all dependencies, both
-direct and indirect (transitive). Alternatively, `--resolution lowest-direct` will use the lowest
-compatible versions for all direct dependencies, while using the latest compatible versions for all
-other dependencies. uv will always use the latest versions for build dependencies.
+`--resolution lowest`を使用すると、uvはすべての依存関係（直接および間接（推移的））の最も低いバージョンをインストールします。代わりに、`--resolution lowest-direct`を使用すると、すべての直接依存関係の最も低い互換バージョンを使用し、他のすべての依存関係の最新の互換バージョンを使用します。uvは常にビルド依存関係の最新バージョンを使用します。
 
-For example, given the following `requirements.in` file:
+たとえば、次の`requirements.in`ファイルがあるとします：
 
 ```python title="requirements.in"
 flask>=2.0.0
 ```
 
-Running `uv pip compile requirements.in` would produce the following `requirements.txt` file:
+`uv pip compile requirements.in`を実行すると、次の`requirements.txt`ファイルが生成されます：
 
 ```python title="requirements.txt"
-# This file was autogenerated by uv via the following command:
+# このファイルは、次のコマンドを介してuvによって自動生成されました：
 #    uv pip compile requirements.in
 blinker==1.7.0
-    # via flask
+    # flask経由
 click==8.1.7
-    # via flask
+    # flask経由
 flask==3.0.0
 itsdangerous==2.1.2
-    # via flask
+    # flask経由
 jinja2==3.1.2
-    # via flask
+    # flask経由
 markupsafe==2.1.3
-    # via
-    #   jinja2
-    #   werkzeug
+    # jinja2経由
+    # werkzeug経由
 werkzeug==3.0.1
-    # via flask
+    # flask経由
 ```
 
-However, `uv pip compile --resolution lowest requirements.in` would instead produce:
+ただし、`uv pip compile --resolution lowest requirements.in`を実行すると、代わりに次のようになります：
 
 ```python title="requirements.in"
-# This file was autogenerated by uv via the following command:
+# このファイルは、次のコマンドを介してuvによって自動生成されました：
 #    uv pip compile requirements.in --resolution lowest
 click==7.1.2
-    # via flask
+    # flask経由
 flask==2.0.0
 itsdangerous==2.0.0
-    # via flask
+    # flask経由
 jinja2==3.0.0
-    # via flask
+    # flask経由
 markupsafe==2.0.0
-    # via jinja2
+    # jinja2経由
 werkzeug==2.0.0
-    # via flask
+    # flask経由
 ```
 
-When publishing libraries, it is recommended to separately run tests with `--resolution lowest` or
-`--resolution lowest-direct` in continuous integration to ensure compatibility with the declared
-lower bounds.
+ライブラリを公開する場合、宣言された下限との互換性を確認するために、継続的インテグレーションで`--resolution lowest`または`--resolution lowest-direct`を使用してテストを個別に実行することをお勧めします。
 
-## Pre-release handling
+## プレリリースの取り扱い
 
-By default, uv will accept pre-release versions during dependency resolution in two cases:
+デフォルトでは、uvは次の2つの場合に依存関係の解決中にプレリリースバージョンを受け入れます：
 
-1. If the package is a direct dependency, and its version specifiers include a pre-release specifier
-   (e.g., `flask>=2.0.0rc1`).
-1. If _all_ published versions of a package are pre-releases.
+1. パッケージが直接依存関係であり、そのバージョン指定子にプレリリース指定子が含まれている場合（例：`flask>=2.0.0rc1`）。
+1. パッケージのすべての公開バージョンがプレリリースである場合。
 
-If dependency resolution fails due to a transitive pre-release, uv will prompt use of
-`--prerelease allow` to allow pre-releases for all dependencies.
+推移的プレリリースによる依存関係の解決が失敗した場合、uvはすべての依存関係に対してプレリリースを許可するために`--prerelease allow`の使用を促します。
 
-Alternatively, the transitive dependency can be added as a [constraint](#dependency-constraints) or
-direct dependency (i.e. in `requirements.in` or `pyproject.toml`) with a pre-release version
-specifier (e.g., `flask>=2.0.0rc1`) to opt-in to pre-release support for that specific dependency.
+または、推移的依存関係をプレリリースバージョン指定子（例：`flask>=2.0.0rc1`）で[制約](#dependency-constraints)または直接依存関係（つまり、`requirements.in`または`pyproject.toml`）として追加して、その特定の依存関係に対してプレリリースサポートをオプトインすることもできます。
 
-Pre-releases are
-[notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
-model, and are a frequent source of bugs in other packaging tools. uv's pre-release handling is
-_intentionally_ limited and requires user opt-in for pre-releases to ensure correctness.
+プレリリースは[モデル化が非常に難しい](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions)ものであり、他のパッケージングツールでのバグの頻繁な原因です。uvのプレリリースの取り扱いは意図的に制限されており、正確性を確保するためにプレリリースのオプトインが必要です。
 
-For more details, see
-[Pre-release compatibility](../pip/compatibility.md#pre-release-compatibility).
+詳細については、[プレリリースの互換性](../pip/compatibility.md#pre-release-compatibility)を参照してください。
 
-## Dependency constraints
+## 依存関係の制約
 
-Like pip, uv supports constraint files (`--constraint constraints.txt`) which narrow the set of
-acceptable versions for the given packages. Constraint files are similar to requirements files, but
-being listed as a constraint alone will not cause a package to be included to the resolution.
-Instead, constraints only take effect if a requested package is already pulled in as a direct or
-transitive dependency. Constraints are useful for reducing the range of available versions for a
-transitive dependency. They can also be used to keep a resolution in sync with some other set of
-resolved versions, regardless of which packages are overlapping between the two.
+pipと同様に、uvは指定されたパッケージの許容バージョンの範囲を狭める制約ファイル（`--constraint constraints.txt`）をサポートしています。制約ファイルは要件ファイルに似ていますが、制約としてリストされているだけでは解決にパッケージが含まれることはありません。代わりに、制約は要求されたパッケージがすでに直接または推移的依存関係として引き込まれている場合にのみ効果を発揮します。制約は、推移的依存関係の利用可能なバージョンの範囲を減らすのに役立ちます。また、解決を他の解決済みバージョンセットと同期させるためにも使用できます。
 
-## Dependency overrides
+## 依存関係のオーバーライド
 
-Dependency overrides allow bypassing failing or undesirable resolutions by overriding a package's
-declared dependencies. Overrides are a useful last resort for cases in which you _know_ that a
-dependency is compatible with a certain version of a package, despite the metadata indicating
-otherwise.
+依存関係のオーバーライドを使用すると、パッケージの宣言された依存関係を上書きして、失敗または望ましくない解決を回避できます。オーバーライドは、メタデータが示すにもかかわらず、依存関係が特定のバージョンのパッケージと互換性があることを知っている場合に便利な最後の手段です。
 
-For example, if a transitive dependency declares the requirement `pydantic>=1.0,<2.0`, but _does_
-work with `pydantic>=2.0`, the user can override the declared dependency by including
-`pydantic>=1.0,<3` in the overrides, thereby allowing the resolver to choose a newer version of
-`pydantic`.
+たとえば、推移的依存関係が`pydantic>=1.0,<2.0`を要求しているが、実際には`pydantic>=2.0`と互換性がある場合、ユーザーはオーバーライドに`pydantic>=1.0,<3`を含めることで、リゾルバが新しいバージョンの`pydantic`を選択できるようにします。
 
-Concretely, if `pydantic>=1.0,<3` is included as an override, uv will ignore all declared
-requirements on `pydantic`, replacing them with the override. In the above example, the
-`pydantic>=1.0,<2.0` requirement would be ignored completely, and would instead be replaced with
-`pydantic>=1.0,<3`.
+具体的には、`pydantic>=1.0,<3`がオーバーライドに含まれている場合、uvは`pydantic`に対するすべての宣言された要件を無視し、それらをオーバーライドに置き換えます。上記の例では、`pydantic>=1.0,<2.0`の要件は完全に無視され、代わりに`pydantic>=1.0,<3`に置き換えられます。
 
-While constraints can only _reduce_ the set of acceptable versions for a package, overrides can
-_expand_ the set of acceptable versions, providing an escape hatch for erroneous upper version
-bounds. As with constraints, overrides do not add a dependency on the package and only take effect
-if the package is requested in a direct or transitive dependency.
+制約はパッケージの許容バージョンのセットを減らすことしかできませんが、オーバーライドは許容バージョンのセットを拡大し、誤った上限バージョンの回避策を提供します。制約と同様に、オーバーライドはパッケージに依存関係を追加せず、パッケージが直接または推移的依存関係で要求された場合にのみ効果を発揮します。
 
-In a `pyproject.toml`, use `tool.uv.override-dependencies` to define a list of overrides. In the
-pip-compatible interface, the `--override` option can be used to pass files with the same format as
-constraints files.
+`pyproject.toml`では、`tool.uv.override-dependencies`を使用してオーバーライドのリストを定義します。pip互換インターフェースでは、制約ファイルと同じ形式のファイルを渡すために`--override`オプションを使用できます。
 
-If multiple overrides are provided for the same package, they must be differentiated with
-[markers](#platform-markers). If a package has a dependency with a marker, it is replaced
-unconditionally when using overrides — it does not matter if the marker evaluates to true or false.
+同じパッケージに対して複数のオーバーライドが提供される場合、それらは[マーカー](#platform-markers)で区別する必要があります。パッケージにマーカー付きの依存関係がある場合、オーバーライドを使用する際には、マーカーが真か偽かに関係なく無条件に置き換えられます。
 
-## Dependency metadata
+## 依存関係のメタデータ
 
-During resolution, uv needs to resolve the metadata for each package it encounters, in order to
-determine its dependencies. This metadata is often available as a static file in the package index;
-however, for packages that only provide source distributions, the metadata may not be available
-upfront.
+解決中に、uvは各パッケージのメタデータを解決して、その依存関係を特定する必要があります。このメタデータは通常、パッケージインデックスに静的ファイルとして提供されますが、ソースディストリビューションのみを提供するパッケージの場合、メタデータは事前に利用できないことがあります。
 
-In such cases, uv has to build the package to determine its metadata (e.g., by invoking `setup.py`).
-This can introduce a performance penalty during resolution. Further, it imposes the requirement that
-the package can be built on all platforms, which may not be true.
+そのような場合、uvはパッケージをビルドしてメタデータを特定する必要があります（例：`setup.py`を呼び出す）。これにより、解決中にパフォーマンスのペナルティが発生する可能性があります。さらに、パッケージがすべてのプラットフォームでビルド可能である必要があるという要件が課されますが、これは必ずしも真ではありません。
 
-For example, you may have a package that should only be built and installed on Linux, but doesn't
-build successfully on macOS or Windows. While uv can construct a perfectly valid lockfile for this
-scenario, doing so would require building the package, which would fail on non-Linux platforms.
+たとえば、Linuxでのみビルドおよびインストールされるべきパッケージがあり、macOSやWindowsではビルドに失敗する場合があります。このシナリオのために完全に有効なロックファイルを構築することはできますが、パッケージをビルドする必要があり、非Linuxプラットフォームでは失敗します。
 
-The `tool.uv.dependency-metadata` table can be used to provide static metadata for such dependencies
-upfront, thereby allowing uv to skip the build step and use the provided metadata instead.
+`tool.uv.dependency-metadata`テーブルを使用して、そのような依存関係の静的メタデータを事前に提供し、uvがビルドステップをスキップして提供されたメタデータを使用できるようにします。
 
-For example, to provide metadata for `chumpy` upfront, include its `dependency-metadata` in the
-`pyproject.toml`:
+たとえば、`chumpy`のメタデータを事前に提供するには、`pyproject.toml`にその`dependency-metadata`を含めます：
 
 ```toml
 [[tool.uv.dependency-metadata]]
@@ -293,13 +183,9 @@ version = "0.70"
 requires-dist = ["numpy>=1.8.1", "scipy>=0.13.0", "six>=1.11.0"]
 ```
 
-These declarations are intended for cases in which a package does _not_ declare static metadata
-upfront, though they are also useful for packages that require disabling build isolation. In such
-cases, it may be easier to declare the package metadata upfront, rather than creating a custom build
-environment prior to resolving the package.
+これらの宣言は、パッケージが事前に静的メタデータを宣言しない場合を意図していますが、ビルド分離を無効にする必要があるパッケージにも役立ちます。そのような場合、パッケージのメタデータを事前に宣言する方が、パッケージを解決する前にカスタムビルド環境を作成するよりも簡単です。
 
-For example, you can declare the metadata for `flash-attn`, allowing uv to resolve without building
-the package from source (which itself requires installing `torch`):
+たとえば、`flash-attn`のメタデータを宣言して、uvがソースからパッケージをビルドせずに解決できるようにします（これ自体が`torch`のインストールを必要とします）：
 
 ```toml
 [[tool.uv.dependency-metadata]]
@@ -308,77 +194,42 @@ version = "2.6.3"
 requires-dist = ["torch", "einops"]
 ```
 
-Like dependency overrides, `tool.uv.dependency-metadata` can also be used for cases in which a
-package's metadata is incorrect or incomplete, or when a package is not available in the package
-index. While dependency overrides allow overriding the allowed versions of a package globally,
-metadata overrides allow overriding the declared metadata of a _specific package_.
+依存関係のオーバーライドと同様に、`tool.uv.dependency-metadata`は、パッケージのメタデータが不正確または不完全である場合や、パッケージがパッケージインデックスに存在しない場合にも使用できます。依存関係のオーバーライドは、パッケージの許容バージョンをグローバルに上書きすることができますが、メタデータのオーバーライドは特定のパッケージの宣言されたメタデータを上書きすることができます。
 
-Entries in the `tool.uv.dependency-metadata` table follow the
-[Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) specification,
-though only `name`, `version`, `requires-dist`, `requires-python`, and `provides-extra` are read by
-uv. The `version` field is also considered optional. If omitted, the metadata will be used for all
-versions of the specified package.
+`tool.uv.dependency-metadata`テーブルのエントリは、[Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/)仕様に従いますが、uvが読み取るのは`name`、`version`、`requires-dist`、`requires-python`、および`provides-extra`のみです。`version`フィールドもオプションと見なされます。省略された場合、メタデータは指定されたパッケージのすべてのバージョンに使用されます。
 
-## Lower bounds
+## 下限
 
-By default, `uv add` adds lower bounds to dependencies and, when using uv to manage projects, uv
-will warn if direct dependencies don't have lower bound.
+デフォルトでは、`uv add`は依存関係に下限を追加し、uvを使用してプロジェクトを管理する場合、uvは直接依存関係に下限がない場合に警告します。
 
-Lower bounds are not critical in the "happy path", but they are important for cases where there are
-dependency conflicts. For example, consider a project that requires two packages and those packages
-have conflicting dependencies. The resolver needs to check all combinations of all versions within
-the constraints for the two packages — if all of them conflict, an error is reported because the
-dependencies are not satisfiable. If there are no lower bounds, the resolver can (and often will)
-backtrack down to the oldest version of a package. This isn't only problematic because it's slow,
-the old version of the package often fails to build, or the resolver can end up picking a version
-that's old enough that it doesn't depend on the conflicting package, but also doesn't work with your
-code.
+下限は「ハッピーパス」では重要ではありませんが、依存関係の競合がある場合には重要です。たとえば、プロジェクトが2つのパッケージを必要とし、それらのパッケージが競合する依存関係を持っている場合、リゾルバは2つのパッケージの制約内のすべてのバージョンの組み合わせをチェックする必要があります。すべてが競合する場合、依存関係が満たされないため、エラーが報告されます。下限がない場合、リゾルバは（しばしば）パッケージの最古のバージョンまでバックトラックすることができます。これは遅いだけでなく、古いバージョンのパッケージはビルドに失敗することがよくあり、リゾルバは競合するパッケージに依存しない古いバージョンを選択することができますが、コードと互換性がないこともあります。
 
-Lower bounds are particularly critical when writing a library. It's important to declare the lowest
-version for each dependency that your library works with, and to validate that the bounds are
-correct — testing with [`--resolution lowest` or `resolution lowest-direct`](#resolution-strategy).
-Otherwise, a user may receive an old, incompatible version of one of your library's dependencies and
-the library will fail with an unexpected error.
+ライブラリを書く場合、下限は特に重要です。ライブラリが動作する各依存関係の最も低いバージョンを宣言し、その境界が正しいことを確認することが重要です。そうしないと、ユーザーはライブラリの依存関係の古い互換性のないバージョンを受け取り、ライブラリが予期しないエラーで失敗します。
 
-## Reproducible resolutions
+## 再現可能な解決
 
-uv supports an `--exclude-newer` option to limit resolution to distributions published before a
-specific date, allowing reproduction of installations regardless of new package releases. The date
-may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp (e.g.,
-`2006-12-02T02:07:43Z`) or a local date in the same format (e.g., `2006-12-02`) in your system's
-configured time zone.
+uvは、特定の日付前に公開されたディストリビューションに解決を制限する`--exclude-newer`オプションをサポートしており、新しいパッケージリリースに関係なくインストールを再現できます。日付は[RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html)タイムスタンプ（例：`2006-12-02T02:07:43Z`）またはシステムの設定されたタイムゾーンの同じ形式のローカル日付（例：`2006-12-02`）として指定できます。
 
-Note the package index must support the `upload-time` field as specified in
-[`PEP 700`](https://peps.python.org/pep-0700/). If the field is not present for a given
-distribution, the distribution will be treated as unavailable. PyPI provides `upload-time` for all
-packages.
+パッケージインデックスは、[`PEP 700`](https://peps.python.org/pep-0700/)で指定された`upload-time`フィールドをサポートしている必要があります。特定のディストリビューションにフィールドが存在しない場合、そのディストリビューションは利用できないものと見なされます。PyPIはすべてのパッケージに対して`upload-time`を提供します。
 
-To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
-distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
-as if they do not exist.
+再現性を確保するために、解決不能な解決のメッセージには、`--exclude-newer`フラグによってディストリビューションが除外されたことは言及されません。新しいディストリビューションは存在しないものとして扱われます。
 
 !!! note
 
-    The `--exclude-newer` option is only applied to packages that are read from a registry (as opposed to, e.g., Git
-    dependencies). Further, when using the `uv pip` interface, uv will not downgrade previously installed packages
-    unless the `--reinstall` flag is provided, in which case uv will perform a new resolution.
+    `--exclude-newer`オプションは、レジストリから読み取られたパッケージにのみ適用されます（例：Git依存関係など）。さらに、`uv pip`インターフェースを使用する場合、uvは`--reinstall`フラグが提供されない限り、以前にインストールされたパッケージをダウングレードしません。この場合、uvは新しい解決を行います。
 
-## Source distribution
+## ソースディストリビューション
 
-[PEP 625](https://peps.python.org/pep-0625/) specifies that packages must distribute source
-distributions as gzip tarball (`.tar.gz`) archives. Prior to this specification, other archive
-formats, which need to be supported for backward compatibility, were also allowed. uv supports
-reading and extracting archives in the following formats:
+[PEP 625](https://peps.python.org/pep-0625/)は、パッケージがソースディストリビューションをgzip tarball（`.tar.gz`）アーカイブとして配布する必要があると規定しています。この仕様の前には、後方互換性のためにサポートする必要がある他のアーカイブ形式も許可されていました。uvは次の形式のアーカイブの読み取りと抽出をサポートしています：
 
-- gzip tarball (`.tar.gz`, `.tgz`)
-- bzip2 tarball (`.tar.bz2`, `.tbz`)
-- xz tarball (`.tar.xz`, `.txz`)
-- zstd tarball (`.tar.zst`)
-- lzip tarball (`.tar.lz`)
-- lzma tarball (`.tar.lzma`)
-- zip (`.zip`)
+- gzip tarball（`.tar.gz`、`.tgz`）
+- bzip2 tarball（`.tar.bz2`、`.tbz`）
+- xz tarball（`.tar.xz`、`.txz`）
+- zstd tarball（`.tar.zst`）
+- lzip tarball（`.tar.lz`）
+- lzma tarball（`.tar.lzma`）
+- zip（`.zip`）
 
-## Learn more
+## 詳細を学ぶ
 
-For more details about the internals of the resolver, see the
-[resolver reference](../reference/resolver-internals.md) documentation.
+リゾルバの内部についての詳細は、[リゾルバリファレンス](../reference/resolver-internals.md)ドキュメントを参照してください。

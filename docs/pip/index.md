@@ -1,25 +1,17 @@
-# The pip interface
+# pipインターフェース
 
-uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands. These
-commands work directly with the virtual environment, in contrast to uv's primary interfaces where
-the virtual environment is managed automatically. The `uv pip` interface exposes the speed and
-functionality of uv to power users and projects that are not ready to transition away from `pip` and
-`pip-tools`.
+uvは、一般的な`pip`、`pip-tools`、および`virtualenv`コマンドのドロップイン置換を提供します。これらのコマンドは、uvの主要なインターフェースとは対照的に、仮想環境を自動的に管理するのではなく、直接仮想環境と連携します。`uv pip`インターフェースは、uvの速度と機能を、`pip`および`pip-tools`から移行する準備ができていないパワーユーザーおよびプロジェクトに提供します。
 
-The following sections discuss the basics of using `uv pip`:
+以下のセクションでは、`uv pip`の基本的な使用方法について説明します：
 
-- [Creating and using environments](./environments.md)
-- [Installing and managing packages](./packages.md)
-- [Inspecting environments and packages](./inspection.md)
-- [Declaring package dependencies](./dependencies.md)
-- [Locking and syncing environments](./compile.md)
+- [環境の作成と使用](./environments.md)
+- [パッケージのインストールと管理](./packages.md)
+- [環境とパッケージの検査](./inspection.md)
+- [パッケージ依存関係の宣言](./dependencies.md)
+- [環境のロックと同期](./compile.md)
 
-Please note these commands do not _exactly_ implement the interfaces and behavior of the tools they
-are based on. The further you stray from common workflows, the more likely you are to encounter
-differences. Consult the [pip-compatibility guide](./compatibility.md) for details.
+これらのコマンドは、それらが基づいているツールのインターフェースと動作を正確に実装しているわけではないことに注意してください。一般的なワークフローから外れるほど、違いに遭遇する可能性が高くなります。詳細については、[pip互換性ガイド](./compatibility.md)を参照してください。
 
 !!! important
 
-    uv does not rely on or invoke pip. The pip interface is named as such to highlight its dedicated
-    purpose of providing low-level commands that match pip's interface and to separate it from the
-    rest of uv's commands which operate at a higher level of abstraction.
+    uvはpipに依存せず、pipを呼び出しません。pipインターフェースは、pipのインターフェースに一致する低レベルのコマンドを提供する専用の目的を強調するためにそのように名付けられており、uvの他のコマンドとは異なる高レベルの抽象化で動作します。

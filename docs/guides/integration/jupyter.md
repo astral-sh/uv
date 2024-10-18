@@ -1,103 +1,73 @@
-# Using uv with Jupyter
+# Jupyterをuvで使用する
 
-The [Jupyter](https://jupyter.org/) notebook is a popular tool for interactive computing, data
-analysis, and visualization. You can use Jupyter with uv in a few different ways, either to interact
-with a project, or as a standalone tool.
+[Jupyter](https://jupyter.org/)ノートブックは、インタラクティブなコンピューティング、データ分析、および可視化のための人気のツールです。Jupyterをuvと一緒に使用する方法はいくつかあり、プロジェクトと対話するため、またはスタンドアロンツールとして使用することができます。
 
-## Using Jupyter within a project
+## プロジェクト内でJupyterを使用する
 
-If you're working within a [project](../../concepts/projects.md), you can start a Jupyter server
-with access to the project's virtual environment via the following:
+[プロジェクト](../../concepts/projects.md)内で作業している場合、次のコマンドを使用してプロジェクトの仮想環境にアクセスできるJupyterサーバーを起動できます。
 
 ```console
 $ uv run --with jupyter jupyter lab
 ```
 
-By default, `jupyter lab` will start the server at
-[http://localhost:8888/lab](http://localhost:8888/lab).
+デフォルトでは、`jupyter lab`はサーバーを[http://localhost:8888/lab](http://localhost:8888/lab)で起動します。
 
-Within a notebook, you can import your project's modules as you would in any other file in the
-project. For example, if your project depends on `requests`, `import requests` will import
-`requests` from the project's virtual environment.
+ノートブック内では、プロジェクトの他のファイルと同様にプロジェクトのモジュールをインポートできます。たとえば、プロジェクトが`requests`に依存している場合、`import requests`はプロジェクトの仮想環境から`requests`をインポートします。
 
-If you're looking for read-only access to the project's virtual environment, then there's nothing
-more to it. However, if you need to install additional packages from within the notebook, there are
-a few extra details to consider.
+プロジェクトの仮想環境への読み取り専用アクセスを探している場合は、それ以上の設定は必要ありません。ただし、ノートブック内から追加のパッケージをインストールする必要がある場合は、いくつかの追加の詳細を考慮する必要があります。
 
-### Creating a kernel
+### カーネルの作成
 
-If you need to install packages from within the notebook, we recommend creating a dedicated kernel
-for your project. Kernels enable the Jupyter server to run in one environment, with individual
-notebooks running in their own, separate environments.
+ノートブック内からパッケージをインストールする必要がある場合、プロジェクト専用のカーネルを作成することをお勧めします。カーネルを使用すると、Jupyterサーバーは1つの環境で実行され、個々のノートブックはそれぞれの独立した環境で実行されます。
 
-In the context of uv, we can create a kernel for a project while installing Jupyter itself in an
-isolated environment, as in `uv run --with jupyter jupyter lab`. Creating a kernel for the project
-ensures that the notebook is hooked up to the correct environment, and that any packages installed
-from within the notebook are installed into the project's virtual environment.
+uvのコンテキストでは、Jupyter自体を分離された環境にインストールしながら、プロジェクトのカーネルを作成できます。たとえば、`uv run --with jupyter jupyter lab`のように。プロジェクトのカーネルを作成することで、ノートブックが正しい環境に接続され、ノートブック内からインストールされたパッケージがプロジェクトの仮想環境にインストールされることが保証されます。
 
-To create a kernel, you'll need to install `ipykernel` as a development dependency:
+カーネルを作成するには、`ipykernel`を開発依存関係としてインストールする必要があります。
 
 ```console
 $ uv add --dev ipykernel
 ```
 
-Then, you can create the kernel for `project` with:
+次に、`project`のカーネルを作成できます。
 
 ```console
 $ uv run ipython kernel install --user --name=project
 ```
 
-From there, start the server with:
+その後、サーバーを起動します。
 
 ```console
 $ uv run --with jupyter jupyter lab
 ```
 
-When creating a notebook, select the `project` kernel from the dropdown. Then use `!uv add pydantic`
-to add `pydantic` to the project's dependencies, or `!uv pip install pydantic` to install `pydantic`
-into the project's virtual environment without persisting the change to the project `pyproject.toml`
-or `uv.lock` files. Either command will make `import pydantic` work within the notebook.
+ノートブックを作成する際に、ドロップダウンから`project`カーネルを選択します。その後、`!uv add pydantic`を使用して`pydantic`をプロジェクトの依存関係に追加するか、`!uv pip install pydantic`を使用して`pydantic`をプロジェクトの仮想環境にインストールしますが、プロジェクトの`pyproject.toml`や`uv.lock`ファイルには変更を反映しません。どちらのコマンドも、ノートブック内で`import pydantic`を機能させます。
 
-### Installing packages without a kernel
+### カーネルなしでパッケージをインストールする
 
-If you don't want to create a kernel, you can still install packages from within the notebook.
-However, there are a few caveats to consider.
+カーネルを作成したくない場合でも、ノートブック内からパッケージをインストールできます。ただし、いくつかの注意点があります。
 
-Though `uv run --with jupyter` runs in an isolated environment, within the notebook itself,
-`!uv add` and related commands will modify the _project's_ environment, even without a kernel.
+`uv run --with jupyter`は分離された環境で実行されますが、ノートブック内では`!uv add`および関連コマンドはカーネルなしでもプロジェクトの環境を変更します。
 
-For example, running `!uv add pydantic` from within a notebook will add `pydantic` to the project's
-dependencies and virtual environment, such that `import pydantic` will work immediately, without
-further configuration or a server restart.
+たとえば、ノートブック内で`!uv add pydantic`を実行すると、`pydantic`がプロジェクトの依存関係および仮想環境に追加され、追加の設定やサーバーの再起動なしで`import pydantic`がすぐに機能します。
 
-However, since the Jupyter server is the "active" environment, `!uv pip install` will install
-package's into _Jupyter's_ environment, not the project environment. Such dependencies will persist
-for the lifetime of the Jupyter server, but may disappear on subsequent `jupyter` invocations.
+ただし、Jupyterサーバーが「アクティブ」な環境であるため、`!uv pip install`はパッケージをプロジェクト環境ではなく_Jupyter_環境にインストールします。そのような依存関係はJupyterサーバーの存続期間中は持続しますが、次回の`jupyter`呼び出し時には消える可能性があります。
 
-If you're working with a notebook that relies on pip (e.g., via the `%pip` magic), you can include
-pip in your project's virtual environment by running `uv venv --seed` prior to starting the Jupyter
-server. For example, given:
+ノートブックがpipに依存している場合（例：`%pip`マジックを使用）、Jupyterサーバーを起動する前に`uv venv --seed`を実行してプロジェクトの仮想環境にpipを含めることができます。たとえば、次のようにします。
 
 ```console
 $ uv venv --seed
 $ uv run --with jupyter jupyter lab
 ```
 
-Subsequent `%pip install` invocations within the notebook will install packages into the project's
-virtual environment. However, such modifications will _not_ be reflected in the project's
-`pyproject.toml` or `uv.lock` files.
+その後、ノートブック内での`%pip install`呼び出しはプロジェクトの仮想環境にパッケージをインストールします。ただし、そのような変更はプロジェクトの`pyproject.toml`や`uv.lock`ファイルには反映されません。
 
-## Using Jupyter as a standalone tool
+## スタンドアロンツールとしてJupyterを使用する
 
-If you ever need ad hoc access to a notebook (i.e., to run a Python snippet interactively), you can
-start a Jupyter server at any time with `uv tool run jupyter lab`. This will run a Jupyter server in
-an isolated environment.
+ノートブックにアドホックにアクセスする必要がある場合（つまり、Pythonスニペットをインタラクティブに実行するため）、`uv tool run jupyter lab`を使用していつでもJupyterサーバーを起動できます。これにより、分離された環境でJupyterサーバーが実行されます。
 
-## Using Jupyter with a non-project environment
+## プロジェクト環境以外でJupyterを使用する
 
-If you need to run Jupyter in a virtual environment that isn't associated with a
-[project](../../concepts/projects.md) (e.g., has no `pyproject.toml` or `uv.lock`), you can do so by
-adding Jupyter to the environment directly. For example:
+[プロジェクト](../../concepts/projects.md)に関連付けられていない仮想環境（例：`pyproject.toml`や`uv.lock`がない）でJupyterを実行する必要がある場合、Jupyterを直接環境に追加できます。たとえば、次のようにします。
 
 ```console
 $ uv venv --seed
@@ -106,44 +76,33 @@ $ uv pip install jupyterlab
 $ .venv/bin/jupyter lab
 ```
 
-From here, `import pydantic` will work within the notebook, and you can install additional packages
-via `!uv pip install`, or even `!pip install`.
+ここから、ノートブック内で`import pydantic`が機能し、`!uv pip install`や`!pip install`を使用して追加のパッケージをインストールできます。
 
-## Using Jupyter from VS Code
+## VS CodeからJupyterを使用する
 
-You can also engage with Jupyter notebooks from within an editor like VS Code. To connect a
-uv-managed project to a Jupyter notebook within VS Code, we recommend creating a kernel for the
-project, as in the following:
+VS Codeのようなエディタ内からJupyterノートブックと対話することもできます。VS Code内でuv管理のプロジェクトをJupyterノートブックに接続するには、次のようにプロジェクトのカーネルを作成することをお勧めします。
 
 ```console
-# Create a project.
+# プロジェクトを作成します。
 $ uv init project
-# Move into the project directory.
+# プロジェクトディレクトリに移動します。
 $ cd project
-# Add ipykernel as a dev dependency.
+# ipykernelを開発依存関係として追加します。
 $ uv add --dev ipykernel
-# Open the project in VS Code.
+# プロジェクトをVS Codeで開きます。
 $ code .
 ```
 
-Once the project directory is open in VS Code, you can create a new Jupyter notebook by selecting
-"Create: New Jupyter Notebook" from the command palette. When prompted to select a kernel, choose
-"Python Environments" and select the virtual environment you created earlier (e.g.,
-`.venv/bin/python`).
+プロジェクトディレクトリがVS Codeで開かれたら、コマンドパレットから「Create: New Jupyter Notebook」を選択して新しいJupyterノートブックを作成できます。カーネルを選択するように求められたら、「Python Environments」を選択し、先ほど作成した仮想環境（例：`.venv/bin/python`）を選択します。
 
 !!! note
 
-    VS Code requires `ipykernel` to be present in the project environment. If you'd prefer to avoid
-    adding `ipykernel` as a dev dependency, you can install it directly into the project environment
-    with `uv pip install ipykernel`.
+    VS Codeはプロジェクト環境に`ipykernel`が存在することを要求します。`ipykernel`を開発依存関係として追加したくない場合は、`uv pip install ipykernel`を使用してプロジェクト環境に直接インストールできます。
 
-If you need to manipulate the project's environment from within the notebook, you may need to add
-`uv` as an explicit development dependency:
+ノートブック内からプロジェクトの環境を操作する必要がある場合は、`uv`を明示的な開発依存関係として追加する必要があるかもしれません。
 
 ```console
 $ uv add --dev uv
 ```
 
-From there, you can use `!uv add pydantic` to add `pydantic` to the project's dependencies, or
-`!uv pip install pydantic` to install `pydantic` into the project's virtual environment without
-updating the project's `pyproject.toml` or `uv.lock` files.
+その後、`!uv add pydantic`を使用して`pydantic`をプロジェクトの依存関係に追加するか、`!uv pip install pydantic`を使用して`pydantic`をプロジェクトの仮想環境にインストールしますが、プロジェクトの`pyproject.toml`や`uv.lock`ファイルには変更を反映しません。

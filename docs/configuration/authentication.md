@@ -1,97 +1,70 @@
-# Authentication
+# 認証
 
-## Git authentication
+## Git認証
 
-uv allows packages to be installed from Git and supports the following schemes for authenticating
-with private repositories.
+uvはGitからのパッケージインストールを許可し、プライベートリポジトリへの認証に以下のスキームをサポートします。
 
-Using SSH:
+SSHを使用する場合：
 
-- `git+ssh://git@<hostname>/...` (e.g. `git+ssh://git@github.com/astral-sh/uv`)
-- `git+ssh://git@<host>/...` (e.g. `git+ssh://git@github.com-key-2/astral-sh/uv`)
+- `git+ssh://git@<hostname>/...`（例：`git+ssh://git@github.com/astral-sh/uv`）
+- `git+ssh://git@<host>/...`（例：`git+ssh://git@github.com-key-2/astral-sh/uv`）
 
-See the
-[GitHub SSH documentation](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/about-ssh)
-for more details on how to configure SSH.
+SSHの設定方法の詳細については、[GitHub SSHドキュメント](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/about-ssh)を参照してください。
 
-Using a password or token:
+パスワードまたはトークンを使用する場合：
 
-- `git+https://<user>:<token>@<hostname>/...` (e.g.
-  `git+https://git:github_pat_asdf@github.com/astral-sh/uv`)
-- `git+https://<token>@<hostname>/...` (e.g. `git+https://github_pat_asdf@github.com/astral-sh/uv`)
-- `git+https://<user>@<hostname>/...` (e.g. `git+https://git@github.com/astral-sh/uv`)
+- `git+https://<user>:<token>@<hostname>/...`（例：`git+https://git:github_pat_asdf@github.com/astral-sh/uv`）
+- `git+https://<token>@<hostname>/...`（例：`git+https://github_pat_asdf@github.com/astral-sh/uv`）
+- `git+https://<user>@<hostname>/...`（例：`git+https://git@github.com/astral-sh/uv`）
 
-When using a GitHub personal access token, the username is arbitrary. GitHub does not support
-logging in with password directly, although other hosts may. If a username is provided without
-credentials, you will be prompted to enter them.
+GitHubの個人アクセストークンを使用する場合、ユーザー名は任意です。GitHubはパスワードでの直接ログインをサポートしていませんが、他のホストではサポートされている場合があります。資格情報なしでユーザー名が提供された場合、入力を求められます。
 
-If there are no credentials present in the URL and authentication is needed, the
-[Git credential helper](https://git-scm.com/doc/credential-helpers) will be queried.
+URLに資格情報が含まれておらず、認証が必要な場合、[Git credential helper](https://git-scm.com/doc/credential-helpers)がクエリされます。
 
-## HTTP authentication
+## HTTP認証
 
-uv supports credentials over HTTP when querying package registries.
+uvはパッケージレジストリのクエリ時にHTTP経由での資格情報をサポートします。
 
-Authentication can come from the following sources, in order of precedence:
+認証は以下のソースから取得され、優先順位は次の通りです：
 
-- The URL, e.g., `https://<user>:<password>@<hostname>/...`
-- A [`netrc`](https://everything.curl.dev/usingcurl/netrc) configuration file
-- A [keyring](https://github.com/jaraco/keyring) provider (requires opt-in)
+- URL（例：`https://<user>:<password>@<hostname>/...`）
+- [`netrc`](https://everything.curl.dev/usingcurl/netrc)設定ファイル
+- [keyring](https://github.com/jaraco/keyring)プロバイダー（オプトインが必要）
 
-If authentication is found for a single net location (scheme, host, and port), it will be cached for
-the duration of the command and used for other queries to that net location. Authentication is not
-cached across invocations of uv.
+単一のネットロケーション（スキーム、ホスト、およびポート）に対して認証が見つかった場合、それはコマンドの実行中にキャッシュされ、そのネットロケーションへの他のクエリにも使用されます。認証はuvの呼び出し間でキャッシュされません。
 
-Note `--keyring-provider subprocess` or `UV_KEYRING_PROVIDER=subprocess` must be provided to enable
-keyring-based authentication.
+keyringベースの認証を有効にするには、`--keyring-provider subprocess`または`UV_KEYRING_PROVIDER=subprocess`を指定する必要があります。
 
-Authentication may be used for hosts specified in the following contexts:
+認証は次のコンテキストで指定されたホストに対して使用される場合があります：
 
 - `index-url`
 - `extra-index-url`
 - `find-links`
 - `package @ https://...`
 
-See the [`pip` compatibility guide](../pip/compatibility.md#registry-authentication) for details on
-differences from `pip`.
+`pip`との違いの詳細については、[`pip`互換性ガイド](../pip/compatibility.md#registry-authentication)を参照してください。
 
-## Custom CA certificates
+## カスタムCA証明書
 
-By default, uv loads certificates from the bundled `webpki-roots` crate. The `webpki-roots` are a
-reliable set of trust roots from Mozilla, and including them in uv improves portability and
-performance (especially on macOS, where reading the system trust store incurs a significant delay).
+デフォルトでは、uvはバンドルされた`webpki-roots`クレートから証明書を読み込みます。`webpki-roots`はMozillaからの信頼できるルート証明書のセットであり、uvに含めることで移植性とパフォーマンスが向上します（特にmacOSでは、システムの信頼ストアを読み取る際に大幅な遅延が発生します）。
 
-However, in some cases, you may want to use the platform's native certificate store, especially if
-you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your
-system's certificate store. To instruct uv to use the system's trust store, run uv with the
-`--native-tls` command-line flag, or set the `UV_NATIVE_TLS` environment variable to `true`.
+ただし、場合によっては、プラットフォームのネイティブ証明書ストアを使用したい場合があります。特に、システムの証明書ストアに含まれている企業の信頼ルート（例：必須プロキシのため）が必要な場合です。uvにシステムの信頼ストアを使用させるには、`--native-tls`コマンドラインフラグを使用するか、`UV_NATIVE_TLS`環境変数を`true`に設定します。
 
-If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
-variable to the path of the certificate bundle, to instruct uv to use that file instead of the
-system's trust store.
+証明書への直接パスが必要な場合（例：CI環境）、`SSL_CERT_FILE`環境変数を証明書バンドルのパスに設定して、uvにシステムの信頼ストアの代わりにそのファイルを使用させます。
 
-If client certificate authentication (mTLS) is desired, set the `SSL_CLIENT_CERT` environment
-variable to the path of the PEM formatted file containing the certificate followed by the private
-key.
+クライアント証明書認証（mTLS）が必要な場合、`SSL_CLIENT_CERT`環境変数をPEM形式のファイルのパスに設定し、そのファイルに証明書と秘密鍵の両方を含めます。
 
-Finally, if you're using a setup in which you want to trust a self-signed certificate or otherwise
-disable certificate verification, you can instruct uv to allow insecure connections to dedicated
-hosts via the `allow-insecure-host` configuration option. For example, adding the following to
-`pyproject.toml` will allow insecure connections to `example.com`:
+最後に、自己署名証明書を信頼するか、証明書の検証を無効にするセットアップを使用している場合、`allow-insecure-host`設定オプションを使用して特定のホストへの安全でない接続を許可するようにuvに指示できます。例えば、`pyproject.toml`に次の内容を追加すると、`example.com`への安全でない接続が許可されます：
 
 ```toml
 [tool.uv]
 allow-insecure-host = ["example.com"]
 ```
 
-`allow-insecure-host` expects to receive a hostname (e.g., `localhost`) or hostname-port pair (e.g.,
-`localhost:8080`), and is only applicable to HTTPS connections, as HTTP connections are inherently
-insecure.
+`allow-insecure-host`はホスト名（例：`localhost`）またはホスト名とポートのペア（例：`localhost:8080`）を受け取り、HTTPS接続にのみ適用されます。HTTP接続は本質的に安全でないためです。
 
-Use `allow-insecure-host` with caution and only in trusted environments, as it can expose you to
-security risks due to the lack of certificate verification.
+`allow-insecure-host`は慎重に使用し、信頼できる環境でのみ使用してください。証明書の検証が行われないため、セキュリティリスクにさらされる可能性があります。
 
-## Authentication with alternative package indexes
+## 代替パッケージインデックスでの認証
 
-See the [alternative indexes integration guide](../guides/integration/alternative-indexes.md) for
-details on authentication with popular alternative Python package indexes.
+人気のある代替Pythonパッケージインデックスでの認証の詳細については、[代替インデックス統合ガイド](../guides/integration/alternative-indexes.md)を参照してください。

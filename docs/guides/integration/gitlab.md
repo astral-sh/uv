@@ -1,9 +1,9 @@
-# Using uv in GitLab CI/CD
+# GitLab CI/CDでuvを使用する
 
-## Using the uv image
+## uvイメージの使用
 
-Astral provides [Docker images](docker.md#available-images) with uv preinstalled.
-Select a variant that is suitable for your workflow.
+Astralは、uvがプリインストールされた[Dockerイメージ](docker.md#available-images)を提供しています。
+ワークフローに適したバリアントを選択してください。
 
 ```yaml title="gitlab-ci.yml"
 variables:
@@ -21,9 +21,9 @@ uv:
     # your `uv` commands
 ```
 
-## Caching
+## キャッシュ
 
-Persisting the uv cache between workflow runs can improve performance.
+ワークフローの実行間でuvキャッシュを保持することで、パフォーマンスを向上させることができます。
 
 ```yaml
 uv-install:
@@ -40,22 +40,17 @@ uv-install:
     - uv cache prune --ci
 ```
 
-See the [GitLab caching documentation](https://docs.gitlab.com/ee/ci/caching/) for more details on
-configuring caching.
+キャッシュの設定に関する詳細は、[GitLabキャッシュドキュメント](https://docs.gitlab.com/ee/ci/caching/)を参照してください。
 
-Using `uv cache prune --ci` at the end of the job is recommended to reduce cache size. See the [uv
-cache documentation](../../concepts/cache.md#caching-in-continuous-integration) for more details.
+ジョブの最後に`uv cache prune --ci`を使用することをお勧めします。これにより、キャッシュサイズが削減されます。詳細については、[uvキャッシュドキュメント](../../concepts/cache.md#caching-in-continuous-integration)を参照してください。
 
-## Using `uv pip`
+## `uv pip`の使用
 
-If using the `uv pip` interface instead of the uv project interface, uv requires a virtual
-environment by default. To allow installing packages into the system environment, use the `--system`
-flag on all uv invocations or set the `UV_SYSTEM_PYTHON` variable.
+uvプロジェクトインターフェースの代わりに`uv pip`インターフェースを使用する場合、uvはデフォルトで仮想環境を必要とします。システム環境にパッケージをインストールできるようにするには、すべてのuv呼び出しで`--system`フラグを使用するか、`UV_SYSTEM_PYTHON`変数を設定します。
 
-The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes. You can read more about
-how [variables and their precedence works in GitLab here](https://docs.gitlab.com/ee/ci/variables/)
+`UV_SYSTEM_PYTHON`変数は、異なるスコープで定義できます。GitLabでの[変数とその優先順位の動作についてはこちら](https://docs.gitlab.com/ee/ci/variables/)を参照してください。
 
-Opt-in for the entire workflow by defining it at the top level:
+ワークフロー全体でオプトインするには、トップレベルで定義します：
 
 ```yaml title="gitlab-ci.yml"
 variables:
@@ -64,7 +59,6 @@ variables:
 # [...]
 ```
 
-To opt-out again, the `--no-system` flag can be used in any uv invocation.
+再度オプトアウトするには、任意のuv呼び出しで`--no-system`フラグを使用できます。
 
-When persisting the cache, you may want to use `requirement.txt` or `pyproject.toml` as
-your cache key files instead of `uv.lock`.
+キャッシュを保持する場合、キャッシュキーとして`requirement.txt`や`pyproject.toml`を使用することを検討してください。

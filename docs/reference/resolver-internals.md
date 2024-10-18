@@ -1,89 +1,54 @@
-# Resolver internals
+# リゾルバの内部
 
 !!! tip
 
-    This document focuses on the internal workings of uv's resolver. For using uv, see the
-    [resolution concept](../concepts/resolution.md) documentation.
+    このドキュメントは、uvのリゾルバの内部動作に焦点を当てています。uvの使用方法については、
+    [解決の概念](../concepts/resolution.md)のドキュメントを参照してください。
 
-## Resolver
+## リゾルバ
 
-As defined in a textbook, resolution, or finding a set of version to install from a given set of
-requirements, is equivalent to the
-[SAT problem](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem) and thereby NP-complete:
-in the worst case you have to try all possible combinations of all versions of all packages and
-there are no general, fast algorithms. In practice, this is misleading for a number of reasons:
+教科書で定義されているように、解決、つまり与えられた要件セットからインストールするバージョンセットを見つけることは、
+[SAT問題](https://en.wikipedia.org/wiki/Boolean_satisfiability_problem)と同等であり、したがってNP完全です。
+最悪の場合、すべてのパッケージのすべてのバージョンのすべての組み合わせを試す必要があり、一般的で高速なアルゴリズムはありません。
+実際には、これはいくつかの理由で誤解を招きます。
 
-- The slowest part of resolution in uv is loading package and version metadata, even if it's cached.
-- There are many possible solutions, but some are preferable than others. For example we generally
-  prefer using the latest version of packages.
-- Package's dependencies are complex, e.g., there are contiguous versions ranges — not arbitrary
-  boolean inclusion/exclusions of versions, adjacent releases often have the same or similar
-  requirements, etc.
-- For most resolutions, the resolver doesn't need to backtrack, picking versions iteratively is
-  sufficient. If there are version preferences from a previous resolution, barely any work needs to
-  be done.
-- When resolution fails, more information is needed than a message that there is no solution (as is
-  seen in SAT solvers). Instead, the resolver should produce an understandable error trace that
-  states which packages are involved in away to allows a user to remove the conflict.
+- uvの解決の最も遅い部分は、パッケージとバージョンのメタデータを読み込むことです。キャッシュされていても同様です。
+- 多くの解決策が存在しますが、いくつかは他のものよりも好まれます。たとえば、一般的には最新バージョンのパッケージを使用することを好みます。
+- パッケージの依存関係は複雑です。たとえば、連続したバージョン範囲があり、任意のブール値のバージョンの包含/除外ではなく、隣接するリリースは同じまたは類似の要件を持つことがよくあります。
+- ほとんどの解決では、リゾルバはバックトラックする必要がなく、バージョンを反復的に選択するだけで十分です。以前の解決からのバージョンの優先順位がある場合、ほとんど作業は必要ありません。
+- 解決が失敗した場合、SATソルバーで見られるように、解決策がないというメッセージ以上の情報が必要です。代わりに、リゾルバは、ユーザーが競合を削除できるように、どのパッケージが関与しているかを理解できるエラートレースを生成する必要があります。
 
-uv uses [pubgrub-rs](https://github.com/pubgrub-rs/pubgrub), the Rust implementation of
-[PubGrub](https://nex3.medium.com/pubgrub-2fb6470504f), an incremental version solver. PubGrub in uv
-works in the following steps:
+uvは、インクリメンタルバージョンソルバーである[PubGrub](https://nex3.medium.com/pubgrub-2fb6470504f)のRust実装である[pubgrub-rs](https://github.com/pubgrub-rs/pubgrub)を使用します。uvのPubGrubは次の手順で動作します。
 
-- Start with a partial solution that declares which packages versions have been selected and which
-  are undecided. Initially, only a virtual root package is decided.
-- The highest priority package is selected from the undecided packages. Package with URLs (including
-  file, git, etc.) have the highest priority, then those with more exact specifiers (such as `==`),
-  then those with less strict specifiers. Inside each category, packages are ordered by when they
-  were first seen (i.e. order in a file), making the resolution deterministic.
-- A version is picked for the selected package. The version must works with all specifiers from the
-  requirements in the partial solution and must not be previously marked as incompatible. The
-  resolver prefers versions from a lockfile (`uv.lock` or `-o requirements.txt`) and those installed
-  in the current environment. Versions are checked from highest to lowest (unless using an
-  alternative [resolution strategy](../concepts/resolution.md#resolution-strategy)).
-- All requirements of the selected package version are added to the undecided packages. uv
-  prefetches their metadata in the background to improve performance.
-- The process is either repeated with the next package unless a conflict is detected, in which the
-  resolver will backtrack. For example, the partial solution contains, among other packages, `a 2`
-  then `b 2` with the requirements `a 2 -> c 1` and `b 2 -> c 2`. No compatible version of `c` can
-  be found. PubGrub can determine this was caused by `a 2` and `b 2` and add the incompatibility
-  `{a 2, b 2}`, meaning that when either is picked, the other cannot be selected. The partial
-  solution is restored to `a 2` with the tracked incompatibility and the resolver attempts to pick a
-  new version for `b`.
+- 選択されたパッケージバージョンと未決定のパッケージを宣言する部分的な解決から開始します。最初は、仮想ルートパッケージのみが決定されます。
+- 未決定のパッケージから最も優先度の高いパッケージが選択されます。URLを持つパッケージ（ファイル、gitなどを含む）が最も優先され、次により正確な指定子（`==`など）を持つもの、次にあまり厳しくない指定子を持つものが優先されます。各カテゴリ内では、パッケージは最初に見られた順序（ファイル内の順序）で並べられ、解決が決定的になります。
+- 選択されたパッケージのバージョンが選択されます。バージョンは、部分的な解決の要件からのすべての指定子と互換性があり、以前に非互換としてマークされていない必要があります。リゾルバは、ロックファイル（`uv.lock`または`-o requirements.txt`）および現在の環境にインストールされているものからのバージョンを優先します。バージョンは、最高から最低までチェックされます（代替の[解決戦略](../concepts/resolution.md#resolution-strategy)を使用していない限り）。
+- 選択されたパッケージバージョンのすべての要件が未決定のパッケージに追加されます。uvはパフォーマンスを向上させるためにバックグラウンドでメタデータをプリフェッチします。
+- プロセスは次のパッケージで繰り返されるか、競合が検出されるとリゾルバがバックトラックします。たとえば、部分的な解決には、他のパッケージの中に`a 2`と`b 2`が含まれ、要件`a 2 -> c 1`と`b 2 -> c 2`があります。互換性のあるバージョンの`c`が見つかりません。PubGrubは、これが`a 2`と`b 2`によって引き起こされたことを判断し、非互換性`{a 2, b 2}`を追加します。これは、いずれかが選択された場合、他方は選択できないことを意味します。部分的な解決は`a 2`に戻され、追跡された非互換性があり、リゾルバは`b`の新しいバージョンを選択しようとします。
 
-Eventually, the resolver either picks compatible versions for all packages (a successful resolution)
-or there is an incompatibility including the virtual "root" package which defines the versions
-requested by the user. An incompatibility with the root package indicates that whatever versions of
-the root dependencies and their transitive dependencies are picked, there will always be a conflict.
-From the incompatibilities tracked in PubGrub, an error message is constructed to enumerate the
-involved packages.
+最終的に、リゾルバはすべてのパッケージに互換性のあるバージョンを選択するか（成功した解決）、ユーザーが要求したバージョンを定義する仮想「ルート」パッケージを含む非互換性があります。ルートパッケージとの非互換性は、ルート依存関係とその推移的依存関係のバージョンが選択されると、常に競合が発生することを示します。PubGrubで追跡された非互換性から、関与するパッケージを列挙するエラーメッセージが構築されます。
 
 !!! tip
 
-    For more details on the PubGrub algorithm, see [Internals of the PubGrub
-    algorithm](https://pubgrub-rs-guide.pages.dev/internals/intro).
+    PubGrubアルゴリズムの詳細については、[PubGrubアルゴリズムの内部](https://pubgrub-rs-guide.pages.dev/internals/intro)を参照してください。
 
-## Forking
+## フォーキング
 
-Python resolvers historically didn't support backtracking, and even with backtracking, resolution
-was usually limited to single environment, which one specific architecture, operating system, Python
-version, and Python implementation. Some packages use contradictory requirements for different
-environments, for example:
+Pythonのリゾルバは歴史的にバックトラックをサポートしておらず、バックトラックをサポートしていても、解決は通常、特定のアーキテクチャ、オペレーティングシステム、Pythonバージョン、およびPython実装を持つ単一の環境に限定されていました。一部のパッケージは、異なる環境に対して矛盾する要件を使用します。たとえば：
 
 ```python
 numpy>=2,<3 ; python_version >= "3.11"
 numpy>=1.16,<2 ; python_version < "3.11"
 ```
 
-Since Python only allows one version of each package, a naive resolver would error here. Inspired by
-[Poetry](https://github.com/python-poetry/poetry), uv uses a forking resolver: whenever there are
-multiple requirements for a package with different markers, the resolution is split.
+Pythonは各パッケージの1つのバージョンのみを許可するため、単純なリゾルバはここでエラーを発生させます。
+[Poetry](https://github.com/python-poetry/poetry)に触発されて、uvはフォーキングリゾルバを使用します。
+異なるマーカーを持つパッケージに複数の要件がある場合、解決は分割されます。
 
-In the above example, the partial solution would be split into two resolutions, one for
-`python_version >= "3.11"` and one for `python_version < "3.11"`.
+上記の例では、部分的な解決は`python_version >= "3.11"`用と`python_version < "3.11"`用の2つの解決に分割されます。
 
-If markers overlap or are missing a part of the marker space, the resolver splits additional times —
-there can be many forks per package. For example, given:
+マーカーが重複しているか、マーカースペースの一部が欠けている場合、リゾルバは追加の分割を行います。
+パッケージごとに多くのフォークが存在する可能性があります。たとえば、次のような場合です。
 
 ```python
 flask > 1 ; sys_platform == 'darwin'
@@ -91,45 +56,36 @@ flask > 2 ; sys_platform == 'win32'
 flask
 ```
 
-A fork would be created for `sys_platform == 'darwin'`, for `sys_platform == 'win32'`, and for
-`sys_platform != 'darwin' and sys_platform != 'win32'`.
+`sys_platform == 'darwin'`、`sys_platform == 'win32'`、および`sys_platform != 'darwin' and sys_platform != 'win32'`のフォークが作成されます。
 
-Forks can be nested, e.g., each fork is dependent on any previous forks that occurred. Forks with
-identical packages are merged to keep the number of forks low.
+フォークはネストできます。つまり、各フォークは発生した以前のフォークに依存します。
+同一のパッケージを持つフォークは、フォークの数を少なくするためにマージされます。
 
 !!! tip
 
-    Forking can be observed in the logs of `uv lock -v` by looking for
-    `Splitting resolution on ...`, `Solving split ... (requires-python: ...)` and `Split ... resolution
-    took ...`.
+    `uv lock -v`のログで`Splitting resolution on ...`、`Solving split ... (requires-python: ...)`、および`Split ... resolution took ...`を探すことで、フォーキングを観察できます。
 
-One difficulty in a forking resolver is that where splits occur is dependent on the order packages
-are seen, which is in turn dependent on the preferences, e.g., from `uv.lock`. So it is possible for
-the resolver to solve the requirements with specific forks, write this to the lockfile, and when the
-resolver is invoked again, a different solution is found because the preferences result in different
-fork points. To avoid this, the `resolution-markers` of each fork and each package that diverges
-between forks is written to the lockfile. When performing a new resolution, the forks from the
-lockfile are used to ensure the resolution is stable. When requirements change, new forks may be
-added to the saved forks.
+フォーキングリゾルバの難しさの1つは、分割が発生する場所がパッケージの順序に依存することです。
+これは、`uv.lock`からの優先順位に依存します。
+したがって、リゾルバが特定のフォークで要件を解決し、これをロックファイルに書き込み、リゾルバが再度呼び出されると、優先順位が異なるフォークポイントをもたらすため、異なる解決が見つかる可能性があります。
+これを回避するために、各フォークの`解決マーカー`とフォーク間で分岐する各パッケージがロックファイルに書き込まれます。
+新しい解決を行う際には、ロックファイルからのフォークが使用され、解決が安定するようにします。
+要件が変更されると、新しいフォークが保存されたフォークに追加される場合があります。
 
-## Requires-python
+## requires-python
 
-To ensure that a resolution with `requires-python = ">=3.9"` can actually be installed for the
-included Python versions, uv requires that all dependencies have the same minimum Python version.
-Package versions that declare a higher minimum Python version, e.g., `requires-python = ">=3.10"`,
-are rejected, because a resolution with that version can't be installed on Python 3.9. For
-simplicity and forward compatibility, only lower bounds in `requires-python` are respected. For
-example, if a package declares `requires-python = ">=3.8,<4"`, the `<4` marker is not propagated to
-the entire resolution.
+`requires-python = ">=3.9"`を持つ解決が含まれるPythonバージョンに実際にインストールできることを確認するために、uvはすべての依存関係が同じ最小Pythonバージョンを持つことを要求します。
+`requires-python = ">=3.10"`のように、より高い最小Pythonバージョンを宣言するパッケージバージョンは拒否されます。
+これは、そのバージョンを持つ解決がPython 3.9にインストールできないためです。
+簡単さと将来の互換性のために、`requires-python`の下限のみが尊重されます。
+たとえば、パッケージが`requires-python = ">=3.8,<4"`を宣言している場合、`<4`マーカーは解決全体に伝播されません。
 
-## Wheel tags
+## ホイールタグ
 
-While uv's resolution is universal with respect to environment markers, this doesn't extend to wheel
-tags. Wheel tags can encode the Python version, Python implementation, operating system, and
-architecture. For example, `torch-2.4.0-cp312-cp312-manylinux2014_aarch64.whl` is only compatible
-with CPython 3.12 on arm64 Linux with `glibc>=2.17` (per the `manylinux2014` policy), while
-`tqdm-4.66.4-py3-none-any.whl` works with all Python 3 versions and interpreters on any operating
-system and architecture. Most projects have a universally compatible source distribution that can be
-used when attempted to install a package that has no compatible wheel, but some packages, such as
-`torch`, don't publish a source distribution. In this case an installation on, e.g., Python 3.13, an
-uncommon operating system, or architecture, will fail and complain that there is no matching wheel.
+uvの解決は環境マーカーに関して普遍的ですが、これはホイールタグには拡張されません。
+ホイールタグは、Pythonバージョン、Python実装、オペレーティングシステム、およびアーキテクチャをエンコードできます。
+たとえば、`torch-2.4.0-cp312-cp312-manylinux2014_aarch64.whl`は、arm64 Linux上のCPython 3.12と`glibc>=2.17`（`manylinux2014`ポリシーによる）にのみ互換性がありますが、
+`tqdm-4.66.4-py3-none-any.whl`は、任意のオペレーティングシステムおよびアーキテクチャ上のすべてのPython 3バージョンおよびインタープリタと互換性があります。
+ほとんどのプロジェクトには、互換性のあるソースディストリビューションがあり、互換性のないホイールを持つパッケージをインストールしようとする場合に使用できますが、
+`torch`のような一部のパッケージはソースディストリビューションを公開していません。
+この場合、たとえばPython 3.13、一般的でないオペレーティングシステム、またはアーキテクチャでのインストールは失敗し、互換性のあるホイールがないと文句を言います。

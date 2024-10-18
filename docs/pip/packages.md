@@ -1,121 +1,119 @@
-# Managing packages
+# パッケージの管理
 
-## Installing a package
+## パッケージのインストール
 
-To install a package into the virtual environment, e.g., Flask:
+仮想環境にパッケージをインストールするには、例えばFlaskをインストールします：
 
 ```console
 $ uv pip install flask
 ```
 
-To install a package with optional dependencies enabled, e.g., Flask with the "dotenv" extra:
+オプションの依存関係を有効にしてパッケージをインストールするには、例えばFlaskの「dotenv」エクストラを有効にします：
 
 ```console
 $ uv pip install "flask[dotenv]"
 ```
 
-To install multiple packages, e.g., Flask and Ruff:
+複数のパッケージをインストールするには、例えばFlaskとRuffをインストールします：
 
 ```console
 $ uv pip install flask ruff
 ```
 
-To install a package with a constraint, e.g., Ruff v0.2.0 or newer:
+制約付きでパッケージをインストールするには、例えばRuff v0.2.0以降をインストールします：
 
 ```console
 $ uv pip install 'ruff>=0.2.0'
 ```
 
-To install a package at a specific version, e.g., Ruff v0.3.0:
+特定のバージョンのパッケージをインストールするには、例えばRuff v0.3.0をインストールします：
 
 ```console
 $ uv pip install 'ruff==0.3.0'
 ```
 
-To install a package from the disk:
+ディスクからパッケージをインストールするには：
 
 ```console
 $ uv pip install "ruff @ ./projects/ruff"
 ```
 
-To install a package from GitHub:
+GitHubからパッケージをインストールするには：
 
 ```console
 $ uv pip install "git+https://github.com/astral-sh/ruff"
 ```
 
-To install a package from GitHub at a specific reference:
+特定のリファレンスでGitHubからパッケージをインストールするには：
 
 ```console
-$ # Install a tag
+$ # タグをインストール
 $ uv pip install "git+https://github.com/astral-sh/ruff@v0.2.0"
 
-$ # Install a commit
+$ # コミットをインストール
 $ uv pip install "git+https://github.com/astral-sh/ruff@1fadefa67b26508cc59cf38e6130bde2243c929d"
 
-$ # Install a branch
+$ # ブランチをインストール
 $ uv pip install "git+https://github.com/astral-sh/ruff@main"
 ```
 
-See the [Git authentication](../configuration/authentication.md#git-authentication) documentation
-for installation from a private repository.
+プライベートリポジトリからのインストールについては、[Git認証](../configuration/authentication.md#git-authentication)のドキュメントを参照してください。
 
-## Editable packages
+## 編集可能なパッケージ
 
-Editable packages do not need to be reinstalled for change to their source code to be active.
+編集可能なパッケージは、ソースコードの変更が有効になるために再インストールする必要はありません。
 
-To install the current project as an editable package
+現在のプロジェクトを編集可能なパッケージとしてインストールするには：
 
 ```console
 $ uv pip install -e .
 ```
 
-To install a project in another directory as an editable package:
+別のディレクトリにあるプロジェクトを編集可能なパッケージとしてインストールするには：
 
 ```console
 $ uv pip install -e ruff @ ./project/ruff
 ```
 
-## Installing packages from files
+## ファイルからパッケージをインストールする
 
-Multiple packages can be installed at once from standard file formats.
+標準のファイル形式から複数のパッケージを一度にインストールできます。
 
-Install from a `requirements.txt` file:
+`requirements.txt`ファイルからインストールするには：
 
 ```console
 $ uv pip install -r requirements.txt
 ```
 
-See the [`uv pip compile`](./compile.md) documentation for more information on `requirements.txt`
-files.
+`requirements.txt`ファイルに関する詳細は、[`uv pip compile`](./compile.md)のドキュメントを参照してください。
 
-Install from a `pyproject.toml` file:
+`pyproject.toml`ファイルからインストールするには：
 
 ```console
 $ uv pip install -r pyproject.toml
 ```
 
-Install from a `pyproject.toml` file with optional dependencies enabled, e.g., the "foo" extra:
+オプションの依存関係を有効にして`pyproject.toml`ファイルからインストールするには、例えば「foo」エクストラを有効にします：
 
 ```console
 $ uv pip install -r pyproject.toml --extra foo
 ```
 
-Install from a `pyproject.toml` file with all optional dependencies enabled:
+すべてのオプションの依存関係を有効にして`pyproject.toml`ファイルからインストールするには：
 
 ```console
 $ uv pip install -r pyproject.toml --all-extras
 ```
 
-## Uninstalling a package
+## パッケージのアンインストール
 
-To uninstall a package, e.g., Flask:
+パッケージをアンインストールするには、例えばFlaskをアンインストールします：
 
 ```console
 $ uv pip uninstall flask
 ```
 
-To uninstall multiple packages, e.g., Flask and Ruff:
+複数のパッケージをアンインストールするには、例えばFlaskとRuffをアンインストールします：
 
 ```console
 $ uv pip uninstall flask ruff

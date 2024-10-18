@@ -1,11 +1,11 @@
-# Integration guides
+# 統合ガイド
 
-Learn how to integrate uv with other software:
+他のソフトウェアとuvを統合する方法を学びます：
 
-- [Using in Docker images](./docker.md)
-- [Using with Jupyter](./jupyter.md)
-- [Using with pre-commit](./pre-commit.md)
-- [Using in GitHub Actions](./github.md)
-- [Using in GitLab CI/CD](./gitlab.md)
-- [Using with alternative package indexes](./alternative-indexes.md)
-- [Building a FastAPI application](./fastapi.md)
+- [Dockerイメージでの使用](./docker.md)
+- [Jupyterとの使用](./jupyter.md)
+- [pre-commitとの使用](./pre-commit.md)
+- [GitHub Actionsでの使用](./github.md)
+- [GitLab CI/CDでの使用](./gitlab.md)
+- [代替パッケージインデックスの使用](./alternative-indexes.md)
+- [FastAPIアプリケーションの構築](./fastapi.md)

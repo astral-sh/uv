@@ -1,32 +1,22 @@
-# Workspaces
+# ワークスペース
 
-Inspired by the [Cargo](https://doc.rust-lang.org/cargo/reference/workspaces.html) concept of the
-same name, a workspace is "a collection of one or more packages, called _workspace members_, that
-are managed together."
+同名の[Cargo](https://doc.rust-lang.org/cargo/reference/workspaces.html)の概念に触発されて、ワークスペースは「_ワークスペースメンバー_と呼ばれる1つ以上のパッケージのコレクションであり、一緒に管理されます。」
 
-Workspaces organize large codebases by splitting them into multiple packages with common
-dependencies. Think: a FastAPI-based web application, alongside a series of libraries that are
-versioned and maintained as separate Python packages, all in the same Git repository.
+ワークスペースは、共通の依存関係を持つ複数のパッケージに分割することで、大規模なコードベースを整理します。たとえば、FastAPIベースのWebアプリケーションと、同じGitリポジトリ内で別々のPythonパッケージとしてバージョン管理および保守される一連のライブラリを考えてみてください。
 
-In a workspace, each package defines its own `pyproject.toml`, but the workspace shares a single
-lockfile, ensuring that the workspace operates with a consistent set of dependencies.
+ワークスペースでは、各パッケージが独自の`pyproject.toml`を定義しますが、ワークスペースは単一のロックファイルを共有し、ワークスペースが一貫した依存関係セットで動作することを保証します。
 
-As such, `uv lock` operates on the entire workspace at once, while `uv run` and `uv sync` operate on
-the workspace root by default, though both accept a `--package` argument, allowing you to run a
-command in a particular workspace member from any workspace directory.
+そのため、`uv lock`はワークスペース全体に対して一度に操作し、`uv run`および`uv sync`はデフォルトでワークスペースのルートで操作しますが、どちらも`--package`引数を受け入れ、任意のワークスペースディレクトリから特定のワークスペースメンバーでコマンドを実行できます。
 
-## Getting started
+## 始めに
 
-To create a workspace, add a `tool.uv.workspace` table to a `pyproject.toml`, which will implicitly
-create a workspace rooted at that package.
+ワークスペースを作成するには、`pyproject.toml`に`tool.uv.workspace`テーブルを追加します。これにより、そのパッケージをルートとするワークスペースが暗黙的に作成されます。
 
 !!! tip
 
-    By default, running `uv init` inside an existing package will add the newly created member to the workspace, creating a `tool.uv.workspace` table in the workspace root if it doesn't already exist.
+    既存のパッケージ内で`uv init`を実行すると、新しく作成されたメンバーがワークスペースに追加され、ワークスペースルートに`tool.uv.workspace`テーブルが存在しない場合は作成されます。
 
-In defining a workspace, you must specify the `members` (required) and `exclude` (optional) keys,
-which direct the workspace to include or exclude specific directories as members respectively, and
-accept lists of globs:
+ワークスペースを定義する際には、`members`（必須）および`exclude`（オプション）のキーを指定する必要があります。これにより、ワークスペースはそれぞれメンバーとして特定のディレクトリを含めたり除外したりするように指示され、グロブのリストを受け入れます。
 
 ```toml title="pyproject.toml"
 [project]
@@ -47,23 +37,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 ```
 
-Every directory included by the `members` globs (and not excluded by the `exclude` globs) must
-contain a `pyproject.toml` file. However, workspace members can be _either_
-[applications](./projects.md#applications) or [libraries](./projects.md#libraries); both are
-supported in the workspace context.
+`members`のグロブに含まれる（および`exclude`のグロブによって除外されない）すべてのディレクトリには、`pyproject.toml`ファイルが含まれている必要があります。ただし、ワークスペースメンバーは[アプリケーション](./projects.md#applications)または[ライブラリ](./projects.md#libraries)のいずれかであることができます。どちらもワークスペースコンテキストでサポートされています。
 
-Every workspace needs a root, which is _also_ a workspace member. In the above example, `albatross`
-is the workspace root, and the workspace members include all projects under the `packages`
-directory, with the exception of `seeds`.
+すべてのワークスペースにはルートが必要であり、それもワークスペースメンバーです。上記の例では、`albatross`がワークスペースのルートであり、ワークスペースメンバーには`packages`ディレクトリ下のすべてのプロジェクトが含まれますが、`seeds`は除外されます。
 
-By default, `uv run` and `uv sync` operates on the workspace root. For example, in the above
-example, `uv run` and `uv run --package albatross` would be equivalent, while
-`uv run --package bird-feeder` would run the command in the `bird-feeder` package.
+デフォルトでは、`uv run`および`uv sync`はワークスペースのルートで操作します。たとえば、上記の例では、`uv run`および`uv run --package albatross`は同等であり、`uv run --package bird-feeder`は`bird-feeder`パッケージでコマンドを実行します。
 
-## Workspace sources
+## ワークスペースソース
 
-Within a workspace, dependencies on workspace members are facilitated via
-[`tool.uv.sources`](./dependencies.md), as in:
+ワークスペース内では、ワークスペースメンバーへの依存関係は[`tool.uv.sources`](./dependencies.md)を介して提供されます。
 
 ```toml title="pyproject.toml"
 [project]
@@ -83,13 +65,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 ```
 
-In this example, the `albatross` project depends on the `bird-feeder` project, which is a member of
-the workspace. The `workspace = true` key-value pair in the `tool.uv.sources` table indicates the
-`bird-feeder` dependency should be provided by the workspace, rather than fetched from PyPI or
-another registry.
+この例では、`albatross`プロジェクトはワークスペースのメンバーである`bird-feeder`プロジェクトに依存しています。`tool.uv.sources`テーブルの`workspace = true`キーと値のペアは、`bird-feeder`依存関係がPyPIや他のレジストリから取得されるのではなく、ワークスペースによって提供されるべきであることを示しています。
 
-Any `tool.uv.sources` definitions in the workspace root apply to all members, unless overridden in
-the `tool.uv.sources` of a specific member. For example, given the following `pyproject.toml`:
+ワークスペースルートの`tool.uv.sources`定義は、特定のメンバーの`tool.uv.sources`でオーバーライドされない限り、すべてのメンバーに適用されます。たとえば、次の`pyproject.toml`を考えてみましょう。
 
 ```toml title="pyproject.toml"
 [project]
@@ -110,16 +88,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 ```
 
-Every workspace member would, by default, install `tqdm` from GitHub, unless a specific member
-overrides the `tqdm` entry in its own `tool.uv.sources` table.
+すべてのワークスペースメンバーは、特定のメンバーが独自の`tool.uv.sources`テーブルで`tqdm`エントリをオーバーライドしない限り、デフォルトでGitHubから`tqdm`をインストールします。
 
-## Workspace layouts
+## ワークスペースレイアウト
 
-The most common workspace layout can be thought of as a root project with a series of accompanying
-libraries.
+最も一般的なワークスペースレイアウトは、ルートプロジェクトと一連の付随するライブラリとして考えることができます。
 
-For example, continuing with the above example, this workspace has an explicit root at `albatross`,
-with two libraries (`bird-feeder` and `seeds`) in the `packages` directory:
+たとえば、上記の例を続けると、このワークスペースには`albatross`に明示的なルートがあり、`packages`ディレクトリに2つのライブラリ（`bird-feeder`および`seeds`）があります。
 
 ```text
 albatross
@@ -144,31 +119,20 @@ albatross
         └── main.py
 ```
 
-Since `seeds` was excluded in the `pyproject.toml`, the workspace has two members total: `albatross`
-(the root) and `bird-feeder`.
+`pyproject.toml`で`seeds`が除外されているため、ワークスペースには合計2つのメンバーがあります：`albatross`（ルート）と`bird-feeder`です。
 
-## When (not) to use workspaces
+## ワークスペースを使用する場合と使用しない場合
 
-Workspaces are intended to facilitate the development of multiple interconnected packages within a
-single repository. As a codebase grows in complexity, it can be helpful to split it into smaller,
-composable packages, each with their own dependencies and version constraints.
+ワークスペースは、単一のリポジトリ内で複数の相互接続されたパッケージの開発を促進することを目的としています。コードベースが複雑になるにつれて、それをより小さく、コンポーザブルなパッケージに分割し、それぞれが独自の依存関係とバージョン制約を持つことが役立ちます。
 
-Workspaces help enforce isolation and separation of concerns. For example, in uv, we have separate
-packages for the core library and the command-line interface, enabling us to test the core library
-independently of the CLI, and vice versa.
+ワークスペースは、分離と関心の分離を強制するのに役立ちます。たとえば、uvでは、コアライブラリとコマンドラインインターフェースのために別々のパッケージを持ち、CLIとは独立してコアライブラリをテストできるようにしています。
 
-Other common use cases for workspaces include:
+ワークスペースの他の一般的な使用例には次のようなものがあります。
 
-- A library with a performance-critical subroutine implemented in an extension module (Rust, C++,
-  etc.).
-- A library with a plugin system, where each plugin is a separate workspace package with a
-  dependency on the root.
+- 拡張モジュール（Rust、C++など）で実装されたパフォーマンスクリティカルなサブルーチンを持つライブラリ。
+- 各プラグインがルートに依存する別々のワークスペースパッケージであるプラグインシステムを持つライブラリ。
 
-Workspaces are _not_ suited for cases in which members have conflicting requirements, or desire a
-separate virtual environment for each member. In this case, path dependencies are often preferable.
-For example, rather than grouping `albatross` and its members in a workspace, you can always define
-each package as its own independent project, with inter-package dependencies defined as path
-dependencies in `tool.uv.sources`:
+ワークスペースは、メンバーが競合する要件を持っている場合や、各メンバーに対して個別の仮想環境を必要とする場合には適していません。この場合、パス依存関係が好まれることがよくあります。たとえば、`albatross`とそのメンバーをワークスペースにグループ化する代わりに、各パッケージを独立したプロジェクトとして定義し、`tool.uv.sources`でパス依存関係としてパッケージ間の依存関係を定義できます。
 
 ```toml title="pyproject.toml"
 [project]
@@ -185,15 +149,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 ```
 
-This approach conveys many of the same benefits, but allows for more fine-grained control over
-dependency resolution and virtual environment management (with the downside that `uv run --package`
-is no longer available; instead, commands must be run from the relevant package directory).
+このアプローチは多くの同じ利点を提供しますが、依存関係の解決と仮想環境の管理に対するより細かい制御を可能にします（`uv run --package`が利用できなくなるという欠点があります。代わりに、コマンドは関連するパッケージディレクトリから実行する必要があります）。
 
-Finally, uv's workspaces enforce a single `requires-python` for the entire workspace, taking the
-intersection of all members' `requires-python` values. If you need to support testing a given member
-on a Python version that isn't supported by the rest of the workspace, you may need to use `uv pip`
-to install that member in a separate virtual environment.
+最後に、uvのワークスペースは、すべてのメンバーの`requires-python`値の交差を取り、ワークスペース全体に対して単一の`requires-python`を強制します。特定のメンバーを他のワークスペースがサポートしていないPythonバージョンでテストする必要がある場合は、そのメンバーを別の仮想環境にインストールするために`uv pip`を使用する必要があるかもしれません。
 
 !!! note
 
-    As Python does not provide dependency isolation, uv can't ensure that a package uses its declared dependencies and nothing else. For workspaces specifically, uv can't ensure that packages don't import dependencies declared by another workspace member.
+    Pythonは依存関係の分離を提供しないため、uvはパッケージが宣言された依存関係のみを使用することを保証できません。特にワークスペースでは、uvはパッケージが他のワークスペースメンバーによって宣言された依存関係をインポートしないことを保証できません。

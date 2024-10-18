@@ -1,12 +1,10 @@
-# Using uv in GitHub Actions
+# GitHub Actionsでuvを使用する
 
-## Installation
+## インストール
 
-For use with GitHub Actions, we recommend the official
-[`astral-sh/setup-uv`](https://github.com/astral-sh/setup-uv) action, which installs uv, adds it to
-PATH, (optionally) persists the cache, and more, with support for all uv-supported platforms.
+GitHub Actionsで使用する場合、公式の[`astral-sh/setup-uv`](https://github.com/astral-sh/setup-uv)アクションをお勧めします。これにより、uvがインストールされ、PATHに追加され、（オプションで）キャッシュが永続化されるなど、uvがサポートするすべてのプラットフォームに対応しています。
 
-To install the latest version of uv:
+最新バージョンのuvをインストールするには：
 
 ```yaml title="example.yml" hl_lines="11-12"
 name: Example
@@ -23,7 +21,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
 ```
 
-It is considered best practice to pin to a specific uv version, e.g., with:
+特定のuvバージョンにピン留めすることが推奨されます。例えば：
 
 ```yaml title="example.yml" hl_lines="14 15"
 name: Example
@@ -43,9 +41,9 @@ jobs:
           version: "0.4.24"
 ```
 
-## Setting up Python
+## Pythonのセットアップ
 
-Python can be installed with the `python install` command:
+Pythonは`python install`コマンドでインストールできます：
 
 ```yaml title="example.yml" hl_lines="14 15"
 name: Example
@@ -65,9 +63,9 @@ jobs:
         run: uv python install
 ```
 
-This will respect the Python version pinned in the project.
+これにより、プロジェクトでピン留めされたPythonバージョンが尊重されます。
 
-Or, when using a matrix, as in:
+また、マトリックスを使用する場合は、次のように：
 
 ```yaml title="example.yml"
 strategy:
@@ -78,7 +76,7 @@ strategy:
       - "3.12"
 ```
 
-Provide the version to the `python install` invocation:
+`python install`呼び出しにバージョンを提供します：
 
 ```yaml title="example.yml" hl_lines="14 15"
 name: Example
@@ -98,12 +96,9 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 ```
 
-Alternatively, the official GitHub `setup-python` action can be used. This can be faster, because
-GitHub caches the Python versions alongside the runner.
+または、公式のGitHub `setup-python`アクションを使用することもできます。これは、GitHubがランナーと一緒にPythonバージョンをキャッシュするため、より高速です。
 
-Set the
-[`python-version-file`](https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-the-python-version-file-input)
-option to use the pinned version for the project:
+[`python-version-file`](https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-the-python-version-file-input)オプションを設定して、プロジェクトのピン留めバージョンを使用します：
 
 ```yaml title="example.yml" hl_lines="14 15 16 17"
 name: Example
@@ -125,8 +120,7 @@ jobs:
           python-version-file: ".python-version"
 ```
 
-Or, specify the `pyproject.toml` file to ignore the pin and use the latest version compatible with
-the project's `requires-python` constraint:
+または、`pyproject.toml`ファイルを指定して、ピン留めを無視し、プロジェクトの`requires-python`制約に互換性のある最新バージョンを使用します：
 
 ```yaml title="example.yml" hl_lines="17"
 name: Example
@@ -148,10 +142,9 @@ jobs:
           python-version-file: "pyproject.toml"
 ```
 
-## Syncing and running
+## 同期と実行
 
-Once uv and Python are installed, the project can be installed with `uv sync` and commands can be
-run in the environment with `uv run`:
+uvとPythonがインストールされたら、`uv sync`でプロジェクトをインストールし、`uv run`で環境内でコマンドを実行できます：
 
 ```yaml title="example.yml" hl_lines="17-22"
 name: Example
@@ -180,16 +173,13 @@ jobs:
 
 !!! tip
 
-    The
-    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#configuring-the-project-environment-path) can
-    be used to install to the system Python environment instead of creating a virtual environment.
+    [`UV_PROJECT_ENVIRONMENT`設定](../../concepts/projects.md#configuring-the-project-environment-path)を使用して、仮想環境を作成せずにシステムPython環境にインストールすることができます。
 
-## Caching
+## キャッシュ
 
-It may improve CI times to store uv's cache across workflow runs.
+ワークフローの実行間でuvのキャッシュを保存することで、CIの時間を短縮できる場合があります。
 
-The [`astral-sh/setup-uv`](https://github.com/astral-sh/setup-uv) has built-in support for
-persisting the cache:
+[`astral-sh/setup-uv`](https://github.com/astral-sh/setup-uv)には、キャッシュを永続化するための組み込みサポートがあります：
 
 ```yaml title="example.yml"
 - name: Enable caching
@@ -198,7 +188,7 @@ persisting the cache:
     enable-cache: true
 ```
 
-You can configure the action to use a custom cache directory on the runner:
+ランナー上でカスタムキャッシュディレクトリを使用するようにアクションを構成できます：
 
 ```yaml title="example.yml"
 - name: Define a custom uv cache path
@@ -208,7 +198,7 @@ You can configure the action to use a custom cache directory on the runner:
     cache-local-path: "/path/to/cache"
 ```
 
-Or invalidate it when the lockfile changes:
+または、ロックファイルが変更されたときに無効にします：
 
 ```yaml title="example.yml"
 - name: Define a cache dependency glob
@@ -218,7 +208,7 @@ Or invalidate it when the lockfile changes:
     cache-dependency-glob: "uv.lock"
 ```
 
-Or when any requirements file changes:
+または、任意のrequirementsファイルが変更されたときに無効にします：
 
 ```yaml title="example.yml"
 - name: Define a cache dependency glob
@@ -228,10 +218,9 @@ Or when any requirements file changes:
     cache-dependency-glob: "requirements**.txt"
 ```
 
-Note that `astral-sh/setup-uv` will automatically use a separate cache key for each host
-architecture and platform.
+`astral-sh/setup-uv`は、ホストアーキテクチャとプラットフォームごとに自動的に別々のキャッシュキーを使用します。
 
-Alternatively, you can manage the cache manually with the `actions/cache` action:
+または、`actions/cache`アクションを使用してキャッシュを手動で管理することもできます：
 
 ```yaml title="example.yml"
 jobs:
@@ -258,21 +247,17 @@ jobs:
         run: uv cache prune --ci
 ```
 
-The `uv cache prune --ci` command is used to reduce the size of the cache and is optimized for CI.
-Its effect on performance is dependent on the packages being installed.
+`uv cache prune --ci`コマンドは、キャッシュのサイズを減らすために使用され、CIに最適化されています。そのパフォーマンスへの影響は、インストールされるパッケージに依存します。
 
 !!! tip
 
-    If using `uv pip`, use `requirements.txt` instead of `uv.lock` in the cache key.
+    `uv pip`を使用する場合、キャッシュキーには`requirements.txt`を使用してください。
 
 !!! note
 
     [post-job-hook]: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job
 
-    When using non-ephemeral, self-hosted runners the default cache directory can grow unbounded.
-    In this case, it may not be optimal to share the cache between jobs. Instead, move the cache
-    inside the GitHub Workspace and remove it once the job finishes using a
-    [Post Job Hook][post-job-hook].
+    非エフェメラルなセルフホストランナーを使用する場合、デフォルトのキャッシュディレクトリは無制限に成長する可能性があります。この場合、ジョブ間でキャッシュを共有することは最適ではないかもしれません。代わりに、キャッシュをGitHubワークスペース内に移動し、ジョブが終了したら削除します。[Post Job Hook][post-job-hook]を使用します。
 
     ```yaml
     install_job:
@@ -281,23 +266,20 @@ Its effect on performance is dependent on the packages being installed.
         UV_CACHE_DIR: ${{ github.workspace }}/.cache/uv
     ```
 
-    Using a post job hook requires setting the `ACTIONS_RUNNER_HOOK_JOB_STARTED` environment
-    variable on the self-hosted runner to the path of a cleanup script such as the one shown below.
+    ポストジョブフックを使用するには、セルフホストランナーで`ACTIONS_RUNNER_HOOK_JOB_STARTED`環境変数をクリーンアップスクリプトのパスに設定する必要があります。以下のようなスクリプトです。
 
     ```sh title="clean-uv-cache.sh"
     #!/usr/bin/env sh
     uv cache clean
     ```
 
-## Using `uv pip`
+## `uv pip`の使用
 
-If using the `uv pip` interface instead of the uv project interface, uv requires a virtual
-environment by default. To allow installing packages into the system environment, use the `--system`
-flag on all `uv` invocations or set the `UV_SYSTEM_PYTHON` variable.
+uvプロジェクトインターフェースの代わりに`uv pip`インターフェースを使用する場合、uvはデフォルトで仮想環境を必要とします。パッケージをシステム環境にインストールするには、すべての`uv`呼び出しで`--system`フラグを使用するか、`UV_SYSTEM_PYTHON`変数を設定します。
 
-The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes.
+`UV_SYSTEM_PYTHON`変数は、異なるスコープで定義できます。
 
-Opt-in for the entire workflow by defining it at the top level:
+ワークフロー全体に対してオプトインするには、トップレベルで定義します：
 
 ```yaml title="example.yml"
 env:
@@ -306,7 +288,7 @@ env:
 jobs: ...
 ```
 
-Or, opt-in for a specific job in the workflow:
+または、ワークフロー内の特定のジョブに対してオプトインします：
 
 ```yaml title="example.yml"
 jobs:
@@ -316,7 +298,7 @@ jobs:
     ...
 ```
 
-Or, opt-in for a specific step in a job:
+または、ジョブ内の特定のステップに対してオプトインします：
 
 ```yaml title="example.yml"
 steps:
@@ -326,4 +308,4 @@ steps:
       UV_SYSTEM_PYTHON: 1
 ```
 
-To opt-out again, the `--no-system` flag can be used in any uv invocation.
+再度オプトアウトするには、任意のuv呼び出しで`--no-system`フラグを使用できます。

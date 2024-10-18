@@ -1,33 +1,26 @@
-# Dependency bots
+# 依存関係ボット
 
-It is considered best practice to regularly update dependencies, to avoid being exposed to
-vulnerabilities, limit incompatibilities between dependencies, and avoid complex upgrades when
-upgrading from a too old version. A variety of tools can help staying up-to-date by creating
-automated pull requests. Several of them support uv, or have work underway to support it.
+依存関係を定期的に更新することは、脆弱性の回避、依存関係間の非互換性の制限、古いバージョンからの複雑なアップグレードの回避のために、ベストプラクティスとされています。さまざまなツールが、自動化されたプルリクエストを作成することで最新の状態を保つのに役立ちます。それらのいくつかはuvをサポートしているか、サポートのための作業が進行中です。
 
 ## Renovate
 
-uv is supported by [Renovate](https://github.com/renovatebot/renovate).
+uvは[Renovate](https://github.com/renovatebot/renovate)によってサポートされています。
 
 !!! note
 
-    Updating `uv pip compile` outputs such as `requirements.txt` is not yet supported. Progress can
-    be tracked
-    at [renovatebot/renovate#30909](https://github.com/renovatebot/renovate/issues/30909).
+    `uv pip compile`の出力（例：`requirements.txt`の更新）はまだサポートされていません。進捗状況は
+    [renovatebot/renovate#30909](https://github.com/renovatebot/renovate/issues/30909)で追跡できます。
 
-### `uv.lock` output
+### `uv.lock`の出力
 
-Renovate uses the presence of a `uv.lock` file to determine that uv is used for managing
-dependencies, and will suggest upgrades to
-[project dependencies](../../concepts/dependencies.md#project-dependencies),
-[optional dependencies](../../concepts/dependencies.md#optional-dependencies) and
-[development dependencies](../../concepts/dependencies.md#development-dependencies). Renovate will
-update both the `pyproject.toml` and `uv.lock` files.
+Renovateは`uv.lock`ファイルの存在を使用して、uvが依存関係の管理に使用されていることを判断し、
+[プロジェクト依存関係](../../concepts/dependencies.md#project-dependencies)、
+[オプション依存関係](../../concepts/dependencies.md#optional-dependencies)、
+[開発依存関係](../../concepts/dependencies.md#development-dependencies)のアップグレードを提案します。Renovateは
+`pyproject.toml`と`uv.lock`の両方のファイルを更新します。
 
-The lockfile can also be refreshed on a regular basis (for instance to update transitive
-dependencies) by enabling the
-[`lockFileMaintenance`](https://docs.renovatebot.com/configuration-options/#lockfilemaintenance)
-option:
+ロックファイルは、定期的に（例えば、推移的依存関係を更新するために）リフレッシュすることもできます。
+[`lockFileMaintenance`](https://docs.renovatebot.com/configuration-options/#lockfilemaintenance)オプションを有効にすることで可能です：
 
 ```jsx title="renovate.json5"
 {
@@ -38,14 +31,12 @@ option:
 }
 ```
 
-### Inline script metadata
+### インラインスクリプトメタデータ
 
-Renovate supports updating dependencies defined using
-[script inline metadata](../scripts.md/#declaring-script-dependencies).
+Renovateは、[スクリプトインラインメタデータ](../scripts.md/#declaring-script-dependencies)を使用して定義された依存関係の更新をサポートしています。
 
-Since it cannot automatically detect which Python files use script inline metadata, their locations
-need to be explicitly defined using
-[`fileMatch`](https://docs.renovatebot.com/configuration-options/#filematch), like so:
+自動的にどのPythonファイルがスクリプトインラインメタデータを使用しているかを検出できないため、
+[`fileMatch`](https://docs.renovatebot.com/configuration-options/#filematch)を使用してその場所を明示的に定義する必要があります。以下のように：
 
 ```jsx title="renovate.json5"
 {
@@ -61,9 +52,7 @@ need to be explicitly defined using
 
 ## Dependabot
 
-Support for uv is not yet available. Progress can be tracked at:
+uvのサポートはまだ利用できません。進捗状況は以下で追跡できます：
 
-- [dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478) for
-  `uv.lock` output
-- [dependabot/dependabot-core#10039](https://github.com/dependabot/dependabot-core/issues/10039) for
-  `uv pip compile` outputs
+- `uv.lock`の出力については[dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478)
+- `uv pip compile`の出力については[dependabot/dependabot-core#10039](https://github.com/dependabot/dependabot-core/issues/10039)

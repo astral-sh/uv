@@ -1,282 +1,221 @@
-# Python versions
+# Pythonバージョン
 
-A Python version is composed of a Python interpreter (i.e. the `python` executable), the standard
-library, and other supporting files.
+Pythonバージョンは、Pythonインタープリタ（つまり、`python`実行ファイル）、標準ライブラリ、およびその他のサポートファイルで構成されます。
 
-## Managed and system Python installations
+## 管理されたPythonインストールとシステムPythonインストール
 
-Since it is common for a system to have an existing Python installation, uv supports
-[discovering](#discovery-of-python-versions) Python versions. However, uv also supports
-[installing Python versions](#installing-a-python-version) itself. To distinguish between these two
-types of Python installations, uv refers to Python versions it installs as _managed_ Python
-installations and all other Python installations as _system_ Python installations.
+システムに既存のPythonインストールがあることが一般的であるため、uvはPythonバージョンの[検出](#discovery-of-python-versions)をサポートしています。ただし、uvはPythonバージョンを自分で[インストール](#installing-a-python-version)することもサポートしています。これらの2つのタイプのPythonインストールを区別するために、uvは自分でインストールしたPythonバージョンを_管理された_ Pythonインストールと呼び、その他のすべてのPythonインストールを_システム_ Pythonインストールと呼びます。
 
 !!! note
 
-    uv does not distinguish between Python versions installed by the operating system vs those
-    installed and managed by other tools. For example, if a Python installation is managed with
-    `pyenv`, it would still be considered a _system_ Python version in uv.
+    uvは、オペレーティングシステムによってインストールされたPythonバージョンと他のツールによってインストールおよび管理されたPythonバージョンを区別しません。たとえば、Pythonインストールが`pyenv`で管理されている場合でも、uvでは_システム_ Pythonバージョンと見なされます。
 
-## Requesting a version
+## バージョンのリクエスト
 
-A specific Python version can be requested with the `--python` flag in most uv commands. For
-example, when creating a virtual environment:
+特定のPythonバージョンは、ほとんどのuvコマンドで`--python`フラグを使用してリクエストできます。たとえば、仮想環境を作成する場合：
 
 ```console
 $ uv venv --python 3.11.6
 ```
 
-uv will ensure that Python 3.11.6 is available — downloading and installing it if necessary — then
-create the virtual environment with it.
+uvはPython 3.11.6が利用可能であることを確認し、必要に応じてダウンロードおよびインストールし、そのバージョンで仮想環境を作成します。
 
-The following Python version request formats are supported:
+次のPythonバージョンリクエスト形式がサポートされています：
 
-- `<version>` e.g. `3`, `3.12`, `3.12.3`
-- `<version-specifier>` e.g. `>=3.12,<3.13`
-- `<implementation>` e.g. `cpython` or `cp`
-- `<implementation>@<version>` e.g. `cpython@3.12`
-- `<implementation><version>` e.g. `cpython3.12` or `cp312`
-- `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
-- `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
+- `<version>` 例：`3`、`3.12`、`3.12.3`
+- `<version-specifier>` 例：`>=3.12,<3.13`
+- `<implementation>` 例：`cpython`または`cp`
+- `<implementation>@<version>` 例：`cpython@3.12`
+- `<implementation><version>` 例：`cpython3.12`または`cp312`
+- `<implementation><version-specifier>` 例：`cpython>=3.12,<3.13`
+- `<implementation>-<version>-<os>-<arch>-<libc>` 例：`cpython-3.12.3-macos-aarch64-none`
 
-Additionally, a specific system Python interpreter can be requested with:
+さらに、特定のシステムPythonインタープリタを次の形式でリクエストできます：
 
-- `<executable-path>` e.g. `/opt/homebrew/bin/python3`
-- `<executable-name>` e.g. `mypython3`
-- `<install-dir>` e.g. `/some/environment/`
+- `<executable-path>` 例：`/opt/homebrew/bin/python3`
+- `<executable-name>` 例：`mypython3`
+- `<install-dir>` 例：`/some/environment/`
 
-By default, uv will automatically download Python versions if they cannot be found on the system.
-This behavior can be
-[disabled with the `python-downloads` option](#disabling-automatic-python-downloads).
+デフォルトでは、uvはシステム上で見つからない場合にPythonバージョンを自動的にダウンロードします。この動作は[`python-downloads`オプション](#disabling-automatic-python-downloads)で無効にできます。
 
-## Installing a Python version
+## Pythonバージョンのインストール
 
-uv bundles a list of downloadable CPython and PyPy distributions for macOS, Linux, and Windows.
+uvはmacOS、Linux、およびWindows向けのダウンロード可能なCPythonおよびPyPyディストリビューションのリストをバンドルしています。
 
 !!! tip
 
-    By default, Python versions are automatically downloaded as needed without using
-    `uv python install`.
+    デフォルトでは、Pythonバージョンは`uv python install`を使用せずに必要に応じて自動的にダウンロードされます。
 
-To install a Python version at a specific version:
+特定のバージョンのPythonバージョンをインストールするには：
 
 ```console
 $ uv python install 3.12.3
 ```
 
-To install the latest patch version:
+最新のパッチバージョンをインストールするには：
 
 ```console
 $ uv python install 3.12
 ```
 
-To install a version that satisfies constraints:
+制約を満たすバージョンをインストールするには：
 
 ```console
 $ uv python install '>=3.8,<3.10'
 ```
 
-To install multiple versions:
+複数のバージョンをインストールするには：
 
 ```console
 $ uv python install 3.9 3.10 3.11
 ```
 
-To install a specific implementation:
+特定の実装をインストールするには：
 
 ```console
 $ uv python install pypy
 ```
 
-All of the [Python version request](#requesting-a-version) formats are supported except those that
-are used for requesting local interpreters such as a file path.
+すべての[Pythonバージョンリクエスト](#requesting-a-version)形式がサポートされていますが、ファイルパスなどのローカルインタープリタをリクエストするために使用される形式は除きます。
 
-## Project Python versions
+## プロジェクトのPythonバージョン
 
-By default `uv python install` will verify that a managed Python version is installed or install the
-latest version.
+デフォルトでは、`uv python install`は管理されたPythonバージョンがインストールされていることを確認するか、最新バージョンをインストールします。
 
-However, a project may include a `.python-version` file specifying a default Python version. If
-present, uv will install the Python version listed in the file.
+ただし、プロジェクトにはデフォルトのPythonバージョンを指定する`.python-version`ファイルが含まれている場合があります。存在する場合、uvはファイルに記載されたPythonバージョンをインストールします。
 
-Alternatively, a project that requires multiple Python versions may also define a `.python-versions`
-file. If present, uv will install all of the Python versions listed in the file. This file takes
-precedence over the `.python-version` file.
+また、複数のPythonバージョンを必要とするプロジェクトは、`.python-versions`ファイルを定義することもできます。存在する場合、uvはファイルに記載されたすべてのPythonバージョンをインストールします。このファイルは`.python-version`ファイルよりも優先されます。
 
-uv will also respect Python requirements defined in a `pyproject.toml` file during project command
-invocations.
+uvはまた、プロジェクトコマンドの呼び出し中に`pyproject.toml`ファイルに定義されたPython要件を尊重します。
 
-## Viewing available Python versions
+## 利用可能なPythonバージョンの表示
 
-To list installed and available Python versions:
+インストール済みおよび利用可能なPythonバージョンを一覧表示するには：
 
 ```console
 $ uv python list
 ```
 
-By default, downloads for other platforms and old patch versions are hidden.
+デフォルトでは、他のプラットフォームおよび古いパッチバージョンのダウンロードは非表示になります。
 
-To view all versions:
+すべてのバージョンを表示するには：
 
 ```console
 $ uv python list --all-versions
 ```
 
-To view Python versions for other platforms:
+他のプラットフォームのPythonバージョンを表示するには：
 
 ```console
 $ uv python list --all-platforms
 ```
 
-To exclude downloads and only show installed Python versions:
+ダウンロードを除外し、インストール済みのPythonバージョンのみを表示するには：
 
 ```console
 $ uv python list --only-installed
 ```
 
-## Finding a Python executable
+## Python実行ファイルの検索
 
-To find a Python executable, use the `uv python find` command:
+Python実行ファイルを検索するには、`uv python find`コマンドを使用します：
 
 ```console
 $ uv python find
 ```
 
-By default, this will display the path to the first available Python executable. See the
-[discovery rules](#discovery-of-python-versions) for details about how executables are discovered.
+デフォルトでは、最初に利用可能なPython実行ファイルのパスが表示されます。実行ファイルがどのように検出されるかの詳細については、[検出ルール](#discovery-of-python-versions)を参照してください。
 
-This interface also supports many [request formats](#requesting-a-version), e.g., to find a Python
-executable that has a version of 3.11 or newer:
+このインターフェースは多くの[リクエスト形式](#requesting-a-version)もサポートしています。たとえば、3.11以上のバージョンを持つPython実行ファイルを検索するには：
 
 ```console
 $ uv python find >=3.11
 ```
 
-By default, `uv python find` will include Python versions from virtual environments. If a `.venv`
-directory is found in the working directory or any of the parent directories or the `VIRTUAL_ENV`
-environment variable is set, it will take precedence over any Python executables on the `PATH`.
+デフォルトでは、`uv python find`は仮想環境からのPythonバージョンを含めます。作業ディレクトリまたは親ディレクトリのいずれかに`.venv`ディレクトリが見つかるか、`VIRTUAL_ENV`環境変数が設定されている場合、それは`PATH`上の他のPython実行ファイルよりも優先されます。
 
-To ignore virtual environments, use the `--system` flag:
+仮想環境を無視するには、`--system`フラグを使用します：
 
 ```console
 $ uv python find --system
 ```
 
-## Discovery of Python versions
+## Pythonバージョンの検出
 
-When searching for a Python version, the following locations are checked:
+Pythonバージョンを検索する場合、次の場所がチェックされます：
 
-- Managed Python installations in the `UV_PYTHON_INSTALL_DIR`.
-- A Python interpreter on the `PATH` as `python`, `python3`, or `python3.x` on macOS and Linux, or
-  `python.exe` on Windows.
-- On Windows, the Python interpreters in the Windows registry and Microsoft Store Python
-  interpreters (see `py --list-paths`) that match the requested version.
+- `UV_PYTHON_INSTALL_DIR`にある管理されたPythonインストール。
+- `PATH`上の`python`、`python3`、または`python3.x`としてのPythonインタープリタ（macOSおよびLinuxの場合）または`python.exe`（Windowsの場合）。
+- Windowsでは、Windowsレジストリ内のPythonインタープリタおよびMicrosoft StoreのPythonインタープリタ（`py --list-paths`を参照）がリクエストされたバージョンに一致します。
 
-In some cases, uv allows using a Python version from a virtual environment. In this case, the
-virtual environment's interpreter will be checked for compatibility with the request before
-searching for an installation as described above. See the
-[pip-compatible virtual environment discovery](../pip/environments.md#discovery-of-python-environments)
-documentation for details.
+一部のケースでは、uvは仮想環境からのPythonバージョンの使用を許可します。この場合、仮想環境のインタープリタはリクエストとの互換性があるかどうかを確認し、上記のようにインストールを検索する前にチェックされます。詳細については、[pip互換の仮想環境の検出](../pip/environments.md#discovery-of-python-environments)のドキュメントを参照してください。
 
-When performing discovery, non-executable files will be ignored. Each discovered executable is
-queried for metadata to ensure it meets the [requested Python version](#requesting-a-version). If
-the query fails, the executable will be skipped. If the executable satisfies the request, it is used
-without inspecting additional executables.
+検出を行う際、実行可能でないファイルは無視されます。検出された各実行ファイルはメタデータを照会して、[リクエストされたPythonバージョン](#requesting-a-version)を満たしていることを確認します。照会が失敗した場合、実行ファイルはスキップされます。実行ファイルがリクエストを満たす場合、追加の実行ファイルを検査せずに使用されます。
 
-When searching for a managed Python version, uv will prefer newer versions first. When searching for
-a system Python version, uv will use the first compatible version — not the newest version.
+管理されたPythonバージョンを検索する場合、uvは新しいバージョンを優先します。システムPythonバージョンを検索する場合、uvは最も新しいバージョンではなく、最初に互換性のあるバージョンを使用します。
 
-If a Python version cannot be found on the system, uv will check for a compatible managed Python
-version download.
+システム上でPythonバージョンが見つからない場合、uvは互換性のある管理されたPythonバージョンのダウンロードを確認します。
 
-### Python pre-releases
+### Pythonプレリリース
 
-Python pre-releases will not be selected by default. Python pre-releases will be used if there is no
-other available installation matching the request. For example, if only a pre-release version is
-available it will be used but otherwise a stable release version will be used. Similarly, if the
-path to a pre-release Python executable is provided then no other Python version matches the request
-and the pre-release version will be used.
+デフォルトでは、Pythonプレリリースは選択されません。Pythonプレリリースは、リクエストに一致する他のインストールがない場合に使用されます。たとえば、プレリリースバージョンのみが利用可能な場合、それが使用されますが、通常は安定リリースバージョンが使用されます。同様に、プレリリースのPython実行ファイルのパスが提供された場合、他のPythonバージョンがリクエストに一致しないため、プレリリースバージョンが使用されます。
 
-If a pre-release Python version is available and matches the request, uv will not download a stable
-Python version instead.
+プレリリースのPythonバージョンが利用可能でリクエストに一致する場合、uvは代わりに安定したPythonバージョンをダウンロードしません。
 
-## Disabling automatic Python downloads
+## 自動Pythonダウンロードの無効化
 
-By default, uv will automatically download Python versions when needed.
+デフォルトでは、uvは必要に応じてPythonバージョンを自動的にダウンロードします。
 
-The [`python-downloads`](../reference/settings.md#python-downloads) option can be used to disable
-this behavior. By default, it is set to `automatic`; set to `manual` to only allow Python downloads
-during `uv python install`.
+[`python-downloads`オプション](../reference/settings.md#python-downloads)を使用してこの動作を無効にできます。デフォルトでは`automatic`に設定されていますが、`manual`に設定すると、`uv python install`中にのみPythonのダウンロードが許可されます。
 
 !!! tip
 
-    The `python-downloads` setting can be set in a
-    [persistent configuration file](../configuration/files.md) to change the default behavior, or
-    the `--no-python-downloads` flag can be passed to any uv command.
+    `python-downloads`設定は、デフォルトの動作を変更するために[永続的な構成ファイル](../configuration/files.md)に設定できます。また、任意のuvコマンドに`--no-python-downloads`フラグを渡すこともできます。
 
-## Adjusting Python version preferences
+## Pythonバージョンの優先順位の調整
 
-By default, uv will attempt to use Python versions found on the system and only download managed
-interpreters when necessary.
+デフォルトでは、uvはシステム上で見つかったPythonバージョンを使用し、必要に応じて管理されたインタープリタをダウンロードします。
 
-The [`python-preference`](../reference/settings.md#python-preference) option can be used to adjust
-this behavior. By default, it is set to `managed` which prefers managed Python installations over
-system Python installations. However, system Python installations are still preferred over
-downloading a managed Python version.
+[`python-preference`オプション](../reference/settings.md#python-preference)を使用してこの動作を調整できます。デフォルトでは`managed`に設定されており、システムPythonインストールよりも管理されたPythonインストールを優先します。ただし、システムPythonインストールは管理されたPythonバージョンのダウンロードよりも優先されます。
 
-The following alternative options are available:
+次の代替オプションが利用可能です：
 
-- `only-managed`: Only use managed Python installations; never use system Python installations
-- `system`: Prefer system Python installations over managed Python installations
-- `only-system`: Only use system Python installations; never use managed Python installations
+- `only-managed`: 管理されたPythonインストールのみを使用し、システムPythonインストールは使用しない
+- `system`: システムPythonインストールを管理されたPythonインストールよりも優先する
+- `only-system`: システムPythonインストールのみを使用し、管理されたPythonインストールは使用しない
 
-These options allow disabling uv's managed Python versions entirely or always using them and
-ignoring any existing system installations.
+これらのオプションにより、uvの管理されたPythonバージョンを完全に無効にするか、常にそれらを使用し、既存のシステムインストールを無視することができます。
 
 !!! note
 
-    Automatic Python version downloads can be [disabled](#disabling-automatic-python-downloads)
-    without changing the preference.
+    Pythonバージョンの自動ダウンロードは、優先順位を変更せずに[無効にする](#disabling-automatic-python-downloads)ことができます。
 
-## Python implementation support
+## Python実装のサポート
 
-uv supports the CPython, PyPy, and GraalPy Python implementations. If a Python implementation is not
-supported, uv will fail to discover its interpreter.
+uvはCPython、PyPy、およびGraalPyのPython実装をサポートしています。Python実装がサポートされていない場合、uvはそのインタープリタを検出できません。
 
-The implementations may be requested with either the long or short name:
+実装は長い名前または短い名前のいずれかでリクエストできます：
 
-- CPython: `cpython`, `cp`
-- PyPy: `pypy`, `pp`
-- GraalPy: `graalpy`, `gp`
+- CPython: `cpython`、`cp`
+- PyPy: `pypy`、`pp`
+- GraalPy: `graalpy`、`gp`
 
-Implementation name requests are not case sensitive.
+実装名のリクエストは大文字と小文字を区別しません。
 
-See the [Python version request](#requesting-a-version) documentation for more details on the
-supported formats.
+サポートされている形式の詳細については、[Pythonバージョンリクエスト](#requesting-a-version)のドキュメントを参照してください。
 
-## Managed Python distributions
+## 管理されたPythonディストリビューション
 
-uv supports downloading and installing CPython and PyPy distributions.
+uvはCPythonおよびPyPyディストリビューションのダウンロードとインストールをサポートしています。
 
-### CPython distributions
+### CPythonディストリビューション
 
-As Python does not publish official distributable CPython binaries, uv instead uses pre-built
-third-party distributions from the
-[`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project.
-`python-build-standalone` is partially maintained by the uv maintainers and is used in many other
-Python projects, like [Rye](https://github.com/astral-sh/rye) and
-[bazelbuild/rules_python](https://github.com/bazelbuild/rules_python).
+Pythonは公式の配布可能なCPythonバイナリを公開していないため、uvは代わりに[`python-build-standalone`](https://github.com/indygreg/python-build-standalone)プロジェクトからの事前構築されたサードパーティディストリビューションを使用します。`python-build-standalone`は部分的にuvのメンテナによって維持されており、[Rye](https://github.com/astral-sh/rye)や[bazelbuild/rules_python](https://github.com/bazelbuild/rules_python)などの他の多くのPythonプロジェクトで使用されています。
 
-The uv Python distributions are self-contained, highly-portable, and performant. While Python can be
-built from source, as in tools like `pyenv`, doing so requires preinstalled system dependencies, and
-creating optimized, performant builds (e.g., with PGO and LTO enabled) is very slow.
+uvのPythonディストリビューションは自己完結型で、高い移植性とパフォーマンスを備えています。Pythonをソースからビルドすることもできますが、`pyenv`などのツールで行う場合、事前にシステム依存関係が必要であり、最適化されたパフォーマンスの高いビルド（例：PGOおよびLTOが有効）を作成するには非常に時間がかかります。
 
-These distributions have some behavior quirks, generally as a consequence of portability; and, at
-present, uv does not support installing them on musl-based Linux distributions, like Alpine Linux.
-See the
-[`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
-documentation for details.
+これらのディストリビューションには、一般的に移植性の結果としていくつかの動作の癖があります。現在、uvはAlpine LinuxのようなmuslベースのLinuxディストリビューションへのインストールをサポートしていません。詳細については、[`python-build-standalone`の癖](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)のドキュメントを参照してください。
 
-### PyPy distributions
+### PyPyディストリビューション
 
-PyPy distributions are provided by the PyPy project.
+PyPyディストリビューションはPyPyプロジェクトによって提供されています。

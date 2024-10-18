@@ -1,9 +1,7 @@
-# Versioning
+# バージョニング
 
-uv uses a custom versioning scheme in which the minor version number is bumped for breaking changes,
-and the patch version number is bumped for bug fixes, enhancements, and other non-breaking changes.
+uvは、マイナーバージョン番号が破壊的変更のためにバンプされ、パッチバージョン番号がバグ修正、機能強化、およびその他の非破壊的変更のためにバンプされるカスタムバージョニングスキームを使用します。
 
-uv does not yet have a stable API; once uv's API is stable (v1.0.0), the versioning scheme will
-adhere to [Semantic Versioning](https://semver.org/).
+uvはまだ安定したAPIを持っていません。uvのAPIが安定したら（v1.0.0）、バージョニングスキームは[セマンティックバージョニング](https://semver.org/)に準拠します。
 
-uv's changelog can be [viewed on GitHub](https://github.com/astral-sh/uv/blob/main/CHANGELOG.md).
+uvの変更ログは[GitHubで表示できます](https://github.com/astral-sh/uv/blob/main/CHANGELOG.md)。

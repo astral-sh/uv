@@ -1,83 +1,65 @@
-# Tools
+# ツール
 
-Tools are Python packages that provide command-line interfaces.
+ツールは、コマンドラインインターフェースを提供するPythonパッケージです。
 
 !!! note
 
-    See the [tools guide](../guides/tools.md) for an introduction to working with the tools
-    interface — this document discusses details of tool management.
+    ツールインターフェースの使用方法については、[ツールガイド](../guides/tools.md)を参照してください。このドキュメントでは、ツール管理の詳細について説明します。
 
-## The `uv tool` interface
+## `uv tool`インターフェース
 
-uv includes a dedicated interface for interacting with tools. Tools can be invoked without
-installation using `uv tool run`, in which case their dependencies are installed in a temporary
-virtual environment isolated from the current project.
+uvには、ツールと対話するための専用インターフェースが含まれています。ツールは`uv tool run`を使用してインストールせずに呼び出すことができます。この場合、依存関係は現在のプロジェクトから隔離された一時的な仮想環境にインストールされます。
 
-Because it is very common to run tools without installing them, a `uvx` alias is provided for
-`uv tool run` — the two commands are exactly equivalent. For brevity, the documentation will mostly
-refer to `uvx` instead of `uv tool run`.
+ツールをインストールせずに実行することが非常に一般的であるため、`uv tool run`のエイリアスとして`uvx`が提供されています。これらの2つのコマンドは完全に同等です。簡潔さのために、ドキュメントでは主に`uvx`を指します。
 
-Tools can also be installed with `uv tool install`, in which case their executables are
-[available on the `PATH`](#the-path) — an isolated virtual environment is still used, but it is not
-removed when the command completes.
+ツールは`uv tool install`を使用してインストールすることもできます。この場合、実行可能ファイルは[`PATH`に配置されます](#the-path)。隔離された仮想環境は引き続き使用されますが、コマンドが完了しても削除されません。
 
-## Execution vs installation
+## 実行とインストールの違い
 
-In most cases, executing a tool with `uvx` is more appropriate than installing the tool. Installing
-the tool is useful if you need the tool to be available to other programs on your system, e.g., if
-some script you do not control requires the tool, or if you are in a Docker image and want to make
-the tool available to users.
+ほとんどの場合、ツールを`uvx`で実行する方が、ツールをインストールするよりも適しています。ツールをインストールするのは、システム上の他のプログラムでツールが利用可能である必要がある場合に便利です。例えば、制御できないスクリプトがツールを必要とする場合や、Dockerイメージ内でツールをユーザーに提供する場合です。
 
-## Tool environments
+## ツール環境
 
-When running a tool with `uvx`, a virtual environment is stored in the uv cache directory and is
-treated as disposable, i.e., if you run `uv cache clean` the environment will be deleted. The
-environment is only cached to reduce the overhead of repeated invocations. If the environment is
-removed, a new one will be created automatically.
+`uvx`でツールを実行する場合、仮想環境はuvキャッシュディレクトリに保存され、一時的なものとして扱われます。つまり、`uv cache clean`を実行すると環境が削除されます。環境は繰り返しの呼び出しのオーバーヘッドを減らすためにのみキャッシュされます。環境が削除された場合、新しい環境が自動的に作成されます。
 
-When installing a tool with `uv tool install`, a virtual environment is created in the uv tools
-directory. The environment will not be removed unless the tool is uninstalled. If the environment is
-manually deleted, the tool will fail to run.
+`uv tool install`でツールをインストールする場合、仮想環境はuvツールディレクトリに作成されます。環境はツールがアンインストールされるまで削除されません。環境が手動で削除された場合、ツールは実行に失敗します。
 
-## Tool versions
+## ツールのバージョン
 
-Unless a specific version is requested, `uv tool install` will install the latest available of the
-requested tool. `uvx` will use the latest available version of the requested tool _on the first
-invocation_. After that, `uvx` will use the cached version of the tool unless a different version is
-requested, the cache is pruned, or the cache is refreshed.
+特定のバージョンが要求されない限り、`uv tool install`は要求されたツールの最新バージョンをインストールします。`uvx`は最初の呼び出し時に要求されたツールの最新バージョンを使用します。その後、`uvx`は異なるバージョンが要求されるか、キャッシュがプルーニングされるか、キャッシュが更新されない限り、キャッシュされたバージョンを使用します。
 
-For example, to run a specific version of Ruff:
+例えば、特定のバージョンのRuffを実行するには：
 
 ```console
 $ uvx ruff@0.6.0 --version
 ruff 0.6.0
 ```
 
-A subsequent invocation of `uvx` will use the latest, not the cached, version.
+その後の`uvx`の呼び出しは、キャッシュされたバージョンではなく最新バージョンを使用します。
 
 ```console
 $ uvx ruff --version
 ruff 0.6.2
 ```
 
-But, if a new version of Ruff was released, it would not be used unless the cache was refreshed.
+ただし、新しいバージョンのRuffがリリースされた場合、それはキャッシュが更新されない限り使用されません。
 
-To request the latest version of Ruff and refresh the cache, use the `@latest` suffix:
+Ruffの最新バージョンを要求し、キャッシュを更新するには、`@latest`サフィックスを使用します：
 
 ```console
 $ uvx ruff@latest --version
 0.6.2
 ```
 
-Once a tool is installed with `uv tool install`, `uvx` will use the installed version by default.
+ツールが`uv tool install`でインストールされると、`uvx`はデフォルトでインストールされたバージョンを使用します。
 
-For example, after installing an older version of Ruff:
+例えば、古いバージョンのRuffをインストールした後：
 
 ```console
 $ uv tool install ruff==0.5.0
 ```
 
-The version of `ruff` and `uvx ruff` is the same:
+`ruff`と`uvx ruff`のバージョンは同じです：
 
 ```console
 $ ruff --version
@@ -86,165 +68,141 @@ $ uvx ruff --version
 ruff 0.5.0
 ```
 
-However, you can ignore the installed version by requesting the latest version explicitly, e.g.:
+ただし、インストールされたバージョンを無視するには、最新バージョンを明示的に要求します。例：
 
 ```console
 $ uvx ruff@latest --version
 0.6.2
 ```
 
-Or, by using the `--isolated` flag, which will avoid refreshing the cache but ignore the installed
-version:
+または、`--isolated`フラグを使用して、キャッシュを更新せずにインストールされたバージョンを無視します：
 
 ```console
 $ uvx --isolated ruff --version
 0.6.2
 ```
 
-`uv tool install` will also respect the `{package}@{version}` and `{package}@latest` specifiers, as
-in:
+`uv tool install`も`{package}@{version}`および`{package}@latest`指定子を尊重します。例：
 
 ```console
 $ uv tool install ruff@latest
 $ uv tool install ruff@0.6.0
 ```
 
-### Tools directory
+### ツールディレクトリ
 
-By default, the uv tools directory is named `tools` and is in the uv application state directory,
-e.g., `~/.local/share/uv/tools`. The location may be customized with the `UV_TOOL_DIR` environment
-variable.
+デフォルトでは、uvツールディレクトリは`tools`という名前で、uvアプリケーションステートディレクトリにあります。例：`~/.local/share/uv/tools`。場所は`UV_TOOL_DIR`環境変数でカスタマイズできます。
 
-To display the path to the tool installation directory:
+ツールインストールディレクトリのパスを表示するには：
 
 ```console
 $ uv tool dir
 ```
 
-Tool environments are placed in a directory with the same name as the tool package, e.g.,
-`.../tools/<name>`.
+ツール環境はツールパッケージと同じ名前のディレクトリに配置されます。例：`.../tools/<name>`。
 
-### Mutating tool environments
+### ツール環境の変更
 
-Tool environments are _not_ intended to be mutated directly. It is strongly recommended never to
-mutate a tool environment manually with a `pip` operation.
+ツール環境は直接変更することを意図していません。ツール環境を手動で`pip`操作で変更することは強く推奨されません。
 
-Tool environments may be upgraded via `uv tool upgrade`, or re-created entirely via subsequent
-`uv tool install` operations.
+ツール環境は`uv tool upgrade`を介してアップグレードするか、後続の`uv tool install`操作を介して完全に再作成できます。
 
-To upgrade all packages in a tool environment
+ツール環境内のすべてのパッケージをアップグレードするには：
 
 ```console
 $ uv tool upgrade black
 ```
 
-To upgrade a single package in a tool environment:
+ツール環境内の単一のパッケージをアップグレードするには：
 
 ```console
 $ uv tool upgrade black --upgrade-package click
 ```
 
-To reinstall all packages in a tool environment
+ツール環境内のすべてのパッケージを再インストールするには：
 
 ```console
 $ uv tool upgrade black --reinstall
 ```
 
-To reinstall a single package in a tool environment:
+ツール環境内の単一のパッケージを再インストールするには：
 
 ```console
 $ uv tool upgrade black --reinstall-package click
 ```
 
-Tool upgrades will respect the version constraints provided when installing the tool. For example,
-`uv tool install black >=23,<24` followed by `uv tool upgrade black` will upgrade Black to the
-latest version in the range `>=23,<24`.
+ツールのアップグレードは、ツールのインストール時に提供されたバージョン制約を尊重します。例えば、`uv tool install black >=23,<24`の後に`uv tool upgrade black`を実行すると、Blackは`>=23,<24`の範囲内の最新バージョンにアップグレードされます。
 
-To instead replace the version constraints, re-install the tool with `uv tool install`:
+バージョン制約を置き換えるには、`uv tool install`でツールを再インストールします：
 
 ```console
 $ uv tool install black>=24
 ```
 
-Similarly, tool upgrades will retain the settings provided when installing the tool. For example,
-`uv tool install black --prerelease allow` followed by `uv tool upgrade black` will retain the
-`--prerelease allow` setting.
+同様に、ツールのアップグレードは、ツールのインストール時に提供された設定を保持します。例えば、`uv tool install black --prerelease allow`の後に`uv tool upgrade black`を実行すると、`--prerelease allow`設定が保持されます。
 
-Tool upgrades will reinstall the tool executables, even if they have not changed.
+ツールのアップグレードは、ツールの実行可能ファイルを再インストールします。たとえそれらが変更されていなくても。
 
-### Including additional dependencies
+### 追加の依存関係の含め
 
-Additional packages can be included during tool execution:
+ツールの実行中に追加のパッケージを含めることができます：
 
 ```console
 $ uvx --with <extra-package> <tool>
 ```
 
-And, during tool installation:
+また、ツールのインストール中にも：
 
 ```console
 $ uv tool install --with <extra-package> <tool-package>
 ```
 
-The `--with` option can be provided multiple times to include additional packages.
+`--with`オプションは複数回提供して追加のパッケージを含めることができます。
 
-The `--with` option supports package specifications, so a specific version can be requested:
+`--with`オプションはパッケージ仕様をサポートしているため、特定のバージョンを要求できます：
 
 ```console
 $ uvx --with <extra-package>==<version> <tool-package>
 ```
 
-If the requested version conflicts with the requirements of the tool package, package resolution
-will fail and the command will error.
+要求されたバージョンがツールパッケージの要件と競合する場合、パッケージの解決は失敗し、コマンドはエラーになります。
 
-## Tool executables
+## ツールの実行可能ファイル
 
-Tool executables include all console entry points, script entry points, and binary scripts provided
-by a Python package. Tool executables are symlinked into the `bin` directory on Unix and copied on
-Windows.
+ツールの実行可能ファイルには、Pythonパッケージが提供するすべてのコンソールエントリポイント、スクリプトエントリポイント、およびバイナリスクリプトが含まれます。ツールの実行可能ファイルはUnixでは`bin`ディレクトリにシンボリックリンクされ、Windowsではコピーされます。
 
-### The `bin` directory
+### `bin`ディレクトリ
 
-Executables are installed into the user `bin` directory following the XDG standard, e.g.,
-`~/.local/bin`. Unlike other directory schemes in uv, the XDG standard is used on _all platforms_
-notably including Windows and macOS — there is no clear alternative location to place executables on
-these platforms. The installation directory is determined from the first available environment
-variable:
+実行可能ファイルはXDG標準に従ってユーザーの`bin`ディレクトリにインストールされます。例：`~/.local/bin`。uvの他のディレクトリスキームとは異なり、XDG標準はすべてのプラットフォームで使用されます。特にWindowsとmacOSを含みます。これらのプラットフォームには実行可能ファイルを配置する明確な代替場所がないためです。インストールディレクトリは最初に利用可能な環境変数から決定されます：
 
 - `$UV_TOOL_BIN_DIR`
 - `$XDG_BIN_HOME`
 - `$XDG_DATA_HOME/../bin`
 - `$HOME/.local/bin`
 
-Executables provided by dependencies of tool packages are not installed.
+ツールパッケージの依存関係によって提供される実行可能ファイルはインストールされません。
 
-### The `PATH`
+### `PATH`
 
-The `bin` directory must be in the `PATH` variable for tool executables to be available from the
-shell. If it is not in the `PATH`, a warning will be displayed. The `uv tool update-shell` command
-can be used to add the `bin` directory to the `PATH` in common shell configuration files.
+ツールの実行可能ファイルをシェルから利用できるようにするには、`bin`ディレクトリが`PATH`変数に含まれている必要があります。`PATH`に含まれていない場合、警告が表示されます。`uv tool update-shell`コマンドを使用して、一般的なシェル構成ファイルに`bin`ディレクトリを追加できます。
 
-### Overwriting executables
+### 実行可能ファイルの上書き
 
-Installation of tools will not overwrite executables in the `bin` directory that were not previously
-installed by uv. For example, if `pipx` has been used to install a tool, `uv tool install` will
-fail. The `--force` flag can be used to override this behavior.
+ツールのインストールは、uvによって以前にインストールされていない`bin`ディレクトリの実行可能ファイルを上書きしません。例えば、`pipx`を使用してツールをインストールした場合、`uv tool install`は失敗します。この動作を上書きするには、`--force`フラグを使用できます。
 
-## Relationship to `uv run`
+## `uv run`との関係
 
-The invocation `uv tool run <name>` (or `uvx <name>`) is nearly equivalent to:
+`uv tool run <name>`（または`uvx <name>`）の呼び出しは、ほぼ次のコマンドと同等です：
 
 ```console
 $ uv run --no-project --with <name> -- <name>
 ```
 
-However, there are a couple notable differences when using uv's tool interface:
+ただし、uvのツールインターフェースを使用する場合にはいくつかの重要な違いがあります：
 
-- The `--with` option is not needed — the required package is inferred from the command name.
-- The temporary environment is cached in a dedicated location.
-- The `--no-project` flag is not needed — tools are always run isolated from the project.
-- If a tool is already installed, `uv tool run` will use the installed version but `uv run` will
-  not.
+- `--with`オプションは必要ありません。必要なパッケージはコマンド名から推測されます。
+- 一時的な環境は専用の場所にキャッシュされます。
+- `--no-project`フラグは必要ありません。ツールは常にプロジェクトから隔離されて実行されます。
+- ツールがすでにインストールされている場合、`uv tool run`はインストールされたバージョンを使用しますが、`uv run`は使用しません。
 
-If the tool should not be isolated from the project, e.g., when running `pytest` or `mypy`, then
-`uv run` should be used instead of `uv tool run`.
+ツールがプロジェクトから隔離されるべきでない場合、例：`pytest`や`mypy`を実行する場合、`uv tool run`の代わりに`uv run`を使用する必要があります。

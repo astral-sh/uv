@@ -1,61 +1,55 @@
-# Getting help
+# ヘルプの取得
 
-## Help menus
+## ヘルプメニュー
 
-The `--help` flag can be used to view the help menu for a command, e.g., for `uv`:
+`--help`フラグを使用して、コマンドのヘルプメニューを表示できます。例：`uv`の場合：
 
 ```console
 $ uv --help
 ```
 
-To view the help menu for a specific command, e.g., for `uv init`:
+特定のコマンドのヘルプメニューを表示するには、例：`uv init`の場合：
 
 ```console
 $ uv init --help
 ```
 
-When using the `--help` flag, uv displays a condensed help menu. To view a longer help menu for a
-command, use `uv help`:
+`--help`フラグを使用すると、uvは簡潔なヘルプメニューを表示します。コマンドの詳細なヘルプメニューを表示するには、`uv help`を使用します：
 
 ```console
 $ uv help
 ```
 
-To view the long help menu for a specific command, e.g., for `uv init`:
+特定のコマンドの詳細なヘルプメニューを表示するには、例：`uv init`の場合：
 
 ```console
 $ uv help init
 ```
 
-When using the long help menu, uv will attempt to use `less` or `more` to "page" the output so it is
-not all displayed at once. To exit the pager, press `q`.
+詳細なヘルプメニューを使用する場合、uvは出力を「ページング」するために`less`または`more`を使用しようとします。これにより、出力が一度にすべて表示されることはありません。ページャーを終了するには、`q`を押します。
 
-## Viewing the version
+## バージョンの確認
 
-When seeking help, it's important to determine the version of uv that you're using — sometimes the
-problem is already solved in a newer version.
+ヘルプを求める際には、使用しているuvのバージョンを確認することが重要です。問題が新しいバージョンで既に解決されていることがあります。
 
-To check the installed version:
+インストールされているバージョンを確認するには：
 
 ```console
 $ uv version
 ```
 
-The following are also valid:
+以下も有効です：
 
 ```console
-$ uv --version      # Same output as `uv version`
-$ uv -V             # Will not include the build commit and date
-$ uv pip --version  # Can be used with a subcommand
+$ uv --version      # `uv version`と同じ出力
+$ uv -V             # ビルドコミットと日付は含まれません
+$ uv pip --version  # サブコマンドと一緒に使用できます
 ```
 
-## Open an issue on GitHub
+## GitHubで問題を報告する
 
-The [issue tracker](https://github.com/astral-sh/uv/issues) on GitHub is a good place to report bugs
-and request features. Make sure to search for similar issues first, as it is common for someone else
-to encounter the same problem.
+GitHubの[issue tracker](https://github.com/astral-sh/uv/issues)は、バグを報告したり機能をリクエストしたりするのに適した場所です。まず同様の問題がないか検索してください。同じ問題に遭遇している人がいるかもしれません。
 
-## Chat on Discord
+## Discordでチャットする
 
-Astral has a [Discord server](https://discord.com/invite/astral-sh), which is a great place to ask
-questions, learn more about uv, and engage with other community members.
+Astralには[Discordサーバー](https://discord.com/invite/astral-sh)があり、質問をしたり、uvについて学んだり、他のコミュニティメンバーと交流したりするのに最適な場所です。
