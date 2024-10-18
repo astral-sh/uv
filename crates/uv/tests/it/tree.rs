@@ -1,5 +1,6 @@
 use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::formatdoc;
 use url::Url;
@@ -621,6 +622,84 @@ fn optional_dependencies_inverted() -> Result<()> {
     // `uv tree` should update the lockfile
     let lock = context.read("uv.lock");
     assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn tree_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── typing-extensions v4.10.0
+    └── sniffio v1.3.1 (group: dev)
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tree().arg("--only-group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0 (group: bar)
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tree().arg("--group").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── typing-extensions v4.10.0
+    ├── sniffio v1.3.1 (group: dev)
+    └── anyio v4.3.0 (group: foo)
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tree().arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── typing-extensions v4.10.0
+    ├── iniconfig v2.0.0 (group: bar)
+    ├── sniffio v1.3.1 (group: dev)
+    └── anyio v4.3.0 (group: foo)
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
 
     Ok(())
 }

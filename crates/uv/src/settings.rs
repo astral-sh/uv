@@ -1022,7 +1022,10 @@ impl TreeSettings {
             tree,
             universal,
             dev,
+            only_dev,
             no_dev,
+            group,
+            only_group,
             locked,
             frozen,
             build,
@@ -1033,8 +1036,7 @@ impl TreeSettings {
         } = args;
 
         Self {
-            // TODO(zanieb): Support `--group` here
-            dev: DevGroupsSpecification::from_args(dev, no_dev, false, vec![], vec![]),
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             locked,
             frozen,
             universal,
