@@ -220,7 +220,7 @@ fn system_config_file() -> Option<PathBuf> {
     // On Windows, use, e.g., C:\ProgramData
     #[cfg(windows)]
     {
-        PathBuf::from("C:\\ProgramData\\uv\\uv.toml")
+        Some(PathBuf::from("C:\\ProgramData\\uv\\uv.toml"))
     }
 
     #[cfg(not(windows))]
