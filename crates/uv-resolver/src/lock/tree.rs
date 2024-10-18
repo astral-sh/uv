@@ -7,7 +7,7 @@ use petgraph::visit::Dfs;
 use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use uv_configuration::DevMode;
+use uv_configuration::DevGroupsSpecification;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::ResolverMarkerEnvironment;
 
@@ -34,7 +34,7 @@ impl<'env> TreeDisplay<'env> {
         depth: usize,
         prune: &[PackageName],
         packages: &[PackageName],
-        dev: DevMode,
+        dev: &DevGroupsSpecification,
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
@@ -134,8 +134,6 @@ impl<'env> TreeDisplay<'env> {
             }
         }
 
-        let mut modified = false;
-
         // Step 1: Filter out packages that aren't reachable on this platform.
         if let Some(environment_markers) = markers {
             let mut reachable = FxHashSet::default();
@@ -167,12 +165,11 @@ impl<'env> TreeDisplay<'env> {
 
             // Remove the unreachable nodes from the graph.
             graph.retain_nodes(|_, index| reachable.contains(&index));
-            modified = true;
         }
 
         // Step 2: Filter the graph to those that are reachable in production or development, if
         // `--no-dev` or `--only-dev` were specified, respectively.
-        if dev != DevMode::Include {
+        {
             let mut reachable = FxHashSet::default();
 
             // Perform a DFS from the root nodes to find the reachable nodes, following only the
@@ -189,27 +186,24 @@ impl<'env> TreeDisplay<'env> {
             while let Some(node) = stack.pop_front() {
                 reachable.insert(node);
                 for edge in graph.edges_directed(node, Direction::Outgoing) {
-                    if matches!(edge.weight(), Edge::Prod(_) | Edge::Optional(_, _)) {
+                    let include = match edge.weight() {
+                        Edge::Prod(_) => dev.prod(),
+                        Edge::Optional(_, _) => dev.prod(),
+                        Edge::Dev(group, _) => dev.iter().contains(*group),
+                    };
+                    if include {
                         stack.push_back(edge.target());
                     }
                 }
             }
 
             // Remove the unreachable nodes from the graph.
-            graph.retain_nodes(|_, index| {
-                if reachable.contains(&index) {
-                    dev != DevMode::Only
-                } else {
-                    dev != DevMode::Exclude
-                }
-            });
-            modified = true;
+            graph.retain_nodes(|_, index| reachable.contains(&index));
         }
 
         // Step 3: Reverse the graph.
         if invert {
             graph.reverse();
-            modified = true;
         }
 
         // Step 4: Filter the graph to those nodes reachable from the target packages.
@@ -230,11 +224,10 @@ impl<'env> TreeDisplay<'env> {
 
             // Remove the unreachable nodes from the graph.
             graph.retain_nodes(|_, index| reachable.contains(&index));
-            modified = true;
         }
 
-        // If the graph was modified, re-create the inverse map.
-        if modified {
+        // Re-create the inverse map.
+        {
             inverse.clear();
             for node in graph.node_indices() {
                 inverse.insert(graph[node], node);
