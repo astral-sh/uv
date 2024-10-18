@@ -105,6 +105,12 @@ impl EnvVars {
     /// Equivalent to the `--no-sync` argument. Skips syncing the environment.
     pub const UV_NO_SYNC: &'static str = "UV_NO_SYNC";
 
+    /// Equivalent to the `--locked` argument. Assert that the `uv.lock` will remain unchanged.
+    pub const UV_LOCKED: &'static str = "UV_LOCKED";
+
+    /// Equivalent to the `--frozen` argument. Run without updating the `uv.lock` file.
+    pub const UV_FROZEN: &'static str = "UV_FROZEN";
+
     /// Equivalent to the `--preview` argument. Enables preview mode.
     pub const UV_PREVIEW: &'static str = "UV_PREVIEW";
 
