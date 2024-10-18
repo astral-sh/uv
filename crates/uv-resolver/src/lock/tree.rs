@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use uv_configuration::DevMode;
+use uv_configuration::DevGroupsSpecification;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::ResolverMarkerEnvironment;
 
@@ -26,7 +26,7 @@ pub struct TreeDisplay<'env> {
     /// Maximum display depth of the dependency tree.
     depth: usize,
     /// Whether to include development dependencies in the display.
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     /// Prune the given packages from the display of the dependency tree.
     prune: Vec<PackageName>,
     /// Display only the specified packages.
@@ -43,7 +43,7 @@ impl<'env> TreeDisplay<'env> {
         depth: usize,
         prune: Vec<PackageName>,
         packages: Vec<PackageName>,
-        dev: DevMode,
+        dev: DevGroupsSpecification,
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
@@ -236,14 +236,14 @@ impl<'env> TreeDisplay<'env> {
         let dependencies: Vec<Node<'env>> = self
             .dependencies
             .get(node.package_id())
-            .filter(|_| self.dev != DevMode::Only)
+            .filter(|_| self.dev.prod())
             .into_iter()
             .flatten()
             .map(|dep| Node::Dependency(dep.as_ref()))
             .chain(
                 self.optional_dependencies
                     .get(node.package_id())
-                    .filter(|_| self.dev != DevMode::Only)
+                    .filter(|_| self.dev.prod())
                     .into_iter()
                     .flatten()
                     .flat_map(|(extra, deps)| {
@@ -254,9 +254,9 @@ impl<'env> TreeDisplay<'env> {
             .chain(
                 self.dev_dependencies
                     .get(node.package_id())
-                    .filter(|_| self.dev != DevMode::Exclude)
                     .into_iter()
                     .flatten()
+                    .filter(|(group, _)| self.dev.iter().contains(*group))
                     .flat_map(|(group, deps)| {
                         deps.iter().map(move |dep| Node::DevDependency(group, dep))
                     }),
