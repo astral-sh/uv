@@ -301,6 +301,13 @@ impl AuthMiddleware {
     /// Run a request to completion.
     ///
     /// If credentials are present, insert them into the cache on success.
+
+    fn fetch_env_credentials(&self, url: &Url) -> Option<Credentials> {
+        let host = url.host_str()?;
+        let index_name = host.replace('.', "_").to_uppercase();
+        Credentials::from_env(&index_name)
+    }
+
     async fn complete_request(
         &self,
         credentials: Option<Arc<Credentials>>,
@@ -380,6 +387,9 @@ impl AuthMiddleware {
         //      falls back to the host, but we cache the result per realm so if a keyring
         //      implementation returns different credentials for different URLs in the
         //      same realm we will use the wrong credentials.
+        } else if let Some(credentials) = self.fetch_env_credentials(url) {
+            debug!("Found credentials in environment variables for {url}");
+            Some(credentials)
         } else if let Some(credentials) = match self.keyring {
             Some(ref keyring) => {
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
