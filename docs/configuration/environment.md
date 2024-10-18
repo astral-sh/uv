@@ -81,6 +81,10 @@ uv accepts the following command-line arguments as environment variables:
   set, uv will use this password for publishing.
 - `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
   the environment.
+- `UV_LOCKED`: Equivalent to the `--locked` command-line argument. If set, uv will assert that the
+  `uv.lock` remains unchanged.
+- `UV_FROZEN`: Equivalent to the `--frozen` command-line argument. If set, uv will run without
+  updating the `uv.lock` file.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
