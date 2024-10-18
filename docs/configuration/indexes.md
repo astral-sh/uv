@@ -18,6 +18,8 @@ name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 ```
 
+Index names must only contain alphanumeric characters, dashes, or underscores.
+
 Indexes are prioritized in the order in which they’re defined, such that the first index listed in
 the configuration file is the first index consulted when resolving dependencies, with indexes
 provided via the command line taking precedence over those in the configuration file.
