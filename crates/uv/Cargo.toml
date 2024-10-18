@@ -119,7 +119,7 @@ ignored = [
 ]
 
 [features]
-default = ["python", "pypi", "git", "performance"]
+default = ["python", "pypi", "git", "performance", "external"]
 # Use better memory allocators, etc. — also turns-on self-update.
 performance = [
     "performance-memory-allocator",
@@ -137,5 +137,7 @@ python-patch = []
 pypi = []
 # Introduces a dependency on Git.
 git = []
+# Introduces a dependency on other external servers.
+external = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]
