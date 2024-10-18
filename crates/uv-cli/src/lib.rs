@@ -408,7 +408,6 @@ pub enum Commands {
     Cache(CacheNamespace),
     /// Manage the uv executable.
     #[command(name = "self")]
-    #[cfg(feature = "self-update")]
     Self_(SelfNamespace),
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(hide = true)]
@@ -449,21 +448,18 @@ pub struct HelpArgs {
 }
 
 #[derive(Args)]
-#[cfg(feature = "self-update")]
 pub struct SelfNamespace {
     #[command(subcommand)]
     pub command: SelfCommand,
 }
 
 #[derive(Subcommand)]
-#[cfg(feature = "self-update")]
 pub enum SelfCommand {
     /// Update uv.
     Update(SelfUpdateArgs),
 }
 
 #[derive(Args, Debug)]
-#[cfg(feature = "self-update")]
 pub struct SelfUpdateArgs {
     /// Update to the specified version. If not provided, uv will update to the latest version.
     pub target_version: Option<String>,

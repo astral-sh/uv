@@ -806,6 +806,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                 }),
         }) => commands::self_update(target_version, token, printer).await,
+        #[cfg(not(feature = "self-update"))]
+        Commands::Self_(_) => {
+            anyhow::bail!(
+                "uv was installed through an external package manager, and self-update \
+                is not available. Please use your package manager to update uv."
+            );
+        }
         Commands::Version { output_format } => {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)
