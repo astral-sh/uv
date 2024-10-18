@@ -137,7 +137,7 @@ python-patch = []
 pypi = []
 # Introduces a dependency on Git.
 git = []
-# Introduces a dependency on other crates.io servers.
+# Introduces a dependency on crates.io.
 crates-io = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]
