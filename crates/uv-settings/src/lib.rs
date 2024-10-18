@@ -258,12 +258,12 @@ pub enum Error {
 }
 
 #[cfg(test)]
+#[cfg(not(windows))]
 mod test {
     use crate::locate_system_config_xdg;
     use std::env;
     use std::path::Path;
 
-    #[cfg(not(windows))]
     #[test]
     fn test_locate_system_config_xdg() {
         // Construct the path to the uv.toml file in the tests/fixtures directory
