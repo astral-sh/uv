@@ -314,6 +314,7 @@ mod test {
         );
     }
 
+    #[test]
     #[cfg(windows)]
     fn test_windows_config() {
         // Construct the path to the uv.toml file in the tests/fixtures directory
