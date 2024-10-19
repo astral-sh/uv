@@ -2819,7 +2819,7 @@ fn add_non_normalized_source() -> Result<()> {
         build-backend = "setuptools.build_meta"
 
         [tool.uv.sources]
-        uv_public_pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
+        uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", rev = "0.0.1" }
         "###
         );
     });
