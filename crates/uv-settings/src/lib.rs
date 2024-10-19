@@ -222,7 +222,7 @@ fn system_config_file() -> Option<PathBuf> {
     {
         if let Ok(system_drive) = std::env::var(EnvVars::SYSTEMDRIVE) {
             let candidate = PathBuf::from(system_drive).join("ProgramData\\uv\\uv.toml");
-            return candidate.as_path().is_file().then(|| candidate);
+            return candidate.as_path().is_file().then_some(candidate);
         }
         None
     }
