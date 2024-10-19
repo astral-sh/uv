@@ -131,6 +131,7 @@ impl PyProjectTomlMut {
         };
         Ok(doc)
     }
+
     /// Adds a dependency to `project.dependencies`.
     ///
     /// Returns `true` if the dependency was added, `false` if it was updated.
@@ -431,7 +432,11 @@ impl PyProjectTomlMut {
             .as_table_mut()
             .ok_or(Error::MalformedSources)?;
 
+        if let Some(key) = find_source(name, sources) {
+            sources.remove(&key);
+        }
         add_source(name, source, sources)?;
+
         Ok(())
     }
 
@@ -532,7 +537,9 @@ impl PyProjectTomlMut {
             .map(|sources| sources.as_table_mut().ok_or(Error::MalformedSources))
             .transpose()?
         {
-            sources.remove(name.as_ref());
+            if let Some(key) = find_source(name, sources) {
+                sources.remove(&key);
+            }
         }
 
         Ok(())
@@ -764,6 +771,16 @@ fn find_dependencies(
         }
     }
     to_replace
+}
+
+/// Returns the key in `tool.uv.sources` that matches the given package name.
+fn find_source(name: &PackageName, sources: &Table) -> Option<String> {
+    for (key, _) in sources {
+        if PackageName::from_str(key).is_ok_and(|ref key| key == name) {
+            return Some(key.to_string());
+        }
+    }
+    None
 }
 
 // Add a source to `tool.uv.sources`.
