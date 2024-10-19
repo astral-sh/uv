@@ -4610,8 +4610,6 @@ fn remove_repeated() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = ["anyio"]
-
-        [tool.uv.sources]
         "###
         );
     });
@@ -4644,8 +4642,6 @@ fn remove_repeated() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = ["anyio"]
-
-        [tool.uv.sources]
         "###
         );
     });
@@ -4681,8 +4677,6 @@ fn remove_repeated() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = []
-
-        [tool.uv.sources]
         "###
         );
     });
