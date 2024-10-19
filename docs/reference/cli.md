@@ -6440,6 +6440,8 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--files</code>, <code>-f</code></dt><dd><p>Show the full list of installed files for each package</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>

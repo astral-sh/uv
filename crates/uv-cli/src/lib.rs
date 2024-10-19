@@ -2005,6 +2005,10 @@ pub struct PipShowArgs {
     #[arg(long, overrides_with("strict"), hide = true)]
     pub no_strict: bool,
 
+    /// Show the full list of installed files for each package.
+    #[arg(short, long)]
+    pub files: bool,
+
     /// The Python interpreter to find the package in.
     ///
     /// By default, uv looks for packages in a virtual environment but will look
