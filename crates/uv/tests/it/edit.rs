@@ -1,9 +1,10 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
+use uv_fs::Simplified;
 
 use uv_static::EnvVars;
 
@@ -4379,6 +4380,144 @@ fn add_script_without_metadata_table_with_docstring() -> Result<()> {
         resp = requests.get("https://peps.python.org/api/peps.json")
         data = resp.json()
         pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Remove a dependency that is present in multiple places.
+#[test]
+fn remove_repeated() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let anyio_local = context.workspace_root.join("scripts/packages/anyio_local");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [project.optional-dependencies]
+        foo = ["anyio"]
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = {{ path = "{anyio_local}" }}
+    "#,
+        anyio_local = anyio_local.portable_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = ["anyio"]
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--optional").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = []
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        foo = []
+
+        [tool.uv]
+        dev-dependencies = []
+
+        [tool.uv.sources]
         "###
         );
     });
