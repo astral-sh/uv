@@ -539,20 +539,6 @@ impl PyProjectTomlMut {
         {
             if let Some(key) = find_source(name, sources) {
                 sources.remove(&key);
-
-                // Remove the `tool.uv.sources` table if it is empty.
-                if sources.is_empty() {
-                    self.doc
-                        .entry("tool")
-                        .or_insert(implicit())
-                        .as_table_mut()
-                        .ok_or(Error::MalformedSources)?
-                        .entry("uv")
-                        .or_insert(implicit())
-                        .as_table_mut()
-                        .ok_or(Error::MalformedSources)?
-                        .remove("sources");
-                }
             }
         }
 
