@@ -1687,8 +1687,6 @@ fn add_remove_workspace() -> Result<()> {
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
-
-        [tool.uv.sources]
         "###
         );
     });
@@ -2713,6 +2711,47 @@ fn update_source_replace_url() -> Result<()> {
 
         [tool.uv.sources]
         requests = { git = "https://github.com/psf/requests", tag = "v2.32.3" }
+        "###
+        );
+    });
+
+    // Change the source again. The existing source should be replaced.
+    uv_snapshot!(context.filters(), context.add().arg("requests @ git+https://github.com/psf/requests").arg("--tag=v2.32.2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     - requests==2.32.3 (from git+https://github.com/psf/requests@0e322af87745eff34caffe4df68456ebc20d9068)
+     + requests==2.32.2 (from git+https://github.com/psf/requests@88dce9d854797c05d0ff296b70e0430535ef8aaf)
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests[security]",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        requests = { git = "https://github.com/psf/requests", tag = "v2.32.2" }
         "###
         );
     });

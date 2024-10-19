@@ -432,9 +432,10 @@ impl PyProjectTomlMut {
             .as_table_mut()
             .ok_or(Error::MalformedSources)?;
 
-        if find_source(name, sources).is_none() {
-            add_source(name, source, sources)?;
+        if let Some(key) = find_source(name, sources) {
+            sources.remove(&key);
         }
+        add_source(name, source, sources)?;
 
         Ok(())
     }
