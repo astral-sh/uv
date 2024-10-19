@@ -4584,12 +4584,10 @@ fn remove_repeated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4610,6 +4608,9 @@ fn remove_repeated() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = { path = "[WORKSPACE]/scripts/packages/anyio_local" }
         "###
         );
     });
@@ -4620,8 +4621,8 @@ fn remove_repeated() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -4642,6 +4643,9 @@ fn remove_repeated() -> Result<()> {
 
         [tool.uv]
         dev-dependencies = ["anyio"]
+
+        [tool.uv.sources]
+        anyio = { path = "[WORKSPACE]/scripts/packages/anyio_local" }
         "###
         );
     });
@@ -4653,10 +4657,8 @@ fn remove_repeated() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Uninstalled 3 packages in [TIME]
-     - anyio==4.3.0
-     - idna==3.6
-     - sniffio==1.3.1
+    Uninstalled 1 package in [TIME]
+     - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
