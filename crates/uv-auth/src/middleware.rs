@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use http::{Extensions, StatusCode};
 use url::Url;
@@ -16,9 +16,36 @@ use tracing::{debug, trace, warn};
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
-    Automatic,
-    Enabled(netrc::Netrc),
+    Automatic(LazyLock<Option<Netrc>>),
+    Enabled(Netrc),
     Disabled,
+}
+
+impl Default for NetrcMode {
+    fn default() -> Self {
+        NetrcMode::Automatic(LazyLock::new(|| match Netrc::new() {
+            Ok(netrc) => Some(netrc),
+            Err(netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                debug!("No netrc file found");
+                None
+            }
+            Err(err) => {
+                warn!("Error reading netrc file: {err}");
+                None
+            }
+        }))
+    }
+}
+
+impl NetrcMode {
+    /// Get the parsed netrc file if enabled.
+    fn get(&self) -> Option<&Netrc> {
+        match self {
+            NetrcMode::Automatic(lock) => lock.as_ref(),
+            NetrcMode::Enabled(netrc) => Some(netrc),
+            NetrcMode::Disabled => None,
+        }
+    }
 }
 
 /// A middleware that adds basic authentication to requests.
@@ -37,7 +64,7 @@ pub struct AuthMiddleware {
 impl AuthMiddleware {
     pub fn new() -> Self {
         Self {
-            netrc: NetrcMode::Automatic,
+            netrc: NetrcMode::default(),
             keyring: None,
             cache: None,
             only_authenticated: false,
@@ -372,39 +399,16 @@ impl AuthMiddleware {
         }
 
         // Netrc support based on: <https://github.com/gribouille/netrc>.
-        let credentials = if let Some(credentials) = match self.netrc {
-            NetrcMode::Enabled(ref netrc) => {
-                debug!("Checking netrc for credentials for {url}");
-                Credentials::from_netrc(
-                    netrc,
-                    url,
-                    credentials
-                        .as_ref()
-                        .and_then(|credentials| credentials.username()),
-                )
-            }
-            NetrcMode::Automatic => match Netrc::new() {
-                Ok(netrc) => {
-                    debug!("Checking netrc for credentials for {url}");
-                    Credentials::from_netrc(
-                        &netrc,
-                        url,
-                        credentials
-                            .as_ref()
-                            .and_then(|credentials| credentials.username()),
-                    )
-                }
-                Err(netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    debug!("No netrc file found");
-                    None
-                }
-                Err(err) => {
-                    warn!("Error reading netrc file: {err}");
-                    None
-                }
-            },
-            NetrcMode::Disabled => None,
-        } {
+        let credentials = if let Some(credentials) = self.netrc.get().and_then(|netrc| {
+            debug!("Checking netrc for credentials for {url}");
+            Credentials::from_netrc(
+                netrc,
+                url,
+                credentials
+                    .as_ref()
+                    .and_then(|credentials| credentials.username()),
+            )
+        }) {
             debug!("Found credentials in netrc file for {url}");
             Some(credentials)
         // N.B. The keyring provider performs lookups for the exact URL then
