@@ -525,6 +525,11 @@ impl PyProjectTomlMut {
 
     /// Remove a matching source from `tool.uv.sources`, if it exists.
     fn remove_source(&mut self, name: &PackageName) -> Result<(), Error> {
+        // If the dependency is still in use, don't remove the source.
+        if !self.find_dependency(name, None).is_empty() {
+            return Ok(());
+        }
+
         if let Some(sources) = self
             .doc
             .get_mut("tool")
