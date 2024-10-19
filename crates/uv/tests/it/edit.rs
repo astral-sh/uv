@@ -1688,8 +1688,6 @@ fn add_remove_workspace() -> Result<()> {
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
-
-        [tool.uv.sources]
         "###
         );
     });
@@ -2881,8 +2879,6 @@ fn remove_non_normalized_source() -> Result<()> {
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
-
-        [tool.uv.sources]
         "###
         );
     });
