@@ -322,7 +322,7 @@ mod test {
         let expected = td.join("ProgramData\\uv\\uv.toml");
 
         // Previous value of %SYSTEMDRIVE% which should always exist
-        let sd = env::var(EnvVars::SYSTEMDRIVE).unwrap();
+        let sd = env::var(EnvVars::SYSTEMDRIVE).unwrap_or("C:".to_string());
 
         // This is typically only a drive (that is, letter and colon) but we
         // allow anything, including a path to the test fixtures...
