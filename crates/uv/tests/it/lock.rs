@@ -16120,6 +16120,42 @@ fn lock_group_invalid_entry_group_name() -> Result<()> {
 }
 
 #[test]
+fn lock_group_invalid_duplicate_group_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo-bar = []
+        foo_bar = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 8, column 9
+      |
+    8 |         [dependency-groups]
+      |         ^^^^^^^^^^^^^^^^^^^
+    duplicate dependency group: `foo-bar`
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn lock_group_invalid_entry_table() -> Result<()> {
     let context = TestContext::new("3.12");
 
