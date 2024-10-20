@@ -875,7 +875,7 @@ fn reformat_array_multiline(deps: &mut Array) {
                     }
                 },
             )
-            .filter_map(|x| x);
+            .flatten();
 
         Box::new(iter)
     }
@@ -912,7 +912,7 @@ fn reformat_array_multiline(deps: &mut Array) {
                     prefix.push_str(&indentation_prefix_str);
                 }
                 CommentType::SameLine => {
-                    prefix.push_str(" ");
+                    prefix.push(' ');
                 }
             }
             prefix.push_str(&comment.text);
