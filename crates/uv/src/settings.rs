@@ -1628,6 +1628,7 @@ impl PipListSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipShowSettings {
     pub(crate) package: Vec<PackageName>,
+    pub(crate) files: bool,
     pub(crate) settings: PipSettings,
 }
 
@@ -1638,6 +1639,7 @@ impl PipShowSettings {
             package,
             strict,
             no_strict,
+            files,
             python,
             system,
             no_system,
@@ -1646,6 +1648,7 @@ impl PipShowSettings {
 
         Self {
             package,
+            files,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
