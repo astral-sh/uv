@@ -49,6 +49,20 @@ pub enum ArrayEdit {
     Add(usize),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum CommentType {
+    /// A comment that appears on its own line.
+    OwnLine,
+    /// A comment that appears at the end of a line.
+    EndOfLine,
+}
+
+#[derive(Debug, Clone)]
+struct Comment {
+    text: String,
+    comment_type: CommentType,
+}
+
 impl ArrayEdit {
     pub fn index(&self) -> usize {
         match self {
@@ -694,7 +708,12 @@ pub fn add_dependency(
             };
             let index = index.unwrap_or(deps.len());
 
-            deps.insert(index, req_string);
+            let mut value = Value::from(req_string.as_str());
+            let decor = value.decor_mut();
+            decor.set_prefix(deps.trailing().clone());
+            deps.set_trailing("");
+
+            deps.insert_formatted(index, value);
             // `reformat_array_multiline` uses the indentation of the first dependency entry.
             // Therefore, we retrieve the indentation of the first dependency entry and apply it to
             // the new entry. Note that it is only necessary if the newly added dependency is going
@@ -829,14 +848,38 @@ fn try_parse_requirement(req: &str) -> Option<Requirement> {
 /// Reformats a TOML array to multi line while trying to preserve all comments
 /// and move them around. This also formats the array to have a trailing comma.
 fn reformat_array_multiline(deps: &mut Array) {
-    fn find_comments(s: Option<&RawString>) -> impl Iterator<Item = &str> {
-        s.and_then(|x| x.as_str())
+    fn find_comments(s: Option<&RawString>) -> Box<dyn Iterator<Item = Comment> + '_> {
+        let iter = s
+            .and_then(|x| x.as_str())
             .unwrap_or("")
             .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                line.starts_with('#').then_some(line)
-            })
+            .scan(
+                (false, false),
+                |(prev_line_was_empty, prev_line_was_comment), line| {
+                    let trimmed_line = line.trim();
+                    if let Some(index) = trimmed_line.find('#') {
+                        let comment_text = trimmed_line[index..].trim().to_string();
+                        let comment_type = if (*prev_line_was_empty) || (*prev_line_was_comment) {
+                            CommentType::OwnLine
+                        } else {
+                            CommentType::EndOfLine
+                        };
+                        *prev_line_was_empty = trimmed_line.is_empty();
+                        *prev_line_was_comment = true;
+                        Some(Some(Comment {
+                            text: comment_text,
+                            comment_type,
+                        }))
+                    } else {
+                        *prev_line_was_empty = trimmed_line.is_empty();
+                        *prev_line_was_comment = false;
+                        Some(None)
+                    }
+                },
+            )
+            .flatten();
+
+        Box::new(iter)
     }
 
     let mut indentation_prefix = None;
@@ -866,8 +909,15 @@ fn reformat_array_multiline(deps: &mut Array) {
         let indentation_prefix_str = format!("\n{}", indentation_prefix.as_ref().unwrap());
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
-            prefix.push_str(&indentation_prefix_str);
-            prefix.push_str(comment);
+            match comment.comment_type {
+                CommentType::OwnLine => {
+                    prefix.push_str(&indentation_prefix_str);
+                }
+                CommentType::EndOfLine => {
+                    prefix.push(' ');
+                }
+            }
+            prefix.push_str(&comment.text);
         }
         prefix.push_str(&indentation_prefix_str);
         decor.set_prefix(prefix);
@@ -880,7 +930,7 @@ fn reformat_array_multiline(deps: &mut Array) {
         if comments.peek().is_some() {
             for comment in comments {
                 rv.push_str("\n    ");
-                rv.push_str(comment);
+                rv.push_str(&comment.text);
             }
         }
         if !rv.is_empty() || !deps.is_empty() {
