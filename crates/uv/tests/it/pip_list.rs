@@ -525,3 +525,77 @@ Version: 0.1-bulbasaur
 
     Ok(())
 }
+
+#[test]
+fn list_ignores_quiet_flag_format_freeze() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + sniffio==1.3.1
+    "###
+    );
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list()
+    .arg("--format=freeze")
+    .arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio==4.3.0
+    idna==3.6
+    poetry-editable==0.1.0
+    sniffio==1.3.1
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, context.pip_list()
+    .arg("--format=freeze")
+    .arg("--editable")
+    .arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    poetry-editable==0.1.0
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, context.pip_list()
+    .arg("--format=freeze")
+    .arg("--exclude-editable")
+    .arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio==4.3.0
+    idna==3.6
+    sniffio==1.3.1
+
+    ----- stderr -----
+    "###
+    );
+}

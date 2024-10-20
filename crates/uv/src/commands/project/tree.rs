@@ -14,7 +14,7 @@ use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::ProjectInterpreter;
 use crate::commands::{project, ExitStatus, SharedState};
-use crate::printer::Printer;
+use crate::printer::{Printer, Stdout};
 use crate::settings::ResolverSettings;
 
 /// Run a command.
@@ -100,7 +100,8 @@ pub(crate) async fn tree(
         invert,
     );
 
-    write!(printer.stdout(), "{tree}")?;
+    // Making an exclusion specifically for tree subcommand (#8379)
+    write!(Stdout::Enabled, "{tree}")?;
 
     Ok(ExitStatus::Success)
 }

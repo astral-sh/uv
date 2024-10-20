@@ -18,7 +18,7 @@ use uv_python::{EnvironmentPreference, PythonEnvironment};
 
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::ExitStatus;
-use crate::printer::Printer;
+use crate::printer::{Printer, Stdout};
 
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -52,11 +52,13 @@ pub(crate) fn pip_list(
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .collect_vec();
 
+    // We force output to stdout specifically for `pip list` command (#8379)
+    let mut forced_stdout = Stdout::Enabled;
     match format {
         ListFormat::Json => {
             let rows = results.iter().copied().map(Entry::from).collect_vec();
             let output = serde_json::to_string(&rows)?;
-            writeln!(printer.stdout(), "{output}")?;
+            writeln!(forced_stdout, "{output}")?;
         }
         ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
@@ -97,18 +99,13 @@ pub(crate) fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                writeln!(printer.stdout(), "{}", elems.join(" ").trim_end())?;
+                writeln!(forced_stdout, "{}", elems.join(" ").trim_end())?;
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
-                writeln!(
-                    printer.stdout(),
-                    "{}=={}",
-                    dist.name().bold(),
-                    dist.version()
-                )?;
+                writeln!(forced_stdout, "{}=={}", dist.name().bold(), dist.version())?;
             }
         }
     }
