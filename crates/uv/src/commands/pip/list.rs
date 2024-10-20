@@ -53,12 +53,11 @@ pub(crate) fn pip_list(
         .collect_vec();
 
     // We force output to stdout specifically for `pip list` command (#8379)
-    let mut forced_stdout = Stdout::Enabled;
     match format {
         ListFormat::Json => {
             let rows = results.iter().copied().map(Entry::from).collect_vec();
             let output = serde_json::to_string(&rows)?;
-            writeln!(forced_stdout, "{output}")?;
+            writeln!(Stdout::Enabled, "{output}")?;
         }
         ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
@@ -99,13 +98,18 @@ pub(crate) fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                writeln!(forced_stdout, "{}", elems.join(" ").trim_end())?;
+                writeln!(Stdout::Enabled, "{}", elems.join(" ").trim_end())?;
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
-                writeln!(forced_stdout, "{}=={}", dist.name().bold(), dist.version())?;
+                writeln!(
+                    Stdout::Enabled,
+                    "{}=={}",
+                    dist.name().bold(),
+                    dist.version()
+                )?;
             }
         }
     }
