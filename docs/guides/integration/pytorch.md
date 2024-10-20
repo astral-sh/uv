@@ -1,138 +1,163 @@
-# Installing pytorch with uv
+# Installing PyTorch with uv
 
-[PyTorch](https://pytorch.org/) is a popular open-source deep-learning learning library that can run
-both on CPUs and GPUs. For this reason, PyTorch can be notoriously cumbersome to install, especially
-on Linux/Windows.
+[PyTorch](https://pytorch.org/) is a popular open-source deep-learning learning framework that has first-class support for acceleration via GPUs. Installation, however, can be complex, as you won't find all the wheels for PyTorch on PyPI and you have to manage this through external indexes. This guide aims to help you set up a `pyproject.toml` file using `uv` [indexes features](../../configuration/indexes.md).
 
-[PyTorch website](https://pytorch.org/get-started/locally/) offers a simple tool to determine what
-`pip` command you should run to install PyTorch. This guide should help you do the same with `uv`.
-If the following instructions fail, you might want to check the original source for any difference,
-and open an issue to report the discrepancy. In this case, or if you run into any other issue,
-please refer to [Getting Help](../../getting-started/help.md).
+!!! info "Available PyTorch indexes"
 
-!!! tip "TL;DR"
+    By default, from PyPI you will download:
+    * CPU-only wheels on Windows and macOS.
+    * CUDA (i.e. GPU) on Linux. At the time of writing, for PyTorch stable version (2.5.0) this defaults to CUDA 12.4. On older versions, this might be different.
 
-    As of 09/2024:
+    If you want to install CPU-only PyTorch wheels on Linux, or a PyTorch version that supports a different CUDA version, you need to resort to external indexes:
 
-    * Use `uv add torch` or `uv pip install torch` for:
-        * on macOS (CPU only)
-        * on Linux (CUDA 12.1 only)
-        * on Windows (CPU only)
-    * Use `uv add --extra-index-url=https://download.pytorch.org/whl/cpu torch` or `uv pip install --extra-index-url=https://download.pytorch.org/whl/cpu torch` for:
-        * on Linux (CPU only)
-    * `uv add --extra-index-url=https://download.pytorch.org/whl/cu118 torch` or `uv pip install --extra-index-url=https://download.pytorch.org/whl/cu118 torch` will work:
-        * on Windows and Linux (CUDA 11.8 only)
-    * `uv add --extra-index-url=https://download.pytorch.org/whl/cu121 torch` or `uv pip install --extra-index-url=https://download.pytorch.org/whl/cu121 torch` will work:
-        * on Windows (CUDA 12.1 only)
-    * `uv add --extra-index-url=https://download.pytorch.org/whl/cu124 torch` or `uv pip install --extra-index-url=https://download.pytorch.org/whl/cu124 torch` will work:
-        * on Windows (CUDA 12.4 only)
-        * on Linux (CUDA 12.4 only)
+    * https://download.pytorch.org/whl/cu118
+    * https://download.pytorch.org/whl/cu121
+    * https://download.pytorch.org/whl/cu124
+    * https://download.pytorch.org/whl/cpu
+    * https://download.pytorch.org/whl/rocm6.2 (AMD GPUs, only available on Linux)
 
 
-!!! info "Why `--extra-index-url`?"
+The [PyTorch website](https://pytorch.org/get-started/locally/) offers a simple interface to determine what `pip` command you should run to install PyTorch. This guide should help you do the same with `uv`. If the following instructions fail, you might want to check the link for any difference, and open an issue to report the discrepancy. In this case, or if you run into any other issue, please refer to [Getting Help](../../getting-started/help.md).
 
-    uv `--extra-index-url` behaves slightly differently from `pip --extra-index-url`. See more [here](https://docs.astral.sh/uv/pip/compatibility/#packages-that-exist-on-multiple-indexes).
+## Initialise a project
 
-!!! warning "About lockfile cross-compatibility"
-
-    Currently, uv does not support pinning a package to a specific index (though progress is tracked [here](https://github.com/astral-sh/uv/issues/171)). As a result,
-    the lockfiles are not guaranteed to be cross-compatible between different platforms. For example: suppose a Windows user runs `uv add torch` and then a Linux user runs
-    `uv sync` to synchronise the lockfile. The Windows user will get CPU-only PyTorch, while the Linux user will get CUDA 12.1 PyTorch.
-
-    If you specify the `[tool.uv.sources]` section in your `pyproject.toml`, users from different platform might not be able to solve for the package dependencies.
-
-## On macOS
-
-Since CUDA is not available on macOS, you should just run:
+Create a new project with `uv init`:
 
 ```sh
-# in a project
+uv init
+```
+
+!!! tip "Supported Python versions"
+
+    Make sure to use a Python version that is supported by PyTorch. You can find the compatibility matrix [here](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
+
+
+## Add PyTorch indexes
+
+Open the `pyproject.toml` file, and create a custom index matching the CUDA version you have available to instruct `uv` where to find the PyTorch wheels.
+
+=== "CPU-only"
+
+    ```toml
+    [[tool.uv.index]]
+    name = "torch-cpu"
+    url = "https://download.pytorch.org/whl/cpu"
+    explicit = true
+    ```
+
+=== "CUDA 11.8"
+
+    ```toml
+    [[tool.uv.index]]
+    name = "torch-cu118"
+    url = "https://download.pytorch.org/whl/cu118"
+    explicit = true
+    ```
+
+=== "CUDA 12.1"
+
+    ```toml
+    [[tool.uv.index]]
+    name = "torch-cu121"
+    url = "https://download.pytorch.org/whl/cu121"
+    explicit = true
+    ```
+
+=== "CUDA 12.4"
+
+    ```toml
+    [[tool.uv.index]]
+    name = "torch-cu124"
+    url = "https://download.pytorch.org/whl/cu124"
+    explicit = true
+    ```
+
+=== "ROCm6"
+
+    ```toml
+    [[tool.uv.index]]
+    name = "torch-rocm"
+    url = "https://download.pytorch.org/whl/rocm6.2"
+    explicit = true
+    ```
+
+Note that we also specify the `explicit` option: this prevents packages from being installed from that index unless explicitly pinned to it (see the step below). This means that only PyTorch will be installed from this index, while all other packages will be looked up on PyPI.
+
+## Pin PyTorch to the custom index
+
+Now we need to pin specific PyTorch versions to the appropriate indexes. We do this by adding/editing the `sources` section in the `pyproject.toml`.
+
+=== "CPU-only"
+
+    Note that we use the `platform_system` marker to instruct `uv` to look into this index on Linux and Windows.
+
+    ```toml
+    [tool.uv.sources]
+    torch = [
+      { index = "torch-cpu", marker = "platform_system != 'Darwin'"},
+    ]
+    ```
+
+=== "CUDA 11.8"
+
+    Note that we use the `platform_system` marker to instruct `uv` to look into this index on Linux and Windows.
+
+    ```toml
+    [tool.uv.sources]
+    torch = [
+      { index = "torch-cu118", marker = "platform_system != 'Darwin'"},
+    ]
+    ```
+
+=== "CUDA 12.1"
+
+    Note that we use the `platform_system` marker to instruct `uv` to look into this index on Linux and Windows.
+
+    ```toml
+    [tool.uv.sources]
+    torch = [
+      { index = "torch-cu121", marker = "platform_system != 'Darwin'"},
+    ]
+    ```
+
+=== "CUDA 12.4"
+
+    Note that we use the `platform_system` marker to instruct `uv` to look into this index on Linux and Windows.
+
+    ```toml
+    [tool.uv.sources]
+    torch = [
+      { index = "torch-cu124", marker = "platform_system != 'Darwin'"},
+    ]
+    ```
+
+=== "ROCm6"
+
+    Note that we use the `platform_system` marker to instruct `uv` to look into this index when on Linux only.
+
+    ```toml
+    [tool.uv.sources]
+    torch = [
+      { index = "torch-rocm", marker = "platform_system == 'Linux'"},
+    ]
+    ```
+
+## Add PyTorch to your dependencies
+
+Finally, we can add PyTorch to the `project.dependencies` section of the `pyproject.toml`. You can do this by hand, or using `uv`:
+
+```sh
 uv add torch
-
-# make sure there is a virtual environment in the directory
-uv pip install torch
 ```
 
-## On Linux
+However, if you want to be more explicit, you could also:
 
-### CPU Only
-
-```sh
-uv add --extra-index-url=https://download.pytorch.org/whl/cpu torch
-
-uv pip install --extra-index-url=https://download.pytorch.org/whl/cpu torch
+```toml
+[project]
+dependencies = [
+  "torch==2.5.0 ; platform_system == 'Darwin'",
+  "torch==2.5.0+cu124 ; platform_system != 'Darwin'",
+]
 ```
 
-### CUDA 11.8 Support
-
-```sh
-# in a project
-uv add --extra-index-url=https://download.pytorch.org/whl/cu118 torch
-
-# make sure there is a virtual environment in the directory
-uv pip install --extra-index-url=https://download.pytorch.org/whl/cu118 torch
-```
-
-### CUDA 12.1 Support
-
-Currently, wheels on PyPI for PyTorch on Linux come with CUDA 12.1.
-
-```sh
-# in a project
-uv add torch
-
-# make sure there is a virtual environment in the directory
-uv pip install torch
-```
-
-### CUDA 12.4 Support
-
-```sh
-# in a project
-uv add --extra-index-url=https://download.pytorch.org/whl/cu124 torch
-
-# make sure there is a virtual environment in the directory
-uv pip install --extra-index-url=https://download.pytorch.org/whl/cu124 torch
-```
-
-## On Windows
-
-### CPU Only
-
-```sh
-# in a project
-uv add torch
-
-# make sure there is a virtual environment in the directory
-uv pip install torch
-```
-
-### CUDA 11.8 Support
-
-```sh
-# in a project
-uv add --extra-index-url=https://download.pytorch.org/whl/cu118 torch
-
-# make sure there is a virtual environment in the directory
-uv pip install --extra-index-url=https://download.pytorch.org/whl/cu118 torch
-```
-
-### CUDA 12.1 Support
-
-```sh
-# in a project
-uv add --extra-index-url=https://download.pytorch.org/whl/cu121 torch
-
-# make sure there is a virtual environment in the directory
-uv pip install --extra-index-url=https://download.pytorch.org/whl/cu121 torch
-```
-
-### CUDA 12.4 Support
-
-```sh
-# in a project
-uv add --extra-index-url=https://download.pytorch.org/whl/cu124 torch
-
-# make sure there is a virtual environment in the directory
-uv pip install --extra-index-url=https://download.pytorch.org/whl/cu124 torch
-```
+This will install PyTorch 2.5.0 on macOS, and PyTorch 2.5.0+cu124 on Linux and Windows.
