@@ -6389,10 +6389,10 @@ fn add_preserves_open_bracket_comment() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = [ # comment 0
-         # comment 1
-         "anyio==3.7.0", # comment 2
-         # comment 3
-         "requests==2.31.0",
+            # comment 1
+            "anyio==3.7.0", # comment 2
+            # comment 3
+            "requests==2.31.0",
         ]
 
         [build-system]

@@ -893,16 +893,14 @@ fn reformat_array_multiline(deps: &mut Array) {
             let decor_prefix = decor
                 .prefix()
                 .and_then(|s| s.as_str())
-                .map(|s| s.split('#').next().unwrap_or(""))
-                .unwrap_or_default()
-                .trim_start_matches(['\r', '\n'].as_ref())
-                .to_string();
+                .and_then(|s| s.lines().last())
+                .unwrap_or_default();
 
             // If there is no indentation, use four-space.
             indentation_prefix = Some(if decor_prefix.is_empty() {
                 "    ".to_string()
             } else {
-                decor_prefix
+                decor_prefix.to_string()
             });
         }
 
