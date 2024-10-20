@@ -33,7 +33,12 @@ fn workspaces_dir() -> PathBuf {
 #[test]
 fn test_albatross_in_examples_bird_feeder() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-in-example")
         .join("examples")
         .join("bird-feeder");
@@ -48,7 +53,7 @@ fn test_albatross_in_examples_bird_feeder() {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-in-example/examples/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-in-example/examples/bird-feeder)
      + idna==3.6
      + sniffio==1.3.1
     "###
@@ -71,7 +76,12 @@ fn test_albatross_in_examples_bird_feeder() {
 #[test]
 fn test_albatross_in_examples() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir().join("albatross-in-example");
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-in-example");
 
     uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
     success: true
@@ -82,7 +92,7 @@ fn test_albatross_in_examples() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-in-example)
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-in-example)
      + tqdm==4.66.2
     "###
     );
@@ -104,7 +114,12 @@ fn test_albatross_in_examples() {
 #[test]
 fn test_albatross_just_project() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir().join("albatross-just-project");
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-just-project");
 
     uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
     success: true
@@ -115,7 +130,7 @@ fn test_albatross_just_project() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-just-project)
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-just-project)
      + tqdm==4.66.2
     "###
     );
@@ -137,7 +152,12 @@ fn test_albatross_just_project() {
 #[test]
 fn test_albatross_project_in_excluded() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-project-in-excluded")
         .join("excluded")
         .join("bird-feeder");
@@ -152,7 +172,7 @@ fn test_albatross_project_in_excluded() {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/excluded/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/excluded/bird-feeder)
      + idna==3.6
      + sniffio==1.3.1
     "###
@@ -171,7 +191,7 @@ fn test_albatross_project_in_excluded() {
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
 
-    let current_dir = workspaces_dir()
+    let current_dir = workspace
         .join("albatross-project-in-excluded")
         .join("packages")
         .join("seeds");
@@ -184,7 +204,7 @@ fn test_albatross_project_in_excluded() {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds)
     "###
     );
 }
@@ -192,7 +212,12 @@ fn test_albatross_project_in_excluded() {
 #[test]
 fn test_albatross_root_workspace() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir().join("albatross-root-workspace");
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-root-workspace");
 
     uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
     success: true
@@ -203,11 +228,11 @@ fn test_albatross_root_workspace() {
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace)
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace)
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
      + tqdm==4.66.2
     "###
@@ -230,7 +255,12 @@ fn test_albatross_root_workspace() {
 #[test]
 fn test_albatross_root_workspace_bird_feeder() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-root-workspace")
         .join("packages")
         .join("bird-feeder");
@@ -245,9 +275,9 @@ fn test_albatross_root_workspace_bird_feeder() {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
     "###
     );
@@ -269,7 +299,12 @@ fn test_albatross_root_workspace_bird_feeder() {
 #[test]
 fn test_albatross_root_workspace_albatross() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-root-workspace")
         .join("packages")
         .join("bird-feeder");
@@ -284,9 +319,9 @@ fn test_albatross_root_workspace_albatross() {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
     "###
     );
@@ -308,7 +343,12 @@ fn test_albatross_root_workspace_albatross() {
 #[test]
 fn test_albatross_virtual_workspace() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-virtual-workspace")
         .join("packages")
         .join("bird-feeder");
@@ -323,9 +363,9 @@ fn test_albatross_virtual_workspace() {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-virtual-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/bird-feeder)
      + idna==3.6
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-virtual-workspace/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/seeds)
      + sniffio==1.3.1
     "###
     );
