@@ -108,6 +108,21 @@ impl Lock {
         let mut packages = BTreeMap::new();
         let requires_python = graph.requires_python.clone();
 
+        // Determine the set of packages included at multiple versions.
+        let mut seen = FxHashSet::default();
+        let mut duplicates = FxHashSet::default();
+        for node_index in graph.petgraph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
+                continue;
+            };
+            if !dist.is_base() {
+                continue;
+            }
+            if !seen.insert(dist.name()) {
+                duplicates.insert(dist.name());
+            }
+        }
+
         // Lock all base packages.
         for node_index in graph.petgraph.node_indices() {
             let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
@@ -116,10 +131,20 @@ impl Lock {
             if !dist.is_base() {
                 continue;
             }
-            let fork_markers = graph
-                .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
-                .cloned()
-                .unwrap_or_default();
+
+            // If there are multiple distributions for the same package, include the markers of all
+            // forks that included the current distribution.
+            let fork_markers = if duplicates.contains(dist.name()) {
+                graph
+                    .fork_markers
+                    .iter()
+                    .filter(|fork_markers| !fork_markers.is_disjoint(&dist.marker))
+                    .cloned()
+                    .collect()
+            } else {
+                vec![]
+            };
+
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
             Self::remove_unreachable_wheels(graph, &requires_python, node_index, &mut package);
 
