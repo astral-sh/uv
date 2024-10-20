@@ -5521,7 +5521,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python ABI tag and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python version tag and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     Ok(())
