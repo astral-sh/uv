@@ -1341,7 +1341,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
-                    &metadata.dev_dependencies,
+                    &metadata.dependency_groups,
                     extra.as_ref(),
                     dev.as_ref(),
                     Some(name),
@@ -1361,7 +1361,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // enabled.
                 if extra.is_none() && dev.is_none() {
                     for group in self.groups.get(name).into_iter().flatten() {
-                        if !metadata.dev_dependencies.contains_key(group) {
+                        if !metadata.dependency_groups.contains_key(group) {
                             continue;
                         }
                         dependencies.push(PubGrubDependency {

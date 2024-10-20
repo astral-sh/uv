@@ -22,7 +22,7 @@ pub struct TreeDisplay<'env> {
     dependencies: FxHashMap<&'env PackageId, Vec<Cow<'env, Dependency>>>,
     optional_dependencies:
         FxHashMap<&'env PackageId, FxHashMap<ExtraName, Vec<Cow<'env, Dependency>>>>,
-    dev_dependencies: FxHashMap<&'env PackageId, FxHashMap<GroupName, Vec<Cow<'env, Dependency>>>>,
+    dependency_groups: FxHashMap<&'env PackageId, FxHashMap<GroupName, Vec<Cow<'env, Dependency>>>>,
     /// Maximum display depth of the dependency tree.
     depth: usize,
     /// Whether to include development dependencies in the display.
@@ -53,7 +53,7 @@ impl<'env> TreeDisplay<'env> {
         // support `--invert`, so we might as well build them up in either case.
         let mut dependencies: FxHashMap<_, Vec<_>> = FxHashMap::default();
         let mut optional_dependencies: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
-        let mut dev_dependencies: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
+        let mut dependency_groups: FxHashMap<_, FxHashMap<_, Vec<_>>> = FxHashMap::default();
 
         for package in &lock.packages {
             for dependency in &package.dependencies {
@@ -129,7 +129,7 @@ impl<'env> TreeDisplay<'env> {
                 }
             }
 
-            for (group, dependencies) in &package.dev_dependencies {
+            for (group, dependencies) in &package.dependency_groups {
                 for dependency in dependencies {
                     // Skip dependencies that don't apply to the current environment.
                     if let Some(environment_markers) = markers {
@@ -160,7 +160,7 @@ impl<'env> TreeDisplay<'env> {
 
                     non_roots.insert(child.package_id.clone());
 
-                    dev_dependencies
+                    dependency_groups
                         .entry(parent)
                         .or_default()
                         .entry(group.clone())
@@ -182,7 +182,7 @@ impl<'env> TreeDisplay<'env> {
             roots,
             dependencies,
             optional_dependencies,
-            dev_dependencies,
+            dependency_groups,
             depth,
             dev,
             prune,
@@ -252,7 +252,7 @@ impl<'env> TreeDisplay<'env> {
                     }),
             )
             .chain(
-                self.dev_dependencies
+                self.dependency_groups
                     .get(node.package_id())
                     .into_iter()
                     .flatten()
