@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anstream::println;
+use anstream::print;
 use anyhow::Result;
 
 use uv_cache::Cache;
@@ -101,7 +101,7 @@ pub(crate) async fn tree(
         invert,
     );
 
-    println!("{tree}");
+    print!("{tree}");
 
     Ok(ExitStatus::Success)
 }
