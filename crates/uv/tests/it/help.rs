@@ -29,7 +29,7 @@ fn help() {
       build                      Build Python packages into source distributions and wheels
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
-      self                       Manage the uvcutable
+      self                       Manage the uv executable
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
@@ -99,7 +99,7 @@ fn help_flag() {
       build    Build Python packages into source distributions and wheels
       publish  Upload distributions to an index
       cache    Manage uv's cache
-      self     Manage the uvcutable
+      self     Manage the uv executable
       version  Display uv's version
       help     Display documentation for a command
 
@@ -167,7 +167,7 @@ fn help_short_flag() {
       build    Build Python packages into source distributions and wheels
       publish  Upload distributions to an index
       cache    Manage uv's cache
-      self     Manage the uvcutable
+      self     Manage the uv executable
       version  Display uv's version
       help     Display documentation for a command
 
@@ -778,7 +778,7 @@ fn help_with_global_option() {
       build                      Build Python packages into source distributions and wheels
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
-      self                       Manage the uvcutable
+      self                       Manage the uv executable
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
@@ -883,7 +883,7 @@ fn help_with_no_pager() {
       build                      Build Python packages into source distributions and wheels
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
-      self                       Manage the uvcutable
+      self                       Manage the uv executable
       version                    Display uv's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
