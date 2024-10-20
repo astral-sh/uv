@@ -1,3 +1,4 @@
+use std::env;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
@@ -179,16 +180,16 @@ impl From<Options> for FilesystemOptions {
 /// `XDG_CONFIG_HOME` environment variable on both Linux _and_ macOS, rather than the
 /// `Application Support` directory on macOS.
 fn user_config_dir() -> Option<PathBuf> {
-    // On Windows, use, e.g., C:\Users\Alice\AppData\Roaming
+    // On Windows, use, e.g., `C:\Users\Alice\AppData\Roaming`.
     #[cfg(windows)]
     {
         dirs_sys::known_folder_roaming_app_data()
     }
 
-    // On Linux and macOS, use, e.g., /home/alice/.config.
+    // On Linux and macOS, use, e.g., `/home/alice/.config`.
     #[cfg(not(windows))]
     {
-        std::env::var_os(EnvVars::XDG_CONFIG_HOME)
+        env::var_os(EnvVars::XDG_CONFIG_HOME)
             .and_then(dirs_sys::is_absolute_path)
             .or_else(|| dirs_sys::home_dir().map(|path| path.join(".config")))
     }
@@ -196,14 +197,12 @@ fn user_config_dir() -> Option<PathBuf> {
 
 #[cfg(not(windows))]
 fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
-    // On Linux/MacOS systems, read the XDG_CONFIG_DIRS environment variable
-
+    // On Linux and macOS, read the `XDG_CONFIG_DIRS` environment variable.
     let default = "/etc/xdg";
     let config_dirs = value.filter(|s| !s.is_empty()).unwrap_or(default);
 
     for dir in config_dirs.split(':').take_while(|s| !s.is_empty()) {
         let uv_toml_path = Path::new(dir).join("uv").join("uv.toml");
-
         if uv_toml_path.is_file() {
             return Some(uv_toml_path);
         }
@@ -217,10 +216,10 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
 /// If the var is not present it will check /etc/xdg/uv/uv.toml and then /etc/uv/uv.toml.
 /// Windows: "%SYSTEMDRIVE%\ProgramData\uv\uv.toml" is used.
 fn system_config_file() -> Option<PathBuf> {
-    // On Windows, use, e.g., C:\ProgramData
+    // On Windows, use, e.g., `C:\ProgramData`.
     #[cfg(windows)]
     {
-        if let Ok(system_drive) = std::env::var(EnvVars::SYSTEMDRIVE) {
+        if let Ok(system_drive) = env::var(EnvVars::SYSTEMDRIVE) {
             let candidate = PathBuf::from(system_drive).join("ProgramData\\uv\\uv.toml");
             return candidate.as_path().is_file().then_some(candidate);
         }
@@ -230,12 +229,12 @@ fn system_config_file() -> Option<PathBuf> {
     #[cfg(not(windows))]
     {
         if let Some(path) =
-            locate_system_config_xdg(std::env::var(EnvVars::XDG_CONFIG_DIRS).ok().as_deref())
+            locate_system_config_xdg(env::var(EnvVars::XDG_CONFIG_DIRS).ok().as_deref())
         {
             return Some(path);
         }
-        // Fallback /etc/uv/uv.toml if XDG_CONFIG_DIRS is not set or no valid
-        // path is found
+        // Fallback to `/etc/uv/uv.toml` if `XDG_CONFIG_DIRS` is not set or no valid
+        // path is found.
         let candidate = Path::new("/etc/uv/uv.toml");
         candidate.is_file().then(|| candidate.to_path_buf())
     }
