@@ -1,6 +1,7 @@
-use anyhow::Result;
-use std::fmt::Write;
 use std::path::Path;
+
+use anstream::println;
+use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -14,7 +15,7 @@ use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::ProjectInterpreter;
 use crate::commands::{project, ExitStatus, SharedState};
-use crate::printer::{Printer, Stdout};
+use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
 /// Run a command.
@@ -100,8 +101,7 @@ pub(crate) async fn tree(
         invert,
     );
 
-    // Making an exclusion specifically for tree subcommand (#8379)
-    write!(Stdout::Enabled, "{tree}")?;
+    println!("{tree}");
 
     Ok(ExitStatus::Success)
 }
