@@ -483,6 +483,8 @@ fn show_files() {
     "#
     );
 
+    // Windows has a different files order.
+    #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.pip_show().arg("requests").arg("--files"), @r#"
     success: true
     exit_code: 0
