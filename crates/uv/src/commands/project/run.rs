@@ -469,6 +469,20 @@ pub(crate) async fn run(
                 );
             }
 
+            // Validate the requested dependency groups.
+            for group in dev.groups().iter() {
+                if !project
+                    .pyproject_toml()
+                    .dependency_groups
+                    .as_ref()
+                    .is_some_and(|groups| groups.contains_key(group))
+                {
+                    return Err(anyhow::anyhow!(
+                        "Group `{group}` is not defined in the project's `dependency-group` table"
+                    ));
+                }
+            }
+
             let venv = if isolated {
                 debug!("Creating isolated virtual environment");
 
