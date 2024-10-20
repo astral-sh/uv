@@ -51,8 +51,10 @@ pub enum ArrayEdit {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum CommentType {
-    FullLine,
-    SameLine,
+    /// A comment that appears on its own line.
+    OwnLine,
+    /// A comment that appears at the end of a line.
+    EndOfLine,
 }
 
 #[derive(Debug, Clone)]
@@ -858,9 +860,9 @@ fn reformat_array_multiline(deps: &mut Array) {
                     if let Some(index) = trimmed_line.find('#') {
                         let comment_text = trimmed_line[index..].trim().to_string();
                         let comment_type = if (*prev_line_was_empty) || (*prev_line_was_comment) {
-                            CommentType::FullLine
+                            CommentType::OwnLine
                         } else {
-                            CommentType::SameLine
+                            CommentType::EndOfLine
                         };
                         *prev_line_was_empty = trimmed_line.is_empty();
                         *prev_line_was_comment = true;
@@ -908,10 +910,10 @@ fn reformat_array_multiline(deps: &mut Array) {
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
             match comment.comment_type {
-                CommentType::FullLine => {
+                CommentType::OwnLine => {
                     prefix.push_str(&indentation_prefix_str);
                 }
-                CommentType::SameLine => {
+                CommentType::EndOfLine => {
                     prefix.push(' ');
                 }
             }

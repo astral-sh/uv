@@ -6271,7 +6271,7 @@ fn add_self() -> Result<()> {
 }
 
 #[test]
-fn add_preserves_comments_indentation_and_sameline_comments() -> Result<()> {
+fn add_preserves_end_of_line_comments() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -6283,6 +6283,7 @@ fn add_preserves_comments_indentation_and_sameline_comments() -> Result<()> {
         dependencies = [
             # comment 0
             "anyio==3.7.0", # comment 1
+            # comment 2
         ]
 
         [build-system]
