@@ -298,6 +298,10 @@ jobs:
 
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          # Avoid permission errors during concurrent tests
+          # See https://github.com/astral-sh/uv/issues/6940
+          UV_LINK_MODE: copy
         run: |
           cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 

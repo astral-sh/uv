@@ -3383,7 +3383,7 @@ fn add_reject_multiple_git_ref_flags() {
     let context = TestContext::new("3.12");
 
     // --tag and --branch
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .add()
         .arg("foo")
         .arg("--tag")
@@ -3404,7 +3404,7 @@ fn add_reject_multiple_git_ref_flags() {
     );
 
     // --tag and --rev
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .add()
         .arg("foo")
         .arg("--tag")
@@ -3425,7 +3425,7 @@ fn add_reject_multiple_git_ref_flags() {
     );
 
     // --tag and --tag
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .add()
         .arg("foo")
         .arg("--tag")
