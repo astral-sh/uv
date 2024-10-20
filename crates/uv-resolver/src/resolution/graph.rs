@@ -16,7 +16,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
-use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind, VerbatimUrl};
+use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 
 use crate::graph_ops::marker_reachability;
@@ -31,7 +31,7 @@ use crate::{
     ResolverMarkers, VersionsResponse,
 };
 
-pub(crate) type MarkersForDistribution = FxHashMap<(Version, Option<VerbatimUrl>), Vec<MarkerTree>>;
+pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
@@ -54,9 +54,6 @@ pub struct ResolutionGraph {
     pub(crate) overrides: Overrides,
     /// The options that were used to build the graph.
     pub(crate) options: Options,
-    /// If there are multiple options for a package, track which fork they belong to so we
-    /// can write that to the lockfile and later get the correct preference per fork back.
-    pub(crate) package_markers: FxHashMap<PackageName, MarkersForDistribution>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,8 +127,6 @@ impl ResolutionGraph {
                     if let Some(markers) = resolution.markers.fork_markers() {
                         package_markers
                             .entry(package.name.clone())
-                            .or_default()
-                            .entry((version.clone(), package.url.clone().map(|url| url.verbatim)))
                             .or_default()
                             .push(markers.clone());
                     }
@@ -239,7 +234,6 @@ impl ResolutionGraph {
         let graph = Self {
             petgraph,
             requires_python,
-            package_markers,
             diagnostics,
             requirements: requirements.to_vec(),
             constraints: constraints.clone(),
@@ -725,22 +719,6 @@ impl ResolutionGraph {
             conjunction.and(MarkerTree::expression(expr));
         }
         Ok(conjunction)
-    }
-
-    /// If there are multiple distributions for the same package name, return the markers of the
-    /// fork(s) that contained this distribution, otherwise return `None`.
-    pub fn fork_markers(
-        &self,
-        package_name: &PackageName,
-        version: &Version,
-        url: Option<&VerbatimUrl>,
-    ) -> Option<&Vec<MarkerTree>> {
-        let package_markers = &self.package_markers.get(package_name)?;
-        if package_markers.len() == 1 {
-            None
-        } else {
-            Some(&package_markers[&(version.clone(), url.cloned())])
-        }
     }
 
     /// Returns a sequence of conflicting distribution errors from this
