@@ -1,6 +1,7 @@
-use anyhow::Result;
-use std::fmt::Write;
 use std::path::Path;
+
+use anstream::print;
+use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -100,7 +101,7 @@ pub(crate) async fn tree(
         invert,
     );
 
-    write!(printer.stdout(), "{tree}")?;
+    print!("{tree}");
 
     Ok(ExitStatus::Success)
 }

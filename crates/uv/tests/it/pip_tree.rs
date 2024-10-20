@@ -1744,3 +1744,42 @@ fn show_version_specifiers_with_package() {
     "###
     );
 }
+
+#[test]
+fn print_output_even_with_quite_flag() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==2.31.0").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###
+    );
+
+    context.assert_command("import requests").success();
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+}

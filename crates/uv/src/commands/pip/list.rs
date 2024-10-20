@@ -1,6 +1,7 @@
 use std::cmp::max;
 use std::fmt::Write;
 
+use anstream::println;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -56,7 +57,7 @@ pub(crate) fn pip_list(
         ListFormat::Json => {
             let rows = results.iter().copied().map(Entry::from).collect_vec();
             let output = serde_json::to_string(&rows)?;
-            writeln!(printer.stdout(), "{output}")?;
+            println!("{output}");
         }
         ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
@@ -97,18 +98,13 @@ pub(crate) fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                writeln!(printer.stdout(), "{}", elems.join(" ").trim_end())?;
+                println!("{}", elems.join(" ").trim_end());
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
-                writeln!(
-                    printer.stdout(),
-                    "{}=={}",
-                    dist.name().bold(),
-                    dist.version()
-                )?;
+                println!("{}=={}", dist.name().bold(), dist.version());
             }
         }
     }
