@@ -1,10 +1,10 @@
+use std::env;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use tracing::debug;
 
 use uv_fs::Simplified;
-#[cfg(not(windows))]
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
@@ -36,7 +36,7 @@ impl Deref for FilesystemOptions {
 impl FilesystemOptions {
     /// Load the user [`FilesystemOptions`].
     pub fn user() -> Result<Option<Self>, Error> {
-        let Some(dir) = config_dir() else {
+        let Some(dir) = user_config_dir() else {
             return Ok(None);
         };
         let root = dir.join("uv");
@@ -59,6 +59,14 @@ impl FilesystemOptions {
             }
             Err(err) => Err(err),
         }
+    }
+
+    pub fn system() -> Result<Option<Self>, Error> {
+        let Some(file) = system_config_file() else {
+            return Ok(None);
+        };
+        debug!("Found system configuration in: `{}`", file.display());
+        Ok(Some(Self(read_file(&file)?)))
     }
 
     /// Find the [`FilesystemOptions`] for the given path.
@@ -171,19 +179,69 @@ impl From<Options> for FilesystemOptions {
 /// This is similar to the `config_dir()` returned by the `dirs` crate, but it uses the
 /// `XDG_CONFIG_HOME` environment variable on both Linux _and_ macOS, rather than the
 /// `Application Support` directory on macOS.
-fn config_dir() -> Option<PathBuf> {
-    // On Windows, use, e.g., C:\Users\Alice\AppData\Roaming
+fn user_config_dir() -> Option<PathBuf> {
+    // On Windows, use, e.g., `C:\Users\Alice\AppData\Roaming`.
     #[cfg(windows)]
     {
         dirs_sys::known_folder_roaming_app_data()
     }
 
-    // On Linux and macOS, use, e.g., /home/alice/.config.
+    // On Linux and macOS, use, e.g., `/home/alice/.config`.
     #[cfg(not(windows))]
     {
-        std::env::var_os(EnvVars::XDG_CONFIG_HOME)
+        env::var_os(EnvVars::XDG_CONFIG_HOME)
             .and_then(dirs_sys::is_absolute_path)
             .or_else(|| dirs_sys::home_dir().map(|path| path.join(".config")))
+    }
+}
+
+#[cfg(not(windows))]
+fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
+    // On Linux and macOS, read the `XDG_CONFIG_DIRS` environment variable.
+    let default = "/etc/xdg";
+    let config_dirs = value.filter(|s| !s.is_empty()).unwrap_or(default);
+
+    for dir in config_dirs.split(':').take_while(|s| !s.is_empty()) {
+        let uv_toml_path = Path::new(dir).join("uv").join("uv.toml");
+        if uv_toml_path.is_file() {
+            return Some(uv_toml_path);
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn locate_system_config_windows(system_drive: &std::ffi::OsStr) -> Option<PathBuf> {
+    // On Windows, use `%SYSTEMDRIVE%\ProgramData\uv\uv.toml` (e.g., `C:\ProgramData`).
+    let candidate = PathBuf::from(system_drive).join("ProgramData\\uv\\uv.toml");
+    candidate.as_path().is_file().then_some(candidate)
+}
+
+/// Returns the path to the system configuration file.
+///
+/// On Unix-like systems, uses the `XDG_CONFIG_DIRS` environment variable (falling back to
+/// `/etc/xdg/uv/uv.toml` if unset or empty) and then `/etc/uv/uv.toml`
+///
+/// On Windows, uses `%SYSTEMDRIVE%\ProgramData\uv\uv.toml`.
+fn system_config_file() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        env::var_os(EnvVars::SYSTEMDRIVE)
+            .and_then(|system_drive| locate_system_config_windows(&system_drive))
+    }
+
+    #[cfg(not(windows))]
+    {
+        if let Some(path) =
+            locate_system_config_xdg(env::var(EnvVars::XDG_CONFIG_DIRS).ok().as_deref())
+        {
+            return Some(path);
+        }
+
+        // Fallback to `/etc/uv/uv.toml` if `XDG_CONFIG_DIRS` is not set or no valid
+        // path is found.
+        let candidate = Path::new("/etc/uv/uv.toml");
+        candidate.is_file().then(|| candidate.to_path_buf())
     }
 }
 
@@ -205,4 +263,94 @@ pub enum Error {
 
     #[error("Failed to parse: `{0}`")]
     UvToml(String, #[source] toml::de::Error),
+}
+
+#[cfg(test)]
+mod test {
+    #[cfg(windows)]
+    use crate::locate_system_config_windows;
+    #[cfg(not(windows))]
+    use crate::locate_system_config_xdg;
+
+    use assert_fs::fixture::FixtureError;
+    use assert_fs::prelude::*;
+    use indoc::indoc;
+
+    #[test]
+    #[cfg(not(windows))]
+    fn test_locate_system_config_xdg() -> Result<(), FixtureError> {
+        // Write a `uv.toml` to a temporary directory.
+        let context = assert_fs::TempDir::new()?;
+        context.child("uv").child("uv.toml").write_str(indoc! {
+            r#"
+            [pip]
+            index-url = "https://test.pypi.org/simple"
+        "#,
+        })?;
+
+        // None
+        assert_eq!(locate_system_config_xdg(None), None);
+
+        // Empty string
+        assert_eq!(locate_system_config_xdg(Some("")), None);
+
+        // Single colon
+        assert_eq!(locate_system_config_xdg(Some(":")), None);
+
+        // Assert that the `system_config_file` function returns the correct path.
+        assert_eq!(
+            locate_system_config_xdg(Some(context.to_str().unwrap())).unwrap(),
+            context.child("uv").child("uv.toml").path()
+        );
+
+        // Write a separate `uv.toml` to a different directory.
+        let first = context.child("first");
+        let first_config = first.child("uv").child("uv.toml");
+        first_config.write_str("")?;
+
+        assert_eq!(
+            locate_system_config_xdg(Some(
+                format!("{}:{}", first.to_string_lossy(), context.to_string_lossy()).as_str()
+            ))
+            .unwrap(),
+            first_config.path()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_windows_config() -> Result<(), FixtureError> {
+        // Write a `uv.toml` to a temporary directory.
+        let context = assert_fs::TempDir::new()?;
+        context
+            .child("ProgramData")
+            .child("uv")
+            .child("uv.toml")
+            .write_str(indoc! { r#"
+            [pip]
+            index-url = "https://test.pypi.org/simple"
+        "#})?;
+
+        // This is typically only a drive (that is, letter and colon) but we
+        // allow anything, including a path to the test fixtures...
+        assert_eq!(
+            locate_system_config_windows(context.path().as_os_str()).unwrap(),
+            context
+                .child("ProgramData")
+                .child("uv")
+                .child("uv.toml")
+                .path()
+        );
+
+        // This does not have a `ProgramData` child, so contains no config.
+        let context = assert_fs::TempDir::new()?;
+        assert_eq!(
+            locate_system_config_windows(context.path().as_os_str()),
+            None
+        );
+
+        Ok(())
+    }
 }

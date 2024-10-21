@@ -199,6 +199,12 @@ impl EnvVars {
     /// Used to set a temporary directory for some tests.
     pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
 
+    /// Path to system-level configuration directory on Unix systems.
+    pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";
+
+    /// Path to system-level configuration directory on Windows systems.
+    pub const SYSTEMDRIVE: &'static str = "SYSTEMDRIVE";
+
     /// Path to user-level configuration directory on Unix systems.
     pub const XDG_CONFIG_HOME: &'static str = "XDG_CONFIG_HOME";
 

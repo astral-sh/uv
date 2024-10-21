@@ -5136,9 +5136,11 @@ dependencies = [
 name = "uv-settings"
 version = "0.0.1"
 dependencies = [
+ "assert_fs",
  "clap",
  "dirs-sys",
  "fs-err",
+ "indoc",
  "schemars",
  "serde",
  "textwrap",
