@@ -329,4 +329,4 @@ github-custom-job-permissions = { "build-docker" = { packages = "write", content
 # Whether to install an updater program
 install-updater = false
 # Path that installers should place binaries in
-install-path = "CARGO_HOME"
+install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
