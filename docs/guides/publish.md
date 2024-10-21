@@ -53,12 +53,14 @@ PyPI from GitHub Actions, you don't need to set any credentials. Instead,
     generate a token. Using a token is equivalent to setting `--username __token__` and using the
     token as password.
 
-It can happen that publishing fails with some files uploaded and some files still missing. With
-PyPI, you can retry the exact same command, existing identical files will be ignored. With other
-registries, use `--skip-existing <index url>` to enable retries. uv will skip uploading files that
-are identical to files in the registry, and it will also handle raced parallel uploads. Note that
-existing files need to match exactly with those uploaded to the registry, this avoids accidentally
-publishing source distribution and wheels with different contents for the same version.
+Even though `uv publish` retries failed uploads, it can happen that publishing fails in the middle,
+with some files uploaded and some files still missing. With PyPI, you can retry the exact same
+command, existing identical files will be ignored. With other registries, use
+`--skip-existing <index url>` with the index URL (not the publish URL) the packages belong to. uv
+will skip uploading files that are identical to files in the registry, and it will also handle raced
+parallel uploads. Note that existing files need to match exactly with those previously uploaded to
+the registry, this avoids accidentally publishing source distribution and wheels with different
+contents for the same version.
 
 ## Installing your package
 
