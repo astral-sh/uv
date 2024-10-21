@@ -5136,25 +5136,13 @@ dependencies = [
 name = "uv-settings"
 version = "0.0.1"
 dependencies = [
- "assert_cmd",
  "assert_fs",
- "base64 0.22.1",
- "byteorder",
  "clap",
  "dirs-sys",
- "etcetera",
- "filetime",
  "fs-err",
- "ignore",
  "indoc",
- "insta",
- "predicates",
- "regex",
- "reqwest",
  "schemars",
  "serde",
- "similar",
- "tempfile",
  "textwrap",
  "thiserror",
  "toml",
@@ -5174,7 +5162,6 @@ dependencies = [
  "uv-resolver",
  "uv-static",
  "uv-warnings",
- "zip",
 ]
 
 [[package]]

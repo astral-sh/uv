@@ -337,7 +337,7 @@ mod test {
             .child("uv")
             .child("uv.toml")
             .write_str(indoc! {
-                    r#"
+                        r#"
             [pip]
             index-url = "https://test.pypi.org/simple"
         "#})?;
