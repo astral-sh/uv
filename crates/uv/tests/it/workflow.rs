@@ -72,7 +72,7 @@ fn packse_add_remove_one_package() {
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
 
-         [package.metadata.requires-dev]
+         [package.metadata.dependency-groups]
          dev = [
              { name = "psutil", specifier = ">=5.9.7" },
              { name = "pytest", specifier = ">=7.4.3" },
@@ -160,7 +160,7 @@ fn packse_add_remove_one_package() {
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
 
-         [package.metadata.requires-dev]
+         [package.metadata.dependency-groups]
          dev = [
              { name = "psutil", specifier = ">=5.9.7" },
              { name = "pytest", specifier = ">=7.4.3" },
@@ -315,7 +315,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
 
-         [package.metadata.requires-dev]
+         [package.metadata.dependency-groups]
          dev = [
              { name = "psutil", specifier = ">=5.9.7" },
              { name = "pytest", specifier = ">=7.4.3" },
@@ -373,7 +373,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
              { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
          ]
 
-         [package.metadata.requires-dev]
+         [package.metadata.dependency-groups]
          dev = [
              { name = "psutil", specifier = ">=5.9.7" },
              { name = "pytest", specifier = ">=7.4.3" },

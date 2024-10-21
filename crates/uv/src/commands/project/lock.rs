@@ -875,7 +875,7 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedDevDependencies(name, version, expected, actual) => {
+            SatisfiesResult::MismatchedDependencyGroups(name, version, expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Expected: {:?}\n  Actual: {:?}",
                     expected, actual

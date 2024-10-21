@@ -4541,7 +4541,7 @@ fn lock_dev() -> Result<()> {
             { name = "iniconfig" },
         ]
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         dev = [
             { name = "typing-extensions" },
         ]
@@ -4549,7 +4549,7 @@ fn lock_dev() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "iniconfig" }]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "typing-extensions", url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl" }]
 
         [[package]]
@@ -6153,14 +6153,14 @@ fn lock_dev_transitive() -> Result<()> {
         version = "0.1.0"
         source = { editable = "baz" }
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         dev = [
             { name = "typing-extensions" },
         ]
 
         [package.metadata]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "typing-extensions", specifier = ">4" }]
 
         [[package]]
@@ -6170,7 +6170,7 @@ fn lock_dev_transitive() -> Result<()> {
 
         [package.metadata]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "anyio" }]
 
         [[package]]
@@ -7077,7 +7077,7 @@ fn lock_no_sources() -> Result<()> {
             { name = "anyio" },
         ]
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         dev = [
             { name = "typing-extensions" },
         ]
@@ -7085,7 +7085,7 @@ fn lock_no_sources() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "anyio", directory = "anyio" }]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "typing-extensions", specifier = ">4" }]
 
         [[package]]
@@ -7167,7 +7167,7 @@ fn lock_no_sources() -> Result<()> {
             { name = "anyio" },
         ]
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         dev = [
             { name = "typing-extensions" },
         ]
@@ -7175,7 +7175,7 @@ fn lock_no_sources() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "typing-extensions", specifier = ">4" }]
 
         [[package]]
@@ -10900,6 +10900,149 @@ fn lock_missing_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Test backwards compatibility for `package.dev-dependencies`, which was renamed to
+/// `package.dependency-groups`.
+#[test]
+fn lock_dev_dependencies_alias() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    let lock = context.temp_dir.child("uv.lock");
+
+    // Write a lockfile with `[package.dev-dependencies]`.
+    lock.write_str(r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.dev-dependencies]
+        dev = [{ name = "iniconfig" }]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+    "#)?;
+
+    // Re-locking should be a no-op.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // If we add a package, re-locking should use `dependency-groups`.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [tool.uv]
+        dev-dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Added typing-extensions v4.10.0
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "typing-extensions" },
+        ]
+
+        [package.dependency-groups]
+        dev = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "typing-extensions" }]
+
+        [package.metadata.dependency-groups]
+        dev = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// Lock a `pyproject.toml`, reorder the dependencies, and ensure that the lockfile is _not_ updated
 /// on the next run.
 #[test]
@@ -12155,14 +12298,14 @@ fn lock_dropped_dev_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         dev = [
             { name = "coverage" },
         ]
 
         [package.metadata]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "coverage", extras = ["toml"] }]
         "###
         );
@@ -13074,7 +13217,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
             { name = "black" },
         ]
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         dev = [
             { name = "anyio" },
         ]
@@ -13082,7 +13225,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "black" }]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "anyio" }]
 
         [[package]]
@@ -13291,7 +13434,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
             { name = "black" },
         ]
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         dev = [
             { name = "anyio" },
         ]
@@ -13299,7 +13442,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "black" }]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "anyio" }]
 
         [[package]]
@@ -15894,7 +16037,7 @@ fn lock_group_include() -> Result<()> {
             { name = "typing-extensions" },
         ]
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         bar = [
             { name = "trio" },
         ]
@@ -15906,7 +16049,7 @@ fn lock_group_include() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         bar = [{ name = "trio" }]
         foo = [
             { name = "anyio" },

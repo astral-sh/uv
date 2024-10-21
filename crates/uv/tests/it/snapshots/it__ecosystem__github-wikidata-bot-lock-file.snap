@@ -116,7 +116,7 @@ dependencies = [
     { name = "yarl" },
 ]
 
-[package.dev-dependencies]
+[package.dependency-groups]
 dev = [
     { name = "httpx" },
     { name = "pytest" },
@@ -135,7 +135,7 @@ requires-dist = [
     { name = "yarl", specifier = ">=1.9,<2" },
 ]
 
-[package.metadata.requires-dev]
+[package.metadata.dependency-groups]
 dev = [
     { name = "httpx", specifier = ">=0.27.0,<0.28" },
     { name = "pytest", specifier = ">=8.0.0,<9" },

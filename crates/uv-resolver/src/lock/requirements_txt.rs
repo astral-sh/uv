@@ -86,7 +86,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         // Add any dev dependencies.
         for group in dev.iter() {
-            for dep in root.dev_dependencies.get(group).into_iter().flatten() {
+            for dep in root.dependency_groups.get(group).into_iter().flatten() {
                 let dep_dist = lock.find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.

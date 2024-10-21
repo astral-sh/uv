@@ -1,5 +1,5 @@
 ---
-source: crates/uv-resolver/src/lock/mod.rs
+source: crates/uv-resolver/src/lock/tests.rs
 expression: result
 ---
 Ok(
@@ -53,10 +53,10 @@ Ok(
                 fork_markers: [],
                 dependencies: [],
                 optional_dependencies: {},
-                dev_dependencies: {},
+                dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
-                    requires_dev: {},
+                    dependency_groups: {},
                 },
             },
         ],
