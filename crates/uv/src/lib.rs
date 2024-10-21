@@ -1137,6 +1137,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 trusted_publishing,
                 keyring_provider,
                 allow_insecure_host,
+                check_url,
             } = PublishSettings::resolve(args, filesystem);
 
             commands::publish(
@@ -1147,6 +1148,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 allow_insecure_host,
                 username,
                 password,
+                check_url,
+                &cache,
                 globals.connectivity,
                 globals.native_tls,
                 printer,
