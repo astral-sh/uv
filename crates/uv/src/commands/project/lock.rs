@@ -337,6 +337,10 @@ async fn do_lock(
             warn_user_once!("The workspace `requires-python` value (`{requires_python}`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
         } else if requires_python.is_exact_without_patch() {
             warn_user_once!("The workspace `requires-python` value (`{requires_python}`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `{requires_python}.0`). Did you mean `{requires_python}.*`?");
+        } else if requires_python.is_tilde_exact_without_patch() {
+            let py_ver = interpreter.python_version();
+            let major_ver = interpreter.python_major();
+            warn_user_once!("The workspace `requires-python` value (`{requires_python}`) contains a compatible release match without a patch version. This will be interpreted as `>={py_ver}, =={major_ver}.*`. Did you mean `{requires_python}.0` to freeze the minor version?");
         }
         requires_python
     } else {
