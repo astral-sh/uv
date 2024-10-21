@@ -202,7 +202,6 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
     let config_dirs = value.filter(|s| !s.is_empty()).unwrap_or(default);
 
     for dir in env::split_paths(config_dirs) {
-        println!("dir: {:?}", dir);
         let uv_toml_path = dir.join("uv").join("uv.toml");
         if uv_toml_path.is_file() {
             return Some(uv_toml_path);
@@ -336,8 +335,7 @@ mod test {
             .child("ProgramData")
             .child("uv")
             .child("uv.toml")
-            .write_str(indoc! {
-                        r#"
+            .write_str(indoc! { r#"
             [pip]
             index-url = "https://test.pypi.org/simple"
         "#})?;
