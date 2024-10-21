@@ -49,7 +49,7 @@ key to include the tags:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ git = { commit = true, tag = true } }]
+cache-keys = [{ git = { commit = true, tags = true } }]
 ```
 
 Similarly, if a project reads from a `requirements.txt` to populate its dependencies, you can add
