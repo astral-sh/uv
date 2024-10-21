@@ -161,3 +161,7 @@ dependencies = [
 ```
 
 This will install PyTorch 2.5.0 on macOS, and PyTorch 2.5.0+cu124 on Linux and Windows.
+
+!!! warning "PyTorch on Intel Macs"
+
+    Note that the last version to support Intel Macs is PyTorch 2.3.0. In other words, if you try to install PyTorch 2.4.0 or more on an Intel Mac, you will get an error.
