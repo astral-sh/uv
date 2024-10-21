@@ -1226,6 +1226,54 @@ fn sync_dev_group() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_non_existent_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = []
+        bar = ["requests"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Requesting a non-existent group should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("baz"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: Could not find dependency group `baz`
+    "###);
+
+    // Requesting an empty group should succeed.
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
 /// Regression test for <https://github.com/astral-sh/uv/issues/6316>.
 ///
 /// Previously, we would read metadata statically from pyproject.toml and write that to `uv.lock`. In

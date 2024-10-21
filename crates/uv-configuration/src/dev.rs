@@ -163,10 +163,12 @@ impl DevGroupsSpecification {
         (self.dev.is_none() || self.dev.as_ref().is_some_and(DevMode::prod)) && self.groups.prod()
     }
 
+    /// Returns the flag that was used to request development dependencies.
     pub fn dev_mode(&self) -> Option<&DevMode> {
         self.dev.as_ref()
     }
 
+    /// Returns the list of groups to include.
     pub fn groups(&self) -> &GroupsSpecification {
         &self.groups
     }

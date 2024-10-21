@@ -613,6 +613,16 @@ impl Lock {
                 }
             }
 
+            // Validate any requested dependency groups.
+            for group in dev.groups().iter() {
+                if !root.metadata.requires_dev.contains_key(group) {
+                    return Err(LockErrorKind::MissingDependencyGroup {
+                        name: group.clone(),
+                    }
+                    .into());
+                }
+            }
+
             // Add any dev dependencies.
             for group in dev.iter() {
                 for dep in root.dev_dependencies.get(group).into_iter().flatten() {
@@ -4105,6 +4115,12 @@ enum LockErrorKind {
     MissingRootPackage {
         /// The ID of the package.
         name: PackageName,
+    },
+    /// An error that occurs when a `--group` is requested but can't be found.
+    #[error("Could not find dependency group `{name}`")]
+    MissingDependencyGroup {
+        /// The ID of the dependency group.
+        name: GroupName,
     },
     /// An error that occurs when resolving metadata for a package.
     #[error("Failed to generate package metadata for `{id}`")]
