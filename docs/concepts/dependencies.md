@@ -321,7 +321,8 @@ installation of Excel parsers and `matplotlib` unless someone explicitly require
 requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
 
 Optional dependencies are specified in `[project.optional-dependencies]`, a TOML table that maps
-from extra name to its dependencies, following [PEP 508](#pep-508) syntax.
+from extra name to its dependencies, following
+[dependency specifiers](#dependency-specifiers-pep-508) syntax.
 
 Optional dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
