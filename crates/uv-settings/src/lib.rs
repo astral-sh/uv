@@ -201,8 +201,9 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
     let default = "/etc/xdg";
     let config_dirs = value.filter(|s| !s.is_empty()).unwrap_or(default);
 
-    for dir in config_dirs.split(':').take_while(|s| !s.is_empty()) {
-        let uv_toml_path = Path::new(dir).join("uv").join("uv.toml");
+    for dir in env::split_paths(config_dirs) {
+        println!("dir: {:?}", dir);
+        let uv_toml_path = dir.join("uv").join("uv.toml");
         if uv_toml_path.is_file() {
             return Some(uv_toml_path);
         }
@@ -269,19 +270,27 @@ mod test {
     #[cfg(windows)]
     use uv_static::EnvVars;
 
+    use assert_fs::fixture::FixtureError;
+    use assert_fs::prelude::*;
+    use indoc::indoc;
     use std::env;
-    use std::path::Path;
 
     #[test]
     #[cfg(not(windows))]
-    fn test_locate_system_config_xdg() {
-        // Construct the path to the uv.toml file in the tests/fixtures directory
-        let td = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-        let tf = td.join("uv").join("uv.toml");
+    fn test_locate_system_config_xdg() -> Result<(), FixtureError> {
+        // Write a `uv.toml` to a temporary directory.
+        let context = assert_fs::TempDir::new()?;
+        context.child("uv").child("uv.toml").write_str(indoc! {
+            r#"
+            [pip]
+            index-url = "https://test.pypi.org/simple"
+        "#,
+        })?;
 
-        let cur_dir = env::current_dir().unwrap();
+        let current_dir = env::current_dir().unwrap();
+
         {
-            env::set_current_dir(&td).unwrap();
+            env::set_current_dir(context.path()).unwrap();
 
             // None
             assert_eq!(locate_system_config_xdg(None), None);
@@ -293,45 +302,68 @@ mod test {
             assert_eq!(locate_system_config_xdg(Some(":")), None);
         }
 
-        env::set_current_dir(&cur_dir).unwrap();
+        env::set_current_dir(&current_dir).unwrap();
         assert_eq!(locate_system_config_xdg(Some(":")), None);
 
-        // Assert that the system_config_file function returns the correct path
+        // Assert that the `system_config_file` function returns the correct path.
         assert_eq!(
-            locate_system_config_xdg(Some(td.to_str().unwrap())).unwrap(),
-            tf
+            locate_system_config_xdg(Some(context.to_str().unwrap())).unwrap(),
+            context.child("uv").child("uv.toml").path()
         );
 
-        let first_td = td.join("first");
-        let first_tf = first_td.join("uv").join("uv.toml");
+        // Write a separate `uv.toml` to a different directory.
+        let first = context.child("first");
+        let first_config = first.child("uv").child("uv.toml");
+        first_config.write_str("")?;
+
         assert_eq!(
             locate_system_config_xdg(Some(
-                format!("{}:{}", first_td.to_string_lossy(), td.to_string_lossy()).as_str()
+                format!("{}:{}", first.to_string_lossy(), context.to_string_lossy()).as_str()
             ))
             .unwrap(),
-            first_tf
+            first_config.path()
         );
+
+        Ok(())
     }
 
     #[test]
     #[cfg(windows)]
-    fn test_windows_config() {
-        // Construct the path to the uv.toml file in the tests/fixtures directory
-        let td = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests\\fixtures");
-        let expected = td.join("ProgramData\\uv\\uv.toml");
+    fn test_windows_config() -> Result<(), FixtureError> {
+        // Write a `uv.toml` to a temporary directory.
+        let context = assert_fs::TempDir::new()?;
+        context
+            .child("ProgramData")
+            .child("uv")
+            .child("uv.toml")
+            .write_str(indoc! {
+                    r#"
+            [pip]
+            index-url = "https://test.pypi.org/simple"
+        "#})?;
 
-        // Previous value of %SYSTEMDRIVE% which should always exist
-        let sd = env::var(EnvVars::SYSTEMDRIVE).unwrap_or("C:".to_string());
+        // Previous value of `SYSTEMDRIVE` which should always exist.
+        let prev_system_drive = env::var(EnvVars::SYSTEMDRIVE).unwrap_or("C:".to_string());
 
         // This is typically only a drive (that is, letter and colon) but we
         // allow anything, including a path to the test fixtures...
-        env::set_var(EnvVars::SYSTEMDRIVE, td.clone());
-        assert_eq!(system_config_file().unwrap(), expected);
+        env::set_var(EnvVars::SYSTEMDRIVE, context.path().as_os_str());
+        assert_eq!(
+            system_config_file().unwrap(),
+            context
+                .child("ProgramData")
+                .child("uv")
+                .child("uv.toml")
+                .path()
+        );
 
-        // This does not have a ProgramData child, so contains no config.
-        env::set_var(EnvVars::SYSTEMDRIVE, td.parent().unwrap());
+        // This does not have a `ProgramData` child, so contains no config.
+        let context = assert_fs::TempDir::new()?;
+        env::set_var(EnvVars::SYSTEMDRIVE, context.path().as_os_str());
         assert_eq!(system_config_file(), None);
 
-        env::set_var(EnvVars::SYSTEMDRIVE, sd);
+        env::set_var(EnvVars::SYSTEMDRIVE, prev_system_drive);
+
+        Ok(())
     }
 }
