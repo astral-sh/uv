@@ -28,9 +28,10 @@ bird-feeder = { path = "./packages/bird-feeder" }
 ## Project dependencies
 
 The `project.dependencies` table represents the dependencies that are used when uploading to PyPI or
-building a wheel. Individual dependencies are specified using [PEP 508](#pep-508) syntax, and the
-table follows the [PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/)
-standard.
+building a wheel. Individual dependencies are specified using
+[dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
+syntax, and the table follows the
+[PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/) standard.
 
 `project.dependencies` defines the list of packages that are required for the project, along with
 the version constraints that should be used when installing them. Each entry includes a dependency
@@ -248,8 +249,8 @@ members = [
 ### Platform-specific sources
 
 You can limit a source to a given platform or Python version by providing
-[PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible environment markers for
-the source.
+[dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)-compatible
+environment markers for the source.
 
 For example, to pull `httpx` from GitHub, but only on macOS, use the following:
 
@@ -437,10 +438,12 @@ Or, to opt-out of using an editable dependency in a workspace:
 $ uv add --no-editable ./path/foo
 ```
 
-## PEP 508
+## Dependency specifiers (PEP 508)
 
-[PEP 508](https://peps.python.org/pep-0508/) defines a syntax for dependency specification. It is
-composed of, in order:
+uv uses
+[dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/),
+previously known as [PEP 508](https://peps.python.org/pep-0508/). A dependency specifier is composed
+of, in order:
 
 - The dependency name
 - The extras you want (optional)
