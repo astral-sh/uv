@@ -31,7 +31,7 @@ use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{CachedClient, CachedClientError, Error, ErrorKind};
+use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -127,6 +127,27 @@ impl<'a> RegistryClientBuilder<'a> {
         let builder = self.base_client_builder;
 
         let client = builder.build();
+
+        let timeout = client.timeout();
+        let connectivity = client.connectivity();
+
+        // Wrap in the cache middleware.
+        let client = CachedClient::new(client);
+
+        RegistryClient {
+            index_urls: self.index_urls,
+            index_strategy: self.index_strategy,
+            cache: self.cache,
+            connectivity,
+            client,
+            timeout,
+        }
+    }
+
+    /// Share the underlying client between two different middleware configurations.
+    pub fn wrap_existing(self, existing: &BaseClient) -> RegistryClient {
+        // Wrap in any relevant middleware and handle connectivity.
+        let client = self.base_client_builder.wrap_existing(existing);
 
         let timeout = client.timeout();
         let connectivity = client.connectivity();

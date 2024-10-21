@@ -16,6 +16,8 @@ doctest = false
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
 uv-pypi-types = { workspace = true }
@@ -32,10 +34,10 @@ krata-tokio-tar = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
+rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true , features = ["io"] }

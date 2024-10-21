@@ -102,6 +102,9 @@ impl EnvVars {
     /// Equivalent to the `--password` argument in `uv publish`. Password for publishing.
     pub const UV_PUBLISH_PASSWORD: &'static str = "UV_PUBLISH_PASSWORD";
 
+    /// Don't upload a file if it already exists on the index. The value is the URL of the index.
+    pub const UV_PUBLISH_SKIP_EXISTING: &'static str = "UV_PUBLISH_SKIP_EXISTING";
+
     /// Equivalent to the `--no-sync` argument. Skips syncing the environment.
     pub const UV_NO_SYNC: &'static str = "UV_NO_SYNC";
 
