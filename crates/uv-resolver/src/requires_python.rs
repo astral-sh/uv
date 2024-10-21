@@ -105,18 +105,32 @@ impl RequiresPython {
         }))
     }
 
-    /// Narrow the [`RequiresPython`] to the given version, if it's stricter (i.e., greater) than
-    /// the current target.
+    /// Narrow the [`RequiresPython`] to the given version, if it's stricter than the current target.
     pub fn narrow(&self, range: &RequiresPythonRange) -> Option<Self> {
-        if *range == self.range {
-            None
-        } else if range.0 >= self.range.0 && range.1 <= self.range.1 {
-            Some(Self {
-                specifiers: self.specifiers.clone(),
-                range: range.clone(),
-            })
+        let lower = if range.0 >= self.range.0 {
+            Some(&range.0)
         } else {
             None
+        };
+        let upper = if range.1 <= self.range.1 {
+            Some(&range.1)
+        } else {
+            None
+        };
+        match (lower, upper) {
+            (Some(lower), Some(upper)) => Some(Self {
+                specifiers: self.specifiers.clone(),
+                range: RequiresPythonRange(lower.clone(), upper.clone()),
+            }),
+            (Some(lower), None) => Some(Self {
+                specifiers: self.specifiers.clone(),
+                range: RequiresPythonRange(lower.clone(), self.range.1.clone()),
+            }),
+            (None, Some(upper)) => Some(Self {
+                specifiers: self.specifiers.clone(),
+                range: RequiresPythonRange(self.range.0.clone(), upper.clone()),
+            }),
+            (None, None) => None,
         }
     }
 
