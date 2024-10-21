@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.25
+
+### Enhancements
+
+- Add support for `uv pip show --files` ([#8369](https://github.com/astral-sh/uv/pull/8369))
+- Don't prefetch unreachable packages ([#8246](https://github.com/astral-sh/uv/pull/8246))
+- Remove `tool.uv.sources` table if it is empty ([#8365](https://github.com/astral-sh/uv/pull/8365))
+- Modify cache versioning to support backwards compatibility ([#8386](https://github.com/astral-sh/uv/pull/8386))
+
+### Configuration
+
+- Add support for `UV_FROZEN` and `UV_LOCKED` ([#8340](https://github.com/astral-sh/uv/pull/8340))
+
+### Bug fixes
+
+- Allow dashes and underscores in custom index names ([#8339](https://github.com/astral-sh/uv/pull/8339))
+- Avoid panic when Git dependencies are included in fork markers ([#8388](https://github.com/astral-sh/uv/pull/8388))
+- Check existing source by normalized name before `uv add` and `uv remove` ([#8359](https://github.com/astral-sh/uv/pull/8359))
+- Fix bug where username from authentication cache could be ignored ([#8345](https://github.com/astral-sh/uv/pull/8345))
+- Fix to respect comments positioning in pyproject.toml on change ([#8384](https://github.com/astral-sh/uv/pull/8384))
+- Redact index sources in `uv.lock` ([#8333](https://github.com/astral-sh/uv/pull/8333))
+- Use correct indentation when project table contains open bracket comment ([#8387](https://github.com/astral-sh/uv/pull/8387))
+- Only remove a source from `[tool.uv.sources]` if it is no long being referenced ([#8366](https://github.com/astral-sh/uv/pull/8366))
+- Modify `uv pip list` and `uv tree` to print to stdout regardless of `--quiet` flag ([#8392](https://github.com/astral-sh/uv/pull/8392))
+
+### Error messages
+
+- Improve help message for missing `self update` invocations ([#8337](https://github.com/astral-sh/uv/pull/8337))
+- Log `.netrc` parsing errors ([#8364](https://github.com/astral-sh/uv/pull/8364))
+- Remove trailing newlines in error messages ([#8322](https://github.com/astral-sh/uv/pull/8322))
+- Use a dedicated message for incompatible Python versions in wheel ABI tags ([#8363](https://github.com/astral-sh/uv/pull/8363))
+- Remove commands available in the top-level from the suggested subcommand error ([#8316](https://github.com/astral-sh/uv/pull/8316))
+
+### Release
+
+- Run release builds for `macos-x86_64` on `macos-14` runners ([#8327](https://github.com/astral-sh/uv/pull/8327))
+
 ## 0.4.24
 
 ### Bug fixes
