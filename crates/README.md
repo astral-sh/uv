@@ -33,7 +33,9 @@ Utilities for interacting with Python version numbers and specifiers.
 
 ## [uv-pep508-rs](./uv-pep508)
 
-Utilities for interacting with [PEP 508](https://peps.python.org/pep-0508/) dependency specifiers.
+Utilities for parsing and evaluating
+[dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/),
+previously known as [PEP 508](https://peps.python.org/pep-0508/).
 
 ## [uv-platform-tags](./uv-platform-tags)
 

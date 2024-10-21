@@ -1,5 +1,5 @@
-//! A library for python [dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
-//! better known as [PEP 508](https://peps.python.org/pep-0508/)
+//! A library for [dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
+//! previously known as [PEP 508](https://peps.python.org/pep-0508/)
 //!
 //! ## Usage
 //!
