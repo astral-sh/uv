@@ -179,7 +179,7 @@ pub struct GlobalArgs {
         conflicts_with = "no_color",
         value_name = "COLOR_CHOICE"
     )]
-    pub color: ColorChoice,
+    pub color: Option<ColorChoice>,
 
     /// Whether to load TLS certificates from the platform's native certificate store.
     ///
