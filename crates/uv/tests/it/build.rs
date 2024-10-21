@@ -889,7 +889,6 @@ fn fail() -> Result<()> {
         from setuptools import setup
     IndentationError: unexpected indent
     error: Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
-    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
     "###);
 
     Ok(())
@@ -1330,7 +1329,6 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building wheel from source distribution...
     Successfully built dist/member_a-0.1.0.tar.gz and dist/member_a-0.1.0-py3-none-any.whl
     [PKG] error: Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
-    See https://docs.astral.sh/uv/reference/build_failures/ for common causes and solutions
     Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
