@@ -13,8 +13,8 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
-    LowerBound, SourceStrategy,
+    Concurrency, Constraints, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
+    GroupsSpecification, InstallOptions, LowerBound, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -204,6 +204,7 @@ pub(crate) async fn add(
                     bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
                 }
                 DependencyType::Dev => (),
+                DependencyType::Group(_) => (),
             }
         }
 
@@ -466,8 +467,11 @@ pub(crate) async fn add(
         let edit = match dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
             DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
-            DependencyType::Optional(ref group) => {
-                toml.add_optional_dependency(group, &requirement, source.as_ref())?
+            DependencyType::Optional(ref extra) => {
+                toml.add_optional_dependency(extra, &requirement, source.as_ref())?
+            }
+            DependencyType::Group(ref group) => {
+                toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
             }
         };
 
@@ -739,8 +743,11 @@ async fn lock_and_sync(
                 DependencyType::Dev => {
                     toml.set_dev_dependency_minimum_version(*index, minimum)?;
                 }
-                DependencyType::Optional(ref group) => {
-                    toml.set_optional_dependency_minimum_version(group, *index, minimum)?;
+                DependencyType::Optional(ref extra) => {
+                    toml.set_optional_dependency_minimum_version(extra, *index, minimum)?;
+                }
+                DependencyType::Group(ref group) => {
+                    toml.set_dependency_group_requirement_minimum_version(group, *index, minimum)?;
                 }
             }
 
@@ -800,17 +807,25 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = DevMode::Exclude;
+            let dev = DevGroupsSpecification::from(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = DevMode::Include;
+            let dev = DevGroupsSpecification::from(DevMode::Include);
             (extras, dev)
         }
-        DependencyType::Optional(ref group_name) => {
-            let extras = ExtrasSpecification::Some(vec![group_name.clone()]);
-            let dev = DevMode::Exclude;
+        DependencyType::Optional(ref extra_name) => {
+            let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
+            let dev = DevGroupsSpecification::from(DevMode::Exclude);
+            (extras, dev)
+        }
+        DependencyType::Group(ref group_name) => {
+            let extras = ExtrasSpecification::None;
+            let dev =
+                DevGroupsSpecification::from(GroupsSpecification::Include(
+                    vec![group_name.clone()],
+                ));
             (extras, dev)
         }
     };
@@ -820,7 +835,7 @@ async fn lock_and_sync(
         venv,
         &lock,
         &extras,
-        dev,
+        &dev,
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,

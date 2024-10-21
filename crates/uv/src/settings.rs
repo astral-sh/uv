@@ -19,7 +19,7 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
+    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
     NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, SourceStrategy, TargetTriple,
     TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
@@ -227,7 +227,7 @@ pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
@@ -252,6 +252,8 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
+            group,
+            only_group,
             module: _,
             only_dev,
             no_editable,
@@ -280,7 +282,7 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             editable: EditableMode::from_args(no_editable),
             with,
             with_editable,
@@ -690,7 +692,7 @@ pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
@@ -711,6 +713,8 @@ impl SyncSettings {
             dev,
             no_dev,
             only_dev,
+            group,
+            only_group,
             no_editable,
             inexact,
             exact,
@@ -738,7 +742,7 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
                 no_install_project,
@@ -825,6 +829,7 @@ impl AddSettings {
             requirements,
             dev,
             optional,
+            group,
             editable,
             no_editable,
             extra,
@@ -843,8 +848,10 @@ impl AddSettings {
             python,
         } = args;
 
-        let dependency_type = if let Some(group) = optional {
-            DependencyType::Optional(group)
+        let dependency_type = if let Some(extra) = optional {
+            DependencyType::Optional(extra)
+        } else if let Some(group) = group {
+            DependencyType::Group(group)
         } else if dev {
             DependencyType::Dev
         } else {
@@ -946,6 +953,7 @@ impl RemoveSettings {
             dev,
             optional,
             packages,
+            group,
             no_sync,
             locked,
             frozen,
@@ -957,8 +965,10 @@ impl RemoveSettings {
             python,
         } = args;
 
-        let dependency_type = if let Some(group) = optional {
-            DependencyType::Optional(group)
+        let dependency_type = if let Some(extra) = optional {
+            DependencyType::Optional(extra)
+        } else if let Some(group) = group {
+            DependencyType::Group(group)
         } else if dev {
             DependencyType::Dev
         } else {
@@ -987,7 +997,7 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
@@ -1009,7 +1019,10 @@ impl TreeSettings {
             tree,
             universal,
             dev,
+            only_dev,
             no_dev,
+            group,
+            only_group,
             locked,
             frozen,
             build,
@@ -1020,7 +1033,7 @@ impl TreeSettings {
         } = args;
 
         Self {
-            dev: DevMode::from_args(dev, no_dev, false),
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             locked,
             frozen,
             universal,
@@ -1044,7 +1057,7 @@ pub(crate) struct ExportSettings {
     pub(crate) format: ExportFormat,
     pub(crate) package: Option<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
@@ -1070,6 +1083,8 @@ impl ExportSettings {
             dev,
             no_dev,
             only_dev,
+            group,
+            only_group,
             header,
             no_header,
             no_editable,
@@ -1094,7 +1109,7 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
             editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
             install_options: InstallOptions::new(

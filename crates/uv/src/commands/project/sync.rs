@@ -8,13 +8,13 @@ use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
+    Concurrency, Constraints, DevGroupsSpecification, EditableMode, ExtrasSpecification,
     HashCheckingMode, InstallOptions, LowerBound,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
     LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
@@ -23,7 +23,7 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
+use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -43,7 +43,7 @@ pub(crate) async fn sync(
     frozen: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -154,7 +154,7 @@ pub(crate) async fn sync(
         &venv,
         &lock,
         &extras,
-        dev,
+        &dev.with_default_dev(),
         editable,
         install_options,
         modifications,
@@ -178,7 +178,7 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: DevMode,
+    dev: &DevGroupsSpecification,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -251,13 +251,6 @@ pub(super) async fn do_sync(
             ));
         }
     }
-
-    // Include development dependencies, if requested.
-    let dev = match dev {
-        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
-        DevMode::Exclude => DevSpecification::Exclude,
-        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
-    };
 
     // Determine the tags to use for resolution.
     let tags = venv.interpreter().tags()?;
@@ -486,6 +479,21 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
             .into_iter()
             .flat_map(|optional| optional.values())
             .flatten();
+        let dependency_groups = member
+            .pyproject_toml()
+            .dependency_groups
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .flat_map(|(_, dependencies)| {
+                dependencies.iter().filter_map(|specifier| {
+                    if let DependencyGroupSpecifier::Requirement(requirement) = specifier {
+                        Some(requirement)
+                    } else {
+                        None
+                    }
+                })
+            });
         let dev_dependencies = member
             .pyproject_toml()
             .tool
@@ -497,6 +505,7 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
 
         for requirement in dependencies
             .chain(optional_dependencies)
+            .chain(dependency_groups)
             .filter_map(|requires_dist| {
                 LenientRequirement::<VerbatimParsedUrl>::from_str(requires_dist)
                     .map(Requirement::from)
