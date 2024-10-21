@@ -23,7 +23,7 @@ use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequ
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
+use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -479,6 +479,21 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
             .into_iter()
             .flat_map(|optional| optional.values())
             .flatten();
+        let dependency_groups = member
+            .pyproject_toml()
+            .dependency_groups
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .flat_map(|(_, dependencies)| {
+                dependencies.iter().filter_map(|specifier| {
+                    if let DependencyGroupSpecifier::Requirement(requirement) = specifier {
+                        Some(requirement)
+                    } else {
+                        None
+                    }
+                })
+            });
         let dev_dependencies = member
             .pyproject_toml()
             .tool
@@ -490,6 +505,7 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
 
         for requirement in dependencies
             .chain(optional_dependencies)
+            .chain(dependency_groups)
             .filter_map(|requires_dist| {
                 LenientRequirement::<VerbatimParsedUrl>::from_str(requires_dist)
                     .map(Requirement::from)
