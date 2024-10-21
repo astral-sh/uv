@@ -49,7 +49,9 @@ format, as a `pyproject.toml` is intended to define a Python _project_.
 
 If project-, user-, and system-level configuration files are found, the settings will be merged,
 with project-level configuration taking precedence over the user-level configuration, and user-level
-configuration taking precedence over the system-level configuration.
+configuration taking precedence over the system-level configuration. (If multiple system-level
+configuration files are found, e.g., at both `/etc/uv/uv.toml` and `$XDG_CONFIG_DIRS/uv/uv.toml`,
+only the first-discovered file will be used, with XDG taking priority.)
 
 For example, if a string, number, or boolean is present in both the project- and user-level
 configuration tables, the project-level value will be used, and the user-level value will be

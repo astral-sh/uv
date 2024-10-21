@@ -210,20 +210,24 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
     None
 }
 
+#[cfg(windows)]
+fn locate_system_config_windows(system_drive: &std::ffi::OsStr) -> Option<PathBuf> {
+    // On Windows, use `%SYSTEMDRIVE%\ProgramData\uv\uv.toml` (e.g., `C:\ProgramData`).
+    let candidate = PathBuf::from(system_drive).join("ProgramData\\uv\\uv.toml");
+    candidate.as_path().is_file().then_some(candidate)
+}
+
 /// Returns the path to the system configuration file.
 ///
-/// Unix-like systems: This uses the `XDG_CONFIG_DIRS` environment variable in *nix systems.
-/// If the var is not present it will check /etc/xdg/uv/uv.toml and then /etc/uv/uv.toml.
-/// Windows: "%SYSTEMDRIVE%\ProgramData\uv\uv.toml" is used.
+/// On Unix-like systems, uses the `XDG_CONFIG_DIRS` environment variable (falling back to
+/// `/etc/xdg/uv/uv.toml` if unset or empty) and then `/etc/uv/uv.toml`
+///
+/// On Windows, uses `%SYSTEMDRIVE%\ProgramData\uv\uv.toml`.
 fn system_config_file() -> Option<PathBuf> {
-    // On Windows, use, e.g., `C:\ProgramData`.
     #[cfg(windows)]
     {
-        if let Ok(system_drive) = env::var(EnvVars::SYSTEMDRIVE) {
-            let candidate = PathBuf::from(system_drive).join("ProgramData\\uv\\uv.toml");
-            return candidate.as_path().is_file().then_some(candidate);
-        }
-        None
+        env::var_os(EnvVars::SYSTEMDRIVE)
+            .and_then(|system_drive| locate_system_config_windows(&system_drive))
     }
 
     #[cfg(not(windows))]
@@ -233,6 +237,7 @@ fn system_config_file() -> Option<PathBuf> {
         {
             return Some(path);
         }
+
         // Fallback to `/etc/uv/uv.toml` if `XDG_CONFIG_DIRS` is not set or no valid
         // path is found.
         let candidate = Path::new("/etc/uv/uv.toml");
@@ -262,17 +267,14 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
+    #[cfg(windows)]
+    use crate::locate_system_config_windows;
     #[cfg(not(windows))]
     use crate::locate_system_config_xdg;
-    #[cfg(windows)]
-    use crate::system_config_file;
-    #[cfg(windows)]
-    use uv_static::EnvVars;
 
     use assert_fs::fixture::FixtureError;
     use assert_fs::prelude::*;
     use indoc::indoc;
-    use std::env;
 
     #[test]
     #[cfg(not(windows))]
@@ -286,22 +288,13 @@ mod test {
         "#,
         })?;
 
-        let current_dir = env::current_dir().unwrap();
+        // None
+        assert_eq!(locate_system_config_xdg(None), None);
 
-        {
-            env::set_current_dir(context.path()).unwrap();
+        // Empty string
+        assert_eq!(locate_system_config_xdg(Some("")), None);
 
-            // None
-            assert_eq!(locate_system_config_xdg(None), None);
-
-            // Empty string
-            assert_eq!(locate_system_config_xdg(Some("")), None);
-
-            // Single colon
-            assert_eq!(locate_system_config_xdg(Some(":")), None);
-        }
-
-        env::set_current_dir(&current_dir).unwrap();
+        // Single colon
         assert_eq!(locate_system_config_xdg(Some(":")), None);
 
         // Assert that the `system_config_file` function returns the correct path.
@@ -340,14 +333,10 @@ mod test {
             index-url = "https://test.pypi.org/simple"
         "#})?;
 
-        // Previous value of `SYSTEMDRIVE` which should always exist.
-        let prev_system_drive = env::var(EnvVars::SYSTEMDRIVE).unwrap_or("C:".to_string());
-
         // This is typically only a drive (that is, letter and colon) but we
         // allow anything, including a path to the test fixtures...
-        env::set_var(EnvVars::SYSTEMDRIVE, context.path().as_os_str());
         assert_eq!(
-            system_config_file().unwrap(),
+            locate_system_config_windows(context.path().as_os_str()).unwrap(),
             context
                 .child("ProgramData")
                 .child("uv")
@@ -357,10 +346,10 @@ mod test {
 
         // This does not have a `ProgramData` child, so contains no config.
         let context = assert_fs::TempDir::new()?;
-        env::set_var(EnvVars::SYSTEMDRIVE, context.path().as_os_str());
-        assert_eq!(system_config_file(), None);
-
-        env::set_var(EnvVars::SYSTEMDRIVE, prev_system_drive);
+        assert_eq!(
+            locate_system_config_windows(context.path().as_os_str()),
+            None
+        );
 
         Ok(())
     }
