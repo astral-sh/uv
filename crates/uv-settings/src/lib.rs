@@ -201,8 +201,8 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
     let default = "/etc/xdg";
     let config_dirs = value.filter(|s| !s.is_empty()).unwrap_or(default);
 
-    for dir in env::split_paths(config_dirs) {
-        let uv_toml_path = dir.join("uv").join("uv.toml");
+    for dir in config_dirs.split(':').take_while(|s| !s.is_empty()) {
+        let uv_toml_path = Path::new(dir).join("uv").join("uv.toml");
         if uv_toml_path.is_file() {
             return Some(uv_toml_path);
         }
