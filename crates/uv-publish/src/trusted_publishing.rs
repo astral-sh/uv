@@ -17,10 +17,10 @@ pub enum TrustedPublishingError {
     Var(#[from] VarError),
     #[error(transparent)]
     Url(#[from] url::ParseError),
-    #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
-    #[error(transparent)]
-    ReqwestMiddleware(#[from] reqwest_middleware::Error),
+    #[error("Failed to fetch {0}")]
+    Reqwest(Url, #[source] reqwest::Error),
+    #[error("Failed to fetch {0}")]
+    ReqwestMiddleware(Url, #[source] reqwest_middleware::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(
@@ -105,8 +105,17 @@ async fn get_audience(
     // (RFC 3986).
     let audience_url = Url::parse(&format!("https://{}/_/oidc/audience", registry.authority()))?;
     debug!("Querying the trusted publishing audience from {audience_url}");
-    let response = client.get(audience_url).send().await?;
-    let audience = response.error_for_status()?.json::<Audience>().await?;
+    let response = client
+        .get(audience_url.clone())
+        .send()
+        .await
+        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err))?;
+    let audience = response
+        .error_for_status()
+        .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?
+        .json::<Audience>()
+        .await
+        .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?;
     trace!("The audience is `{}`", &audience.audience);
     Ok(audience.audience)
 }
@@ -123,11 +132,17 @@ async fn get_oidc_token(
     debug!("Querying the trusted publishing OIDC token from {oidc_token_url}");
     let authorization = format!("bearer {oidc_token_request_token}");
     let response = client
-        .get(oidc_token_url)
+        .get(oidc_token_url.clone())
         .header(header::AUTHORIZATION, authorization)
         .send()
-        .await?;
-    let oidc_token: OidcToken = response.error_for_status()?.json().await?;
+        .await
+        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(oidc_token_url.clone(), err))?;
+    let oidc_token: OidcToken = response
+        .error_for_status()
+        .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?
+        .json()
+        .await
+        .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?;
     Ok(oidc_token.value)
 }
 
@@ -145,14 +160,18 @@ async fn get_publish_token(
         token: oidc_token.to_string(),
     };
     let response = client
-        .post(mint_token_url)
+        .post(mint_token_url.clone())
         .body(serde_json::to_vec(&mint_token_payload)?)
         .send()
-        .await?;
+        .await
+        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(mint_token_url.clone(), err))?;
 
     // reqwest's implementation of `.json()` also goes through `.bytes()`
     let status = response.status();
-    let body = response.bytes().await?;
+    let body = response
+        .bytes()
+        .await
+        .map_err(|err| TrustedPublishingError::Reqwest(mint_token_url.clone(), err))?;
 
     if status.is_success() {
         let publish_token: PublishToken = serde_json::from_slice(&body)?;

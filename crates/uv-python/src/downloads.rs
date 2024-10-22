@@ -39,10 +39,10 @@ pub enum Error {
     InvalidPythonVersion(String),
     #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
-    #[error(transparent)]
-    NetworkError(#[from] WrappedReqwestError),
-    #[error(transparent)]
-    NetworkMiddlewareError(#[from] anyhow::Error),
+    #[error("Failed to download {0}")]
+    NetworkError(Url, #[source] WrappedReqwestError),
+    #[error("Failed to download {0}")]
+    NetworkMiddlewareError(Url, #[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
     ExtractError(String, #[source] uv_extract::Error),
     #[error("Failed to hash installation")]
@@ -619,18 +619,18 @@ impl ManagedPythonDownload {
     }
 }
 
-impl From<reqwest::Error> for Error {
-    fn from(error: reqwest::Error) -> Self {
-        Self::NetworkError(WrappedReqwestError::from(error))
+impl Error {
+    pub(crate) fn from_reqwest(url: Url, err: reqwest::Error) -> Self {
+        Self::NetworkError(url, WrappedReqwestError::from(err))
     }
-}
 
-impl From<reqwest_middleware::Error> for Error {
-    fn from(error: reqwest_middleware::Error) -> Self {
-        match error {
-            reqwest_middleware::Error::Middleware(error) => Self::NetworkMiddlewareError(error),
+    pub(crate) fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
+        match err {
+            reqwest_middleware::Error::Middleware(error) => {
+                Self::NetworkMiddlewareError(url, error)
+            }
             reqwest_middleware::Error::Reqwest(error) => {
-                Self::NetworkError(WrappedReqwestError::from(error))
+                Self::NetworkError(url, WrappedReqwestError::from(error))
             }
         }
     }
@@ -701,10 +701,17 @@ async fn read_url(
 
         Ok((Either::Left(reader), Some(size)))
     } else {
-        let response = client.for_host(url).get(url.clone()).send().await?;
+        let response = client
+            .for_host(url)
+            .get(url.clone())
+            .send()
+            .await
+            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
 
         // Ensure the request was successful.
-        response.error_for_status_ref()?;
+        response
+            .error_for_status_ref()
+            .map_err(|err| Error::from_reqwest(url.clone(), err))?;
 
         let size = response.content_length();
         let stream = response
