@@ -4,8 +4,6 @@ use uv_static::EnvVars;
 
 use crate::Cache;
 use clap::Parser;
-use directories::ProjectDirs;
-use etcetera::BaseStrategy;
 use tracing::{debug, warn};
 
 #[derive(Parser, Debug, Clone)]
@@ -45,18 +43,13 @@ impl Cache {
             Self::temp()
         } else if let Some(cache_dir) = cache_dir {
             Ok(Self::from_path(cache_dir))
-        } else if let Some(cache_dir) = ProjectDirs::from("", "", "uv")
-            .map(|dirs| dirs.cache_dir().to_path_buf())
-            .filter(|dir| dir.exists())
+        } else if let Some(cache_dir) = uv_dirs::legacy_user_cache_dir().filter(|dir| dir.exists())
         {
             // If the user has an existing directory at (e.g.) `/Users/user/Library/Caches/uv`,
             // respect it for backwards compatibility. Otherwise, prefer the XDG strategy, even on
             // macOS.
             Ok(Self::from_path(cache_dir))
-        } else if let Some(cache_dir) = etcetera::base_strategy::choose_base_strategy()
-            .ok()
-            .map(|dirs| dirs.cache_dir().join("uv"))
-        {
+        } else if let Some(cache_dir) = uv_dirs::user_cache_dir() {
             if cfg!(windows) {
                 // On Windows, we append `cache` to the LocalAppData directory, i.e., prefer
                 // `C:\Users\User\AppData\Local\uv\cache` over `C:\Users\User\AppData\Local\uv`.

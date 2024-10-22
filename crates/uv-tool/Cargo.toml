@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-cache = { workspace = true }
+uv-dirs = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
@@ -28,8 +29,6 @@ uv-settings = { workspace = true }
 uv-state = { workspace = true }
 uv-static = { workspace = true }
 uv-virtualenv = { workspace = true }
-
-dirs-sys = { workspace = true }
 fs-err = { workspace = true }
 pathdiff = { workspace = true }
 serde = { workspace = true }

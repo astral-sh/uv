@@ -31,6 +31,7 @@ uv-cli = { path = "crates/uv-cli" }
 uv-client = { path = "crates/uv-client" }
 uv-configuration = { path = "crates/uv-configuration" }
 uv-console = { path = "crates/uv-console" }
+uv-dirs = { path = "crates/uv-dirs" }
 uv-dispatch = { path = "crates/uv-dispatch" }
 uv-distribution = { path = "crates/uv-distribution" }
 uv-distribution-filename = { path = "crates/uv-distribution-filename" }
