@@ -2628,11 +2628,13 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_editable: bool,
 
-    /// Load environment variables from a file. The default is to use `.env`.
+    /// Load environment variables from a `.env` file.
+    ///
+    /// Defaults to reading `.env` in the current working directory.
     #[arg(long, value_parser = parse_file_path, env = EnvVars::UV_ENV_FILE)]
     pub env_file: Option<PathBuf>,
 
-    /// Skip loading of the environment variables file
+    /// Avoid reading environment variables from a `.env` file.
     #[arg(long, conflicts_with = "env_file", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
     pub no_env_file: bool,
 
