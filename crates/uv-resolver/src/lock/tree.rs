@@ -7,7 +7,7 @@ use petgraph::visit::Dfs;
 use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use uv_configuration::DevGroupsSpecification;
+use uv_configuration::DevGroupsManifest;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::ResolverMarkerEnvironment;
 
@@ -34,7 +34,7 @@ impl<'env> TreeDisplay<'env> {
         depth: usize,
         prune: &[PackageName],
         packages: &[PackageName],
-        dev: &DevGroupsSpecification,
+        dev: &DevGroupsManifest,
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
