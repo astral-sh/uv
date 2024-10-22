@@ -2661,9 +2661,12 @@ pub struct RunArgs {
 
     /// Load environment variables from a `.env` file.
     ///
+    /// Can be provided multiple times, with subsequent files overriding values defined in
+    /// previous files.
+    ///
     /// Defaults to reading `.env` in the current working directory.
-    #[arg(long, value_parser = parse_file_path, env = EnvVars::UV_ENV_FILE)]
-    pub env_file: Option<PathBuf>,
+    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<PathBuf>,
 
     /// Avoid reading environment variables from a `.env` file.
     #[arg(long, conflicts_with = "env_file", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]

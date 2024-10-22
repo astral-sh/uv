@@ -137,6 +137,8 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--env-file</code> <i>env-file</i></dt><dd><p>Load environment variables from a <code>.env</code> file.</p>
 
+<p>Can be provided multiple times, with subsequent files overriding values defined in previous files.</p>
+
 <p>Defaults to reading <code>.env</code> in the current working directory.</p>
 
 <p>May also be set with the <code>UV_ENV_FILE</code> environment variable.</p>

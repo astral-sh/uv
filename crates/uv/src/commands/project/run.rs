@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use anstream::eprint;
 use anyhow::{anyhow, bail, Context};
 use futures::StreamExt;
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
@@ -80,7 +80,7 @@ pub(crate) async fn run(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-    env_file: Option<PathBuf>,
+    env_file: Vec<PathBuf>,
     no_env_file: bool,
 ) -> anyhow::Result<ExitStatus> {
     // These cases seem quite complex because (in theory) they should change the "current package".
@@ -110,51 +110,57 @@ pub(crate) async fn run(
 
     // Read from the `.env` file, if necessary.
     if !no_env_file {
-        let env_file_path = env_file.as_deref().unwrap_or_else(|| Path::new(".env"));
-        match dotenvy::from_path(env_file_path) {
-            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                if env_file.is_none() {
-                    debug!(
-                        "No environment file found at: `{}`",
-                        env_file_path.simplified_display()
+        let env_file_paths = if env_file.is_empty() {
+            Either::Left(std::iter::once(Path::new(".env")))
+        } else {
+            Either::Right(env_file.iter().rev().map(PathBuf::as_path))
+        };
+        for env_file_path in env_file_paths {
+            match dotenvy::from_path(env_file_path) {
+                Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    if env_file.is_empty() {
+                        debug!(
+                            "No environment file found at: `{}`",
+                            env_file_path.simplified_display()
+                        );
+                    } else {
+                        bail!(
+                            "No environment file found at: `{}`",
+                            env_file_path.simplified_display()
+                        );
+                    }
+                }
+                Err(dotenvy::Error::Io(err)) => {
+                    if env_file.is_empty() {
+                        debug!(
+                            "Failed to read environment file `{}`: {err}",
+                            env_file_path.simplified_display()
+                        );
+                    } else {
+                        bail!(
+                            "Failed to read environment file `{}`: {err}",
+                            env_file_path.simplified_display()
+                        );
+                    }
+                }
+                Err(dotenvy::Error::LineParse(content, position)) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}` at position {position}: {content}",
+                        env_file_path.simplified_display(),
                     );
-                } else {
-                    bail!(
-                        "No environment file found at: `{}`",
+                }
+                Err(err) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}`: {err}",
+                        env_file_path.simplified_display(),
+                    );
+                }
+                Ok(()) => {
+                    debug!(
+                        "Read environment file at: `{}`",
                         env_file_path.simplified_display()
                     );
                 }
-            }
-            Err(dotenvy::Error::Io(err)) => {
-                if env_file.is_none() {
-                    debug!(
-                        "Failed to read environment file `{}`: {err}",
-                        env_file_path.simplified_display()
-                    );
-                } else {
-                    bail!(
-                        "Failed to read environment file `{}`: {err}",
-                        env_file_path.simplified_display()
-                    );
-                }
-            }
-            Err(dotenvy::Error::LineParse(content, position)) => {
-                warn_user!(
-                    "Failed to parse environment file `{}` at position {position}: {content}",
-                    env_file_path.simplified_display(),
-                );
-            }
-            Err(err) => {
-                warn_user!(
-                    "Failed to parse environment file `{}`: {err}",
-                    env_file_path.simplified_display(),
-                );
-            }
-            Ok(()) => {
-                debug!(
-                    "Read environment file at: `{}`",
-                    env_file_path.simplified_display()
-                );
             }
         }
     }

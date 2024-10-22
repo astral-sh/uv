@@ -245,7 +245,7 @@ pub(crate) struct RunSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) env_file: Option<PathBuf>,
+    pub(crate) env_file: Vec<PathBuf>,
     pub(crate) no_env_file: bool,
 }
 

@@ -78,11 +78,18 @@ By default, `uv run` will load environment variables from a `.env` file in the c
 directory, following the discovery and parsing rules of the
 [`dotenvy`](https://github.com/allan2/dotenvy) crate.
 
-If the same variable is defined in the environment and in the file, the value from the environment
-will take precedence.
+To load a `.env` file from a dedicated location, set the `UV_ENV_FILE` environment variable, or pass
+the `--env-file` flag to `uv run`.
 
-To disable this behavior, set `UV_NO_ENV_FILE=1` in the environment, or pass the `--no-env-file`
-flag to `uv run`.
+The `--env-file` flag can be provided multiple times, with subsequent files overriding values
+defined in previous files. To provide multiple files via the `UV_ENV_FILE` environment variable,
+separate the paths with a space (e.g., `UV_ENV_FILE="/path/to/file1 /path/to/file2"`).
+
+To disable this behavior, set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the
+`--no-env-file` flag to `uv run`.
+
+If the same variable is defined in the environment and in a `.env` file, the value from the
+environment will take precedence.
 
 ## Configuring the pip interface
 
