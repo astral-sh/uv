@@ -9,7 +9,7 @@ use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
 use tracing::debug;
-
+use uv_cache::Cache;
 use uv_fs::{cachedir, Simplified, CWD};
 use uv_pypi_types::Scheme;
 use uv_python::{Interpreter, VirtualEnvironment};
@@ -52,15 +52,40 @@ pub(crate) fn create(
     allow_existing: bool,
     relocatable: bool,
     seed: bool,
+    cache: &Cache,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable
     // from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
     // the base Python executable is the Python executable of the interpreter's base interpreter.
     let base_python = if cfg!(unix) {
-        // On Unix, follow symlinks to resolve the base interpreter, since the Python executable in
-        // a virtual environment is a symlink to the base interpreter.
-        uv_fs::canonicalize_executable(interpreter.sys_executable())?
+        // If we're in virtual environment, resolve symlinks until we find a non-virtual interpreter.
+        if interpreter.is_virtualenv() {
+            if let Some(base_executable) =
+                uv_fs::read_executable_link(interpreter.sys_executable())?
+            {
+                let mut base_interpreter = Interpreter::query(base_executable, cache)?;
+                while base_interpreter.is_virtualenv() {
+                    let Some(base_executable) =
+                        uv_fs::read_executable_link(base_interpreter.sys_executable())?
+                    else {
+                        break;
+                    };
+                    base_interpreter = Interpreter::query(base_executable, cache)?;
+                }
+                base_interpreter.sys_executable().to_path_buf()
+            } else {
+                // If the interpreter isn't a symlink, use `sys._base_executable` or, as a last
+                // resort, `sys.executable`.
+                if let Some(base_executable) = interpreter.sys_base_executable() {
+                    base_executable.to_path_buf()
+                } else {
+                    interpreter.sys_executable().to_path_buf()
+                }
+            }
+        } else {
+            interpreter.sys_executable().to_path_buf()
+        }
     } else if cfg!(windows) {
         // On Windows, follow `virtualenv`. If we're in a virtual environment, use
         // `sys._base_executable` if it exists; if not, use `sys.base_prefix`. For example, with

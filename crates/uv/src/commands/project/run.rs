@@ -372,6 +372,7 @@ pub(crate) async fn run(
                 false,
                 false,
                 false,
+                cache,
             )?;
 
             Some(environment.into_interpreter())
@@ -570,6 +571,7 @@ pub(crate) async fn run(
                     false,
                     false,
                     false,
+                    cache,
                 )?
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
@@ -717,6 +719,7 @@ pub(crate) async fn run(
                     false,
                     false,
                     false,
+                    cache,
                 )?;
                 venv.into_interpreter()
             } else {
@@ -766,6 +769,7 @@ pub(crate) async fn run(
                     false,
                     false,
                     false,
+                    cache,
                 )?
             }
             Some(spec) => {

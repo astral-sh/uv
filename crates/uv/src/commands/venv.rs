@@ -270,6 +270,7 @@ async fn venv_impl(
         allow_existing,
         relocatable,
         seed,
+        cache,
     )
     .map_err(VenvError::Creation)?;
 

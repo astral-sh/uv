@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -236,7 +237,7 @@ pub fn normalize_path(path: &Path) -> PathBuf {
 }
 
 /// Like `fs_err::canonicalize`, but avoids attempting to resolve symlinks on Windows.
-pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+pub fn canonicalize_executable(path: impl AsRef<Path>) -> io::Result<PathBuf> {
     let path = path.as_ref();
     debug_assert!(
         path.is_absolute(),
@@ -247,6 +248,24 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
         Ok(path.to_path_buf())
     } else {
         fs_err::canonicalize(path)
+    }
+}
+
+/// Resolve a symlink for an executable. Unlike `fs_err::canonicalize`, this does not resolve
+/// symlinks recursively.
+pub fn read_executable_link(executable: &Path) -> Result<Option<PathBuf>, io::Error> {
+    let Ok(link) = executable.read_link() else {
+        return Ok(None);
+    };
+    if link.is_absolute() {
+        Ok(Some(link))
+    } else {
+        executable
+            .parent()
+            .map(|parent| parent.join(link))
+            .as_deref()
+            .map(normalize_absolute_path)
+            .transpose()
     }
 }
 

@@ -26,7 +26,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
-
+use uv_cache::Cache;
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
 use uv_distribution::RequiresDist;
 use uv_distribution_types::{IndexLocations, Resolution};
@@ -260,6 +260,7 @@ impl SourceBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        cache: &Cache,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().environment()?;
 
@@ -306,6 +307,7 @@ impl SourceBuild {
                 false,
                 false,
                 false,
+                cache,
             )?
         };
 

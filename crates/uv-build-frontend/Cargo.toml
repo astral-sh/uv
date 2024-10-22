@@ -17,6 +17,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
