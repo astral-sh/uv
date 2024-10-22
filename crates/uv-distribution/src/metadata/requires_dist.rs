@@ -19,7 +19,7 @@ pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Vec<uv_pypi_types::Requirement>,
     pub provides_extras: Vec<ExtraName>,
-    pub dev_dependencies: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
 }
 
 impl RequiresDist {
@@ -34,7 +34,7 @@ impl RequiresDist {
                 .map(uv_pypi_types::Requirement::from)
                 .collect(),
             provides_extras: metadata.provides_extras,
-            dev_dependencies: BTreeMap::default(),
+            dependency_groups: BTreeMap::default(),
         }
     }
 
@@ -101,7 +101,7 @@ impl RequiresDist {
             SourceStrategy::Disabled => &empty,
         };
 
-        let dev_dependencies = {
+        let dependency_groups = {
             // First, collect `tool.uv.dev_dependencies`
             let dev_dependencies = project_workspace
                 .current_project()
@@ -218,7 +218,7 @@ impl RequiresDist {
         Ok(Self {
             name: metadata.name,
             requires_dist,
-            dev_dependencies,
+            dependency_groups,
             provides_extras: metadata.provides_extras,
         })
     }
@@ -230,7 +230,7 @@ impl From<Metadata> for RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
-            dev_dependencies: metadata.dev_dependencies,
+            dependency_groups: metadata.dependency_groups,
         }
     }
 }
