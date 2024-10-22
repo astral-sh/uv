@@ -126,6 +126,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          # For manual cache invalidation
+          key: v2
+
       - name: "Install Rust toolchain"
         run: rustup target add x86_64-pc-windows-msvc
       - name: "Install cargo-xwin"
