@@ -18,8 +18,6 @@ name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 ```
 
-Index names must only contain alphanumeric characters, dashes, or underscores.
-
 Indexes are prioritized in the order in which they’re defined, such that the first index listed in
 the configuration file is the first index consulted when resolving dependencies, with indexes
 provided via the command line taking precedence over those in the configuration file.
@@ -37,6 +35,9 @@ default = true
 
 The default index is always treated as lowest priority, regardless of its position in the list of
 indexes.
+
+Index names many only contain alphanumeric characters, dashes, underscores, and periods, and must be
+valid ASCII.
 
 ## Pinning a package to an index
 
@@ -127,17 +128,18 @@ password (or access token).
 To authenticate with a provide index, either provide credentials via environment variables or embed
 them in the URL.
 
-For example, given an index named `internal` that requires a username (`public`) and password
+For example, given an index named `internal-proxy` that requires a username (`public`) and password
 (`koala`), define the index (without credentials) in your `pyproject.toml`:
 
 ```toml
 [[tool.uv.index]]
-name = "internal"
+name = "internal-proxy"
 url = "https://example.com/simple"
 ```
 
-From there, you can set the `UV_INDEX_INTERNAL_USERNAME` and `UV_INDEX_INTERNAL_PASSWORD`
-environment variables, where `INTERNAL` is the uppercase version of the index name:
+From there, you can set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and
+`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL` is the uppercase version
+of the index name, with non-alphanumeric characters replaced by underscores:
 
 ```sh
 export UV_INDEX_INTERNAL_USERNAME=public

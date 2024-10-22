@@ -6,7 +6,7 @@ use thiserror::Error;
 use url::Url;
 use uv_configuration::LowerBound;
 use uv_distribution_filename::DistExtension;
-use uv_distribution_types::{Index, IndexLocations, Origin};
+use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
@@ -398,7 +398,7 @@ pub enum LoweringError {
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
     #[error("Package `{0}` references an undeclared index: `{1}`")]
-    MissingIndex(PackageName, String),
+    MissingIndex(PackageName, IndexName),
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
     #[error(transparent)]

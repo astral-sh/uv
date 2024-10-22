@@ -12449,6 +12449,57 @@ fn lock_trailing_slash() -> Result<()> {
 }
 
 #[test]
+fn lock_invalid_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        iniconfig = { index = "internal proxy" }
+
+        [[tool.uv.index]]
+        name = "internal proxy"
+        url = "https://test.pypi.org/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 16, column 16
+         |
+      16 |         name = "internal proxy"
+         |                ^^^^^^^^^^^^^^^^
+      Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 13, column 31
+       |
+    13 |         iniconfig = { index = "internal proxy" }
+       |                               ^^^^^^^^^^^^^^^^
+    Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn lock_explicit_index() -> Result<()> {
     let context = TestContext::new("3.12");
 
