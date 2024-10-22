@@ -16,7 +16,7 @@ use std::str::FromStr;
 use std::{collections::BTreeMap, mem};
 use thiserror::Error;
 use url::Url;
-use uv_distribution_types::Index;
+use uv_distribution_types::{Index, IndexName};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
@@ -644,7 +644,7 @@ pub enum Source {
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
-        index: String,
+        index: IndexName,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -684,7 +684,7 @@ impl<'de> Deserialize<'de> for Source {
             url: Option<Url>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
-            index: Option<String>,
+            index: Option<IndexName>,
             workspace: Option<bool>,
             #[serde(
                 skip_serializing_if = "uv_pep508::marker::ser::is_empty",
@@ -993,7 +993,7 @@ impl Source {
         source: RequirementSource,
         workspace: bool,
         editable: Option<bool>,
-        index: Option<String>,
+        index: Option<IndexName>,
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,

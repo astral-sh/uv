@@ -18,7 +18,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
@@ -910,7 +910,7 @@ fn resolve_requirement(
     requirement: uv_pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
-    index: Option<String>,
+    index: Option<IndexName>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
