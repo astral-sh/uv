@@ -912,15 +912,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "directories"
-version = "5.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a49173b84e034382284f27f1af4dcbbd231ffa358c0fe316541a7337f376a35"
-dependencies = [
- "dirs-sys",
-]
-
-[[package]]
 name = "dirs"
 version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4536,8 +4527,6 @@ dependencies = [
 name = "uv-dirs"
 version = "0.0.1"
 dependencies = [
- "directories",
- "dirs-sys",
  "etcetera",
  "uv-static",
 ]
@@ -5178,7 +5167,7 @@ version = "0.0.1"
 dependencies = [
  "assert_fs",
  "clap",
- "dirs-sys",
+ "etcetera",
  "fs-err",
  "indoc",
  "schemars",
@@ -5549,7 +5538,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
