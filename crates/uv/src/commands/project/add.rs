@@ -13,8 +13,8 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
-    GroupsSpecification, InstallOptions, LowerBound, SourceStrategy,
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DevMode, EditableMode,
+    ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -835,7 +835,7 @@ async fn lock_and_sync(
         venv,
         &lock,
         &extras,
-        &dev,
+        &DevGroupsManifest::from_spec(dev),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
