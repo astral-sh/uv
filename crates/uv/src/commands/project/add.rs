@@ -823,9 +823,7 @@ async fn lock_and_sync(
         DependencyType::Group(ref group_name) => {
             let extras = ExtrasSpecification::None;
             let dev =
-                DevGroupsSpecification::from(GroupsSpecification::Include(
-                    vec![group_name.clone()],
-                ));
+                DevGroupsSpecification::from(GroupsSpecification::from_group(group_name.clone()));
             (extras, dev)
         }
     };
