@@ -104,7 +104,7 @@ impl<'env> TreeDisplay<'env> {
                 }
             }
 
-            for (group, dependencies) in &package.dev_dependencies {
+            for (group, dependencies) in &package.dependency_groups {
                 for dependency in dependencies {
                     // Insert the package into the graph.
                     let package_node = if let Some(index) = inverse.get(&package.id) {
