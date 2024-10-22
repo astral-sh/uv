@@ -313,6 +313,16 @@ pub struct ToolUv {
     )]
     pub package: Option<bool>,
 
+    /// The list of `dependency-groups` to install by default.
+    #[option(
+        default = r#"["dev"]"#,
+        value_type = "list[str]",
+        example = r#"
+            default-groups = ["docs"]
+        "#
+    )]
+    pub default_groups: Option<Vec<GroupName>>,
+
     /// The project's development dependencies. Development dependencies will be installed by
     /// default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
     #[cfg_attr(
@@ -330,31 +340,6 @@ pub struct ToolUv {
         "#
     )]
     pub dev_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-
-    /// A list of supported environments against which to resolve dependencies.
-    ///
-    /// By default, uv will resolve for all possible environments during a `uv lock` operation.
-    /// However, you can restrict the set of supported environments to improve performance and avoid
-    /// unsatisfiable branches in the solution space.
-    ///
-    /// These environments will also respected when `uv pip compile` is invoked with the
-    /// `--universal` flag.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "A list of environment markers, e.g., `python_version >= '3.6'`."
-        )
-    )]
-    #[option(
-        default = r#"[]"#,
-        value_type = "str | list[str]",
-        example = r#"
-            # Resolve for macOS, but not for Linux or Windows.
-            environments = ["sys_platform == 'darwin'"]
-        "#
-    )]
-    pub environments: Option<SupportedEnvironments>,
 
     /// Overrides to apply when resolving the project's dependencies.
     ///
@@ -422,6 +407,31 @@ pub struct ToolUv {
         "#
     )]
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
+    /// A list of supported environments against which to resolve dependencies.
+    ///
+    /// By default, uv will resolve for all possible environments during a `uv lock` operation.
+    /// However, you can restrict the set of supported environments to improve performance and avoid
+    /// unsatisfiable branches in the solution space.
+    ///
+    /// These environments will also respected when `uv pip compile` is invoked with the
+    /// `--universal` flag.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "A list of environment markers, e.g., `python_version >= '3.6'`."
+        )
+    )]
+    #[option(
+        default = r#"[]"#,
+        value_type = "str | list[str]",
+        example = r#"
+            # Resolve for macOS, but not for Linux or Windows.
+            environments = ["sys_platform == 'darwin'"]
+        "#
+    )]
+    pub environments: Option<SupportedEnvironments>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]

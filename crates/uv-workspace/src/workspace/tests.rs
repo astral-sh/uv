@@ -237,10 +237,11 @@ async fn albatross_root_workspace() {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
               },
               "dependency-groups": null
@@ -327,10 +328,11 @@ async fn albatross_virtual_workspace() {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
               },
               "dependency-groups": null
@@ -531,10 +533,11 @@ async fn exclude_package() -> Result<()> {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
               },
               "dependency-groups": null
@@ -633,10 +636,11 @@ async fn exclude_package() -> Result<()> {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
               },
               "dependency-groups": null
@@ -748,10 +752,11 @@ async fn exclude_package() -> Result<()> {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
               },
               "dependency-groups": null
@@ -837,10 +842,11 @@ async fn exclude_package() -> Result<()> {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
               },
               "dependency-groups": null

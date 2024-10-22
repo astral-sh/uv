@@ -8,8 +8,8 @@ use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, EditableMode, ExtrasSpecification,
-    HashCheckingMode, InstallOptions, LowerBound,
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
+    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
@@ -30,7 +30,9 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, SharedState};
+use crate::commands::project::{
+    default_dependency_groups, validate_dependency_groups, ProjectError, SharedState,
+};
 use crate::commands::{diagnostics, pip, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
@@ -93,19 +95,9 @@ pub(crate) async fn sync(
         warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
     }
 
-    // Validate the requested dependency groups.
-    for group in dev.groups().iter() {
-        if !project
-            .pyproject_toml()
-            .dependency_groups
-            .as_ref()
-            .is_some_and(|groups| groups.contains_key(group))
-        {
-            return Err(anyhow::anyhow!(
-                "Group `{group}` is not defined in the project's `dependency-group` table"
-            ));
-        }
-    }
+    // Determine the default groups to include.
+    validate_dependency_groups(project.pyproject_toml(), &dev)?;
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
@@ -169,7 +161,7 @@ pub(crate) async fn sync(
         &venv,
         &lock,
         &extras,
-        &dev.with_default_dev(),
+        &dev.with_defaults(defaults),
         editable,
         install_options,
         modifications,
@@ -193,7 +185,7 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: &DevGroupsSpecification,
+    dev: &DevGroupsManifest,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,

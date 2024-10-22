@@ -13,7 +13,9 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::ProjectInterpreter;
+use crate::commands::project::{
+    default_dependency_groups, validate_dependency_groups, ProjectInterpreter,
+};
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
@@ -45,6 +47,10 @@ pub(crate) async fn tree(
 ) -> Result<ExitStatus> {
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+
+    // Determine the default groups to include.
+    validate_dependency_groups(workspace.pyproject_toml(), &dev)?;
+    let defaults = default_dependency_groups(workspace.pyproject_toml())?;
 
     // Find an interpreter for the project
     let interpreter = ProjectInterpreter::discover(
@@ -97,7 +103,7 @@ pub(crate) async fn tree(
         depth.into(),
         &prune,
         &package,
-        &dev.with_default_dev(),
+        &dev.with_defaults(defaults),
         no_dedupe,
         invert,
     );
