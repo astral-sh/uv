@@ -2617,6 +2617,12 @@ pub struct RunArgs {
     #[arg(long, conflicts_with("only_group"))]
     pub group: Vec<GroupName>,
 
+    /// Exclude dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
     /// Only include dependencies from the specified local dependency group.
     ///
     /// May be provided multiple times.
@@ -2807,6 +2813,12 @@ pub struct SyncArgs {
     /// May be provided multiple times.
     #[arg(long, conflicts_with("only_group"))]
     pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
 
     /// Only include dependencies from the specified local dependency group.
     ///
@@ -3198,6 +3210,12 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with("only_group"))]
     pub group: Vec<GroupName>,
 
+    /// Exclude dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
     /// Only include dependencies from the specified local dependency group.
     ///
     /// May be provided multiple times.
@@ -3312,6 +3330,12 @@ pub struct ExportArgs {
     /// May be provided multiple times.
     #[arg(long, conflicts_with("only_group"))]
     pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified local dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
 
     /// Only include dependencies from the specified local dependency group.
     ///

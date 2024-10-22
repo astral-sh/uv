@@ -253,6 +253,7 @@ impl RunSettings {
             dev,
             no_dev,
             group,
+            no_group,
             only_group,
             module: _,
             only_dev,
@@ -282,7 +283,9 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
+            dev: DevGroupsSpecification::from_args(
+                dev, no_dev, only_dev, group, no_group, only_group,
+            ),
             editable: EditableMode::from_args(no_editable),
             with,
             with_editable,
@@ -715,6 +718,7 @@ impl SyncSettings {
             only_dev,
             group,
             only_group,
+            no_group,
             no_editable,
             inexact,
             exact,
@@ -742,7 +746,9 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
+            dev: DevGroupsSpecification::from_args(
+                dev, no_dev, only_dev, group, no_group, only_group,
+            ),
             editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
                 no_install_project,
@@ -1022,6 +1028,7 @@ impl TreeSettings {
             only_dev,
             no_dev,
             group,
+            no_group,
             only_group,
             locked,
             frozen,
@@ -1033,7 +1040,9 @@ impl TreeSettings {
         } = args;
 
         Self {
-            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
+            dev: DevGroupsSpecification::from_args(
+                dev, no_dev, only_dev, group, no_group, only_group,
+            ),
             locked,
             frozen,
             universal,
@@ -1084,6 +1093,7 @@ impl ExportSettings {
             no_dev,
             only_dev,
             group,
+            no_group,
             only_group,
             header,
             no_header,
@@ -1109,7 +1119,9 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevGroupsSpecification::from_args(dev, no_dev, only_dev, group, only_group),
+            dev: DevGroupsSpecification::from_args(
+                dev, no_dev, only_dev, group, no_group, only_group,
+            ),
             editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
             install_options: InstallOptions::new(

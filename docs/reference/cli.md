@@ -286,6 +286,10 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
@@ -1539,6 +1543,10 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-install-package</code> <i>no-install-package</i></dt><dd><p>Do not install the given package(s).</p>
@@ -2185,6 +2193,10 @@ uv export [OPTIONS]
 
 <p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
 
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-hashes</code></dt><dd><p>Omit hashes in the generated output</p>
 
 </dd><dt><code>--no-header</code></dt><dd><p>Exclude the comment header at the top of the generated output file</p>
@@ -2501,6 +2513,10 @@ uv tree [OPTIONS]
 </dd><dt><code>--no-dedupe</code></dt><dd><p>Do not de-duplicate repeated dependencies. Usually, when a package has already displayed its dependencies, further occurrences will not re-display its dependencies, and will include a (*) to indicate it has already been shown. This flag will cause those duplicates to be repeated</p>
 
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
+
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 

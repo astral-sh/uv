@@ -8,8 +8,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, LowerBound, Reinstall,
-    Upgrade,
+    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, GroupsSpecification,
+    LowerBound, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -1361,7 +1361,11 @@ pub(crate) fn validate_dependency_groups(
     pyproject_toml: &PyProjectToml,
     dev: &DevGroupsSpecification,
 ) -> Result<(), ProjectError> {
-    for group in dev.groups().into_iter().flatten() {
+    for group in dev
+        .groups()
+        .into_iter()
+        .flat_map(GroupsSpecification::names)
+    {
         if !pyproject_toml
             .dependency_groups
             .as_ref()
