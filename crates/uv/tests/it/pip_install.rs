@@ -12,6 +12,7 @@ use crate::common::{
     self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path, TestContext,
 };
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 #[test]
 fn missing_requirements_txt() {
@@ -190,7 +191,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `dev-dependencies`, `managed`, `package`
+      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `dev-dependencies`, `managed`, `package`
 
     Resolved in [TIME]
     Audited in [TIME]
@@ -747,6 +748,27 @@ fn reinstall_incomplete() -> Result<()> {
 #[test]
 fn exact_install_removes_extraneous_packages() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
+    // Install anyio
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--exact")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
 
     // Install flask
     uv_snapshot!(context.filters(), context.pip_install()
@@ -769,10 +791,55 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
     "###
     );
 
-    // Install anyio with exact flag removes flask and flask dependencies.
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio==3.7.0")?;
+    // Install requirements file with exact flag removes flask and flask dependencies.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--exact")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+     - blinker==1.7.0
+     - click==8.1.7
+     - flask==3.0.2
+     - itsdangerous==2.1.2
+     - jinja2==3.1.3
+     - markupsafe==2.1.5
+     - werkzeug==3.0.1
+    "###
+    );
+
+    // Install flask again
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("flask"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    requirements_txt.write_str(indoc! {r"
+        anyio==3.7.0
+        flit_core<4.0.0
+        "
+    })?;
+
+    // Install requirements file with exact flag installs flit_core and removes flask and flask dependencies.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--exact")
         .arg("-r")
@@ -786,15 +853,13 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + anyio==3.7.0
      - blinker==1.7.0
      - click==8.1.7
      - flask==3.0.2
-     + idna==3.6
+     + flit-core==3.9.0
      - itsdangerous==2.1.2
      - jinja2==3.1.3
      - markupsafe==2.1.5
-     + sniffio==1.3.1
      - werkzeug==3.0.1
     "###
     );
@@ -1393,7 +1458,7 @@ fn install_extra_index_url_has_priority() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
         .arg("https://test.pypi.org/simple")
         .arg("--extra-index-url")
@@ -1529,7 +1594,7 @@ fn install_git_public_https_missing_branch_or_tag() {
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`git fetch .*`", "`git fetch [...]`"));
+    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
     filters.push(("exit status", "exit code"));
 
     uv_snapshot!(filters, context.pip_install()
@@ -1559,7 +1624,7 @@ fn install_git_public_https_missing_commit() {
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`git fetch .*`", "`git fetch [...]`"));
+    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
     filters.push(("exit status", "exit code"));
 
     // There are flakes on Windows where this irrelevant error is appended
@@ -1777,6 +1842,7 @@ fn install_git_private_https_pat_not_authorized() {
 
     let mut filters = context.filters();
     filters.insert(0, (token, "***"));
+    filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
@@ -2240,6 +2306,43 @@ fn only_binary_editable_setup_py() {
      + sniffio==1.3.1
     "###
     );
+}
+
+/// We should not recommend `--prerelease=allow` in source distribution build failures, since we
+/// don't propagate the `--prerelease` flag to the source distribution build regardless.
+#[test]
+fn no_prerelease_hint_source_builds() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=40.8.0"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::UV_EXCLUDE_NEWER, "2018-10-08"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to prepare distributions
+      Caused by: Failed to build `project @ file://[TEMP_DIR]/`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -3953,7 +4056,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(filters, context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .env("UV_NO_BUILD_ISOLATION", "yes"), @r###"
+        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3990,7 +4093,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .env("UV_NO_BUILD_ISOLATION", "yes"), @r###"
+        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4018,7 +4121,7 @@ fn install_utf16le_requirements() -> Result<()> {
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_le("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -4045,7 +4148,7 @@ fn install_utf16be_requirements() -> Result<()> {
     requirements_txt.write_binary(&utf8_to_utf16_with_bom_be("tomli<=2.0.1"))?;
 
     uv_snapshot!(context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -4419,7 +4522,7 @@ fn install_package_basic_auth_from_netrc_default() -> Result<()> {
         .arg("anyio")
         .arg("--index-url")
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
-        .env("NETRC", netrc.to_str().unwrap())
+        .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -4451,7 +4554,7 @@ fn install_package_basic_auth_from_netrc() -> Result<()> {
         .arg("anyio")
         .arg("--index-url")
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
-        .env("NETRC", netrc.to_str().unwrap())
+        .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -4491,7 +4594,7 @@ anyio
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .env("NETRC", netrc.to_str().unwrap())
+        .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -4564,8 +4667,8 @@ fn install_package_basic_auth_from_keyring() {
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env("PATH", venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4611,8 +4714,8 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
-        .env("PATH", venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4622,6 +4725,8 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
     Request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "###
     );
 }
@@ -4652,8 +4757,8 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env("KEYRING_TEST_CREDENTIALS", r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
-        .env("PATH", venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4663,6 +4768,8 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
     Request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "###
     );
 }
@@ -5624,7 +5731,7 @@ fn require_hashes_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -6109,7 +6216,7 @@ fn verify_hashes_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -6447,7 +6554,7 @@ fn local_index_absolute() -> Result<()> {
     "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("tqdm")
         .arg("--index-url")
         .arg(Url::from_directory_path(root).unwrap().as_str()), @r###"
@@ -6498,7 +6605,7 @@ fn local_index_relative() -> Result<()> {
     "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("tqdm")
         .arg("--index-url")
         .arg("./simple-html"), @r###"
@@ -6555,7 +6662,7 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
     "#, Url::from_directory_path(root).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -6613,7 +6720,7 @@ fn local_index_requirements_txt_relative() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true

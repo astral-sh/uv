@@ -11,6 +11,8 @@ use std::process::Command;
 use assert_cmd::assert::Assert;
 use assert_cmd::prelude::*;
 
+use uv_static::EnvVars;
+
 use crate::common::{
     build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, venv_to_interpreter,
     TestContext,
@@ -49,7 +51,7 @@ fn command(context: &TestContext) -> Command {
         .arg("--find-links")
         .arg(build_vendor_links_url());
     context.add_shared_args(&mut command, true);
-    command.env_remove("UV_EXCLUDE_NEWER");
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
 }
 
@@ -333,30 +335,30 @@ fn excluded_only_compatible_version() {
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-compatible-version-a!=2.0.0")
                 .arg("excluded-only-compatible-version-b<3.0.0,>=2.0.0")
-        , @r#"
+        , @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
               package-a==2.0.0
               package-a==3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all of:
               package-a<2.0.0
               package-a>2.0.0
           depend on one of:
-              package-b==1.0.0
-              package-b==3.0.0
+              package-b<=1.0.0
+              package-b>=3.0.0
 
           And because you require one of:
               package-a<2.0.0
               package-a>2.0.0
           and package-b>=2.0.0,<3.0.0, we can conclude that your requirements are unsatisfiable.
-    "#);
+    "###);
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require
     // incompatible versions of `b`. The user has excluded that version of `a` so
@@ -1165,16 +1167,16 @@ fn transitive_incompatible_with_root_version() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-root-version-a")
                 .arg("transitive-incompatible-with-root-version-b==1.0.0")
-        , @r#"
+        , @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b==2.0.0.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
           And because you require package-a and package-b==1.0.0, we can conclude that your requirements are unsatisfiable.
-    "#);
+    "###);
 
     assert_not_installed(
         &context.venv,
@@ -1554,16 +1556,16 @@ fn local_transitive_greater_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-greater-than-a")
                 .arg("local-transitive-greater-than-b==2.0.0+foo")
-        , @r#"
+        , @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b>2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b>2.0.0.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b>2.0.0, we can conclude that all versions of package-a depend on package-b>2.0.0.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
-    "#);
+    "###);
 
     assert_not_installed(
         &context.venv,
@@ -1665,16 +1667,16 @@ fn local_transitive_less_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-less-than-a")
                 .arg("local-transitive-less-than-b==2.0.0+foo")
-        , @r#"
+        , @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b<2.0.0 and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b<2.0.0.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<2.0.0, we can conclude that all versions of package-a depend on package-b<2.0.0.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
-    "#);
+    "###);
 
     assert_not_installed(
         &context.venv,
@@ -1824,16 +1826,16 @@ fn local_transitive_conflicting() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-conflicting-a")
                 .arg("local-transitive-conflicting-b==2.0.0+foo")
-        , @r#"
+        , @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==2.0.0+bar and only package-a==1.0.0 is available, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
           And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
-    "#);
+    "###);
 
     assert_not_installed(
         &context.venv,

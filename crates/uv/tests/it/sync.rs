@@ -1,11 +1,14 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
+use indoc::indoc;
 use insta::assert_snapshot;
+
+use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
-use predicates::prelude::predicate;
+use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
+use uv_static::EnvVars;
 
 #[test]
 fn sync() -> Result<()> {
@@ -572,7 +575,7 @@ fn sync_build_isolation_package() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
+      Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
     [stderr]
@@ -663,7 +666,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
+      Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
     [stderr]
@@ -682,7 +685,7 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz
+      Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
     [stderr]
@@ -1642,7 +1645,7 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Running `uv sync` should create `foo` in the project directory when customized
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1667,7 +1670,7 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // An absolute path can be provided
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foobar/.venv"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foobar/.venv"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1692,7 +1695,7 @@ fn sync_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // An absolute path can be provided
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", context.temp_dir.join("bar")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, context.temp_dir.join("bar")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1713,7 +1716,7 @@ fn sync_custom_environment_path() -> Result<()> {
     // And, it can be outside the project
     let tempdir = tempdir_in(TestContext::test_bucket_dir())?;
     context = context.with_filtered_path(tempdir.path(), "OTHER_TEMPDIR");
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", tempdir.path().join(".venv")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, tempdir.path().join(".venv")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1734,7 +1737,7 @@ fn sync_custom_environment_path() -> Result<()> {
     fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
     fs_err::create_dir(context.temp_dir.join("foo"))?;
     fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1760,7 +1763,7 @@ fn sync_custom_environment_path() -> Result<()> {
     fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
 
     // We can delete and use it
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1837,7 +1840,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Running `uv sync` should create `foo` in the workspace root when customized
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1862,7 +1865,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::is_dir());
 
     // Similarly, `uv sync` from the child project uses `foo` relative to  the workspace root
-    uv_snapshot!(context.filters(), context.sync().env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(context.temp_dir.join("child")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(context.temp_dir.join("child")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1885,7 +1888,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
         .assert(predicate::path::missing());
 
     // And, `uv sync --package child` uses `foo` relative to  the workspace root
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1926,7 +1929,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     )?;
 
     // We should not warn if it matches the project environment
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join(".venv")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join(".venv")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1939,7 +1942,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // Including if it's a relative path that matches
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", ".venv"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, ".venv"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1957,7 +1960,7 @@ fn sync_virtual_env_warning() -> Result<()> {
         let link = context.temp_dir.join("link");
         symlink(context.temp_dir.join(".venv"), &link)?;
 
-        uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", link), @r###"
+        uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, link), @r###"
         success: true
         exit_code: 0
         ----- stdout -----
@@ -1969,7 +1972,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     }
 
     // But we should warn if it's a different path
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1981,7 +1984,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // Including absolute paths
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join("foo")), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join("foo")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1993,7 +1996,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // We should not warn if the project environment has been customized and matches
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2007,7 +2010,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // But we should warn if they don't match still
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "bar"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2026,7 +2029,7 @@ fn sync_virtual_env_warning() -> Result<()> {
 
     // And `VIRTUAL_ENV` is resolved relative to the project root so with relative paths we should
     // warn from a child too
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", "foo").env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, "foo").env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(&child), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2038,7 +2041,7 @@ fn sync_virtual_env_warning() -> Result<()> {
     "###);
 
     // But, a matching absolute path shouldn't warn
-    uv_snapshot!(context.filters(), context.sync().env("VIRTUAL_ENV", context.temp_dir.join("foo")).env("UV_PROJECT_ENVIRONMENT", "foo").current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::VIRTUAL_ENV, context.temp_dir.join("foo")).env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(&child), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2309,12 +2312,13 @@ fn sync_wheel_path_source_error() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl")?;
     let archive = context
         .temp_dir
         .child("cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl",
+        &archive,
+    );
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2720,6 +2724,169 @@ fn sync_dynamic_extra() -> Result<()> {
 }
 
 #[test]
+fn build_system_requires_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let build = context.temp_dir.child("backend");
+    build.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "backend"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=3.10"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    build
+        .child("src")
+        .child("backend")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def hello() -> str:
+                return "Hello, world!"
+        "#})?;
+    build.child("README.md").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("project").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "backend==0.1.0"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["../backend"]
+
+        [tool.uv.sources]
+        backend = { workspace = true }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("project")
+        .child("setup.py")
+        .write_str(indoc! {r"
+        from setuptools import setup
+
+        from backend import hello
+
+        hello()
+
+        setup()
+        ",
+        })?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("project")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn build_system_requires_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let build = context.temp_dir.child("backend");
+    build.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "backend"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=3.10"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    build
+        .child("src")
+        .child("backend")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def hello() -> str:
+                return "Hello, world!"
+        "#})?;
+    build.child("README.md").touch()?;
+
+    let pyproject_toml = context.temp_dir.child("project").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42", "backend==0.1.0"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        backend = { path = "../backend" }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("project")
+        .child("setup.py")
+        .write_str(indoc! {r"
+        from setuptools import setup
+
+        from backend import hello
+
+        hello()
+
+        setup()
+        ",
+        })?;
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(context.temp_dir.child("project")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/project)
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn sync_invalid_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
@@ -2904,6 +3071,63 @@ fn sync_no_sources_missing_member() -> Result<()> {
      + idna==3.6
      + root==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_explicit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna>2",
+        ]
+
+        [[tool.uv.index]]
+        name = "test"
+        url = "https://test.pypi.org/simple"
+        explicit = true
+
+        [tool.uv.sources]
+        idna = { index = "test" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==2.7
+    "###);
+
+    // Clear the environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // The package should be drawn from the cache.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + idna==2.7
     "###);
 
     Ok(())

@@ -14,17 +14,20 @@ use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
 use base64::{prelude::BASE64_STANDARD as base64, Engine};
 use etcetera::BaseStrategy;
+use futures::StreamExt;
 use indoc::formatdoc;
 use itertools::Itertools;
 use predicates::prelude::predicate;
 use regex::Regex;
 
+use tokio::io::AsyncWriteExt;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::{
     EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
 };
+use uv_static::EnvVars;
 
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
@@ -53,7 +56,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.)", "/$1"),
-    (r"uv.exe", "uv"),
+    (r"uv\.exe", "uv"),
     // uv version display
     (
         r"uv(-.*)? \d+\.\d+\.\d+( \(.*\))?",
@@ -219,7 +222,7 @@ impl TestContext {
     /// returns resolved symlink). This is problematic, as we _don't_ want to resolve symlinks
     /// for user-provided paths.
     pub fn test_bucket_dir() -> PathBuf {
-        env::var("UV_INTERNAL__TEST_DIR")
+        env::var(EnvVars::UV_INTERNAL__TEST_DIR)
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 etcetera::base_strategy::choose_base_strategy()
@@ -268,7 +271,7 @@ impl TestContext {
 
         // The workspace root directory is not available without walking up the tree
         // https://github.com/rust-lang/cargo/issues/3946
-        let workspace_root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        let workspace_root = Path::new(&std::env::var(EnvVars::CARGO_MANIFEST_DIR).unwrap())
             .parent()
             .expect("CARGO_MANIFEST_DIR should be nested in workspace")
             .parent()
@@ -295,6 +298,12 @@ impl TestContext {
         }
 
         let mut filters = Vec::new();
+
+        // Exclude `link-mode` on Windows since we set it in the remote test suite
+        if cfg!(windows) {
+            filters.push(("--link-mode <LINK_MODE> ".to_string(), String::new()));
+            filters.push(((r#"link-mode = "copy"\n"#).to_string(), String::new()));
+        }
 
         filters.extend(
             Self::path_patterns(&cache_dir)
@@ -442,23 +451,23 @@ impl TestContext {
             .arg("--cache-dir")
             .arg(self.cache_dir.path())
             // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
-            .env_remove("VIRTUAL_ENV")
-            .env("UV_NO_WRAP", "1")
-            .env("HOME", self.home_dir.as_os_str())
-            .env("UV_PYTHON_INSTALL_DIR", "")
-            .env("UV_TEST_PYTHON_PATH", self.python_path())
-            .env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER)
-            .env_remove("UV_CACHE_DIR")
+            .env_remove(EnvVars::VIRTUAL_ENV)
+            .env(EnvVars::UV_NO_WRAP, "1")
+            .env(EnvVars::HOME, self.home_dir.as_os_str())
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
+            .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
+            .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+            .env_remove(EnvVars::UV_CACHE_DIR)
             .current_dir(self.temp_dir.path());
 
         if activate_venv {
-            command.env("VIRTUAL_ENV", self.venv.as_os_str());
+            command.env(EnvVars::VIRTUAL_ENV, self.venv.as_os_str());
         }
 
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
         }
     }
 
@@ -545,12 +554,12 @@ impl TestContext {
     pub fn help(&self) -> Command {
         let mut command = Command::new(get_bin());
         command.arg("help");
-        command.env_remove("UV_CACHE_DIR");
+        command.env_remove(EnvVars::UV_CACHE_DIR);
 
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
         }
 
         command
@@ -605,7 +614,7 @@ impl TestContext {
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
-            command.env("UV_STACK_SIZE", (4 * 1024 * 1024).to_string());
+            command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
         }
 
         command
@@ -617,8 +626,8 @@ impl TestContext {
         command
             .arg("python")
             .arg("find")
-            .env("UV_PREVIEW", "1")
-            .env("UV_PYTHON_INSTALL_DIR", "")
+            .env(EnvVars::UV_PREVIEW, "1")
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             .current_dir(&self.temp_dir);
         self.add_shared_args(&mut command, true);
         command
@@ -630,8 +639,8 @@ impl TestContext {
         command
             .arg("python")
             .arg("pin")
-            .env("UV_PREVIEW", "1")
-            .env("UV_PYTHON_INSTALL_DIR", "")
+            .env(EnvVars::UV_PREVIEW, "1")
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             .current_dir(&self.temp_dir);
         self.add_shared_args(&mut command, true);
         command
@@ -648,7 +657,7 @@ impl TestContext {
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command.arg("run").env("UV_SHOW_RESOLUTION", "1");
+        command.arg("run").env(EnvVars::UV_SHOW_RESOLUTION, "1");
         self.add_shared_args(&mut command, true);
         command
     }
@@ -659,7 +668,7 @@ impl TestContext {
         command
             .arg("tool")
             .arg("run")
-            .env("UV_SHOW_RESOLUTION", "1");
+            .env(EnvVars::UV_SHOW_RESOLUTION, "1");
         self.add_shared_args(&mut command, false);
         command
     }
@@ -677,7 +686,7 @@ impl TestContext {
         let mut command = Command::new(get_bin());
         command.arg("tool").arg("install");
         self.add_shared_args(&mut command, false);
-        command.env("UV_EXCLUDE_NEWER", EXCLUDE_NEWER);
+        command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
         command
     }
 
@@ -1109,6 +1118,7 @@ pub fn run_and_format<T: AsRef<str>>(
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
+#[allow(clippy::print_stderr)]
 pub fn run_and_format_with_status<T: AsRef<str>>(
     mut command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
@@ -1122,13 +1132,13 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         .to_string();
 
     // Support profiling test run commands with traces.
-    if let Ok(root) = env::var("TRACING_DURATIONS_TEST_ROOT") {
+    if let Ok(root) = env::var(EnvVars::TRACING_DURATIONS_TEST_ROOT) {
         assert!(
             cfg!(feature = "tracing-durations-export"),
             "You need to enable the tracing-durations-export feature to use `TRACING_DURATIONS_TEST_ROOT`"
         );
         command.borrow_mut().env(
-            "TRACING_DURATIONS_FILE",
+            EnvVars::TRACING_DURATIONS_FILE,
             Path::new(&root).join(function_name).with_extension("jsonl"),
         );
     }
@@ -1138,13 +1148,21 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         .output()
         .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
 
+    eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    eprintln!(
+        "----- stdout -----\n{}\n----- stderr -----\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    eprintln!("────────────────────────────────────────────────────────────────────────────────\n");
+
     let mut snapshot = apply_filters(
         format!(
             "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
             output.status.success(),
             output.status.code().unwrap_or(!0),
             String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            String::from_utf8_lossy(&output.stderr),
         ),
         filters,
     );
@@ -1277,6 +1295,31 @@ pub fn decode_token(content: &[&str]) -> String {
         })
         .join("_");
     token
+}
+
+/// Simulates `reqwest::blocking::get` but returns bytes directly, and disables
+/// certificate verification, passing through the `BaseClient`
+#[tokio::main(flavor = "current_thread")]
+pub async fn download_to_disk(url: &str, path: &Path) {
+    let trusted_hosts: Vec<_> = std::env::var(EnvVars::UV_INSECURE_HOST)
+        .unwrap_or_default()
+        .split(' ')
+        .map(|h| uv_configuration::TrustedHost::from_str(h).unwrap())
+        .collect();
+
+    let client = uv_client::BaseClientBuilder::new()
+        .allow_insecure_host(trusted_hosts)
+        .build();
+    let url: reqwest::Url = url.parse().unwrap();
+    let client = client.for_host(&url);
+    let response = client.request(http::Method::GET, url).send().await.unwrap();
+
+    let mut file = tokio::fs::File::create(path).await.unwrap();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        file.write_all(&chunk.unwrap()).await.unwrap();
+    }
+    file.sync_all().await.unwrap();
 }
 
 /// Utility macro to return the name of the current function.

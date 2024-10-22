@@ -1,5 +1,5 @@
 use super::*;
-use insta::{assert_snapshot, with_settings};
+use insta::assert_snapshot;
 use std::str::FromStr;
 use tempfile::TempDir;
 use uv_normalize::PackageName;
@@ -16,17 +16,13 @@ fn test_wheel() {
         platform_tag: vec!["any".to_string()],
     };
 
-    with_settings!({
-        filters => [(uv_version::version(), "[VERSION]")],
-    }, {
-        assert_snapshot!(wheel_info(&filename), @r"
-                Wheel-Version: 1.0
-                Generator: uv [VERSION]
-                Root-Is-Purelib: true
-                Tag: py2-none-any
-                Tag: py3-none-any
-            ");
-    });
+    assert_snapshot!(wheel_info(&filename, "1.0.0+test"), @r"
+        Wheel-Version: 1.0
+        Generator: uv 1.0.0+test
+        Root-Is-Purelib: true
+        Tag: py2-none-any
+        Tag: py3-none-any
+    ");
 }
 
 #[test]
@@ -50,7 +46,7 @@ fn test_record() {
 fn test_determinism() {
     let temp1 = TempDir::new().unwrap();
     let uv_backend = Path::new("../../scripts/packages/uv_backend");
-    build(uv_backend, temp1.path(), None).unwrap();
+    build(uv_backend, temp1.path(), None, "1.0.0+test").unwrap();
 
     // Touch the file to check that we don't serialize the last modified date.
     fs_err::write(
@@ -60,7 +56,7 @@ fn test_determinism() {
     .unwrap();
 
     let temp2 = TempDir::new().unwrap();
-    build(uv_backend, temp2.path(), None).unwrap();
+    build(uv_backend, temp2.path(), None, "1.0.0+test").unwrap();
 
     let wheel_filename = "uv_backend-0.1.0-py3-none-any.whl";
     assert_eq!(
@@ -74,7 +70,7 @@ fn test_determinism() {
 fn test_prepare_metadata() {
     let metadata_dir = TempDir::new().unwrap();
     let uv_backend = Path::new("../../scripts/packages/uv_backend");
-    metadata(uv_backend, metadata_dir.path()).unwrap();
+    metadata(uv_backend, metadata_dir.path(), "1.0.0+test").unwrap();
 
     let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
         .into_iter()
@@ -117,21 +113,16 @@ fn test_prepare_metadata() {
         .path()
         .join("uv_backend-0.1.0.dist-info/RECORD");
     assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-        uv_backend-0.1.0.dist-info/WHEEL,sha256=70ce44709b6a53e0d0c5a6755b0290179697020f1f867e794f26154fe4825738,79
-        uv_backend-0.1.0.dist-info/METADATA,sha256=e4a0d390317d7182f65ea978254c71ed283e0a4242150cf1c99a694b113ff68d,224
-        uv_backend-0.1.0.dist-info/RECORD,,
-        "###);
+    uv_backend-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
+    uv_backend-0.1.0.dist-info/METADATA,sha256=e4a0d390317d7182f65ea978254c71ed283e0a4242150cf1c99a694b113ff68d,224
+    uv_backend-0.1.0.dist-info/RECORD,,
+    "###);
 
     let wheel_file = metadata_dir.path().join("uv_backend-0.1.0.dist-info/WHEEL");
-    let filters = vec![(uv_version::version(), "[VERSION]")];
-    with_settings!({
-        filters => filters
-    }, {
-        assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @r###"
-                Wheel-Version: 1.0
-                Generator: uv [VERSION]
-                Root-Is-Purelib: true
-                Tag: py3-none-any
-            "###);
-    });
+    assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @r###"
+        Wheel-Version: 1.0
+        Generator: uv 1.0.0+test
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+    "###);
 }

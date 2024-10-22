@@ -631,7 +631,7 @@ pub enum CacheBucket {
     /// can put next to the wheels as in the `Wheels` bucket.
     ///
     /// The unzipped source distribution is stored in a directory matching the source distribution
-    /// acrhive name.
+    /// archive name.
     ///
     /// Source distributions are built into zipped wheel files (as PEP 517 specifies) and unzipped
     /// lazily before installing. So when resolving, we only build the wheel and store the archive
@@ -764,7 +764,7 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            Self::SourceDistributions => "sdists-v4",
+            Self::SourceDistributions => "sdists-v5",
             Self::FlatIndex => "flat-index-v1",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v2",

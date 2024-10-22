@@ -105,6 +105,18 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
             Value::Waiting(_) => None,
         }
     }
+
+    /// Remove the result of a previous job, if any.
+    pub fn remove<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+    {
+        let entry = self.items.remove(key)?;
+        match entry {
+            (_, Value::Filled(value)) => Some(value),
+            (_, Value::Waiting(_)) => None,
+        }
+    }
 }
 
 impl<K: Eq + Hash + Clone, V, H: Default + BuildHasher + Clone> Default for OnceMap<K, V, H> {

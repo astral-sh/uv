@@ -1,6 +1,9 @@
 //! Find requested Python interpreters and query interpreters for information.
 use thiserror::Error;
 
+#[cfg(test)]
+use uv_static::EnvVars;
+
 pub use crate::discovery::{
     find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
     PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
@@ -45,7 +48,7 @@ pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
 
 #[cfg(test)]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
-    std::env::var_os("PWD")
+    std::env::var_os(EnvVars::PWD)
         .map(std::path::PathBuf::from)
         .map(Ok)
         .unwrap_or(std::env::current_dir())

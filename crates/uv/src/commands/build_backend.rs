@@ -12,8 +12,12 @@ pub(crate) fn build_wheel(
     wheel_directory: &Path,
     metadata_directory: Option<&Path>,
 ) -> Result<ExitStatus> {
-    let filename =
-        uv_build_backend::build(&env::current_dir()?, wheel_directory, metadata_directory)?;
+    let filename = uv_build_backend::build(
+        &env::current_dir()?,
+        wheel_directory,
+        metadata_directory,
+        uv_version::version(),
+    )?;
     println!("{filename}");
     Ok(ExitStatus::Success)
 }
@@ -33,7 +37,11 @@ pub(crate) fn get_requires_for_build_wheel() -> Result<ExitStatus> {
     todo!()
 }
 pub(crate) fn prepare_metadata_for_build_wheel(metadata_directory: &Path) -> Result<ExitStatus> {
-    let filename = uv_build_backend::metadata(&env::current_dir()?, metadata_directory)?;
+    let filename = uv_build_backend::metadata(
+        &env::current_dir()?,
+        metadata_directory,
+        uv_version::version(),
+    )?;
     println!("{filename}");
     Ok(ExitStatus::Success)
 }

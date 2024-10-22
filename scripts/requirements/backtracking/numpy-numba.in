@@ -1,0 +1,9 @@
+# Run with Python 3.12.
+# As of 2024-10-14:
+# llvmlite==0.36.0
+# numba==0.53.1
+# numpy==2.1.2
+# setuptools==75.1.0
+
+numpy>=2.1,<2.2
+numba<=0.60,>0.1

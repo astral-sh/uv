@@ -3,7 +3,8 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::SourceStrategy;
+use uv_configuration::{LowerBound, SourceStrategy};
+use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigest, ResolutionMetadata};
@@ -61,7 +62,9 @@ impl Metadata {
     pub async fn from_workspace(
         metadata: ResolutionMetadata,
         install_path: &Path,
+        locations: &IndexLocations,
         sources: SourceStrategy,
+        bounds: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let RequiresDist {
@@ -76,7 +79,9 @@ impl Metadata {
                 provides_extras: metadata.provides_extras,
             },
             install_path,
+            locations,
             sources,
+            bounds,
         )
         .await?;
 

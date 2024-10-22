@@ -17,6 +17,7 @@ use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_static::EnvVars;
 
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
@@ -273,9 +274,10 @@ impl PythonDownloadRequest {
             ) {
                 return false;
             }
-            if version.is_freethreaded() {
-                debug!("Installing managed free-threaded Python is not yet supported");
-                return false;
+            if let Some(variant) = version.variant() {
+                if variant != key.variant {
+                    return false;
+                }
             }
         }
         true
@@ -579,11 +581,11 @@ impl ManagedPythonDownload {
     fn download_url(&self) -> Result<Url, Error> {
         match self.key.implementation {
             LenientImplementationName::Known(ImplementationName::CPython) => {
-                if let Ok(mirror) = std::env::var("UV_PYTHON_INSTALL_MIRROR") {
+                if let Ok(mirror) = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR) {
                     let Some(suffix) = self.url.strip_prefix(
                         "https://github.com/indygreg/python-build-standalone/releases/download/",
                     ) else {
-                        return Err(Error::Mirror("UV_PYTHON_INSTALL_MIRROR", self.url));
+                        return Err(Error::Mirror(EnvVars::UV_PYTHON_INSTALL_MIRROR, self.url));
                     };
                     return Ok(Url::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
@@ -592,10 +594,10 @@ impl ManagedPythonDownload {
             }
 
             LenientImplementationName::Known(ImplementationName::PyPy) => {
-                if let Ok(mirror) = std::env::var("UV_PYPY_INSTALL_MIRROR") {
+                if let Ok(mirror) = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR) {
                     let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
                     else {
-                        return Err(Error::Mirror("UV_PYPY_INSTALL_MIRROR", self.url));
+                        return Err(Error::Mirror(EnvVars::UV_PYPY_INSTALL_MIRROR, self.url));
                     };
                     return Ok(Url::parse(
                         format!("{}/{}", mirror.trim_end_matches('/'), suffix).as_str(),
@@ -692,7 +694,7 @@ async fn read_url(
 
         Ok((Either::Left(reader), Some(size)))
     } else {
-        let response = client.client().get(url.clone()).send().await?;
+        let response = client.for_host(url).get(url.clone()).send().await?;
 
         // Ensure the request was successful.
         response.error_for_status_ref()?;

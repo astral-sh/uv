@@ -1,16 +1,17 @@
 use std::process::Command;
 
 use assert_fs::prelude::*;
+use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
 
 /// and operating system.
 fn add_shared_args(mut command: Command) -> Command {
     command
-        .env("UV_LINK_MODE", "clone")
-        .env("UV_CONCURRENT_DOWNLOADS", "50")
-        .env("UV_CONCURRENT_BUILDS", "16")
-        .env("UV_CONCURRENT_INSTALLS", "8");
+        .env(EnvVars::UV_LINK_MODE, "clone")
+        .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
+        .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "8");
     command
 }
 
@@ -87,31 +88,36 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [],
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -229,31 +235,36 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [],
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -372,31 +383,36 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [],
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -547,31 +563,36 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [],
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -691,8 +712,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -821,31 +841,36 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [],
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -988,53 +1013,63 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "test.pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://test.pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "test.pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://test.pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
                 ],
                 flat_index: [],
                 no_index: false,
@@ -1155,75 +1190,93 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "test.pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "test.pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://test.pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://test.pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "test.pypi.org",
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: Some(
+                            Cli,
+                        ),
+                    },
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://test.pypi.org/simple",
-                            ),
-                        },
-                    ),
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "test.pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://test.pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
                 ],
                 flat_index: [],
                 no_index: false,
@@ -1367,31 +1420,36 @@ fn resolve_find_links() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "download.pytorch.org",
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "download.pytorch.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/whl/torch_stable.html",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://download.pytorch.org/whl/torch_stable.html",
                                 ),
-                                port: None,
-                                path: "/whl/torch_stable.html",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://download.pytorch.org/whl/torch_stable.html",
-                            ),
-                        },
-                    ),
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
                 ],
                 no_index: true,
             },
@@ -1533,8 +1591,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -1669,52 +1726,63 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "download.pytorch.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "download.pytorch.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/whl",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://download.pytorch.org/whl",
                                 ),
-                                port: None,
-                                path: "/whl",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://download.pytorch.org/whl",
-                            ),
-                        },
-                    ),
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "test.pypi.org",
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "test.pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://test.pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://test.pypi.org/simple",
-                            ),
-                        },
-                    ),
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
                 ],
                 flat_index: [],
                 no_index: false,
@@ -1833,52 +1901,63 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "download.pytorch.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "download.pytorch.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/whl",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://download.pytorch.org/whl",
                                 ),
-                                port: None,
-                                path: "/whl",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://download.pytorch.org/whl",
-                            ),
-                        },
-                    ),
-                    Url(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "test.pypi.org",
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "test.pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://test.pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://test.pypi.org/simple",
-                            ),
-                        },
-                    ),
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
                 ],
                 flat_index: [],
                 no_index: false,
@@ -1972,7 +2051,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2021,8 +2100,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -2098,7 +2176,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2147,8 +2225,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -2224,7 +2301,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2273,8 +2350,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -2352,7 +2428,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2401,8 +2477,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -2499,7 +2574,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
         .arg("--show-settings")
         .arg("requirements.in")
-        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2541,6 +2616,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             ),
         ),
         options: ResolverInstallerOptions {
+            index: None,
             index_url: None,
             extra_index_url: None,
             no_index: None,
@@ -2577,8 +2653,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         },
         settings: ResolverInstallerSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -2705,8 +2780,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -2859,31 +2933,36 @@ fn resolve_both() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [],
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -3028,31 +3107,36 @@ fn resolve_config_file() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: Some(
-                    Pypi(
-                        VerbatimUrl {
-                            url: Url {
-                                scheme: "https",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: Some(
-                                    Domain(
-                                        "pypi.org",
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Pypi(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "pypi.org",
+                                        ),
                                     ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://pypi.org/simple",
                                 ),
-                                port: None,
-                                path: "/simple",
-                                query: None,
-                                fragment: None,
                             },
-                            given: Some(
-                                "https://pypi.org/simple",
-                            ),
-                        },
-                    ),
-                ),
-                extra_index: [],
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
                 flat_index: [],
                 no_index: false,
             },
@@ -3145,7 +3229,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `dev-dependencies`, `managed`, `package`
+    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `dev-dependencies`, `managed`, `package`
 
     "###
     );
@@ -3272,8 +3356,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -3401,8 +3484,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -3538,8 +3620,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         ),
         settings: PipSettings {
             index_locations: IndexLocations {
-                index: None,
-                extra_index: [],
+                indexes: [],
                 flat_index: [],
                 no_index: false,
             },
@@ -3552,17 +3633,1116 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             allow_insecure_host: [
-                TrustedHost {
+                Host {
                     scheme: None,
                     host: "google.com",
                     port: None,
                 },
-                TrustedHost {
+                Host {
                     scheme: None,
                     host: "example.com",
                     port: None,
                 },
             ],
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+/// Prioritize indexes defined across multiple configuration sources.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn index_priority() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        [[index]]
+        url = "https://file.pypi.org/simple"
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("requirements.in")
+        .arg("--show-settings")
+        .arg("--index-url")
+        .arg("https://cli.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "cli.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://cli.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: Some(
+                            Cli,
+                        ),
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "file.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://file.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
+                ],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            allow_insecure_host: [],
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("requirements.in")
+        .arg("--show-settings")
+        .arg("--default-index")
+        .arg("https://cli.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "cli.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://cli.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: Some(
+                            Cli,
+                        ),
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "file.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://file.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: None,
+                    },
+                ],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            allow_insecure_host: [],
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        index-url = "https://file.pypi.org/simple"
+    "#})?;
+
+    // Prefer the `--default-index` from the CLI, and treat it as the default.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("requirements.in")
+        .arg("--show-settings")
+        .arg("--default-index")
+        .arg("https://cli.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "cli.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://cli.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: Some(
+                            Cli,
+                        ),
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "file.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://file.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            allow_insecure_host: [],
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    // Prefer the `--index` from the CLI, but treat the index from the file as the default.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("requirements.in")
+        .arg("--show-settings")
+        .arg("--index")
+        .arg("https://cli.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "cli.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://cli.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: Some(
+                            Cli,
+                        ),
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "file.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://file.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            allow_insecure_host: [],
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        [[index]]
+        url = "https://file.pypi.org/simple"
+        default = true
+    "#})?;
+
+    // Prefer the `--index-url` from the CLI, and treat it as the default.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("requirements.in")
+        .arg("--show-settings")
+        .arg("--index-url")
+        .arg("https://cli.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "cli.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://cli.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: Some(
+                            Cli,
+                        ),
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "file.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://file.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            allow_insecure_host: [],
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    // Prefer the `--extra-index-url` from the CLI, but not as the default.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("requirements.in")
+        .arg("--show-settings")
+        .arg("--extra-index-url")
+        .arg("https://cli.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        src_file: [
+            "requirements.in",
+        ],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "cli.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://cli.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: false,
+                        origin: Some(
+                            Cli,
+                        ),
+                    },
+                    Index {
+                        name: None,
+                        url: Url(
+                            VerbatimUrl {
+                                url: Url {
+                                    scheme: "https",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: Some(
+                                        Domain(
+                                            "file.pypi.org",
+                                        ),
+                                    ),
+                                    port: None,
+                                    path: "/simple",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                given: Some(
+                                    "https://file.pypi.org/simple",
+                                ),
+                            },
+                        ),
+                        explicit: false,
+                        default: true,
+                        origin: None,
+                    },
+                ],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {

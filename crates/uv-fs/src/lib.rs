@@ -104,6 +104,26 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
 }
 
+/// Create a symlink at `dst` pointing to `src` or, on Windows, copy `src` to `dst`.
+///
+/// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
+/// instead; it will use a junction on Windows, which is more performant.
+pub fn symlink_copy_fallback_file(
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        fs_err::copy(src.as_ref(), dst.as_ref())?;
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+    }
+
+    Ok(())
+}
+
 #[cfg(windows)]
 pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     match junction::delete(dunce::simplified(path.as_ref())) {
@@ -325,10 +345,10 @@ impl LockedFile {
                 Ok(Self(file))
             }
             Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures
-                // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
-                // the error when it is `WouldBlock`, which is expected and noisy otherwise.
-                trace!("Try lock error: {err:?}");
+                // Log error code and enum kind to help debugging more exotic failures.
+                if err.kind() != std::io::ErrorKind::WouldBlock {
+                    debug!("Try lock error: {err:?}");
+                }
                 info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),

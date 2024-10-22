@@ -17,7 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, SourceStrategy,
+    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -32,6 +33,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::Lock;
 use uv_scripts::Pep723Item;
+use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
 
@@ -214,7 +216,19 @@ pub(crate) async fn run(
 
         // Install the script requirements, if necessary. Otherwise, use an isolated environment.
         if let Some(dependencies) = script.dependencies {
-            // // Collect any `tool.uv.sources` from the script.
+            // Collect any `tool.uv.index` from the script.
+            let empty = Vec::default();
+            let script_indexes = match settings.sources {
+                SourceStrategy::Enabled => script
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.indexes.as_deref())
+                    .unwrap_or(&empty),
+                SourceStrategy::Disabled => &empty,
+            };
+
+            // Collect any `tool.uv.sources` from the script.
             let empty = BTreeMap::default();
             let script_sources = match settings.sources {
                 SourceStrategy::Enabled => script
@@ -233,6 +247,9 @@ pub(crate) async fn run(
                         requirement,
                         script_dir.as_ref(),
                         script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
                     )
                     .map_ok(LoweredRequirement::into_inner)
                 })
@@ -529,6 +546,8 @@ pub(crate) async fn run(
                     project.workspace(),
                     venv.interpreter(),
                     settings.as_ref().into(),
+                    LowerBound::Allow,
+                    &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
                     } else {
@@ -576,7 +595,6 @@ pub(crate) async fn run(
                     install_options,
                     Modifications::Sufficient,
                     settings.as_ref().into(),
-                    &state,
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
                     } else {
@@ -859,17 +877,17 @@ pub(crate) async fn run(
             .chain(std::iter::once(base_interpreter.scripts()))
             .map(PathBuf::from)
             .chain(
-                std::env::var_os("PATH")
+                std::env::var_os(EnvVars::PATH)
                     .as_ref()
                     .iter()
                     .flat_map(std::env::split_paths),
             ),
     )?;
-    process.env("PATH", new_path);
+    process.env(EnvVars::PATH, new_path);
 
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
-        process.env("VIRTUAL_ENV", interpreter.sys_prefix().as_os_str());
+        process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     };
 
     // Spawn and wait for completion
@@ -1167,7 +1185,7 @@ impl RunCommand {
                     .connectivity(connectivity)
                     .native_tls(native_tls)
                     .build();
-                let response = client.client().get(url.clone()).send().await?;
+                let response = client.for_host(&url).get(url.clone()).send().await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();

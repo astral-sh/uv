@@ -1,10 +1,9 @@
 use std::io;
 use std::path::{Path, PathBuf};
+use uv_static::EnvVars;
 
 use crate::Cache;
 use clap::Parser;
-use directories::ProjectDirs;
-use etcetera::BaseStrategy;
 use tracing::{debug, warn};
 
 #[derive(Parser, Debug, Clone)]
@@ -17,7 +16,7 @@ pub struct CacheArgs {
         long,
         short,
         alias = "no-cache-dir",
-        env = "UV_NO_CACHE",
+        env = EnvVars::UV_NO_CACHE,
         value_parser = clap::builder::BoolishValueParser::new(),
     )]
     pub no_cache: bool,
@@ -26,7 +25,7 @@ pub struct CacheArgs {
     ///
     /// Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
     /// Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
-    #[arg(global = true, long, env = "UV_CACHE_DIR")]
+    #[arg(global = true, long, env = EnvVars::UV_CACHE_DIR)]
     pub cache_dir: Option<PathBuf>,
 }
 
@@ -44,18 +43,13 @@ impl Cache {
             Self::temp()
         } else if let Some(cache_dir) = cache_dir {
             Ok(Self::from_path(cache_dir))
-        } else if let Some(cache_dir) = ProjectDirs::from("", "", "uv")
-            .map(|dirs| dirs.cache_dir().to_path_buf())
-            .filter(|dir| dir.exists())
+        } else if let Some(cache_dir) = uv_dirs::legacy_user_cache_dir().filter(|dir| dir.exists())
         {
             // If the user has an existing directory at (e.g.) `/Users/user/Library/Caches/uv`,
             // respect it for backwards compatibility. Otherwise, prefer the XDG strategy, even on
             // macOS.
             Ok(Self::from_path(cache_dir))
-        } else if let Some(cache_dir) = etcetera::base_strategy::choose_base_strategy()
-            .ok()
-            .map(|dirs| dirs.cache_dir().join("uv"))
-        {
+        } else if let Some(cache_dir) = uv_dirs::user_cache_dir() {
             if cfg!(windows) {
                 // On Windows, we append `cache` to the LocalAppData directory, i.e., prefer
                 // `C:\Users\User\AppData\Local\uv\cache` over `C:\Users\User\AppData\Local\uv`.

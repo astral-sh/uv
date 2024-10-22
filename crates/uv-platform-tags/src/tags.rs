@@ -23,9 +23,15 @@ pub enum TagsError {
 
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone)]
 pub enum IncompatibleTag {
+    /// The tag is invalid and cannot be used.
     Invalid,
+    /// The Python implementation tag is incompatible.
     Python,
+    /// The ABI tag is incompatible.
     Abi,
+    /// The Python version component of the ABI tag is incompatible with `requires-python`.
+    AbiPythonVersion,
+    /// The platform tag is incompatible.
     Platform,
 }
 

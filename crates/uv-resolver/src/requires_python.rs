@@ -105,18 +105,32 @@ impl RequiresPython {
         }))
     }
 
-    /// Narrow the [`RequiresPython`] to the given version, if it's stricter (i.e., greater) than
-    /// the current target.
+    /// Narrow the [`RequiresPython`] to the given version, if it's stricter than the current target.
     pub fn narrow(&self, range: &RequiresPythonRange) -> Option<Self> {
-        if *range == self.range {
-            None
-        } else if range.0 >= self.range.0 && range.1 <= self.range.1 {
-            Some(Self {
-                specifiers: self.specifiers.clone(),
-                range: range.clone(),
-            })
+        let lower = if range.0 >= self.range.0 {
+            Some(&range.0)
         } else {
             None
+        };
+        let upper = if range.1 <= self.range.1 {
+            Some(&range.1)
+        } else {
+            None
+        };
+        match (lower, upper) {
+            (Some(lower), Some(upper)) => Some(Self {
+                specifiers: self.specifiers.clone(),
+                range: RequiresPythonRange(lower.clone(), upper.clone()),
+            }),
+            (Some(lower), None) => Some(Self {
+                specifiers: self.specifiers.clone(),
+                range: RequiresPythonRange(lower.clone(), self.range.1.clone()),
+            }),
+            (None, Some(upper)) => Some(Self {
+                specifiers: self.specifiers.clone(),
+                range: RequiresPythonRange(self.range.0.clone(), upper.clone()),
+            }),
+            (None, None) => None,
         }
     }
 
@@ -248,6 +262,18 @@ impl RequiresPython {
         self.range.lower().as_ref() == Bound::Unbounded
     }
 
+    /// Returns `true` if the `Requires-Python` specifier is set to an exact version
+    /// without specifying a patch version. (e.g. `==3.10`)
+    pub fn is_exact_without_patch(&self) -> bool {
+        match self.range.lower().as_ref() {
+            Bound::Included(version) => {
+                version.release().len() == 2
+                    && self.range.upper().as_ref() == Bound::Included(version)
+            }
+            _ => false,
+        }
+    }
+
     /// Returns the [`RequiresPythonBound`] truncated to the major and minor version.
     pub fn bound_major_minor(&self) -> LowerBound {
         match self.range.lower().as_ref() {
@@ -350,8 +376,8 @@ impl RequiresPython {
                             return true;
                         };
 
-                        // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
-                        let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                        // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
+                        let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
                         if wheel_bound > self.range.upper().major_minor() {
                             return false;
                         }
@@ -375,7 +401,8 @@ impl RequiresPython {
                             return false;
                         }
 
-                        let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                        // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
+                        let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
                         if wheel_bound > self.range.upper().major_minor() {
                             return false;
                         }
@@ -403,8 +430,8 @@ impl RequiresPython {
                     return false;
                 }
 
-                // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
-                let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
+                let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
                 if wheel_bound > self.range.upper().major_minor() {
                     return false;
                 }
@@ -428,8 +455,8 @@ impl RequiresPython {
                     return false;
                 }
 
-                // Ex) If the wheel bound is `3.12`, then it doesn't match `==3.10.*`.
-                let wheel_bound = UpperBound(Bound::Excluded(Version::new([3, minor + 1])));
+                // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
+                let wheel_bound = UpperBound(Bound::Included(Version::new([3, minor])));
                 if wheel_bound > self.range.upper().major_minor() {
                     return false;
                 }
@@ -552,13 +579,11 @@ impl LowerBound {
     /// Return the [`LowerBound`] truncated to the major and minor version.
     fn major_minor(&self) -> Self {
         match &self.0 {
-            // Ex) `>=3.10.1` -> `>=3.10` (and `>=3.10.0` is `>=3.10`)
+            // Ex) `>=3.10.1` -> `>=3.10`
             Bound::Included(version) => Self(Bound::Included(Version::new(
                 version.release().iter().take(2),
             ))),
             // Ex) `>3.10.1` -> `>=3.10`.
-            // This is unintuitive, but `>3.10.1` does indicate that _some_ version of Python 3.10
-            // is supported.
             Bound::Excluded(version) => Self(Bound::Included(Version::new(
                 version.release().iter().take(2),
             ))),
@@ -667,24 +692,20 @@ impl UpperBound {
     /// Return the [`UpperBound`] truncated to the major and minor version.
     fn major_minor(&self) -> Self {
         match &self.0 {
-            // Ex) `<=3.10.1` -> `<3.11` (but `<=3.10.0` is `<=3.10`)
-            Bound::Included(version) => {
-                let major = version.release().first().copied().unwrap_or(3);
-                let minor = version.release().get(1).copied().unwrap_or(0);
-                if version.release().get(2).is_some_and(|patch| *patch > 0) {
-                    Self(Bound::Excluded(Version::new([major, minor + 1])))
-                } else {
-                    Self(Bound::Included(Version::new([major, minor])))
-                }
-            }
-            // Ex) `<3.10.1` -> `<3.11` (but `<3.10.0` is `<3.10`)
+            // Ex) `<=3.10.1` -> `<=3.10`
+            Bound::Included(version) => Self(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            // Ex) `<3.10.1` -> `<=3.10` (but `<3.10.0` is `<3.10`)
             Bound::Excluded(version) => {
-                let major = version.release().first().copied().unwrap_or(3);
-                let minor = version.release().get(1).copied().unwrap_or(0);
                 if version.release().get(2).is_some_and(|patch| *patch > 0) {
-                    Self(Bound::Excluded(Version::new([major, minor + 1])))
+                    Self(Bound::Included(Version::new(
+                        version.release().iter().take(2),
+                    )))
                 } else {
-                    Self(Bound::Excluded(Version::new([major, minor])))
+                    Self(Bound::Excluded(Version::new(
+                        version.release().iter().take(2),
+                    )))
                 }
             }
             Bound::Unbounded => Self(Bound::Unbounded),

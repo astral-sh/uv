@@ -3,7 +3,8 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
 use thiserror::Error;
-use toml_edit::{Array, DocumentMut, Item, RawString, Table, TomlError, Value};
+use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, RawString, Table, TomlError, Value};
+use uv_distribution_types::Index;
 use uv_fs::PortablePath;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
@@ -46,6 +47,20 @@ pub enum ArrayEdit {
     Update(usize),
     /// A new entry was added at the given index (typically, the end of the array).
     Add(usize),
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum CommentType {
+    /// A comment that appears on its own line.
+    OwnLine,
+    /// A comment that appears at the end of a line.
+    EndOfLine,
+}
+
+#[derive(Debug, Clone)]
+struct Comment {
+    text: String,
+    comment_type: CommentType,
 }
 
 impl ArrayEdit {
@@ -130,6 +145,7 @@ impl PyProjectTomlMut {
         };
         Ok(doc)
     }
+
     /// Adds a dependency to `project.dependencies`.
     ///
     /// Returns `true` if the dependency was added, `false` if it was updated.
@@ -188,6 +204,88 @@ impl PyProjectTomlMut {
         }
 
         Ok(edit)
+    }
+
+    /// Add an [`Index`] to `tool.uv.index`.
+    pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
+        let existing = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("index")
+            .or_insert(Item::ArrayOfTables(ArrayOfTables::new()))
+            .as_array_of_tables()
+            .ok_or(Error::MalformedSources)?;
+
+        let mut table = Table::new();
+        if let Some(name) = index.name.as_ref() {
+            table.insert("name", toml_edit::value(name.to_string()));
+        } else if let Some(name) = existing
+            .iter()
+            .find(|table| {
+                table
+                    .get("url")
+                    .is_some_and(|url| url.as_str() == Some(index.url.url().as_str()))
+            })
+            .and_then(|existing| existing.get("name"))
+        {
+            // If there's an existing index with the same URL, and a name, preserve the name.
+            table.insert("name", name.clone());
+        }
+        table.insert("url", toml_edit::value(index.url.to_string()));
+        if index.default {
+            table.insert("default", toml_edit::value(true));
+        }
+
+        // Push the item to the table.
+        let mut updated = ArrayOfTables::new();
+        updated.push(table);
+        for table in existing {
+            // If there's another index with the same name, replace it.
+            if table
+                .get("name")
+                .is_some_and(|name| name.as_str() == index.name.as_deref())
+            {
+                continue;
+            }
+
+            // If there's another default index, remove it.
+            if index.default
+                && table
+                    .get("default")
+                    .is_some_and(|default| default.as_bool() == Some(true))
+            {
+                continue;
+            }
+
+            // If there's another index with the same URL, replace it.
+            if table
+                .get("url")
+                .is_some_and(|url| url.as_str() == Some(index.url.url().as_str()))
+            {
+                continue;
+            }
+
+            updated.push(table.clone());
+        }
+        self.doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .insert("index", Item::ArrayOfTables(updated));
+
+        Ok(())
     }
 
     /// Adds a dependency to `project.optional-dependencies`.
@@ -348,7 +446,11 @@ impl PyProjectTomlMut {
             .as_table_mut()
             .ok_or(Error::MalformedSources)?;
 
+        if let Some(key) = find_source(name, sources) {
+            sources.remove(&key);
+        }
         add_source(name, source, sources)?;
+
         Ok(())
     }
 
@@ -437,6 +539,11 @@ impl PyProjectTomlMut {
 
     /// Remove a matching source from `tool.uv.sources`, if it exists.
     fn remove_source(&mut self, name: &PackageName) -> Result<(), Error> {
+        // If the dependency is still in use, don't remove the source.
+        if !self.find_dependency(name, None).is_empty() {
+            return Ok(());
+        }
+
         if let Some(sources) = self
             .doc
             .get_mut("tool")
@@ -449,7 +556,23 @@ impl PyProjectTomlMut {
             .map(|sources| sources.as_table_mut().ok_or(Error::MalformedSources))
             .transpose()?
         {
-            sources.remove(name.as_ref());
+            if let Some(key) = find_source(name, sources) {
+                sources.remove(&key);
+
+                // Remove the `tool.uv.sources` table if it is empty.
+                if sources.is_empty() {
+                    self.doc
+                        .entry("tool")
+                        .or_insert(implicit())
+                        .as_table_mut()
+                        .ok_or(Error::MalformedSources)?
+                        .entry("uv")
+                        .or_insert(implicit())
+                        .as_table_mut()
+                        .ok_or(Error::MalformedSources)?
+                        .remove("sources");
+                }
+            }
         }
 
         Ok(())
@@ -585,7 +708,12 @@ pub fn add_dependency(
             };
             let index = index.unwrap_or(deps.len());
 
-            deps.insert(index, req_string);
+            let mut value = Value::from(req_string.as_str());
+            let decor = value.decor_mut();
+            decor.set_prefix(deps.trailing().clone());
+            deps.set_trailing("");
+
+            deps.insert_formatted(index, value);
             // `reformat_array_multiline` uses the indentation of the first dependency entry.
             // Therefore, we retrieve the indentation of the first dependency entry and apply it to
             // the new entry. Note that it is only necessary if the newly added dependency is going
@@ -683,6 +811,16 @@ fn find_dependencies(
     to_replace
 }
 
+/// Returns the key in `tool.uv.sources` that matches the given package name.
+fn find_source(name: &PackageName, sources: &Table) -> Option<String> {
+    for (key, _) in sources {
+        if PackageName::from_str(key).is_ok_and(|ref key| key == name) {
+            return Some(key.to_string());
+        }
+    }
+    None
+}
+
 // Add a source to `tool.uv.sources`.
 fn add_source(req: &PackageName, source: &Source, sources: &mut Table) -> Result<(), Error> {
     // Serialize as an inline table.
@@ -710,14 +848,38 @@ fn try_parse_requirement(req: &str) -> Option<Requirement> {
 /// Reformats a TOML array to multi line while trying to preserve all comments
 /// and move them around. This also formats the array to have a trailing comma.
 fn reformat_array_multiline(deps: &mut Array) {
-    fn find_comments(s: Option<&RawString>) -> impl Iterator<Item = &str> {
-        s.and_then(|x| x.as_str())
+    fn find_comments(s: Option<&RawString>) -> Box<dyn Iterator<Item = Comment> + '_> {
+        let iter = s
+            .and_then(|x| x.as_str())
             .unwrap_or("")
             .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                line.starts_with('#').then_some(line)
-            })
+            .scan(
+                (false, false),
+                |(prev_line_was_empty, prev_line_was_comment), line| {
+                    let trimmed_line = line.trim();
+                    if let Some(index) = trimmed_line.find('#') {
+                        let comment_text = trimmed_line[index..].trim().to_string();
+                        let comment_type = if (*prev_line_was_empty) || (*prev_line_was_comment) {
+                            CommentType::OwnLine
+                        } else {
+                            CommentType::EndOfLine
+                        };
+                        *prev_line_was_empty = trimmed_line.is_empty();
+                        *prev_line_was_comment = true;
+                        Some(Some(Comment {
+                            text: comment_text,
+                            comment_type,
+                        }))
+                    } else {
+                        *prev_line_was_empty = trimmed_line.is_empty();
+                        *prev_line_was_comment = false;
+                        Some(None)
+                    }
+                },
+            )
+            .flatten();
+
+        Box::new(iter)
     }
 
     let mut indentation_prefix = None;
@@ -731,24 +893,29 @@ fn reformat_array_multiline(deps: &mut Array) {
             let decor_prefix = decor
                 .prefix()
                 .and_then(|s| s.as_str())
-                .map(|s| s.split('#').next().unwrap_or(""))
-                .unwrap_or_default()
-                .trim_start_matches(['\r', '\n'].as_ref())
-                .to_string();
+                .and_then(|s| s.lines().last())
+                .unwrap_or_default();
 
             // If there is no indentation, use four-space.
             indentation_prefix = Some(if decor_prefix.is_empty() {
                 "    ".to_string()
             } else {
-                decor_prefix
+                decor_prefix.to_string()
             });
         }
 
         let indentation_prefix_str = format!("\n{}", indentation_prefix.as_ref().unwrap());
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
-            prefix.push_str(&indentation_prefix_str);
-            prefix.push_str(comment);
+            match comment.comment_type {
+                CommentType::OwnLine => {
+                    prefix.push_str(&indentation_prefix_str);
+                }
+                CommentType::EndOfLine => {
+                    prefix.push(' ');
+                }
+            }
+            prefix.push_str(&comment.text);
         }
         prefix.push_str(&indentation_prefix_str);
         decor.set_prefix(prefix);
@@ -761,7 +928,7 @@ fn reformat_array_multiline(deps: &mut Array) {
         if comments.peek().is_some() {
             for comment in comments {
                 rv.push_str("\n    ");
-                rv.push_str(comment);
+                rv.push_str(&comment.text);
             }
         }
         if !rv.is_empty() || !deps.is_empty() {

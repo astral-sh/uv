@@ -20,7 +20,6 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pubgrub = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 
 csv = { workspace = true}
@@ -41,5 +40,5 @@ workspace = true
 
 [dev-dependencies]
 indoc = { version = "2.0.5" }
-insta = { version = "1.40.0", features = ["filters"] }
+insta = { version = "1.40.0" }
 tempfile = { version = "3.12.0" }

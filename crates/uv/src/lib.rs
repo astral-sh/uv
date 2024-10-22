@@ -26,6 +26,7 @@ use uv_fs::CWD;
 use uv_requirements::RequirementsSource;
 use uv_scripts::{Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
+use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
@@ -41,7 +42,6 @@ pub(crate) mod commands;
 pub(crate) mod logging;
 pub(crate) mod printer;
 pub(crate) mod settings;
-pub(crate) mod version;
 
 #[instrument(skip_all)]
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
@@ -117,17 +117,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         None
     } else if matches!(&*cli.command, Commands::Tool(_)) {
         // For commands that operate at the user-level, ignore local configuration.
-        FilesystemOptions::user()?
+        FilesystemOptions::user()?.combine(FilesystemOptions::system()?)
     } else if let Ok(workspace) =
         Workspace::discover(&project_dir, &DiscoveryOptions::default()).await
     {
         let project = FilesystemOptions::find(workspace.install_path())?;
+        let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
-        project.combine(user)
+        project.combine(user).combine(system)
     } else {
         let project = FilesystemOptions::find(&project_dir)?;
+        let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
-        project.combine(user)
+        project.combine(user).combine(system)
     };
 
     // Parse the external command, if necessary.
@@ -241,7 +243,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .break_words(false)
                 .word_separator(textwrap::WordSeparator::AsciiSpace)
                 .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(std::env::var("UV_NO_WRAP").map(|_| false).unwrap_or(true))
+                .wrap_lines(
+                    std::env::var(EnvVars::UV_NO_WRAP)
+                        .map(|_| false)
+                        .unwrap_or(true),
+                )
                 .build(),
         )
     }))?;
@@ -251,7 +257,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .build_global()
         .expect("failed to initialize global rayon pool");
 
-    debug!("uv {}", version::version());
+    debug!("uv {}", uv_cli::version::version());
 
     // Write out any resolved settings.
     macro_rules! show_settings {
@@ -620,6 +626,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
+                args.files,
                 &cache,
                 printer,
             )
@@ -802,6 +809,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                 }),
         }) => commands::self_update(target_version, token, printer).await,
+        #[cfg(not(feature = "self-update"))]
+        Commands::Self_(_) => {
+            anyhow::bail!(
+                "uv was installed through an external package manager, and self-update \
+                is not available. Please use your package manager to update uv."
+            );
+        }
         Commands::Version { output_format } => {
             commands::version(output_format, &mut stdout())?;
             Ok(ExitStatus::Success)
@@ -962,7 +976,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?.with_refresh(Refresh::All(Timestamp::now()));
 
-            commands::tool_upgrade(
+            Box::pin(commands::tool_upgrade(
                 args.name,
                 args.python,
                 globals.connectivity,
@@ -974,7 +988,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 &cache,
                 printer,
-            )
+            ))
             .await
         }
         Commands::Tool(ToolNamespace {
@@ -1213,6 +1227,7 @@ async fn run_project(
                 args.package,
                 args.kind,
                 args.vcs,
+                args.build_backend,
                 args.no_readme,
                 args.author_from,
                 args.no_pin_python,
@@ -1376,6 +1391,7 @@ async fn run_project(
                 args.editable,
                 args.dependency_type,
                 args.raw_sources,
+                args.indexes,
                 args.rev,
                 args.tag,
                 args.branch,
@@ -1444,6 +1460,7 @@ async fn run_project(
 
             commands::tree(
                 project_dir,
+                args.dev,
                 args.locked,
                 args.frozen,
                 args.universal,
@@ -1523,25 +1540,19 @@ where
             if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand)
             {
                 match subcommand.as_str() {
-                    "compile" | "lock" => {
+                    "compile" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip compile".to_string()),
                         );
                     }
-                    "sync" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip sync".to_string()),
-                        );
-                    }
-                    "install" | "add" => {
+                    "install" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip install".to_string()),
                         );
                     }
-                    "uninstall" | "remove" => {
+                    "uninstall" => {
                         err.insert(
                             ContextKind::SuggestedSubcommand,
                             ContextValue::String("uv pip uninstall".to_string()),
@@ -1565,12 +1576,6 @@ where
                             ContextValue::String("uv pip show".to_string()),
                         );
                     }
-                    "tree" => {
-                        err.insert(
-                            ContextKind::SuggestedSubcommand,
-                            ContextValue::String("uv pip tree".to_string()),
-                        );
-                    }
                     _ => {}
                 }
             }
@@ -1583,7 +1588,7 @@ where
     // We support increasing the stack size to avoid stack overflows in debug mode on Windows. In
     // addition, we box types and futures in various places. This includes the `Box::pin(run())`
     // here, which prevents the large (non-send) main future alone from overflowing the stack.
-    let result = if let Ok(stack_size) = std::env::var("UV_STACK_SIZE") {
+    let result = if let Ok(stack_size) = std::env::var(EnvVars::UV_STACK_SIZE) {
         let stack_size = stack_size.parse().expect("Invalid stack size");
         let tokio_main = move || {
             let runtime = tokio::runtime::Builder::new_current_thread()
@@ -1622,9 +1627,13 @@ where
         Ok(code) => code.into(),
         Err(err) => {
             let mut causes = err.chain();
-            eprintln!("{}: {}", "error".red().bold(), causes.next().unwrap());
+            eprintln!(
+                "{}: {}",
+                "error".red().bold(),
+                causes.next().unwrap().to_string().trim()
+            );
             for err in causes {
-                eprintln!("  {}: {}", "Caused by".red().bold(), err);
+                eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
             }
             ExitStatus::Error.into()
         }

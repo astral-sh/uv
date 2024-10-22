@@ -12,9 +12,11 @@ use predicates::Predicate;
 use url::Url;
 
 use crate::common::{
-    copy_dir_all, site_packages_path, uv_snapshot, venv_to_interpreter, TestContext,
+    copy_dir_all, download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter,
+    TestContext,
 };
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
     Command::new(venv_to_interpreter(venv))
@@ -426,7 +428,7 @@ fn link() -> Result<()> {
     // Create a separate virtual environment, but reuse the same cache.
     let context2 = TestContext::new("3.12");
     let mut cmd = context1.pip_sync();
-    cmd.env("VIRTUAL_ENV", context2.venv.as_os_str())
+    cmd.env(EnvVars::VIRTUAL_ENV, context2.venv.as_os_str())
         .current_dir(&context2.temp_dir);
 
     uv_snapshot!(cmd
@@ -705,7 +707,7 @@ fn install_sdist() -> Result<()> {
     requirements_txt.write_str("source-distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1069,10 +1071,8 @@ fn install_local_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1208,10 +1208,8 @@ fn mismatched_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
     let archive = context.temp_dir.child("tomli-3.7.2-py3-none-any.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1243,10 +1241,11 @@ fn mismatched_name() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
     let archive = context.temp_dir.child("foo-2.0.1-py3-none-any.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1279,10 +1278,11 @@ fn install_local_source_distribution() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a source distribution.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz")?;
     let archive = context.temp_dir.child("wheel-0.42.0.tar.gz");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/b0/b4/bc2baae3970c282fae6c2cb8e0f179923dceb7eaffb0e76170628f9af97b/wheel-0.42.0.tar.gz",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1540,7 +1540,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     requirements_txt.write_str("source_distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1563,7 +1563,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     context.reset_venv();
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1610,7 +1610,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     );
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1639,10 +1639,11 @@ fn install_path_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a source distribution.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz")?;
     let archive = context.temp_dir.child("source_distribution-0.0.1.tar.gz");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1734,10 +1735,11 @@ fn install_path_built_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
     // Download a wheel.
-    let response = reqwest::blocking::get("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl")?;
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    let mut archive_file = fs_err::File::create(archive.path())?;
-    std::io::copy(&mut response.bytes()?.as_ref(), &mut archive_file)?;
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     let url = Url::from_file_path(archive.path()).unwrap();
@@ -3346,7 +3348,7 @@ fn no_stream() -> Result<()> {
         .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--index-url")
         .arg("https://buf.build/gen/python"), @r###"
@@ -3572,7 +3574,7 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download and build `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -3625,7 +3627,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
         .write_str("source-distribution==0.0.1 --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -3666,7 +3668,7 @@ fn require_hashes_source_only_binary() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -3699,7 +3701,7 @@ fn require_hashes_wrong_digest() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -3732,7 +3734,7 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -3905,7 +3907,7 @@ fn require_hashes_wheel_url() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
       Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
     Expected:
@@ -3960,7 +3962,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
       Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
     Expected:
@@ -4069,7 +4071,7 @@ fn require_hashes_re_download() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
+      Caused by: Failed to download `anyio==4.0.0`
       Caused by: Hash mismatch for `anyio==4.0.0`
 
     Expected:
@@ -4161,7 +4163,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl
+      Caused by: Failed to download `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
       Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
 
     Expected:
@@ -4438,7 +4440,7 @@ fn require_hashes_repeated_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl
+      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
       Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
     Expected:
@@ -4570,7 +4572,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4600,7 +4602,7 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4691,7 +4693,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4720,7 +4722,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4801,7 +4803,7 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Failed to download and build `example-a-961b4c22==1.0.0`
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4826,7 +4828,7 @@ fn require_hashes_registry_no_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--index-url")
@@ -4856,7 +4858,7 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes")
         .arg("--find-links")
@@ -4884,7 +4886,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4897,7 +4899,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4914,7 +4916,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4927,7 +4929,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -4945,7 +4947,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
@@ -4970,7 +4972,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -4997,7 +4999,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e --hash=sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--refresh")
         .arg("--reinstall")
@@ -5011,7 +5013,7 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: example-a-961b4c22==1.0.0
+      Caused by: Failed to download and build `example-a-961b4c22==1.0.0`
       Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
     Expected:
@@ -5036,7 +5038,7 @@ fn require_hashes_url() -> Result<()> {
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5064,7 +5066,7 @@ fn require_hashes_url_other_fragment() -> Result<()> {
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5089,7 +5091,7 @@ fn require_hashes_url_invalid() -> Result<()> {
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5099,7 +5101,7 @@ fn require_hashes_url_invalid() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+      Caused by: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
       Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
 
     Expected:
@@ -5123,7 +5125,7 @@ fn require_hashes_url_ignore() -> Result<()> {
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5133,7 +5135,7 @@ fn require_hashes_url_ignore() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+      Caused by: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
       Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
 
     Expected:
@@ -5157,7 +5159,7 @@ fn require_hashes_url_unnamed() -> Result<()> {
         .write_str("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove("UV_EXCLUDE_NEWER")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5210,7 +5212,7 @@ fn target_built_distribution() -> Result<()> {
         .arg("-B")
         .arg("-c")
         .arg("import iniconfig")
-        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
         .current_dir(&context.temp_dir)
         .assert()
         .success();
@@ -5307,7 +5309,7 @@ fn target_source_distribution() -> Result<()> {
         .arg("-B")
         .arg("-c")
         .arg("import iniconfig")
-        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
         .current_dir(&context.temp_dir)
         .assert()
         .success();
@@ -5374,7 +5376,7 @@ fn target_no_build_isolation() -> Result<()> {
         .arg("-B")
         .arg("-c")
         .arg("import wheel")
-        .env("PYTHONPATH", context.temp_dir.child("target").path())
+        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path())
         .current_dir(&context.temp_dir)
         .assert()
         .success();
@@ -5417,7 +5419,7 @@ fn prefix() -> Result<()> {
         .arg("-c")
         .arg("import iniconfig")
         .env(
-            "PYTHONPATH",
+            EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
         )
         .current_dir(&context.temp_dir)
@@ -5494,7 +5496,7 @@ fn incompatible_build_constraint() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: requests==1.2.0
+      Caused by: Failed to download and build `requests==1.2.0`
       Caused by: Failed to resolve requirements from `setup.py` build
       Caused by: No solution found when resolving: `setuptools>=40.8.0`
       Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.

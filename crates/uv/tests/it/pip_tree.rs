@@ -3,6 +3,8 @@ use std::process::Command;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
+use uv_static::EnvVars;
+
 use crate::common::get_bin;
 use crate::common::{uv_snapshot, TestContext};
 
@@ -334,8 +336,8 @@ fn depth() {
         .arg(context.cache_dir.path())
         .arg("--depth")
         .arg("0")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -354,8 +356,8 @@ fn depth() {
         .arg(context.cache_dir.path())
         .arg("--depth")
         .arg("1")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -378,8 +380,8 @@ fn depth() {
         .arg(context.cache_dir.path())
         .arg("--depth")
         .arg("2")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -432,8 +434,8 @@ fn prune() {
         .arg(context.cache_dir.path())
         .arg("--prune")
         .arg("numpy")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -456,8 +458,8 @@ fn prune() {
         .arg("numpy")
         .arg("--prune")
         .arg("joblib")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -477,8 +479,8 @@ fn prune() {
         .arg(context.cache_dir.path())
         .arg("--prune")
         .arg("scipy")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -780,8 +782,8 @@ fn prune_large_tree() {
         .arg(context.cache_dir.path())
         .arg("--prune")
         .arg("hatchling")
-        .env("VIRTUAL_ENV", context.venv.as_os_str())
-        .env("UV_NO_WRAP", "1")
+        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
+        .env(EnvVars::UV_NO_WRAP, "1")
         .current_dir(&context.temp_dir), @r###"
     success: true
     exit_code: 0
@@ -839,7 +841,7 @@ fn cyclic_dependency() {
         .unwrap();
 
     let mut command = context.pip_install();
-    command.env_remove("UV_EXCLUDE_NEWER");
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
         .arg("-r")
         .arg("requirements.txt")
@@ -1177,7 +1179,7 @@ fn no_dedupe_and_cycle() {
     );
 
     let mut command = context.pip_install();
-    command.env_remove("UV_EXCLUDE_NEWER");
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
         .arg("uv-cyclic-dependencies-c==0.1.0")
         .arg("--index-url")
@@ -1737,6 +1739,45 @@ fn show_version_specifiers_with_package() {
     ----- stdout -----
     scipy v1.12.0
     └── numpy v1.26.4 [required: >=1.22.4, <1.29.0]
+
+    ----- stderr -----
+    "###
+    );
+}
+
+#[test]
+fn print_output_even_with_quite_flag() {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==2.31.0").unwrap();
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###
+    );
+
+    context.assert_command("import requests").success();
+    uv_snapshot!(context.filters(), context.pip_tree().arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
     ----- stderr -----
     "###

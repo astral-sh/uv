@@ -1,18 +1,17 @@
 use std::cmp::min;
 
 use itertools::Itertools;
-use pubgrub::Range;
+use pubgrub::{Range, Term};
 use rustc_hash::FxHashMap;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
-
-use uv_distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities};
-use uv_pep440::Version;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::Request;
 use crate::{InMemoryIndex, PythonRequirement, ResolveError, ResolverMarkers, VersionsResponse};
+use uv_distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities, IndexUrl};
+use uv_pep440::Version;
 
 enum BatchPrefetchStrategy {
     /// Go through the next versions assuming the existing selection and its constraints
@@ -47,11 +46,13 @@ impl BatchPrefetcher {
     pub(crate) fn prefetch_batches(
         &mut self,
         next: &PubGrubPackage,
+        index: Option<&IndexUrl>,
         version: &Version,
         current_range: &Range<Version>,
+        unchangeable_constraints: Option<&Term<Range<Version>>>,
         python_requirement: &PythonRequirement,
         request_sink: &Sender<Request>,
-        index: &InMemoryIndex,
+        in_memory: &InMemoryIndex,
         capabilities: &IndexCapabilities,
         selector: &CandidateSelector,
         markers: &ResolverMarkers,
@@ -73,10 +74,17 @@ impl BatchPrefetcher {
         let total_prefetch = min(num_tried, 50);
 
         // This is immediate, we already fetched the version map.
-        let versions_response = index
-            .packages()
-            .wait_blocking(name)
-            .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?;
+        let versions_response = if let Some(index) = index {
+            in_memory
+                .explicit()
+                .wait_blocking(&(name.clone(), index.clone()))
+                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+        } else {
+            in_memory
+                .implicit()
+                .wait_blocking(name)
+                .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
+        };
 
         let VersionsResponse::Found(ref version_map) = *versions_response else {
             return Ok(());
@@ -112,11 +120,22 @@ impl BatchPrefetcher {
                     }
                 }
                 BatchPrefetchStrategy::InOrder { previous } => {
-                    let range = if selector.use_highest_version(name) {
+                    let mut range = if selector.use_highest_version(name) {
                         Range::strictly_lower_than(previous)
                     } else {
                         Range::strictly_higher_than(previous)
                     };
+                    // If we have constraints from root, don't go beyond those. Example: We are
+                    // prefetching for foo 1.60 and have a dependency for `foo>=1.50`, so we should
+                    // only prefetch 1.60 to 1.50, knowing 1.49 will always be rejected.
+                    if let Some(unchangeable_constraints) = unchangeable_constraints {
+                        range = match unchangeable_constraints {
+                            Term::Positive(constraints) => range.intersection(constraints),
+                            Term::Negative(negative_constraints) => {
+                                range.intersection(&negative_constraints.complement())
+                            }
+                        };
+                    }
                     if let Some(candidate) =
                         selector.select_no_preference(name, &range, version_map, markers)
                     {
@@ -191,7 +210,7 @@ impl BatchPrefetcher {
             );
             prefetch_count += 1;
 
-            if index.distributions().register(candidate.version_id()) {
+            if in_memory.distributions().register(candidate.version_id()) {
                 let request = Request::from(dist);
                 request_sink.blocking_send(request)?;
             }

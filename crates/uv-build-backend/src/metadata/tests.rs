@@ -151,7 +151,7 @@ fn valid() {
 fn build_system_valid() {
     let contents = extend_project("");
     let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
-    assert!(pyproject_toml.check_build_system());
+    assert!(pyproject_toml.check_build_system("1.0.0+test"));
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn build_system_no_bound() {
             build-backend = "uv"
         "#};
     let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-    assert!(!pyproject_toml.check_build_system());
+    assert!(!pyproject_toml.check_build_system("1.0.0+test"));
 }
 
 #[test]
@@ -181,7 +181,7 @@ fn build_system_multiple_packages() {
             build-backend = "uv"
         "#};
     let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-    assert!(!pyproject_toml.check_build_system());
+    assert!(!pyproject_toml.check_build_system("1.0.0+test"));
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn build_system_no_requires_uv() {
             build-backend = "uv"
         "#};
     let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-    assert!(!pyproject_toml.check_build_system());
+    assert!(!pyproject_toml.check_build_system("1.0.0+test"));
 }
 
 #[test]
@@ -211,7 +211,7 @@ fn build_system_not_uv() {
             build-backend = "setuptools"
         "#};
     let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-    assert!(!pyproject_toml.check_build_system());
+    assert!(!pyproject_toml.check_build_system("1.0.0+test"));
 }
 
 #[test]

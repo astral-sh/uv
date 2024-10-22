@@ -1,28 +1,29 @@
+use std::collections::hash_map::Entry;
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
+
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
-use std::collections::hash_map::Entry;
-use std::fmt::Write;
-use std::path::{Path, PathBuf};
 use tracing::debug;
+use url::Url;
 
-use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
-    SourceStrategy,
+    LowerBound, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::UnresolvedRequirement;
+use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
-use uv_pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
+use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
@@ -58,6 +59,7 @@ pub(crate) async fn add(
     editable: Option<bool>,
     dependency_type: DependencyType,
     raw_sources: bool,
+    indexes: Vec<Index>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -115,7 +117,7 @@ pub(crate) async fn add(
         }
         if no_sync {
             warn_user_once!(
-                "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
 
@@ -232,6 +234,7 @@ pub(crate) async fn add(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
+    let bounds = LowerBound::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::default();
@@ -244,8 +247,10 @@ pub(crate) async fn add(
         resolution_environment(python_version, python_platform, target.interpreter())?;
 
     // Add all authenticated sources to the cache.
-    for url in settings.index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in settings.index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -274,7 +279,9 @@ pub(crate) async fn add(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(settings.index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(settings.index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
     };
 
@@ -298,6 +305,7 @@ pub(crate) async fn add(
         &settings.build_options,
         &build_hasher,
         settings.exclude_newer,
+        bounds,
         sources,
         concurrency,
     );
@@ -357,6 +365,16 @@ pub(crate) async fn add(
         }
     }
 
+    // If the user provides a single, named index, pin all requirements to that index.
+    let index = indexes
+        .first()
+        .as_ref()
+        .and_then(|index| index.name.as_ref())
+        .filter(|_| indexes.len() == 1)
+        .inspect(|index| {
+            debug!("Pinning all requirements to index: `{index}`");
+        });
+
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
         Target::Script(script, _) => {
@@ -385,6 +403,7 @@ pub(crate) async fn add(
                     requirement,
                     false,
                     editable,
+                    index.cloned(),
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
@@ -400,6 +419,7 @@ pub(crate) async fn add(
                     requirement,
                     workspace,
                     editable,
+                    index.cloned(),
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
@@ -422,13 +442,13 @@ pub(crate) async fn add(
                 branch,
                 marker,
             }) => {
-                let credentials = Credentials::from_url(&git);
+                let credentials = uv_auth::Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
                     GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
 
                     // Redact the credentials.
-                    redact_git_credentials(&mut git);
+                    redact_credentials(&mut git);
                 };
                 Some(Source::Git {
                     git,
@@ -477,6 +497,13 @@ pub(crate) async fn add(
             source,
             edit,
         });
+    }
+
+    // Add any indexes that were provided on the command-line.
+    if !raw_sources {
+        for index in indexes {
+            toml.add_index(&index)?;
+        }
     }
 
     let content = toml.to_string();
@@ -563,6 +590,7 @@ pub(crate) async fn add(
         &dependency_type,
         raw_sources,
         settings.as_ref(),
+        bounds,
         connectivity,
         concurrency,
         native_tls,
@@ -623,6 +651,7 @@ async fn lock_and_sync(
     dependency_type: &DependencyType,
     raw_sources: bool,
     settings: ResolverInstallerSettingsRef<'_>,
+    bounds: LowerBound,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -635,6 +664,8 @@ async fn lock_and_sync(
         project.workspace(),
         venv.interpreter(),
         settings.into(),
+        bounds,
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -674,7 +705,11 @@ async fn lock_and_sync(
             };
 
             // Only set a minimum version for registry requirements.
-            if edit.source.is_some() {
+            if edit
+                .source
+                .as_ref()
+                .is_some_and(|source| !matches!(source, Source::Registry { .. }))
+            {
                 continue;
             }
 
@@ -726,6 +761,15 @@ async fn lock_and_sync(
                 .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
                 .ok_or(ProjectError::TomlUpdate)?;
 
+            // Invalidate the project metadata.
+            if let VirtualProject::Project(ref project) = project {
+                let url = Url::from_file_path(project.project_root())
+                    .expect("project root is a valid URL");
+                let version_id = VersionId::from_url(&url);
+                let existing = state.index.distributions().remove(&version_id);
+                debug_assert!(existing.is_some(), "distribution should exist");
+            }
+
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::do_safe_lock(
@@ -734,6 +778,8 @@ async fn lock_and_sync(
                 project.workspace(),
                 venv.interpreter(),
                 settings.into(),
+                bounds,
+                &state,
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -779,7 +825,6 @@ async fn lock_and_sync(
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
-        &state,
         Box::new(DefaultInstallLogger),
         connectivity,
         concurrency,
@@ -865,6 +910,7 @@ fn resolve_requirement(
     requirement: uv_pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
+    index: Option<IndexName>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -875,6 +921,7 @@ fn resolve_requirement(
         requirement.source.clone(),
         workspace,
         editable,
+        index,
         rev,
         tag,
         branch,

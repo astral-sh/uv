@@ -85,7 +85,7 @@ impl PyProjectToml {
     /// ```
     ///
     /// Returns whether all checks passed.
-    pub(crate) fn check_build_system(&self) -> bool {
+    pub(crate) fn check_build_system(&self, uv_version: &str) -> bool {
         let mut passed = true;
         if self.build_system.build_backend.as_deref() != Some("uv") {
             warn_user_once!(
@@ -95,8 +95,8 @@ impl PyProjectToml {
             passed = false;
         }
 
-        let uv_version = Version::from_str(uv_version::version())
-            .expect("uv's own version is not PEP 440 compliant");
+        let uv_version =
+            Version::from_str(uv_version).expect("uv's own version is not PEP 440 compliant");
         let next_minor = uv_version.release().get(1).copied().unwrap_or_default() + 1;
         let next_breaking = Version::new([0, next_minor]);
 
@@ -131,8 +131,7 @@ impl PyProjectToml {
                     // This is allowed to happen when testing prereleases, but we should still warn.
                     warn_user_once!(
                         r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
-                        current uv version {}"#,
-                        uv_version::version()
+                        current uv version {uv_version}"#,
                     );
                     passed = false;
                 }

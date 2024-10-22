@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::Path;
+use tracing::debug;
 
 use uv_client::Connectivity;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
@@ -58,7 +59,10 @@ pub(crate) async fn install(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let installed_installations: Vec<_> = installations.find_all()?.collect();
+    let installed_installations: Vec<_> = installations
+        .find_all()?
+        .inspect(|installation| debug!("Found existing installation {}", installation.key()))
+        .collect();
     let mut unfilled_requests = Vec::new();
     let mut uninstalled = Vec::new();
     for (request, download_request) in requests.iter().zip(download_requests) {
@@ -163,6 +167,7 @@ pub(crate) async fn install(
                 // Ensure the installations have externally managed markers
                 let managed = ManagedPythonInstallation::new(path.clone())?;
                 managed.ensure_externally_managed()?;
+                managed.ensure_canonical_executables()?;
             }
             Err(err) => {
                 errors.push((key, err));
@@ -230,7 +235,12 @@ pub(crate) async fn install(
                 key.green()
             )?;
             for err in anyhow::Error::new(err).chain() {
-                writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+                writeln!(
+                    printer.stderr(),
+                    "  {}: {}",
+                    "Caused by".red().bold(),
+                    err.to_string().trim()
+                )?;
             }
         }
         return Ok(ExitStatus::Failure);

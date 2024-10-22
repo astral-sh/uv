@@ -18,12 +18,14 @@ workspace = true
 
 [dependencies]
 uv-configuration = { workspace = true }
+uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
+uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 

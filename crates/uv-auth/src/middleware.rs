@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use http::{Extensions, StatusCode};
 use url::Url;
@@ -12,14 +12,48 @@ use anyhow::{anyhow, format_err};
 use netrc::Netrc;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Error, Middleware, Next};
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
+
+/// Strategy for loading netrc files.
+enum NetrcMode {
+    Automatic(LazyLock<Option<Netrc>>),
+    Enabled(Netrc),
+    Disabled,
+}
+
+impl Default for NetrcMode {
+    fn default() -> Self {
+        NetrcMode::Automatic(LazyLock::new(|| match Netrc::new() {
+            Ok(netrc) => Some(netrc),
+            Err(netrc::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                debug!("No netrc file found");
+                None
+            }
+            Err(err) => {
+                warn!("Error reading netrc file: {err}");
+                None
+            }
+        }))
+    }
+}
+
+impl NetrcMode {
+    /// Get the parsed netrc file if enabled.
+    fn get(&self) -> Option<&Netrc> {
+        match self {
+            NetrcMode::Automatic(lock) => lock.as_ref(),
+            NetrcMode::Enabled(netrc) => Some(netrc),
+            NetrcMode::Disabled => None,
+        }
+    }
+}
 
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
 /// fetches credentials from a netrc file and the keyring.
 pub struct AuthMiddleware {
-    netrc: Option<Netrc>,
+    netrc: NetrcMode,
     keyring: Option<KeyringProvider>,
     cache: Option<CredentialsCache>,
     /// We know that the endpoint needs authentication, so we don't try to send an unauthenticated
@@ -30,19 +64,23 @@ pub struct AuthMiddleware {
 impl AuthMiddleware {
     pub fn new() -> Self {
         Self {
-            netrc: Netrc::new().ok(),
+            netrc: NetrcMode::default(),
             keyring: None,
             cache: None,
             only_authenticated: false,
         }
     }
 
-    /// Configure the [`Netrc`] credential file to use.
+    /// Configure the [`netrc::Netrc`] credential file to use.
     ///
     /// `None` disables authentication via netrc.
     #[must_use]
-    pub fn with_netrc(mut self, netrc: Option<Netrc>) -> Self {
-        self.netrc = netrc;
+    pub fn with_netrc(mut self, netrc: Option<netrc::Netrc>) -> Self {
+        self.netrc = if let Some(netrc) = netrc {
+            NetrcMode::Enabled(netrc)
+        } else {
+            NetrcMode::Disabled
+        };
         self
     }
 
@@ -131,25 +169,7 @@ impl Middleware for AuthMiddleware {
 
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
-        let url = if tracing::enabled!(tracing::Level::DEBUG) {
-            let mut url = request.url().clone();
-            if let Some(username) = credentials
-                .as_ref()
-                .and_then(|credentials| credentials.username())
-            {
-                let _ = url.set_username(username);
-            };
-            if credentials
-                .as_ref()
-                .and_then(|credentials| credentials.password())
-                .is_some()
-            {
-                let _ = url.set_password(Some("****"));
-            };
-            url.to_string()
-        } else {
-            request.url().to_string()
-        };
+        let url = tracing_url(&request, credentials.as_ref());
         trace!("Handling request for {url}");
 
         if let Some(credentials) = credentials {
@@ -198,13 +218,20 @@ impl Middleware for AuthMiddleware {
         // We have no credentials
         trace!("Request for {url} is unauthenticated, checking cache");
 
-        // Check the cache for a URL match
+        // Check the cache for a URL match first, this can save us from making a failing request
         let credentials = self.cache().get_url(request.url(), &Username::none());
         if let Some(credentials) = credentials.as_ref() {
             request = credentials.authenticate(request);
+
+            // If it's fully authenticated, finish the request
             if credentials.password().is_some() {
+                trace!("Request for {url} is fully authenticated");
                 return self.complete_request(None, request, extensions, next).await;
             }
+
+            // If we just found a username, we'll make the request then look for password elsewhere
+            // if it fails
+            trace!("Found username for {url} in cache, attempting request");
         }
         let attempt_has_username = credentials
             .as_ref()
@@ -216,8 +243,12 @@ impl Middleware for AuthMiddleware {
             trace!("Checking for credentials for {url}");
             (request, None)
         } else {
-            // Otherwise, attempt an anonymous request
-            trace!("Attempting unauthenticated request for {url}");
+            let url = tracing_url(&request, credentials.as_deref());
+            if credentials.is_none() {
+                trace!("Attempting unauthenticated request for {url}");
+            } else {
+                trace!("Attempting partially authenticated request for {url}");
+            }
 
             // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
             // Clone the request so we can retry it on authentication failure
@@ -247,13 +278,17 @@ impl Middleware for AuthMiddleware {
             (retry_request, Some(response))
         };
 
-        // Check in the cache first
-        let credentials = self.cache().get_realm(
-            Realm::from(retry_request.url()),
-            credentials
-                .map(|credentials| credentials.to_username())
-                .unwrap_or(Username::none()),
-        );
+        // Check if there are credentials in the realm-level cache
+        let credentials = self
+            .cache()
+            .get_realm(
+                Realm::from(retry_request.url()),
+                credentials
+                    .as_ref()
+                    .map(|credentials| credentials.to_username())
+                    .unwrap_or(Username::none()),
+            )
+            .or(credentials);
         if let Some(credentials) = credentials.as_ref() {
             if credentials.password().is_some() {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
@@ -265,7 +300,7 @@ impl Middleware for AuthMiddleware {
         }
 
         // Then, fetch from external services.
-        // Here we use the username from the cache if present.
+        // Here, we use the username from the cache if present.
         if let Some(credentials) = self
             .fetch_credentials(credentials.as_deref(), retry_request.url())
             .await
@@ -364,7 +399,7 @@ impl AuthMiddleware {
         }
 
         // Netrc support based on: <https://github.com/gribouille/netrc>.
-        let credentials = if let Some(credentials) = self.netrc.as_ref().and_then(|netrc| {
+        let credentials = if let Some(credentials) = self.netrc.get().and_then(|netrc| {
             debug!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
@@ -403,6 +438,28 @@ impl AuthMiddleware {
         self.cache().fetches.done(key.clone(), credentials.clone());
 
         credentials
+    }
+}
+
+fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> String {
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        let mut url = request.url().clone();
+        if let Some(username) = credentials
+            .as_ref()
+            .and_then(|credentials| credentials.username())
+        {
+            let _ = url.set_username(username);
+        };
+        if credentials
+            .as_ref()
+            .and_then(|credentials| credentials.password())
+            .is_some()
+        {
+            let _ = url.set_password(Some("****"));
+        };
+        url.to_string()
+    } else {
+        request.url().to_string()
     }
 }
 

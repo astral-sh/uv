@@ -9,6 +9,7 @@ use std::fmt::Display;
 use thiserror::Error;
 use tracing::{debug, trace};
 use url::Url;
+use uv_static::EnvVars;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
@@ -74,7 +75,7 @@ pub(crate) async fn get_token(
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // If this fails, we can skip the audience request.
-    let oidc_token_request_token = env::var("ACTIONS_ID_TOKEN_REQUEST_TOKEN")?;
+    let oidc_token_request_token = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN)?;
 
     // Request 1: Get the audience
     let audience = get_audience(registry, client).await?;
@@ -89,7 +90,7 @@ pub(crate) async fn get_token(
 
     // Tell GitHub Actions to mask the token in any console logs.
     #[allow(clippy::print_stdout)]
-    if env::var("GITHUB_ACTIONS") == Ok("true".to_string()) {
+    if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
         println!("::add-mask::{}", &publish_token);
     }
 
@@ -115,7 +116,7 @@ async fn get_oidc_token(
     oidc_token_request_token: &str,
     client: &ClientWithMiddleware,
 ) -> Result<String, TrustedPublishingError> {
-    let mut oidc_token_url = Url::parse(&env::var("ACTIONS_ID_TOKEN_REQUEST_URL")?)?;
+    let mut oidc_token_url = Url::parse(&env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL)?)?;
     oidc_token_url
         .query_pairs_mut()
         .append_pair("audience", audience);

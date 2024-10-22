@@ -2,7 +2,9 @@ use assert_fs::prelude::PathChild;
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use fs_err::remove_dir_all;
 use indoc::indoc;
+
 use uv_python::platform::{Arch, Os};
+use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
 
@@ -12,7 +14,7 @@ fn python_find() {
 
     // No interpreters on the path
     if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.python_find().env("UV_TEST_PYTHON_PATH", ""), @r###"
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r###"
         success: false
         exit_code: 2
         ----- stdout -----
@@ -21,7 +23,7 @@ fn python_find() {
         error: No interpreter found in virtual environments, managed installations, system path, or `py` launcher
         "###);
     } else {
-        uv_snapshot!(context.filters(), context.python_find().env("UV_TEST_PYTHON_PATH", ""), @r###"
+        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r###"
         success: false
         exit_code: 2
         ----- stdout -----
@@ -274,7 +276,7 @@ fn python_find_venv() {
 
     // Even if the `VIRTUAL_ENV` is not set (the test context includes this by default)
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::VIRTUAL_ENV), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -297,7 +299,7 @@ fn python_find_venv() {
     "###);
 
     // Or, `UV_SYSTEM_PYTHON` is set
-    uv_snapshot!(context.filters(), context.python_find().env("UV_SYSTEM_PYTHON", "1"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -308,7 +310,7 @@ fn python_find_venv() {
 
     // Unless, `--no-system` is included
     // TODO(zanieb): Report this as a bug upstream — this should be allowed.
-    uv_snapshot!(context.filters(), context.python_find().arg("--no-system").env("UV_SYSTEM_PYTHON", "1"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-system").env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -323,7 +325,7 @@ fn python_find_venv() {
 
     // We should find virtual environments from a child directory
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -342,7 +344,7 @@ fn python_find_venv() {
     "###);
 
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -377,7 +379,7 @@ fn python_find_venv() {
 
     // Or activated via `VIRTUAL_ENV`
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().env("VIRTUAL_ENV", child_dir.join(".venv").as_os_str()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, child_dir.join(".venv").as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

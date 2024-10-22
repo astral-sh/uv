@@ -27,15 +27,18 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
-pub use crate::error::{Error, MissingHeaderCause};
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings};
-use uv_distribution_types::Resolution;
+use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
+use uv_distribution::RequiresDist;
+use uv_distribution_types::{IndexLocations, Resolution};
 use uv_fs::{rename_with_retry, PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_static::EnvVars;
 use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
+
+pub use crate::error::{Error, MissingHeaderCause};
 
 /// The default backend to use when PEP 517 is used without a `build-system` section.
 static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend {
@@ -242,12 +245,15 @@ impl SourceBuild {
     pub async fn setup(
         source: &Path,
         subdirectory: Option<&Path>,
+        install_path: &Path,
         fallback_package_name: Option<&PackageName>,
         fallback_package_version: Option<&Version>,
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
         version_id: Option<String>,
+        locations: &IndexLocations,
+        source_strategy: SourceStrategy,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
         build_kind: BuildKind,
@@ -266,8 +272,16 @@ impl SourceBuild {
         let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
 
         // Check if we have a PEP 517 build backend.
-        let (pep517_backend, project) =
-            Self::extract_pep517_backend(&source_tree, &default_backend).map_err(|err| *err)?;
+        let (pep517_backend, project) = Self::extract_pep517_backend(
+            &source_tree,
+            install_path,
+            fallback_package_name,
+            locations,
+            source_strategy,
+            &default_backend,
+        )
+        .await
+        .map_err(|err| *err)?;
 
         let package_name = project
             .as_ref()
@@ -318,10 +332,10 @@ impl SourceBuild {
 
         // Figure out what the modified path should be, and remove the PATH variable from the
         // environment variables if it's there.
-        let user_path = environment_variables.remove(&OsString::from("PATH"));
+        let user_path = environment_variables.remove(&OsString::from(EnvVars::PATH));
 
         // See if there is an OS PATH variable.
-        let os_path = env::var_os("PATH");
+        let os_path = env::var_os(EnvVars::PATH);
 
         // Prepend the user supplied PATH to the existing OS PATH
         let modified_path = if let Some(user_path) = user_path {
@@ -356,12 +370,15 @@ impl SourceBuild {
             create_pep517_build_environment(
                 &runner,
                 &source_tree,
+                install_path,
                 &venv,
                 &pep517_backend,
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
                 version_id.as_deref(),
+                locations,
+                source_strategy,
                 build_kind,
                 level,
                 &config_settings,
@@ -420,8 +437,12 @@ impl SourceBuild {
     }
 
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
-    fn extract_pep517_backend(
+    async fn extract_pep517_backend(
         source_tree: &Path,
+        install_path: &Path,
+        package_name: Option<&PackageName>,
+        locations: &IndexLocations,
+        source_strategy: SourceStrategy,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
@@ -432,7 +453,49 @@ impl SourceBuild {
                 let pyproject_toml: PyProjectToml =
                     PyProjectToml::deserialize(pyproject_toml.into_deserializer())
                         .map_err(Error::InvalidPyprojectTomlSchema)?;
+
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
+                    // If necessary, lower the requirements.
+                    let requirements = match source_strategy {
+                        SourceStrategy::Enabled => {
+                            if let Some(name) = pyproject_toml
+                                .project
+                                .as_ref()
+                                .map(|project| &project.name)
+                                .or(package_name)
+                            {
+                                // TODO(charlie): Add a type to lower requirements without providing
+                                // empty extras.
+                                let requires_dist = uv_pypi_types::RequiresDist {
+                                    name: name.clone(),
+                                    requires_dist: build_system.requires,
+                                    provides_extras: vec![],
+                                };
+                                let requires_dist = RequiresDist::from_project_maybe_workspace(
+                                    requires_dist,
+                                    install_path,
+                                    locations,
+                                    source_strategy,
+                                    LowerBound::Allow,
+                                )
+                                .await
+                                .map_err(Error::Lowering)?;
+                                requires_dist.requires_dist
+                            } else {
+                                build_system
+                                    .requires
+                                    .into_iter()
+                                    .map(Requirement::from)
+                                    .collect()
+                            }
+                        }
+                        SourceStrategy::Disabled => build_system
+                            .requires
+                            .into_iter()
+                            .map(Requirement::from)
+                            .collect(),
+                    };
+
                     Pep517Backend {
                         // If `build-backend` is missing, inject the legacy setuptools backend, but
                         // retain the `requires`, to match `pip` and `build`. Note that while PEP 517
@@ -445,11 +508,7 @@ impl SourceBuild {
                             .build_backend
                             .unwrap_or_else(|| "setuptools.build_meta:__legacy__".to_string()),
                         backend_path: build_system.backend_path,
-                        requirements: build_system
-                            .requires
-                            .into_iter()
-                            .map(Requirement::from)
-                            .collect(),
+                        requirements,
                     }
                 } else {
                     // If a `pyproject.toml` is present, but `[build-system]` is missing, proceed with
@@ -748,12 +807,15 @@ fn escape_path_for_python(path: &Path) -> String {
 async fn create_pep517_build_environment(
     runner: &PythonRunner,
     source_tree: &Path,
+    install_path: &Path,
     venv: &PythonEnvironment,
     pep517_backend: &Pep517Backend,
     build_context: &impl BuildContext,
     package_name: Option<&PackageName>,
     package_version: Option<&Version>,
     version_id: Option<&str>,
+    locations: &IndexLocations,
+    source_strategy: SourceStrategy,
     build_kind: BuildKind,
     level: BuildOutput,
     config_settings: &ConfigSettings,
@@ -850,7 +912,34 @@ async fn create_pep517_build_environment(
                     version_id,
                 )
             })?;
-    let extra_requires: Vec<_> = extra_requires.into_iter().map(Requirement::from).collect();
+
+    // If necessary, lower the requirements.
+    let extra_requires = match source_strategy {
+        SourceStrategy::Enabled => {
+            if let Some(package_name) = package_name {
+                // TODO(charlie): Add a type to lower requirements without providing
+                // empty extras.
+                let requires_dist = uv_pypi_types::RequiresDist {
+                    name: package_name.clone(),
+                    requires_dist: extra_requires,
+                    provides_extras: vec![],
+                };
+                let requires_dist = RequiresDist::from_project_maybe_workspace(
+                    requires_dist,
+                    install_path,
+                    locations,
+                    source_strategy,
+                    LowerBound::Allow,
+                )
+                .await
+                .map_err(Error::Lowering)?;
+                requires_dist.requires_dist
+            } else {
+                extra_requires.into_iter().map(Requirement::from).collect()
+            }
+        }
+        SourceStrategy::Disabled => extra_requires.into_iter().map(Requirement::from).collect(),
+    };
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
@@ -944,10 +1033,10 @@ impl PythonRunner {
             .args(["-c", script])
             .current_dir(source_tree.simplified())
             .envs(environment_variables)
-            .env("PATH", modified_path)
-            .env("VIRTUAL_ENV", venv.root())
-            .env("CLICOLOR_FORCE", "1")
-            .env("PYTHONIOENCODING", "utf-8:backslashreplace")
+            .env(EnvVars::PATH, modified_path)
+            .env(EnvVars::VIRTUAL_ENV, venv.root())
+            .env(EnvVars::CLICOLOR_FORCE, "1")
+            .env(EnvVars::PYTHONIOENCODING, "utf-8:backslashreplace")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()

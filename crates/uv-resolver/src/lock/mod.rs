@@ -10,7 +10,7 @@ use std::fmt::{Debug, Display};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
@@ -20,10 +20,9 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
-    IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata,
-    ToUrlError, UrlString,
+    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Resolution, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -32,17 +31,20 @@ use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{
-    redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
-    RequirementSource, ResolverMarkerEnvironment,
+    redact_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement, RequirementSource,
+    ResolverMarkerEnvironment,
 };
-use uv_types::BuildContext;
+use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::{InstallTarget, Workspace};
 
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::{ExcludeNewer, PrereleaseMode, RequiresPython, ResolutionGraph, ResolutionMode};
+use crate::{
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
+    ResolutionMode,
+};
 
 mod requirements_txt;
 mod tree;
@@ -106,6 +108,21 @@ impl Lock {
         let mut packages = BTreeMap::new();
         let requires_python = graph.requires_python.clone();
 
+        // Determine the set of packages included at multiple versions.
+        let mut seen = FxHashSet::default();
+        let mut duplicates = FxHashSet::default();
+        for node_index in graph.petgraph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
+                continue;
+            };
+            if !dist.is_base() {
+                continue;
+            }
+            if !seen.insert(dist.name()) {
+                duplicates.insert(dist.name());
+            }
+        }
+
         // Lock all base packages.
         for node_index in graph.petgraph.node_indices() {
             let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
@@ -114,10 +131,20 @@ impl Lock {
             if !dist.is_base() {
                 continue;
             }
-            let fork_markers = graph
-                .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
-                .cloned()
-                .unwrap_or_default();
+
+            // If there are multiple distributions for the same package, include the markers of all
+            // forks that included the current distribution.
+            let fork_markers = if duplicates.contains(dist.name()) {
+                graph
+                    .fork_markers
+                    .iter()
+                    .filter(|fork_markers| !fork_markers.is_disjoint(&dist.marker))
+                    .cloned()
+                    .collect()
+            } else {
+                vec![]
+            };
+
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
             Self::remove_unreachable_wheels(graph, &requires_python, node_index, &mut package);
 
@@ -927,6 +954,8 @@ impl Lock {
         indexes: Option<&IndexLocations>,
         build_options: &BuildOptions,
         tags: &Tags,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
         let mut queue: VecDeque<&Package> = VecDeque::new();
@@ -1053,53 +1082,31 @@ impl Lock {
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let remotes = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index_url.redacted()))
+                        Some(UrlString::from(index.url().redacted()))
                     }
                     IndexUrl::Path(_) => None,
                 })
-                .chain(
-                    locations
-                        .flat_index()
-                        .filter_map(|index_url| match index_url {
-                            FlatIndexLocation::Url(_) => {
-                                Some(UrlString::from(index_url.redacted()))
-                            }
-                            FlatIndexLocation::Path(_) => None,
-                        }),
-                )
                 .collect::<BTreeSet<_>>()
         });
 
         let locals = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
-                    IndexUrl::Path(index_url) => {
-                        let path = index_url.to_file_path().ok()?;
+                    IndexUrl::Path(url) => {
+                        let path = url.to_file_path().ok()?;
                         let path = relative_to(&path, workspace.install_path())
                             .or_else(|_| std::path::absolute(path))
                             .ok()?;
                         Some(path)
                     }
                 })
-                .chain(
-                    locations
-                        .flat_index()
-                        .filter_map(|index_url| match index_url {
-                            FlatIndexLocation::Url(_) => None,
-                            FlatIndexLocation::Path(index_url) => {
-                                let path = index_url.to_file_path().ok()?;
-                                let path = relative_to(&path, workspace.install_path())
-                                    .or_else(|_| std::path::absolute(path))
-                                    .ok()?;
-                                Some(path)
-                            }
-                        }),
-                )
                 .collect::<BTreeSet<_>>()
         });
 
@@ -1158,18 +1165,48 @@ impl Lock {
                 build_options,
             )?;
 
-            let archive = database
-                .get_or_build_wheel_metadata(&dist, HashPolicy::None)
-                .await
-                .map_err(|err| LockErrorKind::Resolution {
-                    id: package.id.clone(),
-                    err,
-                })?;
+            // Fetch the metadata for the distribution.
+            let metadata = {
+                let id = dist.version_id();
+                if let Some(archive) =
+                    index
+                        .distributions()
+                        .get(&id)
+                        .as_deref()
+                        .and_then(|response| {
+                            if let MetadataResponse::Found(archive, ..) = response {
+                                Some(archive)
+                            } else {
+                                None
+                            }
+                        })
+                {
+                    // If the metadata is already in the index, return it.
+                    archive.metadata.clone()
+                } else {
+                    // Run the PEP 517 build process to extract metadata from the source distribution.
+                    let archive = database
+                        .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package.id.clone(),
+                            err,
+                        })?;
+
+                    let metadata = archive.metadata.clone();
+
+                    // Insert the metadata into the index.
+                    index
+                        .distributions()
+                        .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                    metadata
+                }
+            };
 
             // Validate the `requires-dist` metadata.
             {
-                let expected: BTreeSet<_> = archive
-                    .metadata
+                let expected: BTreeSet<_> = metadata
                     .requires_dist
                     .into_iter()
                     .map(|requirement| normalize_requirement(requirement, workspace))
@@ -1194,8 +1231,7 @@ impl Lock {
 
             // Validate the `dev-dependencies` metadata.
             {
-                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = archive
-                    .metadata
+                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
                     .dev_dependencies
                     .into_iter()
                     .map(|(group, requirements)| {
@@ -3086,7 +3122,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     let mut url = git_dist.git.repository().clone();
 
     // Redact the credentials.
-    redact_git_credentials(&mut url);
+    redact_credentials(&mut url);
 
     // Clear out any existing state.
     url.set_fragment(None);
@@ -3675,11 +3711,11 @@ fn normalize_requirement(
             url,
         } => {
             // Redact the credentials.
-            redact_git_credentials(&mut repository);
+            redact_credentials(&mut repository);
 
             // Redact the PEP 508 URL.
             let mut url = url.to_url();
-            redact_git_credentials(&mut url);
+            redact_credentials(&mut url);
             let url = VerbatimUrl::from_url(url);
 
             Ok(Requirement {
@@ -3740,11 +3776,36 @@ fn normalize_requirement(
                 origin: None,
             })
         }
-        _ => Ok(Requirement {
+        RequirementSource::Registry {
+            specifier,
+            mut index,
+        } => {
+            if let Some(index) = index.as_mut() {
+                redact_credentials(index);
+            }
+            Ok(Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                marker: requirement.marker,
+                source: RequirementSource::Registry { specifier, index },
+                origin: None,
+            })
+        }
+        RequirementSource::Url {
+            location,
+            subdirectory,
+            ext,
+            url,
+        } => Ok(Requirement {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
-            source: requirement.source,
+            source: RequirementSource::Url {
+                location,
+                subdirectory,
+                ext,
+                url,
+            },
             origin: None,
         }),
     }

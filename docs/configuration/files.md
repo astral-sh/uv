@@ -9,7 +9,7 @@ in the nearest parent directory.
 
     For `tool` commands, which operate at the user level, local configuration
     files will be ignored. Instead, uv will exclusively read from user-level configuration
-    (e.g., `~/.config/uv/uv.toml`).
+    (e.g., `~/.config/uv/uv.toml`) and system-level configuration (e.g., `/etc/uv/uv.toml`).
 
 In workspaces, uv will begin its search at the workspace root, ignoring any configuration defined in
 workspace members. Since the workspace is locked as a single unit, configuration is shared across
@@ -40,13 +40,21 @@ index-url = "https://test.pypi.org/simple"
     `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
 
 uv will also discover user-level configuration at `~/.config/uv/uv.toml` (or
-`$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows. User-level
-configuration must use the `uv.toml` format, rather than the `pyproject.toml` format, as a
-`pyproject.toml` is intended to define a Python _project_.
+`$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows; and
+system-level configuration at `/etc/uv/uv.toml` (or `$XDG_CONFIG_DIRS/uv/uv.toml`) on macOS and
+Linux, or `%SYSTEMDRIVE%\ProgramData\uv\uv.toml` on Windows.
 
-If both project- and user-level configuration are found, the settings will be merged, with the
-project-level configuration taking precedence. Specifically, if a string, number, or boolean is
-present in both tables, the project-level value will be used, and the user-level value will be
+User-and system-level configuration must use the `uv.toml` format, rather than the `pyproject.toml`
+format, as a `pyproject.toml` is intended to define a Python _project_.
+
+If project-, user-, and system-level configuration files are found, the settings will be merged,
+with project-level configuration taking precedence over the user-level configuration, and user-level
+configuration taking precedence over the system-level configuration. (If multiple system-level
+configuration files are found, e.g., at both `/etc/uv/uv.toml` and `$XDG_CONFIG_DIRS/uv/uv.toml`,
+only the first-discovered file will be used, with XDG taking priority.)
+
+For example, if a string, number, or boolean is present in both the project- and user-level
+configuration tables, the project-level value will be used, and the user-level value will be
 ignored. If an array is present in both tables, the arrays will be concatenated, with the
 project-level settings appearing earlier in the merged array.
 

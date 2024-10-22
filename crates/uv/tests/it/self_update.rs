@@ -5,6 +5,8 @@ use axoupdater::{
     ReleaseSourceType,
 };
 
+use uv_static::EnvVars;
+
 use crate::common::get_bin;
 
 #[test]
@@ -12,7 +14,10 @@ fn check_self_update() {
     // To maximally emulate behaviour in practice, this test actually modifies CARGO_HOME
     // and therefore should only be run in CI by default, where it can't hurt developers.
     // We use the "CI" env-var that CI machines tend to run
-    if std::env::var("CI").map(|s| s.is_empty()).unwrap_or(true) {
+    if std::env::var(EnvVars::CI)
+        .map(|s| s.is_empty())
+        .unwrap_or(true)
+    {
         return;
     }
 
