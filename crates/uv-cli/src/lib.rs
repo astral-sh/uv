@@ -945,7 +945,7 @@ pub struct PipCompileArgs {
     #[arg(long, short, env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraint: Vec<Maybe<PathBuf>>,
 
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -1494,7 +1494,7 @@ pub struct PipInstallArgs {
     #[arg(long, short, env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraint: Vec<Maybe<PathBuf>>,
 
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -2573,7 +2573,7 @@ pub struct InitArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
-    /// Include optional dependencies from the extra group name.
+    /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
     ///
@@ -2769,7 +2769,7 @@ pub struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
-    /// Include optional dependencies from the extra group name.
+    /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
     ///
@@ -2984,13 +2984,12 @@ pub struct AddArgs {
     #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
     pub dev: bool,
 
-    /// Add the requirements to the specified optional dependency group.
+    /// Add the requirements to the package's optional dependencies for the specified extra.
     ///
     /// The group may then be activated when installing the project with the
     /// `--extra` flag.
     ///
-    /// To enable an optional dependency group for this requirement instead, see
-    /// `--extra`.
+    /// To enable an optional extra for this requirement instead, see `--extra`.
     #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
     pub optional: Option<ExtraName>,
 
@@ -3037,8 +3036,7 @@ pub struct AddArgs {
     ///
     /// May be provided more than once.
     ///
-    /// To add this dependency to an optional group in the current project
-    /// instead, see `--optional`.
+    /// To add this dependency to an optional extra instead, see `--optional`.
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
@@ -3108,7 +3106,7 @@ pub struct RemoveArgs {
     #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
     pub dev: bool,
 
-    /// Remove the packages from the specified optional dependency group.
+    /// Remove the packages from the project's optional dependencies for the specified extra.
     #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
     pub optional: Option<ExtraName>,
 
@@ -3289,7 +3287,7 @@ pub struct ExportArgs {
     #[arg(long)]
     pub package: Option<PackageName>,
 
-    /// Include optional dependencies from the extra group name.
+    /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]

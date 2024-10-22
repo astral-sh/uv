@@ -841,7 +841,7 @@
           ]
         },
         "extra": {
-          "description": "Include optional dependencies from the extra group name; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Include optional dependencies from the specified extra; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
           "type": [
             "array",
             "null"
