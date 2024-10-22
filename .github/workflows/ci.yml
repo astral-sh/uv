@@ -322,11 +322,10 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
-    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
-    timeout-minutes: 20
+    timeout-minutes: 15
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: ubuntu-latest
+    runs-on: windows-latest-xlarge
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
@@ -335,50 +334,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Load xwin cache
-        uses: actions/cache@v4
-        with:
-          path: "${{ github.workspace }}/.xwin"
-          key: cargo-xwin-${{ matrix.target-arch }}
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
-      - uses: rui314/setup-mold@v1
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ${{ github.workspace }}/crates/uv-trampoline
+          workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
 
       - name: "Install Rust toolchain"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
-      - name: "Install cargo-xwin and cargo-bloat"
+      - name: "Install cargo-bloat"
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-xwin,cargo-bloat
-
-      - name: "Install xwin dependencies"
-        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
+          tool: cargo-bloat
 
       - name: "Clippy"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         if: matrix.target-arch == 'x86_64'
-        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
-        env:
-          XWIN_ARCH: "x86_64"
-          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
 
       - name: "Bloat Check"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         if: matrix.target-arch == 'x86_64'
         run: |
-          cargo xwin bloat --release --target x86_64-pc-windows-msvc | \
-          grep -v -i -E 'core::fmt::write|core::fmt::getcount' | \
-          grep -q -E 'core::fmt|std::panicking|std::backtrace_rs' && exit 1 || exit 0
-        env:
-          XWIN_ARCH: "x86_64"
-          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+          $output = cargo bloat --release --target x86_64-pc-windows-msvc
+          $filteredOutput = $output | Select-String -Pattern 'core::fmt::write|core::fmt::getcount' -NotMatch
+          $containsPatterns = $filteredOutput | Select-String -Pattern 'core::fmt|std::panicking|std::backtrace_rs'
+
+          if ($containsPatterns) {
+              Exit 1
+          } else {
+              Exit 0
+          }
 
   # Separate jobs for the nightly crate
   windows-trampoline-test:
