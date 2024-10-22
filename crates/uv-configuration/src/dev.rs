@@ -68,35 +68,73 @@ pub struct DevGroupsSpecification {
 #[derive(Debug, Clone)]
 pub enum GroupsSpecification {
     /// Include dependencies from the specified groups.
-    Include(Vec<GroupName>),
+    ///
+    /// The `include` list is guaranteed to omit groups in the `exclude` list (i.e., they have an
+    /// empty intersection).
+    Include {
+        include: Vec<GroupName>,
+        exclude: Vec<GroupName>,
+    },
     /// Only include dependencies from the specified groups, exclude all other dependencies.
-    Only(Vec<GroupName>),
+    ///
+    /// The `include` list is guaranteed to omit groups in the `exclude` list (i.e., they have an
+    /// empty intersection).
+    Only {
+        include: Vec<GroupName>,
+        exclude: Vec<GroupName>,
+    },
 }
 
 impl GroupsSpecification {
+    /// Create a [`GroupsSpecification`] that includes the given group.
+    pub fn from_group(group: GroupName) -> Self {
+        Self::Include {
+            include: vec![group],
+            exclude: Vec::new(),
+        }
+    }
+
     /// Returns `true` if the specification allows for production dependencies.
     pub fn prod(&self) -> bool {
-        matches!(self, Self::Include(_))
+        matches!(self, Self::Include { .. })
     }
 
     /// Returns `true` if the specification is limited to a select set of groups.
     pub fn only(&self) -> bool {
-        matches!(self, Self::Only(_))
+        matches!(self, Self::Only { .. })
     }
 
     /// Returns the option that was used to request the groups, if any.
     pub fn as_flag(&self) -> Option<Cow<'_, str>> {
         match self {
-            Self::Include(groups) => match groups.as_slice() {
-                [] => None,
+            Self::Include { include, exclude } => match include.as_slice() {
+                [] => match exclude.as_slice() {
+                    [] => None,
+                    [group] => Some(Cow::Owned(format!("--no-group {group}"))),
+                    [..] => Some(Cow::Borrowed("--no-group")),
+                },
                 [group] => Some(Cow::Owned(format!("--group {group}"))),
                 [..] => Some(Cow::Borrowed("--group")),
             },
-            Self::Only(groups) => match groups.as_slice() {
-                [] => None,
+            Self::Only { include, exclude } => match include.as_slice() {
+                [] => match exclude.as_slice() {
+                    [] => None,
+                    [group] => Some(Cow::Owned(format!("--no-group {group}"))),
+                    [..] => Some(Cow::Borrowed("--no-group")),
+                },
                 [group] => Some(Cow::Owned(format!("--only-group {group}"))),
                 [..] => Some(Cow::Borrowed("--only-group")),
             },
+        }
+    }
+
+    /// Iterate over all groups referenced in the [`DevGroupsSpecification`].
+    pub fn names(&self) -> impl Iterator<Item = &GroupName> {
+        match self {
+            GroupsSpecification::Include { include, exclude }
+            | GroupsSpecification::Only { include, exclude } => {
+                include.iter().chain(exclude.iter())
+            }
         }
     }
 
@@ -112,9 +150,14 @@ impl<'a> IntoIterator for &'a GroupsSpecification {
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            GroupsSpecification::Include(groups) | GroupsSpecification::Only(groups) => {
-                groups.iter()
+            GroupsSpecification::Include {
+                include,
+                exclude: _,
             }
+            | GroupsSpecification::Only {
+                include,
+                exclude: _,
+            } => include.iter(),
         }
     }
 }
@@ -125,8 +168,9 @@ impl DevGroupsSpecification {
         dev: bool,
         no_dev: bool,
         only_dev: bool,
-        group: Vec<GroupName>,
-        only_group: Vec<GroupName>,
+        mut group: Vec<GroupName>,
+        no_group: Vec<GroupName>,
+        mut only_group: Vec<GroupName>,
     ) -> Self {
         let dev = if only_dev {
             Some(DevMode::Only)
@@ -142,12 +186,31 @@ impl DevGroupsSpecification {
             if matches!(dev, Some(DevMode::Only)) {
                 unreachable!("cannot specify both `--only-dev` and `--group`")
             };
-            Some(GroupsSpecification::Include(group))
+
+            // Ensure that `--no-group` and `--group` are mutually exclusive.
+            group.retain(|group| !no_group.contains(group));
+
+            Some(GroupsSpecification::Include {
+                include: group,
+                exclude: no_group,
+            })
         } else if !only_group.is_empty() {
             if matches!(dev, Some(DevMode::Include)) {
                 unreachable!("cannot specify both `--dev` and `--only-group`")
             };
-            Some(GroupsSpecification::Only(only_group))
+
+            // Ensure that `--no-group` and `--only-group` are mutually exclusive.
+            only_group.retain(|group| !no_group.contains(group));
+
+            Some(GroupsSpecification::Only {
+                include: only_group,
+                exclude: no_group,
+            })
+        } else if !no_group.is_empty() {
+            Some(GroupsSpecification::Include {
+                include: Vec::new(),
+                exclude: no_group,
+            })
         } else {
             None
         };
@@ -270,8 +333,24 @@ impl DevGroupsManifest {
                     .iter()
                     .chain(self.defaults.iter().filter(|default| {
                         // If `--no-dev` was provided, exclude the `dev` group from the list of defaults.
-                        !matches!(self.spec.dev_mode(), Some(DevMode::Exclude))
-                            || *default != &*DEV_DEPENDENCIES
+                        if matches!(self.spec.dev_mode(), Some(DevMode::Exclude)) {
+                            if *default == &*DEV_DEPENDENCIES {
+                                return false;
+                            };
+                        }
+
+                        // If `--no-group` was provided, exclude the group from the list of defaults.
+                        if let Some(GroupsSpecification::Include {
+                            include: _,
+                            exclude,
+                        }) = self.spec.groups()
+                        {
+                            if exclude.contains(default) {
+                                return false;
+                            }
+                        }
+
+                        true
                     })),
             )
         }
