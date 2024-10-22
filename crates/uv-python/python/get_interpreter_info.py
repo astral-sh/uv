@@ -563,6 +563,7 @@ def main() -> None:
         "sys_executable": sys.executable,
         "sys_path": sys.path,
         "stdlib": sysconfig.get_path("stdlib"),
+        "sysconfig_prefix": sysconfig.get_config_var("prefix"),
         "scheme": get_scheme(),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,
