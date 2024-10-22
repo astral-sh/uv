@@ -798,9 +798,11 @@ async fn read_url_to_string(
                 url: path.as_ref().to_owned(),
             })?;
 
+    let url = Url::from_str(path_utf8)
+        .map_err(|err| RequirementsTxtParserError::InvalidUrl(path_utf8.to_string(), err))?;
     Ok(client
-        .client()
-        .get(path_utf8)
+        .for_host(&url)
+        .get(url)
         .send()
         .await?
         .error_for_status()?
@@ -890,6 +892,8 @@ pub enum RequirementsTxtParserError {
     },
     #[cfg(feature = "http")]
     Reqwest(reqwest_middleware::Error),
+    #[cfg(feature = "http")]
+    InvalidUrl(String, url::ParseError),
 }
 
 impl Display for RequirementsTxtParserError {
@@ -956,6 +960,10 @@ impl Display for RequirementsTxtParserError {
             Self::Reqwest(err) => {
                 write!(f, "Error while accessing remote requirements file {err}")
             }
+            #[cfg(feature = "http")]
+            Self::InvalidUrl(url, err) => {
+                write!(f, "Not a valid  URL, {err}: `{url}`")
+            }
         }
     }
 }
@@ -982,6 +990,8 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::NonUnicodeUrl { .. } => None,
             #[cfg(feature = "http")]
             Self::Reqwest(err) => err.source(),
+            #[cfg(feature = "http")]
+            Self::InvalidUrl(_, err) => err.source(),
         }
     }
 }
@@ -1113,6 +1123,10 @@ impl Display for RequirementsTxtFileError {
                     "Error while accessing remote requirements file {}: {err}",
                     self.file.user_display(),
                 )
+            }
+            #[cfg(feature = "http")]
+            RequirementsTxtParserError::InvalidUrl(url, err) => {
+                write!(f, "Not a valid URL, {err}: `{url}`")
             }
         }
     }

@@ -67,7 +67,7 @@ pub(crate) async fn publish(
         keyring_provider,
         trusted_publishing,
         &publish_url,
-        &oidc_client.client(),
+        &oidc_client,
     )
     .await?;
 
@@ -104,7 +104,7 @@ pub(crate) async fn publish(
             &raw_filename,
             &filename,
             &publish_url,
-            &upload_client.client(),
+            &upload_client,
             DEFAULT_RETRIES,
             username.as_deref(),
             password.as_deref(),
