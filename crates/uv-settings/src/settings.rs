@@ -921,7 +921,7 @@ pub struct PipOptions {
         "#
     )]
     pub strict: Option<bool>,
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the specified extra; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[option(
