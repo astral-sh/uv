@@ -195,7 +195,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             .into_iter()
             .chain(
                 metadata
-                    .dev_dependencies
+                    .dependency_groups
                     .into_iter()
                     .filter_map(|(group, dependencies)| {
                         if self.dev.contains(&group) {

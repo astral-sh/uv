@@ -66,7 +66,7 @@ pub struct Metadata {
     pub requires_dist: Vec<uv_pypi_types::Requirement>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
-    pub dev_dependencies: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
 }
 
 impl Metadata {
@@ -83,7 +83,7 @@ impl Metadata {
                 .collect(),
             requires_python: metadata.requires_python,
             provides_extras: metadata.provides_extras,
-            dev_dependencies: BTreeMap::default(),
+            dependency_groups: BTreeMap::default(),
         }
     }
 
@@ -101,7 +101,7 @@ impl Metadata {
             name,
             requires_dist,
             provides_extras,
-            dev_dependencies,
+            dependency_groups,
         } = RequiresDist::from_project_maybe_workspace(
             uv_pypi_types::RequiresDist {
                 name: metadata.name,
@@ -122,7 +122,7 @@ impl Metadata {
             requires_dist,
             requires_python: metadata.requires_python,
             provides_extras,
-            dev_dependencies,
+            dependency_groups,
         })
     }
 }

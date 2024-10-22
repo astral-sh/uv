@@ -3889,7 +3889,7 @@ deploy = [
     { name = "gunicorn" },
 ]
 
-[package.dev-dependencies]
+[package.dependency-groups]
 dev = [
     { name = "asyncudp" },
     { name = "black" },
@@ -4033,7 +4033,7 @@ requires-dist = [
     { name = "zxcvbn" },
 ]
 
-[package.metadata.requires-dev]
+[package.metadata.dependency-groups]
 dev = [
     { name = "asyncudp", specifier = ">=0.7" },
     { name = "black", specifier = "==24.4.2" },

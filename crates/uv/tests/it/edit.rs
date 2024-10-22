@@ -1074,14 +1074,14 @@ fn add_remove_dev() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
 
-        [package.dev-dependencies]
+        [package.dependency-groups]
         dev = [
             { name = "anyio" },
         ]
 
         [package.metadata]
 
-        [package.metadata.requires-dev]
+        [package.metadata.dependency-groups]
         dev = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
