@@ -86,6 +86,16 @@
         "type": "string"
       }
     },
+    "default-groups": {
+      "description": "The list of `dependency-groups` to install by default.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/GroupName"
+      }
+    },
     "dependency-metadata": {
       "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When provided, enables the resolver to use the specified metadata instead of querying the registry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name`: The name of the package. - (Optional) `version`: The version of the package. If omitted, the metadata will be applied to all versions of the package. - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`). - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`). - (Optional) `provides-extras`: The extras provided by the package.",
       "type": [
@@ -578,6 +588,10 @@
         }
       },
       "additionalProperties": false
+    },
+    "GroupName": {
+      "description": "The normalized name of a dependency group.\n\nSee: - <https://peps.python.org/pep-0735/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "type": "string"
     },
     "Index": {
       "type": "object",

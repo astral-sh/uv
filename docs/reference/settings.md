@@ -30,6 +30,23 @@ constraint-dependencies = ["grpcio<1.65"]
 
 ---
 
+### [`default-groups`](#default-groups) {: #default-groups }
+
+The list of `dependency-groups` to install by default.
+
+**Default value**: `["dev"]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+default-groups = ["docs"]
+```
+
+---
+
 ### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
 The project's development dependencies. Development dependencies will be installed by

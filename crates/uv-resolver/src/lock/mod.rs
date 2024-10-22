@@ -15,7 +15,7 @@ use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::{BuildOptions, DevGroupsSpecification, ExtrasSpecification, InstallOptions};
+use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
@@ -575,7 +575,7 @@ impl Lock {
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
-        dev: &DevGroupsSpecification,
+        dev: &DevGroupsManifest,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {

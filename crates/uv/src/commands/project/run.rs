@@ -17,8 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, InstallOptions,
-    LowerBound, SourceStrategy,
+    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
+    InstallOptions, LowerBound, SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -44,8 +44,8 @@ use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::{
-    validate_requires_python, EnvironmentSpecification, ProjectError, PythonRequestSource,
-    WorkspacePython,
+    default_dependency_groups, validate_dependency_groups, validate_requires_python,
+    EnvironmentSpecification, ProjectError, PythonRequestSource, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{diagnostics, project, ExitStatus, SharedState};
@@ -342,7 +342,7 @@ pub(crate) async fn run(
                 dev_mode.as_flag()
             );
         }
-        if let Some(flag) = dev.groups().as_flag() {
+        if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
             warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
         }
         if package.is_some() {
@@ -422,7 +422,7 @@ pub(crate) async fn run(
                     dev_mode.as_flag()
                 );
             }
-            if let Some(flag) = dev.groups().as_flag() {
+            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if locked {
@@ -445,7 +445,7 @@ pub(crate) async fn run(
                     dev_mode.as_flag()
                 );
             }
-            if let Some(flag) = dev.groups().as_flag() {
+            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if locked {
@@ -467,20 +467,6 @@ pub(crate) async fn run(
                     "Discovered virtual workspace at: {}",
                     project.workspace().install_path().display()
                 );
-            }
-
-            // Validate the requested dependency groups.
-            for group in dev.groups().iter() {
-                if !project
-                    .pyproject_toml()
-                    .dependency_groups
-                    .as_ref()
-                    .is_some_and(|groups| groups.contains_key(group))
-                {
-                    return Err(anyhow::anyhow!(
-                        "Group `{group}` is not defined in the project's `dependency-group` table"
-                    ));
-                }
             }
 
             let venv = if isolated {
@@ -563,6 +549,10 @@ pub(crate) async fn run(
                         .flatten();
                 }
             } else {
+                // Determine the default groups to include.
+                validate_dependency_groups(project.pyproject_toml(), &dev)?;
+                let defaults = default_dependency_groups(project.pyproject_toml())?;
+
                 let result = match project::lock::do_safe_lock(
                     locked,
                     frozen,
@@ -613,7 +603,7 @@ pub(crate) async fn run(
                     &venv,
                     result.lock(),
                     &extras,
-                    &dev.with_default_dev(),
+                    &dev.with_defaults(defaults),
                     editable,
                     install_options,
                     Modifications::Sufficient,

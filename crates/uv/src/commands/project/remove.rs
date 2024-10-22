@@ -6,8 +6,7 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, DevMode, EditableMode, ExtrasSpecification,
-    InstallOptions, LowerBound,
+    Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
 };
 use uv_fs::Simplified;
 use uv_pep508::PackageName;
@@ -20,6 +19,7 @@ use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::default_dependency_groups;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -206,16 +206,18 @@ pub(crate) async fn remove(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let dev = DevMode::Include;
     let extras = ExtrasSpecification::All;
     let install_options = InstallOptions::default();
+
+    // Determine the default groups to include.
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     project::sync::do_sync(
         InstallTarget::from(&project),
         &venv,
         &lock,
         &extras,
-        &DevGroupsSpecification::from(dev),
+        &DevGroupsManifest::from_defaults(defaults),
         EditableMode::Editable,
         install_options,
         Modifications::Exact,

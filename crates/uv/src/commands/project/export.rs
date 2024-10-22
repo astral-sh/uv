@@ -18,7 +18,9 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace}
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, ProjectInterpreter};
+use crate::commands::project::{
+    default_dependency_groups, validate_dependency_groups, ProjectError, ProjectInterpreter,
+};
 use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
@@ -70,19 +72,9 @@ pub(crate) async fn export(
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
-    // Validate the requested dependency groups.
-    for group in dev.groups().iter() {
-        if !project
-            .pyproject_toml()
-            .dependency_groups
-            .as_ref()
-            .is_some_and(|groups| groups.contains_key(group))
-        {
-            return Err(anyhow::anyhow!(
-                "Group `{group}` is not defined in the project's `dependency-group` table"
-            ));
-        }
-    }
+    // Determine the default groups to include.
+    validate_dependency_groups(project.pyproject_toml(), &dev)?;
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     let VirtualProject::Project(project) = project else {
         return Err(anyhow::anyhow!("Legacy non-project roots are not supported in `uv export`; add a `[project]` table to your `pyproject.toml` to enable exports"));
@@ -155,7 +147,7 @@ pub(crate) async fn export(
                 &lock,
                 project.project_name(),
                 &extras,
-                &dev.with_default_dev(),
+                &dev.with_defaults(defaults),
                 editable,
                 hashes,
                 &install_options,

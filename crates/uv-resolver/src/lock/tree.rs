@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use uv_configuration::DevGroupsSpecification;
+use uv_configuration::DevGroupsManifest;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::ResolverMarkerEnvironment;
 
@@ -26,7 +26,7 @@ pub struct TreeDisplay<'env> {
     /// Maximum display depth of the dependency tree.
     depth: usize,
     /// Whether to include development dependencies in the display.
-    dev: DevGroupsSpecification,
+    dev: DevGroupsManifest,
     /// Prune the given packages from the display of the dependency tree.
     prune: Vec<PackageName>,
     /// Display only the specified packages.
@@ -43,7 +43,7 @@ impl<'env> TreeDisplay<'env> {
         depth: usize,
         prune: Vec<PackageName>,
         packages: Vec<PackageName>,
-        dev: DevGroupsSpecification,
+        dev: DevGroupsManifest,
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
