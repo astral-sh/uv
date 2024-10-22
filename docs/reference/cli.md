@@ -136,7 +136,7 @@ uv run [OPTIONS] [COMMAND]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 
 <p>May be provided more than once.</p>
 
@@ -743,7 +743,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>May be provided more than once.</p>
 
-<p>To add this dependency to an optional group in the current project instead, see <code>--optional</code>.</p>
+<p>To add this dependency to an optional extra instead, see <code>--optional</code>.</p>
 
 </dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
@@ -886,11 +886,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Add the requirements to the specified optional dependency group.</p>
+</dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Add the requirements to the package&#8217;s optional dependencies for the specified extra.</p>
 
 <p>The group may then be activated when installing the project with the <code>--extra</code> flag.</p>
 
-<p>To enable an optional dependency group for this requirement instead, see <code>--extra</code>.</p>
+<p>To enable an optional extra for this requirement instead, see <code>--extra</code>.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Add the dependency to a specific package in the workspace</p>
 
@@ -1222,7 +1222,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Remove the packages from the specified optional dependency group</p>
+</dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Remove the packages from the project&#8217;s optional dependencies for the specified extra</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Remove the dependencies from a specific package in the workspace</p>
 
@@ -1401,7 +1401,7 @@ uv sync [OPTIONS]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 
 <p>May be provided more than once.</p>
 
@@ -2029,7 +2029,7 @@ uv export [OPTIONS]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 
 <p>May be provided more than once.</p>
 
@@ -4951,7 +4951,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name; may be provided more than once.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 
@@ -5715,7 +5715,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name; may be provided more than once.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 

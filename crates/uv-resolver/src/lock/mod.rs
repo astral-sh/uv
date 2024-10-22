@@ -3864,7 +3864,7 @@ enum LockErrorKind {
         /// The ID of the package for which a duplicate dependency was
         /// found.
         id: PackageId,
-        /// The name of the optional dependency group.
+        /// The name of the extra.
         extra: ExtraName,
         /// The ID of the conflicting dependency.
         dependency: Dependency,
