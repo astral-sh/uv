@@ -923,6 +923,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_with_package)
                 .chain(
+                    args.with_editable
+                        .into_iter()
+                        .map(RequirementsSource::Editable),
+                )
+                .chain(
                     args.with_requirements
                         .into_iter()
                         .map(RequirementsSource::from_requirements_file),

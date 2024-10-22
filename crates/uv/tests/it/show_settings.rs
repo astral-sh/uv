@@ -2606,6 +2606,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         from: None,
         with: [],
         with_requirements: [],
+        with_editable: [],
         python: None,
         refresh: None(
             Timestamp(
