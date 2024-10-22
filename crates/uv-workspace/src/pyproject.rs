@@ -540,6 +540,11 @@ impl DependencyGroups {
         self.0.get(group)
     }
 
+    /// Returns `true` if the dependency group is in the list.
+    pub fn contains_key(&self, group: &GroupName) -> bool {
+        self.0.contains_key(group)
+    }
+
     /// Returns an iterator over the dependency groups.
     pub fn iter(&self) -> impl Iterator<Item = (&GroupName, &Vec<DependencyGroupSpecifier>)> {
         self.0.iter()
