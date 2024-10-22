@@ -2373,9 +2373,7 @@ fn run_stdin_with_pep723() -> Result<()> {
        "#
     })?;
 
-    let mut command = context.run();
-    let command_with_args = command.stdin(std::fs::File::open(test_script)?).arg("-");
-    uv_snapshot!(context.filters(), command_with_args, @r###"
+    uv_snapshot!(context.filters(), context.run().stdin(std::fs::File::open(test_script)?).arg("-"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2396,8 +2394,7 @@ fn run_stdin_with_pep723() -> Result<()> {
 fn run_with_env() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let test_script = context.temp_dir.child("test.py");
-    test_script.write_str(indoc! { "
+    context.temp_dir.child("test.py").write_str(indoc! { "
         import os
         print(os.environ.get('THE_EMPIRE_VARIABLE'))
         print(os.environ.get('REBEL_1'))
@@ -2406,8 +2403,7 @@ fn run_with_env() -> Result<()> {
        "
     })?;
 
-    let env_file = context.temp_dir.child(".env");
-    env_file.write_str(indoc! { "
+    context.temp_dir.child(".env").write_str(indoc! { "
         THE_EMPIRE_VARIABLE=palpatine
         REBEL_1=leia_organa
         REBEL_2=obi_wan_kenobi
@@ -2415,10 +2411,7 @@ fn run_with_env() -> Result<()> {
        "
     })?;
 
-    let mut command = context.run();
-    let command_with_args = command.arg("test.py");
-
-    uv_snapshot!(context.filters(), command_with_args,@r###"
+    uv_snapshot!(context.filters(), context.run().arg("test.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2434,11 +2427,10 @@ fn run_with_env() -> Result<()> {
 }
 
 #[test]
-fn run_with_parent_env() -> Result<()> {
+fn run_with_env_file() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let test_script = context.temp_dir.child("test").child("test.py");
-    test_script.write_str(indoc! { "
+    context.temp_dir.child("test.py").write_str(indoc! { "
         import os
         print(os.environ.get('THE_EMPIRE_VARIABLE'))
         print(os.environ.get('REBEL_1'))
@@ -2447,8 +2439,7 @@ fn run_with_parent_env() -> Result<()> {
        "
     })?;
 
-    let env_file = context.temp_dir.child(".env");
-    env_file.write_str(indoc! { "
+    context.temp_dir.child(".file").write_str(indoc! { "
         THE_EMPIRE_VARIABLE=palpatine
         REBEL_1=leia_organa
         REBEL_2=obi_wan_kenobi
@@ -2456,21 +2447,64 @@ fn run_with_parent_env() -> Result<()> {
        "
     })?;
 
-    let mut command = context.run();
-    let command_with_args = command
-        .arg("test.py")
-        .current_dir(context.temp_dir.child("test"));
-
-    uv_snapshot!(context.filters(), command_with_args,@r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".file").arg("test.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    None
-    None
-    None
-    None
+    palpatine
+    leia_organa
+    obi_wan_kenobi
+    C3PO
 
     ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_multiple_env_files() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("test.py").write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+        print(os.environ.get('REBEL_2'))
+       "
+    })?;
+
+    context.temp_dir.child(".env1").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+       "
+    })?;
+
+    context.temp_dir.child(".env2").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=obi_wan_kenobi
+        REBEL_2=C3PO
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env1").arg("--env-file").arg(".env2").arg("test.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    palpatine
+    obi_wan_kenobi
+    C3PO
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("test.py").env("UV_ENV_FILE", ".env1 .env2"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No environment file found at: `.env1 .env2`
     "###);
 
     Ok(())
@@ -2480,26 +2514,61 @@ fn run_with_parent_env() -> Result<()> {
 fn run_with_env_omitted() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let test_script = context.temp_dir.child("test.py");
-    test_script.write_str(indoc! { "
+    context.temp_dir.child("test.py").write_str(indoc! { "
         import os
         print(os.environ.get('THE_EMPIRE_VARIABLE'))
        "
     })?;
 
-    let env_file = context.temp_dir.child(".env");
-    env_file.write_str(indoc! { "
+    context.temp_dir.child(".env").write_str(indoc! { "
         THE_EMPIRE_VARIABLE=palpatine
        "
     })?;
 
-    let mut command = context.run();
-    let command_with_args = command.arg("--no-env-file").arg("test.py");
-
-    uv_snapshot!(context.filters(), command_with_args,@r###"
+    uv_snapshot!(context.filters(), context.run().arg("--no-env-file").arg("test.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    None
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn run_with_parent_env() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("test")
+        .child("test.py")
+        .write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+        print(os.environ.get('REBEL_2'))
+        print(os.environ.get('REBEL_3'))
+       "
+        })?;
+
+    context.temp_dir.child(".env").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+        REBEL_2=obi_wan_kenobi
+        REBEL_3=C3PO
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("test.py").current_dir(context.temp_dir.child("test")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    None
+    None
+    None
     None
 
     ----- stderr -----
@@ -2512,23 +2581,18 @@ fn run_with_env_omitted() -> Result<()> {
 fn run_with_malformed_env() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let test_script = context.temp_dir.child("test.py");
-    test_script.write_str(indoc! { "
+    context.temp_dir.child("test.py").write_str(indoc! { "
         import os
         print(os.environ.get('THE_EMPIRE_VARIABLE'))
        "
     })?;
 
-    let env_file = context.temp_dir.child(".env");
-    env_file.write_str(indoc! { "
+    context.temp_dir.child(".env").write_str(indoc! { "
         THE_^EMPIRE_VARIABLE=darth_vader
        "
     })?;
 
-    let mut command = context.run();
-    let command_with_args = command.arg("test.py");
-
-    uv_snapshot!(context.filters(), command_with_args,@r###"
+    uv_snapshot!(context.filters(), context.run().arg("test.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2542,56 +2606,14 @@ fn run_with_malformed_env() -> Result<()> {
 }
 
 #[test]
-fn run_with_specific_env_file() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let test_script = context.temp_dir.child("test.py");
-    test_script.write_str(indoc! { "
-        import os
-        print(os.environ.get('THE_EMPIRE_VARIABLE'))
-       "
-    })?;
-
-    let env_file = context.temp_dir.child(".env.development");
-    env_file.write_str(indoc! { "
-        THE_EMPIRE_VARIABLE=sidious
-       "
-    })?;
-
-    let mut command = context.run();
-    let command_with_args = command
-        .arg("--env-file")
-        .arg(".env.development")
-        .arg("test.py");
-
-    uv_snapshot!(context.filters(), command_with_args,@r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    sidious
-
-    ----- stderr -----
-    "###);
-
-    Ok(())
-}
-
-#[test]
 fn run_with_not_existing_env_file() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let test_script = context.temp_dir.child("test.py");
-    test_script.write_str(indoc! { "
+    context.temp_dir.child("test.py").write_str(indoc! { "
         import os
         print(os.environ.get('THE_EMPIRE_VARIABLE'))
        "
     })?;
-
-    let mut command = context.run();
-    let command_with_args = command
-        .arg("--env-file")
-        .arg(".env.development")
-        .arg("test.py");
 
     let mut filters = context.filters();
     filters.push((
@@ -2599,7 +2621,7 @@ fn run_with_not_existing_env_file() -> Result<()> {
         "error: Failed to read environment file `.env.development`: [ERR]",
     ));
 
-    uv_snapshot!(filters, command_with_args,@r###"
+    uv_snapshot!(filters, context.run().arg("--env-file").arg(".env.development").arg("test.py"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
