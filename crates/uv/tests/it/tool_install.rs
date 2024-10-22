@@ -173,7 +173,9 @@ fn tool_install() {
 
 #[test]
 fn tool_install_with_editable() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
