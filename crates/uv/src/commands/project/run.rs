@@ -110,19 +110,36 @@ pub(crate) async fn run(
     // Read from the `.env` file, if necessary.
     if !no_env_file {
         let env_file_path = env_file.as_deref().unwrap_or_else(|| Path::new(".env"));
-        match dotenvy::from_path(&env_file_path) {
+        match dotenvy::from_path(env_file_path) {
+            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                if env_file.is_none() {
+                    debug!(
+                        "No environment file found at: `{}`",
+                        env_file_path.simplified_display()
+                    );
+                } else {
+                    bail!(
+                        "No environment file found at: `{}`",
+                        env_file_path.simplified_display()
+                    );
+                }
+            }
             Err(dotenvy::Error::Io(err)) => {
-                // If the user provided a specific file, fail.
-                if env_file.is_some() {
+                if env_file.is_none() {
+                    debug!(
+                        "Failed to read environment file `{}`: {err}",
+                        env_file_path.simplified_display()
+                    );
+                } else {
                     bail!(
                         "Failed to read environment file `{}`: {err}",
                         env_file_path.simplified_display()
                     );
                 }
             }
-            Err(dotenvy::Error::LineParse(line_content, line_num)) => {
+            Err(dotenvy::Error::LineParse(content, position)) => {
                 warn_user!(
-                    "Failed to parse line in environment file `{}` on line {line_num}: {line_content}",
+                    "Failed to parse environment file `{}` at position {position}: {content}",
                     env_file_path.simplified_display(),
                 );
             }
@@ -132,7 +149,7 @@ pub(crate) async fn run(
                     env_file_path.simplified_display(),
                 );
             }
-            Ok(_) => {
+            Ok(()) => {
                 debug!(
                     "Read environment file at: `{}`",
                     env_file_path.simplified_display()

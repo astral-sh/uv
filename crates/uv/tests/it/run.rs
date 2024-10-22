@@ -2434,6 +2434,49 @@ fn run_with_env() -> Result<()> {
 }
 
 #[test]
+fn run_with_parent_env() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("test").child("test.py");
+    test_script.write_str(indoc! { "
+        import os
+        print(os.environ.get('THE_EMPIRE_VARIABLE'))
+        print(os.environ.get('REBEL_1'))
+        print(os.environ.get('REBEL_2'))
+        print(os.environ.get('REBEL_3'))
+       "
+    })?;
+
+    let env_file = context.temp_dir.child(".env");
+    env_file.write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+        REBEL_2=obi_wan_kenobi
+        REBEL_3=C3PO
+       "
+    })?;
+
+    let mut command = context.run();
+    let command_with_args = command
+        .arg("test.py")
+        .current_dir(context.temp_dir.child("test"));
+
+    uv_snapshot!(context.filters(), command_with_args,@r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    None
+    None
+    None
+    None
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_with_env_omitted() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2492,7 +2535,7 @@ fn run_with_malformed_env() -> Result<()> {
     None
 
     ----- stderr -----
-    warning: Failed to parse line in environment file `.env` at position 4: THE_^EMPIRE_VARIABLE=darth_vader
+    warning: Failed to parse environment file `.env` at position 4: THE_^EMPIRE_VARIABLE=darth_vader
     "###);
 
     Ok(())
@@ -2562,7 +2605,7 @@ fn run_with_not_existing_env_file() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to read environment file `.env.development`: [ERR]
+    error: No environment file found at: `.env.development`
     "###);
 
     Ok(())

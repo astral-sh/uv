@@ -618,6 +618,9 @@ pub enum ProjectCommand {
     /// arguments to uv. All options to uv must be provided before the command,
     /// e.g., `uv run --verbose foo`. A `--` can be used to separate the command
     /// from uv options for clarity, e.g., `uv run --python 3.12 -- python`.
+    ///
+    /// Respects `.env` files in the current directory unless `--no-env-file` is
+    /// provided.
     #[command(
         after_help = "Use `uv help run` for more details.",
         after_long_help = ""
