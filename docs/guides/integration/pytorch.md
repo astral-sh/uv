@@ -34,13 +34,13 @@ uv init
 
 ## Add PyTorch indexes
 
-Open the `pyproject.toml` file, and create a custom index matching the CUDA version you have available to instruct `uv` where to find the PyTorch wheels.
+Open the `pyproject.toml` file, and create a custom index matching the channel you want to use (CPU, NVIDIA or AMD), to instruct `uv` where to find the PyTorch wheels.
 
 === "CPU-only"
 
     ```toml
     [[tool.uv.index]]
-    name = "torch-cpu"
+    name = "pytorch-cpu"
     url = "https://download.pytorch.org/whl/cpu"
     explicit = true
     ```
@@ -49,7 +49,7 @@ Open the `pyproject.toml` file, and create a custom index matching the CUDA vers
 
     ```toml
     [[tool.uv.index]]
-    name = "torch-cu118"
+    name = "pytorch-cu118"
     url = "https://download.pytorch.org/whl/cu118"
     explicit = true
     ```
@@ -58,7 +58,7 @@ Open the `pyproject.toml` file, and create a custom index matching the CUDA vers
 
     ```toml
     [[tool.uv.index]]
-    name = "torch-cu121"
+    name = "pytorch-cu121"
     url = "https://download.pytorch.org/whl/cu121"
     explicit = true
     ```
@@ -67,7 +67,7 @@ Open the `pyproject.toml` file, and create a custom index matching the CUDA vers
 
     ```toml
     [[tool.uv.index]]
-    name = "torch-cu124"
+    name = "pytorch-cu124"
     url = "https://download.pytorch.org/whl/cu124"
     explicit = true
     ```
@@ -76,16 +76,16 @@ Open the `pyproject.toml` file, and create a custom index matching the CUDA vers
 
     ```toml
     [[tool.uv.index]]
-    name = "torch-rocm"
+    name = "pytorch-rocm"
     url = "https://download.pytorch.org/whl/rocm6.2"
     explicit = true
     ```
 
-Note that we also specify the `explicit` option: this prevents packages from being installed from that index unless explicitly pinned to it (see the step below). This means that only PyTorch will be installed from this index, while all other packages will be looked up on PyPI.
+Note the `explicit` option: this prevents packages from being installed from that index unless explicitly pinned to it (see the step below). This means that only PyTorch will be installed from this index, while all other packages will be looked up on PyPI (the default index).
 
 ## Pin PyTorch to the custom index
 
-Now we need to pin specific PyTorch versions to the appropriate indexes. We do this by adding/editing the `sources` section in the `pyproject.toml`.
+Now you need to pin specific PyTorch versions to the appropriate indexes. The `tool.uv.sources` table in the `pyproject.toml` is a mapping that matches a package to a list of indexes inside of which to look. Note that you need to create a new entry for every library you want to install. In other words, if your project depends on both PyTorch and torchvision, you need to do as follows:
 
 === "CPU-only"
 
@@ -94,7 +94,10 @@ Now we need to pin specific PyTorch versions to the appropriate indexes. We do t
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "torch-cpu", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cpu", marker = "platform_system != 'Darwin'"},
+    ]
+    torchvision = [
+      { index = "pytorch-cpu", marker = "platform_system != 'Darwin'"},
     ]
     ```
 
@@ -105,7 +108,10 @@ Now we need to pin specific PyTorch versions to the appropriate indexes. We do t
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "torch-cu118", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu118", marker = "platform_system != 'Darwin'"},
+    ]
+    torchvision = [
+      { index = "pytorch-cu118", marker = "platform_system != 'Darwin'"},
     ]
     ```
 
@@ -116,7 +122,10 @@ Now we need to pin specific PyTorch versions to the appropriate indexes. We do t
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "torch-cu121", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu121", marker = "platform_system != 'Darwin'"},
+    ]
+    torchvision = [
+      { index = "pytorch-cu121", marker = "platform_system != 'Darwin'"},
     ]
     ```
 
@@ -127,7 +136,10 @@ Now we need to pin specific PyTorch versions to the appropriate indexes. We do t
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "torch-cu124", marker = "platform_system != 'Darwin'"},
+      { index = "pytorch-cu124", marker = "platform_system != 'Darwin'"},
+    ]
+    torchvision = [
+      { index = "pytorch-cu124", marker = "platform_system != 'Darwin'"},
     ]
     ```
 
@@ -138,16 +150,19 @@ Now we need to pin specific PyTorch versions to the appropriate indexes. We do t
     ```toml
     [tool.uv.sources]
     torch = [
-      { index = "torch-rocm", marker = "platform_system == 'Linux'"},
+      { index = "pytorch-rocm", marker = "platform_system == 'Linux'"},
+    ]
+    torchvision = [
+      { index = "pytorch-rocm", marker = "platform_system == 'Linux'"},
     ]
     ```
 
 ## Add PyTorch to your dependencies
 
-Finally, we can add PyTorch to the `project.dependencies` section of the `pyproject.toml`. You can do this by hand, or using `uv`:
+Finally, we can add PyTorch to the `project.dependencies` section of the `pyproject.toml`. To install PyTorch and torchvision, run:
 
 ```sh
-uv add torch
+uv add torch torchvision
 ```
 
 However, if you want to be more explicit, you could also:
@@ -157,10 +172,12 @@ However, if you want to be more explicit, you could also:
 dependencies = [
   "torch==2.5.0 ; platform_system == 'Darwin'",
   "torch==2.5.0+cu124 ; platform_system != 'Darwin'",
+  "torchvision==0.20.0 ; platform_system == 'Darwin'",
+  "torchvision==0.20.0+cu124 ; platform_system != 'Darwin'",
 ]
 ```
 
-This will install PyTorch 2.5.0 on macOS, and PyTorch 2.5.0+cu124 on Linux and Windows.
+This will install PyTorch 2.5.0 and torchvision 0.19 on macOS, and PyTorch 2.5.0+cu124 with torchvision 0.20.0+cu124 on Linux and Windows.
 
 !!! warning "PyTorch on Intel Macs"
 
