@@ -4335,8 +4335,6 @@ name = "uv-cache"
 version = "0.0.1"
 dependencies = [
  "clap",
- "directories",
- "etcetera",
  "fs-err",
  "nanoid",
  "rmp-serde",
@@ -4347,6 +4345,7 @@ dependencies = [
  "url",
  "uv-cache-info",
  "uv-cache-key",
+ "uv-dirs",
  "uv-distribution-types",
  "uv-fs",
  "uv-normalize",
@@ -4531,6 +4530,16 @@ dependencies = [
  "uv-static",
  "uv-workspace",
  "walkdir",
+]
+
+[[package]]
+name = "uv-dirs"
+version = "0.0.1"
+dependencies = [
+ "directories",
+ "dirs-sys",
+ "etcetera",
+ "uv-static",
 ]
 
 [[package]]
@@ -5212,10 +5221,9 @@ dependencies = [
 name = "uv-state"
 version = "0.0.1"
 dependencies = [
- "directories",
- "etcetera",
  "fs-err",
  "tempfile",
+ "uv-dirs",
 ]
 
 [[package]]
@@ -5226,7 +5234,6 @@ version = "0.0.1"
 name = "uv-tool"
 version = "0.0.1"
 dependencies = [
- "dirs-sys",
  "fs-err",
  "pathdiff",
  "serde",
@@ -5235,6 +5242,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "uv-cache",
+ "uv-dirs",
  "uv-fs",
  "uv-install-wheel",
  "uv-installer",
