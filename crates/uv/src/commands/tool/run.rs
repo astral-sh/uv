@@ -207,6 +207,15 @@ pub(crate) async fn run(
                         for (name, _) in entrypoints {
                             writeln!(printer.stdout(), "- {}", name.cyan())?;
                         }
+                        let suggested_command = format!(
+                            "{} --from {} <EXECUTABLE_NAME>",
+                            invocation_source, from.name
+                        );
+                        writeln!(
+                            printer.stdout(),
+                            "Consider using `{}` instead.",
+                            suggested_command.green()
+                        )?;
                     }
                     return Ok(ExitStatus::Failure);
                 }
