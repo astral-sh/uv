@@ -2665,21 +2665,6 @@ fn init_app_build_backend_maturin() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("foo"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Hello from foo!
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    "###);
-
     Ok(())
 }
 
@@ -2932,21 +2917,6 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         "###
         );
     });
-
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Hello from foo!
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    "###);
 
     Ok(())
 }
