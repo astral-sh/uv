@@ -10,7 +10,7 @@ use itertools::Itertools;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
-use reqwest_middleware::{ClientWithMiddleware, RequestBuilder};
+use reqwest_middleware::RequestBuilder;
 use reqwest_retry::{Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
@@ -24,7 +24,7 @@ use tokio::io::AsyncReadExt;
 use tokio_util::io::ReaderStream;
 use tracing::{debug, enabled, trace, Level};
 use url::Url;
-use uv_client::UvRetryableStrategy;
+use uv_client::{BaseClient, UvRetryableStrategy};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_fs::{ProgressReader, Simplified};
@@ -246,7 +246,7 @@ pub async fn check_trusted_publishing(
     keyring_provider: KeyringProviderType,
     trusted_publishing: TrustedPublishing,
     registry: &Url,
-    client: &ClientWithMiddleware,
+    client: &BaseClient,
 ) -> Result<Option<TrustedPublishingToken>, PublishError> {
     match trusted_publishing {
         TrustedPublishing::Automatic => {
@@ -264,7 +264,7 @@ pub async fn check_trusted_publishing(
             // We could check for credentials from the keyring or netrc the auth middleware first, but
             // given that we are in GitHub Actions we check for trusted publishing first.
             debug!("Running on GitHub Actions without explicit credentials, checking for trusted publishing");
-            match trusted_publishing::get_token(registry, client).await {
+            match trusted_publishing::get_token(registry, client.for_host(registry)).await {
                 Ok(token) => Ok(Some(token)),
                 Err(err) => {
                     // TODO(konsti): It would be useful if we could differentiate between actual errors
@@ -283,7 +283,7 @@ pub async fn check_trusted_publishing(
                 );
             }
 
-            let token = trusted_publishing::get_token(registry, client).await?;
+            let token = trusted_publishing::get_token(registry, client.for_host(registry)).await?;
             Ok(Some(token))
         }
         TrustedPublishing::Never => Ok(None),
@@ -300,7 +300,7 @@ pub async fn upload(
     raw_filename: &str,
     filename: &DistFilename,
     registry: &Url,
-    client: &ClientWithMiddleware,
+    client: &BaseClient,
     retries: u32,
     username: Option<&str>,
     password: Option<&str>,
@@ -504,7 +504,7 @@ async fn build_request(
     raw_filename: &str,
     filename: &DistFilename,
     registry: &Url,
-    client: &ClientWithMiddleware,
+    client: &BaseClient,
     username: Option<&str>,
     password: Option<&str>,
     form_metadata: &[(&'static str, String)],
@@ -543,6 +543,7 @@ async fn build_request(
     };
 
     let mut request = client
+        .for_host(&url)
         .post(url)
         .multipart(form)
         // Ask PyPI for a structured error messages instead of HTML-markup error messages.

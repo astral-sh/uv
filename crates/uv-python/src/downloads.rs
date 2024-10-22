@@ -694,7 +694,7 @@ async fn read_url(
 
         Ok((Either::Left(reader), Some(size)))
     } else {
-        let response = client.client().get(url.clone()).send().await?;
+        let response = client.for_host(url).get(url.clone()).send().await?;
 
         // Ensure the request was successful.
         response.error_for_status_ref()?;

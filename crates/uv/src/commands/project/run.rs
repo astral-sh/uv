@@ -1185,7 +1185,7 @@ impl RunCommand {
                     .connectivity(connectivity)
                     .native_tls(native_tls)
                     .build();
-                let response = client.client().get(url.clone()).send().await?;
+                let response = client.for_host(&url).get(url.clone()).send().await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();

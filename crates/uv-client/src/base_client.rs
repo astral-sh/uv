@@ -350,16 +350,6 @@ enum Security {
 }
 
 impl BaseClient {
-    /// The underlying [`ClientWithMiddleware`] for secure requests.
-    pub fn client(&self) -> ClientWithMiddleware {
-        self.client.clone()
-    }
-
-    /// The underlying [`Client`] without middleware.
-    pub fn raw_client(&self) -> Client {
-        self.raw_client.clone()
-    }
-
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
         if self
