@@ -93,6 +93,20 @@ pub(crate) async fn sync(
         warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
     }
 
+    // Validate the requested dependency groups.
+    for group in dev.groups().iter() {
+        if !project
+            .pyproject_toml()
+            .dependency_groups
+            .as_ref()
+            .is_some_and(|groups| groups.contains_key(group))
+        {
+            return Err(anyhow::anyhow!(
+                "Group `{group}` is not defined in the project's `dependency-group` table"
+            ));
+        }
+    }
+
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
         target.workspace(),
