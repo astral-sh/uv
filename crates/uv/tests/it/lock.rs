@@ -6817,7 +6817,7 @@ fn lock_env_credentials() -> Result<()> {
         build-backend = "setuptools.build_meta"
 
         [[tool.uv.index]]
-        name = "proxy"
+        name = "internal-proxy"
         url = "https://pypi-proxy.fly.dev/basic-auth/simple"
         default = true
         "#,
@@ -6838,8 +6838,8 @@ fn lock_env_credentials() -> Result<()> {
 
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::index_username("PROXY"), "public")
-        .env(EnvVars::index_password("PROXY"), "heron"), @r###"
+        .env(EnvVars::index_username("INTERNAL_PROXY"), "public")
+        .env(EnvVars::index_password("INTERNAL_PROXY"), "heron"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
