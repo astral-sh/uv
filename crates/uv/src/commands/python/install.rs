@@ -4,7 +4,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::Path;
 use tracing::debug;
@@ -64,7 +64,7 @@ pub(crate) async fn install(
         .inspect(|installation| debug!("Found existing installation {}", installation.key()))
         .collect();
     let mut unfilled_requests = Vec::new();
-    let mut uninstalled = BTreeSet::new();
+    let mut uninstalled = HashSet::new();
     for (request, download_request) in requests.iter().zip(download_requests) {
         if matches!(requests.as_slice(), [PythonRequest::Default]) {
             writeln!(printer.stderr(), "Searching for Python installations")?;
@@ -151,7 +151,7 @@ pub(crate) async fn install(
         });
     }
 
-    let mut installed = BTreeSet::new();
+    let mut installed = HashSet::new();
     let mut errors = vec![];
     while let Some((key, result)) = tasks.next().await {
         match result {
@@ -206,7 +206,7 @@ pub(crate) async fn install(
         let reinstalled = uninstalled
             .intersection(&installed)
             .copied()
-            .collect::<BTreeSet<_>>();
+            .collect::<HashSet<_>>();
         let uninstalled = uninstalled.difference(&reinstalled).copied();
         let installed = installed.difference(&reinstalled).copied();
 
