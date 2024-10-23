@@ -366,7 +366,6 @@ impl PyProjectTomlMut {
 
         // Set the position to the minimum, if it's not already the first element.
         if let Some(min) = existing.iter().filter_map(toml_edit::Table::position).min() {
-            // if !table.position().is_some_and(|position| position < min) {
             table.set_position(min);
 
             // Increment the position of all existing elements.
@@ -375,7 +374,6 @@ impl PyProjectTomlMut {
                     table.set_position(position + 1);
                 }
             }
-            // }
         }
 
         // Push the item to the table.
@@ -805,11 +803,16 @@ pub fn add_dependency(
             let index = index.unwrap_or(deps.len());
 
             let mut value = Value::from(req_string.as_str());
+
             let decor = value.decor_mut();
-            decor.set_prefix(deps.trailing().clone());
-            deps.set_trailing("");
+
+            if index == deps.len() {
+                decor.set_prefix(deps.trailing().clone());
+                deps.set_trailing("");
+            }
 
             deps.insert_formatted(index, value);
+
             // `reformat_array_multiline` uses the indentation of the first dependency entry.
             // Therefore, we retrieve the indentation of the first dependency entry and apply it to
             // the new entry. Note that it is only necessary if the newly added dependency is going
@@ -992,6 +995,11 @@ fn reformat_array_multiline(deps: &mut Array) {
                 .and_then(|s| s.lines().last())
                 .unwrap_or_default();
 
+            let decor_prefix = decor_prefix
+                .split_once('#')
+                .map(|(s, _)| s)
+                .unwrap_or(decor_prefix);
+
             // If there is no indentation, use four-space.
             indentation_prefix = Some(if decor_prefix.is_empty() {
                 "    ".to_string()
@@ -1023,7 +1031,16 @@ fn reformat_array_multiline(deps: &mut Array) {
         let mut rv = String::new();
         if comments.peek().is_some() {
             for comment in comments {
-                rv.push_str("\n    ");
+                match comment.comment_type {
+                    CommentType::OwnLine => {
+                        let indentation_prefix_str =
+                            format!("\n{}", indentation_prefix.as_ref().unwrap());
+                        rv.push_str(&indentation_prefix_str);
+                    }
+                    CommentType::EndOfLine => {
+                        rv.push(' ');
+                    }
+                }
                 rv.push_str(&comment.text);
             }
         }

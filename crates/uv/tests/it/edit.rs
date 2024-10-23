@@ -6591,3 +6591,240 @@ fn add_preserves_open_bracket_comment() -> Result<()> {
     });
     Ok(())
 }
+
+#[test]
+fn add_preserves_empty_comment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # First line.
+            # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # First line.
+            # Second line.
+            "anyio==3.7.0",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_preserves_trailing_comment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna",
+            "iniconfig",  # Use iniconfig.
+            # First line.
+            # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio==3.7.0",
+            "idna",
+            "iniconfig", # Use iniconfig.
+            # First line.
+            # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio==3.7.0",
+            "idna",
+            "iniconfig", # Use iniconfig.
+            # First line.
+            # Second line.
+            "typing-extensions>=4.10.0",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_preserves_trailing_depth() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+          "idna",
+          "iniconfig",# Use iniconfig.
+            # First line.
+            # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+          "anyio==3.7.0",
+          "idna",
+          "iniconfig", # Use iniconfig.
+          # First line.
+          # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
