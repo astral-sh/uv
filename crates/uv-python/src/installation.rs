@@ -132,7 +132,7 @@ impl PythonInstallation {
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(&client, installations_dir, &cache_dir, reporter)
+            .fetch(&client, installations_dir, &cache_dir, false, reporter)
             .await?;
 
         let path = match result {

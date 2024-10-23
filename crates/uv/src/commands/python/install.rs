@@ -1,5 +1,4 @@
 use anyhow::Result;
-use fs_err as fs;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -90,7 +89,6 @@ pub(crate) async fn install(
                 )?;
             }
             if reinstall {
-                fs::remove_dir_all(installation.path())?;
                 uninstalled.push(installation.key().clone());
                 unfilled_requests.push(download_request);
             }
@@ -145,7 +143,13 @@ pub(crate) async fn install(
             (
                 download.key(),
                 download
-                    .fetch(&client, installations_dir, &cache_dir, Some(&reporter))
+                    .fetch(
+                        &client,
+                        installations_dir,
+                        &cache_dir,
+                        reinstall,
+                        Some(&reporter),
+                    )
                     .await,
             )
         });
