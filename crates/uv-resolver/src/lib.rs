@@ -4,7 +4,8 @@ pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use lock::{
-    Lock, LockError, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
+    Lock, LockError, LockVersion, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
+    TreeDisplay, VERSION,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};

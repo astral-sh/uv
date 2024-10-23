@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::Path;
 
-use anstream::eprint;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
@@ -28,8 +27,8 @@ use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreferenc
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
-    ResolverManifest, ResolverMarkers, SatisfiesResult,
+    FlatIndex, InMemoryIndex, Lock, LockVersion, Options, OptionsBuilder, PythonRequirement,
+    RequiresPython, ResolverManifest, ResolverMarkers, SatisfiesResult, VERSION,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -204,7 +203,15 @@ pub(super) async fn do_safe_lock(
         Ok(result)
     } else {
         // Read the existing lockfile.
-        let existing = read(workspace).await?;
+        let existing = match read(workspace).await {
+            Ok(Some(existing)) => Some(existing),
+            Ok(None) => None,
+            Err(ProjectError::Lock(err)) => {
+                warn_user!("Failed to read existing lockfile; ignoring locked requirements: {err}");
+                None
+            }
+            Err(err) => return Err(err),
+        };
 
         // Perform the lock operation.
         let result = do_lock(
@@ -903,13 +910,34 @@ async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> 
 /// Returns `Ok(None)` if the lockfile does not exist.
 pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
     match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
-        Ok(encoded) => match toml::from_str(&encoded) {
-            Ok(lock) => Ok(Some(lock)),
-            Err(err) => {
-                eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");
-                Ok(None)
+        Ok(encoded) => {
+            match toml::from_str::<Lock>(&encoded) {
+                Ok(lock) => {
+                    // If the lockfile uses an unsupported version, raise an error.
+                    if lock.version() != VERSION {
+                        return Err(ProjectError::UnsupportedLockVersion(
+                            VERSION,
+                            lock.version(),
+                        ));
+                    }
+                    Ok(Some(lock))
+                }
+                Err(err) => {
+                    // If we failed to parse the lockfile, determine whether it's a supported
+                    // version.
+                    if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
+                        if lock.version() != VERSION {
+                            return Err(ProjectError::UnparsableLockVersion(
+                                VERSION,
+                                lock.version(),
+                                err,
+                            ));
+                        }
+                    }
+                    Err(ProjectError::UvLockParse(err))
+                }
             }
-        },
+        }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err.into()),
     }
