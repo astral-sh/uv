@@ -7,10 +7,7 @@ use std::path::{Path, PathBuf};
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{
-    Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
-    InstallOptions, LowerBound,
-};
+use uv_configuration::{Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions, LowerBound, TrustedHost};
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
@@ -47,6 +44,7 @@ pub(crate) async fn export(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     quiet: bool,
     cache: &Cache,
     printer: Printer,
@@ -93,6 +91,7 @@ pub(crate) async fn export(
             python_downloads,
             connectivity,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -120,6 +119,7 @@ pub(crate) async fn export(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
