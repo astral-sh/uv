@@ -302,6 +302,15 @@ For example, you can declare the metadata for `flash-attn`, allowing uv to resol
 the package from source (which itself requires installing `torch`):
 
 ```toml
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["flash-attn"]
+
+[tool.uv.sources]
+flash-attn = { git = "https://github.com/Dao-AILab/flash-attention", tag = "v2.6.3" }
+
 [[tool.uv.dependency-metadata]]
 name = "flash-attn"
 version = "2.6.3"
