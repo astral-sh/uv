@@ -1,6 +1,7 @@
 //! Fetches CPU information.
 
 use anyhow::Error;
+
 #[cfg(target_os = "linux")]
 use procfs::{CpuInfo, Current};
 
@@ -14,14 +15,9 @@ use procfs::{CpuInfo, Current};
 #[cfg(target_os = "linux")]
 pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
     let cpu_info = CpuInfo::current()?;
-
-    // Iterate through each core and check if the "vfp" flag is present,
-    // indicating hardware floating-point support.
-    for num in 0..cpu_info.num_cores() {
-        if let Some(flags) = cpu_info.flags(num) {
-            if flags.contains(&"vfp") {
-                return Ok(true); // Hardware floating-point (gnueabihf) detected.
-            }
+    if let Some(features) = cpu_info.fields.get("Features") {
+        if features.contains("vfp") {
+            return Ok(true); // "vfp" found: hard-float (gnueabihf) detected
         }
     }
 
