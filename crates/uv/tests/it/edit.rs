@@ -5507,7 +5507,7 @@ fn add_index() -> Result<()> {
         );
     });
 
-    // Adding a subsequent index should put it _below_ the existing index.
+    // Adding a subsequent index should put it _above_ the existing index.
     uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
@@ -5541,11 +5541,11 @@ fn add_index() -> Result<()> {
         name = "pytorch"
         url = "https://download.pytorch.org/whl/cu121"
 
-        [[tool.uv.index]]
-        url = "https://pypi.org/simple"
-
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
+
+        [[tool.uv.index]]
+        url = "https://pypi.org/simple"
         "###
         );
     });
@@ -5638,15 +5638,15 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://test.pypi.org/simple"
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-
-        [tool.uv.sources]
-        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5748,15 +5748,15 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
 
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://test.pypi.org/simple"
-
-        [tool.uv.sources]
-        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5867,15 +5867,15 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://test.pypi.org/simple"
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-
-        [tool.uv.sources]
-        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -6126,6 +6126,194 @@ fn add_default_index_url() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
         ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_index_credentials() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        # Set an internal index as the default, without credentials.
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+    "#})?;
+
+    // Provide credentials for the index via the environment variable.
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env("UV_DEFAULT_INDEX", "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",
+        ]
+
+        # Set an internal index as the default, without credentials.
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
+        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_index_comments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://test.pypi.org/simple"  # This is a test index.
+        default = true
+    "#})?;
+
+    // Preserve the comment on the index URL, despite replacing it.
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env("UV_DEFAULT_INDEX", "https://pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://pypi.org/simple"  # This is a test index.
+        default = true
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
         "###
         );
     });
