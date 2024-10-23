@@ -2003,7 +2003,13 @@ where
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(mut err) => {
-            let cmd = Cli::command().disable_colored_help(no_color);
+            let cmd = if no_color {
+                Cli::command()
+                    .color(clap::ColorChoice::Never)
+                    .disable_colored_help(true)
+            } else {
+                Cli::command()
+            };
             err = err.with_cmd(&cmd);
             if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand)
             {
