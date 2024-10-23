@@ -2,7 +2,7 @@ mod options_metadata;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{parse_macro_input, Attribute, DeriveInput, ImplItem, ItemImpl};
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, doc, option_group))]
 pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
@@ -48,4 +48,57 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
         }
     };
     gen.into()
+}
+
+fn get_doc_comment(attr: &Attribute) -> Option<String> {
+    if attr.path().is_ident("doc") {
+        if let syn::Meta::NameValue(meta) = &attr.meta {
+            if let syn::Expr::Lit(expr) = &meta.value {
+                if let syn::Lit::Str(str) = &expr.lit {
+                    return Some(str.value().trim().to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+#[proc_macro_attribute]
+pub fn collect_constants(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as ItemImpl);
+
+    let constants: Vec<_> = ast
+        .items
+        .iter()
+        .filter_map(|item| {
+            match item {
+                ImplItem::Const(item) => {
+                    let name = item.ident.to_string();
+                    let doc = item.attrs.iter().find_map(get_doc_comment).expect("Missing doc comment");
+                    Some((name, doc))
+                }
+                _ => None,
+            }
+        })
+        .collect();
+
+    let struct_name = &ast.self_ty;
+    let pairs = constants.iter().map(|(name, doc)| {
+        quote! {
+            (#name, #doc)
+        }
+    });
+
+    let expanded = quote! {
+        #ast
+
+        impl #struct_name {
+            /// Returns a list of pairs of constants and their documentation defined in this impl block.
+            pub fn constants<'a>() -> &'a [(&'static str, &'static str)] {
+                &[#(#pairs),*]
+            }
+        }
+    };
+
+    expanded.into()
 }
