@@ -1,6 +1,9 @@
+use uv_macros::collect_constants;
+
 /// Declares all environment variable used throughout `uv` and its crates.
 pub struct EnvVars;
 
+#[collect_constants]
 impl EnvVars {
     /// Equivalent to the `--default-index` argument. Base index URL for searching packages.
     pub const UV_DEFAULT_INDEX: &'static str = "UV_DEFAULT_INDEX";

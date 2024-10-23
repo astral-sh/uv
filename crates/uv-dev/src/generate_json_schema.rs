@@ -27,7 +27,6 @@ struct CombinedOptions {
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
-    /// Write the generated output to stdout (rather than to `uv.schema.json`).
     #[arg(long, default_value_t, value_enum)]
     pub(crate) mode: Mode,
 }

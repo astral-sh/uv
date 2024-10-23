@@ -5221,6 +5221,9 @@ dependencies = [
 [[package]]
 name = "uv-static"
 version = "0.0.1"
+dependencies = [
+ "uv-macros",
+]
 
 [[package]]
 name = "uv-tool"
