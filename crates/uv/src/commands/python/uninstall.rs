@@ -179,12 +179,10 @@ async fn do_uninstall(
             .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
         {
             match event.kind {
-                ChangeEventKind::Added => {
-                    writeln!(printer.stderr(), " {} {}", "+".green(), event.key.bold())?;
-                }
                 ChangeEventKind::Removed => {
                     writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold())?;
                 }
+                _ => unreachable!(),
             }
         }
     }

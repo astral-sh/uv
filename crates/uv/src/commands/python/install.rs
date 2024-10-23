@@ -3,6 +3,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::Path;
@@ -63,7 +64,7 @@ pub(crate) async fn install(
         .inspect(|installation| debug!("Found existing installation {}", installation.key()))
         .collect();
     let mut unfilled_requests = Vec::new();
-    let mut uninstalled = Vec::new();
+    let mut uninstalled = FxHashSet::default();
     for (request, download_request) in requests.iter().zip(download_requests) {
         if matches!(requests.as_slice(), [PythonRequest::Default]) {
             writeln!(printer.stderr(), "Searching for Python installations")?;
@@ -89,7 +90,7 @@ pub(crate) async fn install(
                 )?;
             }
             if reinstall {
-                uninstalled.push(installation.key().clone());
+                uninstalled.insert(installation.key());
                 unfilled_requests.push(download_request);
             }
         } else {
@@ -155,7 +156,7 @@ pub(crate) async fn install(
         });
     }
 
-    let mut installed = vec![];
+    let mut installed = FxHashSet::default();
     let mut errors = vec![];
     while let Some((key, result)) = tasks.next().await {
         match result {
@@ -166,7 +167,7 @@ pub(crate) async fn install(
                     DownloadResult::Fetched(path) => path,
                 };
 
-                installed.push(key.clone());
+                installed.insert(key);
 
                 // Ensure the installations have externally managed markers
                 let managed = ManagedPythonInstallation::new(path.clone())?;
@@ -180,7 +181,8 @@ pub(crate) async fn install(
     }
 
     if !installed.is_empty() {
-        if let [installed] = installed.as_slice() {
+        if installed.len() == 1 {
+            let installed = installed.iter().next().unwrap();
             // Ex) "Installed Python 3.9.7 in 1.68s"
             writeln!(
                 printer.stderr(),
@@ -194,28 +196,37 @@ pub(crate) async fn install(
             )?;
         } else {
             // Ex) "Installed 2 versions in 1.68s"
-            let s = if installed.len() == 1 { "" } else { "s" };
             writeln!(
                 printer.stderr(),
                 "{}",
                 format!(
                     "Installed {} {}",
-                    format!("{} version{s}", installed.len()).bold(),
+                    format!("{} versions", installed.len()).bold(),
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
                 .dimmed()
             )?;
         }
 
+        let reinstalled = uninstalled
+            .intersection(&installed)
+            .copied()
+            .collect::<FxHashSet<_>>();
+        let uninstalled = uninstalled.difference(&reinstalled).copied();
+        let installed = installed.difference(&reinstalled).copied();
+
         for event in uninstalled
-            .into_iter()
             .map(|key| ChangeEvent {
-                key,
+                key: key.clone(),
                 kind: ChangeEventKind::Removed,
             })
-            .chain(installed.into_iter().map(|key| ChangeEvent {
-                key,
+            .chain(installed.map(|key| ChangeEvent {
+                key: key.clone(),
                 kind: ChangeEventKind::Added,
+            }))
+            .chain(reinstalled.iter().map(|&key| ChangeEvent {
+                key: key.clone(),
+                kind: ChangeEventKind::Reinstalled,
             }))
             .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
         {
@@ -225,6 +236,9 @@ pub(crate) async fn install(
                 }
                 ChangeEventKind::Removed => {
                     writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold())?;
+                }
+                ChangeEventKind::Reinstalled => {
+                    writeln!(printer.stderr(), " {} {}", "~".yellow(), event.key.bold(),)?;
                 }
             }
         }

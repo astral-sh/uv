@@ -133,7 +133,7 @@ pub enum EnvironmentPreference {
     Any,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PythonVariant {
     #[default]
     Default,
