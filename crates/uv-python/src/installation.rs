@@ -405,5 +405,6 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
             .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
+            .then_with(|| self.variant.cmp(&other.variant))
     }
 }
