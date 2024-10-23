@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4.26
+
+### Enhancements
+
+- Allow static dependency metadata entries for direct URL requirements ([#7846](https://github.com/astral-sh/uv/pull/7846))
+- Use reinstall report formatting for `uv python install --reinstall` ([#8487](https://github.com/astral-sh/uv/pull/8487))
+- Add support for system-level `uv.toml` configuration ([#7851](https://github.com/astral-sh/uv/pull/7851))
+
+### Bug fixes
+
+- Apply `requires-python` narrowing with upper bounds ([#8403](https://github.com/astral-sh/uv/pull/8403))
+- Avoid rewriting `[[tool.uv.index]]` entries when credentials are provided ([#8502](https://github.com/astral-sh/uv/pull/8502))
+- Fix `uv add` comment handling for empty arrays ([#8504](https://github.com/astral-sh/uv/pull/8504))
+- Replace dashes with underscores in index credential variables ([#8452](https://github.com/astral-sh/uv/pull/8452))
+- Respect `--allow-insecure-host` in `uv publish` ([#8440](https://github.com/astral-sh/uv/pull/8440))
+- Allow arbitrary `--package` includes in `uv tree` ([#8507](https://github.com/astral-sh/uv/pull/8507))
+- Remove existing Python install after successful download in `uv python install` ([#8485](https://github.com/astral-sh/uv/pull/8485))
+
+### Documentation
+
+- Add docs example for URLs with `[tool.uv.dependency-metadata]` ([#8484](https://github.com/astral-sh/uv/pull/8484))
+- Add help page for build failures ([#8286](https://github.com/astral-sh/uv/pull/8286))
+- Fix `cache-keys` typo in `tags = true` ([#8422](https://github.com/astral-sh/uv/pull/8422))
+- Add documentation examples for manual branch, rev, and tag Git dependencies ([#8497](https://github.com/astral-sh/uv/pull/8497))
+
+### Error messages
+
+- Improve error message for cache info serialization ([#8500](https://github.com/astral-sh/uv/pull/8500))
+- Suggest `--from` command when executable is available for `uvx` ([#8473](https://github.com/astral-sh/uv/pull/8473))
+- Support `--with-editable` in `uv tool install` ([#8472](https://github.com/astral-sh/uv/pull/8472))
+
 ## 0.4.25
 
 ### Enhancements
