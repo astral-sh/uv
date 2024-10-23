@@ -145,7 +145,8 @@ $ uv add git+https://github.com/encode/httpx --rev 326b943
 ```
 
 Git dependencies can also be manually added or edited in the `pyproject.toml` with the
-`{ git = <url> }` syntax. A target revision may be specified with one of: `tag`, `branch`, or `rev` (i.e., commit).
+`{ git = <url> }` syntax. A target revision may be specified with one of: `tag`, `branch`, or `rev`
+(i.e., commit).
 
 === "tag"
 
