@@ -136,16 +136,54 @@ dependencies = [
 httpx = { git = "https://github.com/encode/httpx" }
 ```
 
-A revision, tag, or branch may also be included:
+A revision (i.e., commit), tag, or branch may also be included:
 
 ```console
 $ uv add git+https://github.com/encode/httpx --tag 0.27.0
 $ uv add git+https://github.com/encode/httpx --branch main
-$ uv add git+https://github.com/encode/httpx --rev 326b943
+$ uv add git+https://github.com/encode/httpx --rev 326b9431c761e1ef1e00b9f760d1f654c8db48c6
 ```
 
 Git dependencies can also be manually added or edited in the `pyproject.toml` with the
-`{ git = <url> }` syntax. A target revision may be specified with one of: `rev`, `tag`, or `branch`.
+`{ git = <url> }` syntax. A target revision may be specified with one of: `rev` (i.e., commit),
+`tag`, or `branch`.
+
+=== "tag"
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = [
+        "httpx",
+    ]
+
+    [tool.uv.sources]
+    httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
+    ```
+
+=== "branch"
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = [
+        "httpx",
+    ]
+
+    [tool.uv.sources]
+    httpx = { git = "https://github.com/encode/httpx", branch = "main" }
+    ```
+
+=== "rev"
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = [
+        "httpx",
+    ]
+
+    [tool.uv.sources]
+    httpx = { git = "https://github.com/encode/httpx", rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6" }
+    ```
+
 A `subdirectory` may be specified if the package isn't in the repository root.
 
 ### URL
