@@ -1,5 +1,5 @@
 [workspace]
-members = [ "bar","crates/*"]
+members = ["crates/*"]
 exclude = [
   "scripts",
   # Needs nightly
