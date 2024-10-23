@@ -354,7 +354,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ///
     /// While hashes will be generated in some cases, hash-checking is _not_ enforced and should
     /// instead be enforced by the caller.
-    pub async fn get_wheel_metadata(
+    async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
@@ -363,7 +363,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if let Some(metadata) = self
             .build_context
             .dependency_metadata()
-            .get(dist.name(), dist.version())
+            .get(dist.name(), Some(dist.version()))
         {
             return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
@@ -425,14 +425,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
-            if let Some(version) = dist.version() {
-                if let Some(metadata) = self
-                    .build_context
-                    .dependency_metadata()
-                    .get(dist.name(), version)
-                {
-                    return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
-                }
+            if let Some(metadata) = self
+                .build_context
+                .dependency_metadata()
+                .get(dist.name(), dist.version())
+            {
+                // If we skipped the build, we should still resolve any Git dependencies to precise
+                // commits.
+                self.builder.resolve_revision(source, &self.client).await?;
+
+                return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
             }
         }
 
