@@ -465,13 +465,14 @@ impl ManagedPythonDownload {
         client: &uv_client::BaseClient,
         installation_dir: &Path,
         cache_dir: &Path,
+        reinstall: bool,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
         let url = self.download_url()?;
         let path = installation_dir.join(self.key().to_string());
 
-        // If it already exists, return it
-        if path.is_dir() {
+        // If it is not a reinstall and the dir already exists, return it.
+        if !reinstall && path.is_dir() {
             return Ok(DownloadResult::AlreadyAvailable(path));
         }
 
@@ -560,7 +561,13 @@ impl ManagedPythonDownload {
             }
         }
 
-        // Persist it to the target
+        // Remove the target if it already exists.
+        if path.is_dir() {
+            debug!("Removing existing directory: {}", path.user_display());
+            fs_err::tokio::remove_dir_all(&path).await?;
+        }
+
+        // Persist it to the target.
         debug!("Moving {} to {}", extracted.display(), path.user_display());
         rename_with_retry(extracted, &path)
             .await
