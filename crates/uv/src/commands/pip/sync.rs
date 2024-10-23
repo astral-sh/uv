@@ -48,7 +48,6 @@ pub(crate) async fn pip_sync(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
     allow_empty_requirements: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -67,6 +66,7 @@ pub(crate) async fn pip_sync(
     sources: SourceStrategy,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     dry_run: bool,
     printer: Printer,
@@ -75,7 +75,7 @@ pub(crate) async fn pip_sync(
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host);
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Initialize a few defaults.
     let overrides = &[];

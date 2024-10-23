@@ -18,7 +18,7 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
-    SourceStrategy,
+    SourceStrategy, TrustedHost,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -77,6 +77,7 @@ pub(crate) async fn run(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
@@ -163,7 +164,8 @@ pub(crate) async fn run(
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
 
         let interpreter = PythonInstallation::find_or_download(
             python_request.as_ref(),
@@ -273,6 +275,7 @@ pub(crate) async fn run(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -467,7 +470,8 @@ pub(crate) async fn run(
                 // base environment for the project.
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
-                    .native_tls(native_tls);
+                    .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec());
 
                 // Resolve the Python request and requirement for the workspace.
                 let WorkspacePython {
@@ -522,6 +526,7 @@ pub(crate) async fn run(
                     python_downloads,
                     connectivity,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
@@ -556,6 +561,7 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
@@ -603,6 +609,7 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
@@ -618,7 +625,8 @@ pub(crate) async fn run(
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
-                    .native_tls(native_tls);
+                    .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec());
 
                 // (1) Explicit request from user
                 let python_request = if let Some(request) = python.as_deref() {
@@ -680,7 +688,8 @@ pub(crate) async fn run(
     } else {
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
 
         let spec =
             RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
@@ -730,6 +739,7 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
@@ -1154,6 +1164,7 @@ impl RunCommand {
         script: bool,
         connectivity: Connectivity,
         native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
     ) -> anyhow::Result<Self> {
         let (target, args) = command.split();
         let Some(target) = target else {
@@ -1184,6 +1195,7 @@ impl RunCommand {
                 let client = BaseClientBuilder::new()
                     .connectivity(connectivity)
                     .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec())
                     .build();
                 let response = client.for_host(&url).get(url.clone()).send().await?;
 

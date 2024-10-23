@@ -14,7 +14,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, TrustedHost};
 use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -77,6 +77,7 @@ pub(crate) async fn run(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
@@ -118,6 +119,7 @@ pub(crate) async fn run(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         &cache,
         printer,
     )
@@ -393,12 +395,14 @@ async fn get_or_create_environment(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<(Requirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -466,6 +470,7 @@ async fn get_or_create_environment(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -478,7 +483,8 @@ async fn get_or_create_environment(
     let spec = {
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
         RequirementsSpecification::from_simple_sources(with, &client_builder).await?
     };
 
@@ -495,6 +501,7 @@ async fn get_or_create_environment(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -571,6 +578,7 @@ async fn get_or_create_environment(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )

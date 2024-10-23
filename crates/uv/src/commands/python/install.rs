@@ -10,6 +10,7 @@ use std::path::Path;
 use tracing::debug;
 
 use uv_client::Connectivity;
+use uv_configuration::TrustedHost;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use uv_python::{PythonDownloads, PythonRequest, PythonVersionFile};
@@ -27,6 +28,7 @@ pub(crate) async fn install(
     python_downloads: PythonDownloads,
     native_tls: bool,
     connectivity: Connectivity,
+    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -135,6 +137,7 @@ pub(crate) async fn install(
     let client = uv_client::BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec())
         .build();
 
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);

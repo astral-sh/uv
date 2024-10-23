@@ -8,7 +8,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -366,6 +366,7 @@ impl ProjectInterpreter {
         python_downloads: PythonDownloads,
         connectivity: Connectivity,
         native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -440,7 +441,8 @@ impl ProjectInterpreter {
 
         let client_builder = BaseClientBuilder::default()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
 
         let reporter = PythonDownloadReporter::single(printer);
 
@@ -501,6 +503,7 @@ pub(crate) async fn get_or_init_environment(
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
@@ -511,6 +514,7 @@ pub(crate) async fn get_or_init_environment(
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -607,6 +611,7 @@ pub(crate) async fn resolve_names(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
@@ -631,7 +636,6 @@ pub(crate) async fn resolve_names(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution: _,
         prerelease: _,
         dependency_metadata,
@@ -661,7 +665,7 @@ pub(crate) async fn resolve_names(
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
-        .allow_insecure_host(allow_insecure_host.clone())
+        .allow_insecure_host(allow_insecure_host.to_vec())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -759,6 +763,7 @@ pub(crate) async fn resolve_environment<'a>(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ResolutionGraph, ProjectError> {
@@ -768,7 +773,6 @@ pub(crate) async fn resolve_environment<'a>(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         dependency_metadata,
@@ -934,6 +938,7 @@ pub(crate) async fn sync_environment(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<PythonEnvironment> {
@@ -941,7 +946,6 @@ pub(crate) async fn sync_environment(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -1087,6 +1091,7 @@ pub(crate) async fn update_environment(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<EnvironmentUpdate> {
@@ -1096,7 +1101,6 @@ pub(crate) async fn update_environment(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         dependency_metadata,
@@ -1167,7 +1171,7 @@ pub(crate) async fn update_environment(
         .index_urls(index_locations.index_urls())
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
-        .allow_insecure_host(allow_insecure_host.clone())
+        .allow_insecure_host(allow_insecure_host.to_vec())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();

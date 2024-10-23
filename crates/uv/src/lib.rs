@@ -149,6 +149,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     *script,
                     settings.connectivity,
                     settings.native_tls,
+                    &settings.allow_insecure_host,
                 )
                 .await?,
             )
@@ -352,7 +353,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &args.settings.allow_insecure_host,
                 args.settings.config_setting,
                 globals.connectivity,
                 args.settings.no_build_isolation,
@@ -420,7 +421,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
                 args.settings.allow_empty_requirements,
                 globals.connectivity,
                 &args.settings.config_setting,
@@ -439,6 +439,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.sources,
                 globals.concurrency,
                 globals.native_tls,
+                &args.settings.allow_insecure_host,
                 cache,
                 args.dry_run,
                 printer,
@@ -504,7 +505,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -527,6 +527,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.prefix,
                 globals.concurrency,
                 globals.native_tls,
+                &args.settings.allow_insecure_host,
                 cache,
                 args.dry_run,
                 printer,
@@ -564,7 +565,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.native_tls,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &args.settings.allow_insecure_host,
                 printer,
             )
             .await
@@ -727,6 +728,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -770,7 +772,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &args.settings.allow_insecure_host,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 globals.connectivity,
@@ -899,6 +901,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 printer,
             )
@@ -943,6 +946,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 printer,
             ))
@@ -986,6 +990,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             ))
@@ -1051,6 +1056,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,
+                &globals.allow_insecure_host,
                 cli.top_level.no_config,
                 printer,
             )
@@ -1126,7 +1132,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
-                allow_insecure_host,
             } = PublishSettings::resolve(args, filesystem);
 
             commands::publish(
@@ -1134,7 +1139,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
-                allow_insecure_host,
+                &globals.allow_insecure_host,
                 username,
                 password,
                 globals.connectivity,
@@ -1237,6 +1242,7 @@ async fn run_project(
                 globals.python_downloads,
                 globals.connectivity,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -1293,6 +1299,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             ))
@@ -1327,6 +1334,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -1354,6 +1362,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -1405,6 +1414,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             ))
@@ -1445,6 +1455,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -1478,6 +1489,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -1511,6 +1523,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 globals.quiet,
                 &cache,
                 printer,

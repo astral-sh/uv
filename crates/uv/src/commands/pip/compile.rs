@@ -76,7 +76,7 @@ pub(crate) async fn pip_compile(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
+    allow_insecure_host: &[TrustedHost],
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
@@ -110,7 +110,7 @@ pub(crate) async fn pip_compile(
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host);
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {

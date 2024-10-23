@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, DevMode, LowerBound, TargetTriple};
+use uv_configuration::{Concurrency, DevMode, LowerBound, TargetTriple, TrustedHost};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
@@ -40,6 +40,7 @@ pub(crate) async fn tree(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -54,6 +55,7 @@ pub(crate) async fn tree(
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -76,6 +78,7 @@ pub(crate) async fn tree(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
