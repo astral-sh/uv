@@ -2043,7 +2043,7 @@ impl Package {
                 }
             }
             if !dependency_groups.is_empty() {
-                table.insert("dependency-groups", Item::Table(dependency_groups));
+                table.insert("dev-dependencies", Item::Table(dependency_groups));
             }
         }
 
@@ -2108,7 +2108,7 @@ impl Package {
                     }
                 }
                 if !dependency_groups.is_empty() {
-                    metadata_table.insert("dependency-groups", Item::Table(dependency_groups));
+                    metadata_table.insert("requires-dev", Item::Table(dependency_groups));
                 }
             }
 
@@ -2218,7 +2218,7 @@ struct PackageWire {
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
-    #[serde(default, alias = "dev-dependencies")]
+    #[serde(default, rename = "dev-dependencies")]
     dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
 }
 
@@ -2227,7 +2227,7 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
-    #[serde(default, alias = "requires-dev")]
+    #[serde(default, rename = "requires-dev")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 

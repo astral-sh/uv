@@ -328,7 +328,7 @@ serve = [
     { name = "watchfiles" },
 ]
 
-[package.dependency-groups]
+[package.dev-dependencies]
 dev = [
     { name = "psutil" },
     { name = "pytest" },
@@ -348,7 +348,7 @@ requires-dist = [
     { name = "watchfiles", marker = "extra == 'serve'", specifier = ">=0.21.0" },
 ]
 
-[package.metadata.dependency-groups]
+[package.metadata.requires-dev]
 dev = [
     { name = "psutil", specifier = ">=5.9.7" },
     { name = "pytest", specifier = ">=7.4.3" },
