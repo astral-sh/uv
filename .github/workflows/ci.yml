@@ -1607,12 +1607,22 @@ jobs:
 
       - name: "Install pyenv"
         run: |
+          # Install pyenv
           curl https://pyenv.run | bash
-          echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> ~/.bashrc
-          echo 'eval "$(pyenv init --path)"' >> ~/.bashrc
-          echo 'eval "$(pyenv init -)"' >> ~/.bashrc
-          echo 'eval "$(pyenv virtualenv-init -)"' >> ~/.bashrc
-          source ~/.bashrc
+
+          # Set up environment variables for current step
+          export PYENV_ROOT="$HOME/.pyenv"
+          export PATH="$PYENV_ROOT/bin:$PATH"
+          eval "$(pyenv init -)"
+
+          # Install Python 3.9
+          pyenv install 3.9
+          pyenv global 3.9
+
+          # Make environment variables persist across steps
+          echo "PYENV_ROOT=$HOME/.pyenv" >> $GITHUB_ENV
+          echo "$HOME/.pyenv/bin" >> $GITHUB_PATH
+          echo "$HOME/.pyenv/shims" >> $GITHUB_PATH
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -1623,7 +1633,12 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Print Python path"
-        run: echo $(which python3.9)
+        run: |
+          echo "Python version: $(python --version)"
+          echo "Python path: $(which python)"
+          echo "Python3.9 path: $(which python3.9)"
+          echo "Pyenv path: $(which pyenv)"
+          echo "PATH: $PATH"
 
       - name: "Validate global Python install"
         run: python3.9 scripts/check_system_python.py --uv ./uv
