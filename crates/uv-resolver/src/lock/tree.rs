@@ -170,6 +170,8 @@ impl<'env> TreeDisplay<'env> {
             }
         }
 
+        // Compute the graph... remove anything that isn't reached.
+
         // Compute the root nodes.
         let roots = lock
             .packages

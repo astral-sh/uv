@@ -1,0 +1,7 @@
+[project]
+name = "foo"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+  "aiohttp>=3.9.5",
+]
