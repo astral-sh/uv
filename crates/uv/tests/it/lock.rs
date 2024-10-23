@@ -4541,7 +4541,7 @@ fn lock_dev() -> Result<()> {
             { name = "iniconfig" },
         ]
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "typing-extensions" },
         ]
@@ -4549,7 +4549,7 @@ fn lock_dev() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "iniconfig" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "typing-extensions", url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl" }]
 
         [[package]]
@@ -6153,14 +6153,14 @@ fn lock_dev_transitive() -> Result<()> {
         version = "0.1.0"
         source = { editable = "baz" }
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "typing-extensions" },
         ]
 
         [package.metadata]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "typing-extensions", specifier = ">4" }]
 
         [[package]]
@@ -6170,7 +6170,7 @@ fn lock_dev_transitive() -> Result<()> {
 
         [package.metadata]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "anyio" }]
 
         [[package]]
@@ -7077,7 +7077,7 @@ fn lock_no_sources() -> Result<()> {
             { name = "anyio" },
         ]
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "typing-extensions" },
         ]
@@ -7085,7 +7085,7 @@ fn lock_no_sources() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "anyio", directory = "anyio" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "typing-extensions", specifier = ">4" }]
 
         [[package]]
@@ -7167,7 +7167,7 @@ fn lock_no_sources() -> Result<()> {
             { name = "anyio" },
         ]
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "typing-extensions" },
         ]
@@ -7175,7 +7175,7 @@ fn lock_no_sources() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "anyio" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "typing-extensions", specifier = ">4" }]
 
         [[package]]
@@ -11017,7 +11017,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
             { name = "typing-extensions" },
         ]
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "iniconfig" },
         ]
@@ -11025,7 +11025,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "iniconfig" }]
 
         [[package]]
@@ -12412,14 +12412,14 @@ fn lock_dropped_dev_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "coverage" },
         ]
 
         [package.metadata]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "coverage", extras = ["toml"] }]
         "###
         );
@@ -13382,7 +13382,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
             { name = "black" },
         ]
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "anyio" },
         ]
@@ -13390,7 +13390,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "black" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "anyio" }]
 
         [[package]]
@@ -13599,7 +13599,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
             { name = "black" },
         ]
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "anyio" },
         ]
@@ -13607,7 +13607,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "black" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "anyio" }]
 
         [[package]]
@@ -16327,7 +16327,7 @@ fn lock_group_include() -> Result<()> {
             { name = "typing-extensions" },
         ]
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         bar = [
             { name = "trio" },
         ]
@@ -16339,7 +16339,7 @@ fn lock_group_include() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         bar = [{ name = "trio" }]
         foo = [
             { name = "anyio" },
