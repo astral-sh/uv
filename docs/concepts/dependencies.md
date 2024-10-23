@@ -154,7 +154,7 @@ Git dependencies can also be manually added or edited in the `pyproject.toml` wi
     dependencies = [
         "httpx",
     ]
-    
+
     [tool.uv.sources]
     httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
     ```
@@ -166,7 +166,7 @@ Git dependencies can also be manually added or edited in the `pyproject.toml` wi
     dependencies = [
         "httpx",
     ]
-    
+
     [tool.uv.sources]
     httpx = { git = "https://github.com/encode/httpx", branch = "main" }
     ```
@@ -178,7 +178,7 @@ Git dependencies can also be manually added or edited in the `pyproject.toml` wi
     dependencies = [
         "httpx",
     ]
-    
+
     [tool.uv.sources]
     httpx = { git = "https://github.com/encode/httpx", rev = "326b943" }
     ```
