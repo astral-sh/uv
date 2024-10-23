@@ -14,7 +14,6 @@ fn nested_dependencies() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "scikit-learn==1.4.1.post1"
@@ -56,7 +55,6 @@ fn invert() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "scikit-learn==1.4.1.post1"
@@ -119,7 +117,6 @@ fn frozen() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = ["anyio"]
     "#,
@@ -150,7 +147,6 @@ fn frozen() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
     "#,
@@ -183,7 +179,6 @@ fn platform_dependencies() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "black"
@@ -273,7 +268,7 @@ fn platform_dependencies_inverted() -> Result<()> {
 
     // When `--universal` is _not_ provided, `colorama` should _not_ be included.
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r#"
+    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -282,7 +277,7 @@ fn platform_dependencies_inverted() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "#);
+    "###);
 
     // Unless `--python-platform` is set to `windows`, in which case it should be included.
     uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("windows"), @r#"
@@ -310,7 +305,6 @@ fn repeated_dependencies() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = [
             "anyio < 2 ; sys_platform == 'win32'",
@@ -429,7 +423,6 @@ fn dev_dependencies() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
 
@@ -482,7 +475,6 @@ fn dev_dependencies_inverted() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = ["iniconfig"]
         [tool.uv]
@@ -525,7 +517,6 @@ fn optional_dependencies() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = ["iniconfig", "flask[dotenv]"]
 
@@ -576,7 +567,6 @@ fn optional_dependencies_inverted() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        # ...
         requires-python = ">=3.12"
         dependencies = ["iniconfig", "flask[dotenv]"]
 
@@ -615,6 +605,81 @@ fn optional_dependencies_inverted() -> Result<()> {
 
     ----- stderr -----
     Resolved 14 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["scikit-learn==1.4.1.post1", "pandas"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── pandas v2.2.1
+    │   ├── numpy v1.26.4
+    │   ├── python-dateutil v2.9.0.post0
+    │   │   └── six v1.16.0
+    │   ├── pytz v2024.1
+    │   └── tzdata v2024.1
+    └── scikit-learn v1.4.1.post1
+        ├── joblib v1.3.2
+        ├── numpy v1.26.4
+        ├── scipy v1.12.0
+        │   └── numpy v1.26.4
+        └── threadpoolctl v3.4.0
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("scipy"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    scipy v1.12.0
+    └── numpy v1.26.4
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("numpy").arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    numpy v1.26.4
+    ├── pandas v2.2.1
+    │   └── project v0.1.0
+    ├── scikit-learn v1.4.1.post1
+    │   └── project v0.1.0
+    └── scipy v1.12.0
+        └── scikit-learn v1.4.1.post1 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
     "###
     );
 
