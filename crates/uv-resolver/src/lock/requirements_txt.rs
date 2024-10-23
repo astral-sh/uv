@@ -10,7 +10,7 @@ use petgraph::{Directed, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
-use uv_configuration::{DevSpecification, EditableMode, ExtrasSpecification, InstallOptions};
+use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions};
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git::GitReference;
@@ -43,7 +43,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         lock: &'lock Lock,
         root_name: &PackageName,
         extras: &ExtrasSpecification,
-        dev: DevSpecification<'_>,
+        dev: &DevGroupsManifest,
         editable: EditableMode,
         hashes: bool,
         install_options: &'lock InstallOptions,
@@ -86,7 +86,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         // Add any dev dependencies.
         for group in dev.iter() {
-            for dep in root.dev_dependencies.get(group).into_iter().flatten() {
+            for dep in root.dependency_groups.get(group).into_iter().flatten() {
                 let dep_dist = lock.find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.

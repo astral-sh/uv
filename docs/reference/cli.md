@@ -136,7 +136,7 @@ uv run [OPTIONS] [COMMAND]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 
 <p>May be provided more than once.</p>
 
@@ -163,6 +163,10 @@ uv run [OPTIONS] [COMMAND]
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -282,6 +286,10 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
@@ -308,6 +316,12 @@ uv run [OPTIONS] [COMMAND]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 </dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
+
+</dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
 
 <p>The project itself will also be omitted.</p>
 
@@ -733,7 +747,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>May be provided more than once.</p>
 
-<p>To add this dependency to an optional group in the current project instead, see <code>--optional</code>.</p>
+<p>To add this dependency to an optional extra instead, see <code>--optional</code>.</p>
 
 </dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
 
@@ -754,6 +768,10 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>The project environment will not be synced.</p>
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Add the requirements to the specified local dependency group.</p>
+
+<p>These requirements will not be included in the published metadata for the project.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -872,11 +890,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Add the requirements to the specified optional dependency group.</p>
+</dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Add the requirements to the package&#8217;s optional dependencies for the specified extra.</p>
 
 <p>The group may then be activated when installing the project with the <code>--extra</code> flag.</p>
 
-<p>To enable an optional dependency group for this requirement instead, see <code>--extra</code>.</p>
+<p>To enable an optional extra for this requirement instead, see <code>--extra</code>.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Add the dependency to a specific package in the workspace</p>
 
@@ -1088,6 +1106,8 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>The project environment will not be synced.</p>
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Remove the packages from the specified local dependency group</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -1206,7 +1226,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
-</dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Remove the packages from the specified optional dependency group</p>
+</dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Remove the packages from the project&#8217;s optional dependencies for the specified extra</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Remove the dependencies from a specific package in the workspace</p>
 
@@ -1385,7 +1405,7 @@ uv sync [OPTIONS]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 
 <p>May be provided more than once.</p>
 
@@ -1410,6 +1430,10 @@ uv sync [OPTIONS]
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -1519,6 +1543,10 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-install-package</code> <i>no-install-package</i></dt><dd><p>Do not install the given package(s).</p>
@@ -1546,6 +1574,12 @@ uv sync [OPTIONS]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 </dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
+
+</dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
 
 <p>The project itself will also be omitted.</p>
 
@@ -2003,7 +2037,7 @@ uv export [OPTIONS]
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name.</p>
 
 <p>May be provided more than once.</p>
 
@@ -2036,6 +2070,10 @@ uv export [OPTIONS]
 <p>If a <code>uv.lock</code> does not exist, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -2155,6 +2193,10 @@ uv export [OPTIONS]
 
 <p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
 
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-hashes</code></dt><dd><p>Omit hashes in the generated output</p>
 
 </dd><dt><code>--no-header</code></dt><dd><p>Exclude the comment header at the top of the generated output file</p>
@@ -2174,6 +2216,12 @@ uv export [OPTIONS]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 </dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
+
+</dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
 
 <p>The project itself will also be omitted.</p>
 
@@ -2353,6 +2401,10 @@ uv tree [OPTIONS]
 <p>If the lockfile is missing, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
+</dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -2462,6 +2514,10 @@ uv tree [OPTIONS]
 
 </dd><dt><code>--no-dev</code></dt><dd><p>Omit development dependencies</p>
 
+</dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>
@@ -2475,6 +2531,16 @@ uv tree [OPTIONS]
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--only-dev</code></dt><dd><p>Omit non-development dependencies.</p>
+
+<p>The project itself will also be omitted.</p>
+
+</dd><dt><code>--only-group</code> <i>only-group</i></dt><dd><p>Only include dependencies from the specified local dependency group.</p>
+
+<p>May be provided multiple times.</p>
+
+<p>The project itself will also be omitted.</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Display only the specified packages</p>
 
@@ -4903,7 +4969,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name; may be provided more than once.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 
@@ -5667,7 +5733,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
 
 <p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
-</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the extra group name; may be provided more than once.</p>
+</dd><dt><code>--extra</code> <i>extra</i></dt><dd><p>Include optional dependencies from the specified extra name; may be provided more than once.</p>
 
 <p>Only applies to <code>pyproject.toml</code>, <code>setup.py</code>, and <code>setup.cfg</code> sources.</p>
 

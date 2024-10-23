@@ -355,7 +355,7 @@ impl ResolutionGraph {
 
             // Validate the development dependency group.
             if let Some(dev) = dev {
-                if !metadata.dev_dependencies.contains_key(dev) {
+                if !metadata.dependency_groups.contains_key(dev) {
                     diagnostics.push(ResolutionDiagnostic::MissingDev {
                         dist: dist.clone(),
                         dev: dev.clone(),
@@ -872,7 +872,7 @@ fn has_lower_bound(
         for requirement in metadata
             .requires_dist
             .iter()
-            .chain(metadata.dev_dependencies.values().flatten())
+            .chain(metadata.dependency_groups.values().flatten())
         {
             if requirement.name != *package_name {
                 continue;

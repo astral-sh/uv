@@ -1,12 +1,15 @@
 use std::env;
-
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 use insta::assert_json_snapshot;
 
+use uv_normalize::GroupName;
+
+use crate::pyproject::{DependencyGroupSpecifier, PyProjectToml};
 use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
 
 async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
@@ -76,7 +79,8 @@ async fn albatross_in_example() {
             ],
             "optional-dependencies": null
           },
-          "tool": null
+          "tool": null,
+          "dependency-groups": null
         }
       }
     }
@@ -128,7 +132,8 @@ async fn albatross_project_in_excluded() {
                 ],
                 "optional-dependencies": null
               },
-              "tool": null
+              "tool": null,
+              "dependency-groups": null
             }
           }
         }
@@ -232,12 +237,14 @@ async fn albatross_root_workspace() {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
-              }
+              },
+              "dependency-groups": null
             }
           }
         }
@@ -321,12 +328,14 @@ async fn albatross_virtual_workspace() {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
-              }
+              },
+              "dependency-groups": null
             }
           }
         }
@@ -377,7 +386,8 @@ async fn albatross_just_project() {
                 ],
                 "optional-dependencies": null
               },
-              "tool": null
+              "tool": null,
+              "dependency-groups": null
             }
           }
         }
@@ -523,12 +533,14 @@ async fn exclude_package() -> Result<()> {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
-              }
+              },
+              "dependency-groups": null
             }
           }
         }
@@ -624,12 +636,14 @@ async fn exclude_package() -> Result<()> {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
-              }
+              },
+              "dependency-groups": null
             }
           }
         }
@@ -738,12 +752,14 @@ async fn exclude_package() -> Result<()> {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
-              }
+              },
+              "dependency-groups": null
             }
           }
         }
@@ -826,12 +842,14 @@ async fn exclude_package() -> Result<()> {
                   },
                   "managed": null,
                   "package": null,
+                  "default-groups": null,
                   "dev-dependencies": null,
-                  "environments": null,
                   "override-dependencies": null,
-                  "constraint-dependencies": null
+                  "constraint-dependencies": null,
+                  "environments": null
                 }
-              }
+              },
+              "dependency-groups": null
             }
           }
         }
@@ -839,4 +857,40 @@ async fn exclude_package() -> Result<()> {
     });
 
     Ok(())
+}
+
+#[test]
+fn read_dependency_groups() {
+    let toml = r#"
+[dependency-groups]
+foo = ["a", {include-group = "bar"}]
+bar = ["b"]
+"#;
+
+    let result =
+        PyProjectToml::from_string(toml.to_string()).expect("Deserialization should succeed");
+
+    let groups = result
+        .dependency_groups
+        .expect("`dependency-groups` should be present");
+    let foo = groups
+        .get(&GroupName::from_str("foo").unwrap())
+        .expect("Group `foo` should be present");
+    assert_eq!(
+        foo,
+        &[
+            DependencyGroupSpecifier::Requirement("a".to_string()),
+            DependencyGroupSpecifier::IncludeGroup {
+                include_group: GroupName::from_str("bar").unwrap(),
+            }
+        ]
+    );
+
+    let bar = groups
+        .get(&GroupName::from_str("bar").unwrap())
+        .expect("Group `bar` should be present");
+    assert_eq!(
+        bar,
+        &[DependencyGroupSpecifier::Requirement("b".to_string())]
+    );
 }

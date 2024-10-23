@@ -8,17 +8,19 @@ use std::path::{Path, PathBuf};
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevMode, DevSpecification, EditableMode, ExportFormat, ExtrasSpecification,
+    Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
     InstallOptions, LowerBound,
 };
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, ProjectInterpreter};
+use crate::commands::project::{
+    default_dependency_groups, validate_dependency_groups, ProjectError, ProjectInterpreter,
+};
 use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
@@ -33,7 +35,7 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     editable: EditableMode,
     locked: bool,
     frozen: bool,
@@ -69,6 +71,10 @@ pub(crate) async fn export(
     } else {
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
+
+    // Determine the default groups to include.
+    validate_dependency_groups(project.pyproject_toml(), &dev)?;
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     let VirtualProject::Project(project) = project else {
         return Err(anyhow::anyhow!("Legacy non-project roots are not supported in `uv export`; add a `[project]` table to your `pyproject.toml` to enable exports"));
@@ -131,13 +137,6 @@ pub(crate) async fn export(
         Err(err) => return Err(err.into()),
     };
 
-    // Include development dependencies, if requested.
-    let dev = match dev {
-        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
-        DevMode::Exclude => DevSpecification::Exclude,
-        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
-    };
-
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
 
@@ -148,7 +147,7 @@ pub(crate) async fn export(
                 &lock,
                 project.project_name(),
                 &extras,
-                dev,
+                &dev.with_defaults(defaults),
                 editable,
                 hashes,
                 &install_options,

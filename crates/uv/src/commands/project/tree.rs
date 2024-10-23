@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, DevMode, LowerBound, TargetTriple};
+use uv_configuration::{Concurrency, DevGroupsSpecification, LowerBound, TargetTriple};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
@@ -13,7 +13,9 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::ProjectInterpreter;
+use crate::commands::project::{
+    default_dependency_groups, validate_dependency_groups, ProjectInterpreter,
+};
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
@@ -22,7 +24,7 @@ use crate::settings::ResolverSettings;
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     locked: bool,
     frozen: bool,
     universal: bool,
@@ -45,6 +47,10 @@ pub(crate) async fn tree(
 ) -> Result<ExitStatus> {
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+
+    // Determine the default groups to include.
+    validate_dependency_groups(workspace.pyproject_toml(), &dev)?;
+    let defaults = default_dependency_groups(workspace.pyproject_toml())?;
 
     // Find an interpreter for the project
     let interpreter = ProjectInterpreter::discover(
@@ -96,7 +102,7 @@ pub(crate) async fn tree(
         depth.into(),
         prune,
         package,
-        dev,
+        dev.with_defaults(defaults),
         no_dedupe,
         invert,
     );

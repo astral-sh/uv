@@ -30,6 +30,23 @@ constraint-dependencies = ["grpcio<1.65"]
 
 ---
 
+### [`default-groups`](#default-groups) {: #default-groups }
+
+The list of `dependency-groups` to install by default.
+
+**Default value**: `["dev"]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+default-groups = ["docs"]
+```
+
+---
+
 ### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
 The project's development dependencies. Development dependencies will be installed by
@@ -1890,7 +1907,7 @@ system's configured time zone.
 #### [`extra`](#pip_extra) {: #pip_extra }
 <span id="extra"></span>
 
-Include optional dependencies from the extra group name; may be provided more than once.
+Include optional dependencies from the specified extra; may be provided more than once.
 
 Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
 
