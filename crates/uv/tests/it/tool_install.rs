@@ -11,7 +11,7 @@ use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{copy_dir_all, uv_snapshot, TestContext};
 
 #[test]
 fn tool_install() {
@@ -169,6 +169,51 @@ fn tool_install() {
         exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
+}
+
+#[test]
+fn tool_install_with_editable() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-editable")
+        .arg("./src/anyio_local")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + iniconfig==2.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    "###);
+
+    Ok(())
 }
 
 #[test]

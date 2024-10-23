@@ -389,6 +389,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
+    pub(crate) with_editable: Vec<String>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -406,6 +407,7 @@ impl ToolInstallSettings {
             editable,
             from,
             with,
+            with_editable,
             with_requirements,
             installer,
             force,
@@ -427,6 +429,7 @@ impl ToolInstallSettings {
             package,
             from,
             with,
+            with_editable,
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)

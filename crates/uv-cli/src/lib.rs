@@ -3514,6 +3514,10 @@ pub struct ToolInstallArgs {
     #[arg(short, long)]
     pub editable: bool,
 
+    /// Include the given packages as editables.
+    #[arg(long, value_delimiter = ',')]
+    pub with_editable: Vec<String>,
+
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
