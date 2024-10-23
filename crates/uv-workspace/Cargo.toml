@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache-key = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git = { workspace = true }

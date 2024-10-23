@@ -1,9 +1,15 @@
-use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
+
+use itertools::Itertools;
 use thiserror::Error;
-use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, RawString, Table, TomlError, Value};
+use toml_edit::{
+    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
+};
+use url::Url;
+
+use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -220,70 +226,160 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedSources)?
             .entry("index")
             .or_insert(Item::ArrayOfTables(ArrayOfTables::new()))
-            .as_array_of_tables()
+            .as_array_of_tables_mut()
             .ok_or(Error::MalformedSources)?;
 
-        let mut table = Table::new();
-        if let Some(name) = index.name.as_ref() {
-            table.insert("name", toml_edit::value(name.to_string()));
-        } else if let Some(name) = existing
+        // If there's already an index with the same name or URL, update it (and move it to the top).
+        let mut table = existing
             .iter()
             .find(|table| {
-                table
+                // If the index has the same name, reuse it.
+                if let Some(index) = index.name.as_deref() {
+                    if table
+                        .get("name")
+                        .and_then(|name| name.as_str())
+                        .is_some_and(|name| name == index)
+                    {
+                        return true;
+                    }
+                }
+
+                // If the index is the default, and there's another default index, reuse it.
+                if index.default
+                    && table
+                        .get("default")
+                        .is_some_and(|default| default.as_bool() == Some(true))
+                {
+                    return true;
+                }
+
+                // If there's another index with the same URL, reuse it.
+                if table
                     .get("url")
-                    .is_some_and(|url| url.as_str() == Some(index.url.url().as_str()))
+                    .and_then(|item| item.as_str())
+                    .and_then(|url| Url::parse(url).ok())
+                    .is_some_and(|url| {
+                        CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url())
+                    })
+                {
+                    return true;
+                }
+
+                false
             })
-            .and_then(|existing| existing.get("name"))
-        {
-            // If there's an existing index with the same URL, and a name, preserve the name.
-            table.insert("name", name.clone());
-        }
-        table.insert("url", toml_edit::value(index.url.to_string()));
-        if index.default {
-            table.insert("default", toml_edit::value(true));
+            .cloned()
+            .unwrap_or_default();
+
+        // If necessary, update the name.
+        if let Some(index) = index.name.as_deref() {
+            if !table
+                .get("name")
+                .and_then(|name| name.as_str())
+                .is_some_and(|name| name == index)
+            {
+                let mut formatted = Formatted::new(index.to_string());
+                if let Some(value) = table.get("name").and_then(Item::as_value) {
+                    if let Some(prefix) = value.decor().prefix() {
+                        formatted.decor_mut().set_prefix(prefix.clone());
+                    }
+                    if let Some(suffix) = value.decor().suffix() {
+                        formatted.decor_mut().set_suffix(suffix.clone());
+                    }
+                }
+                table.insert("name", Value::String(formatted).into());
+            }
         }
 
-        // Push the item to the table.
-        let mut updated = ArrayOfTables::new();
-        updated.push(table);
-        for table in existing {
-            // If there's another index with the same name, replace it.
-            if table
-                .get("name")
-                .is_some_and(|name| name.as_str() == index.name.as_deref())
+        // If necessary, update the URL.
+        if !table
+            .get("url")
+            .and_then(|item| item.as_str())
+            .and_then(|url| Url::parse(url).ok())
+            .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
+        {
+            let mut formatted = Formatted::new(index.url.to_string());
+            if let Some(value) = table.get("url").and_then(Item::as_value) {
+                if let Some(prefix) = value.decor().prefix() {
+                    formatted.decor_mut().set_prefix(prefix.clone());
+                }
+                if let Some(suffix) = value.decor().suffix() {
+                    formatted.decor_mut().set_suffix(suffix.clone());
+                }
+            }
+            table.insert("url", Value::String(formatted).into());
+        }
+
+        // If necessary, update the default.
+        if index.default {
+            if !table
+                .get("default")
+                .and_then(toml_edit::Item::as_bool)
+                .is_some_and(|default| default)
             {
-                continue;
+                let mut formatted = Formatted::new(true);
+                if let Some(value) = table.get("default").and_then(Item::as_value) {
+                    if let Some(prefix) = value.decor().prefix() {
+                        formatted.decor_mut().set_prefix(prefix.clone());
+                    }
+                    if let Some(suffix) = value.decor().suffix() {
+                        formatted.decor_mut().set_suffix(suffix.clone());
+                    }
+                }
+                table.insert("default", Value::Boolean(formatted).into());
+            }
+        }
+
+        // Remove any replaced tables.
+        existing.retain(|table| {
+            // If the index has the same name, skip it.
+            if let Some(index) = index.name.as_deref() {
+                if table
+                    .get("name")
+                    .and_then(|name| name.as_str())
+                    .is_some_and(|name| name == index)
+                {
+                    return false;
+                }
             }
 
-            // If there's another default index, remove it.
+            // If there's another default index, skip it.
             if index.default
                 && table
                     .get("default")
                     .is_some_and(|default| default.as_bool() == Some(true))
             {
-                continue;
+                return false;
             }
 
-            // If there's another index with the same URL, replace it.
+            // If there's another index with the same URL, skip it.
             if table
                 .get("url")
-                .is_some_and(|url| url.as_str() == Some(index.url.url().as_str()))
+                .and_then(|item| item.as_str())
+                .and_then(|url| Url::parse(url).ok())
+                .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
             {
-                continue;
+                return false;
             }
 
-            updated.push(table.clone());
+            true
+        });
+
+        // Set the position to the minimum, if it's not already the first element.
+        if let Some(min) = existing.iter().filter_map(toml_edit::Table::position).min() {
+            // if !table.position().is_some_and(|position| position < min) {
+            table.set_position(min);
+
+            // Increment the position of all existing elements.
+            for table in existing.iter_mut() {
+                if let Some(position) = table.position() {
+                    table.set_position(position + 1);
+                }
+            }
+            // }
         }
-        self.doc
-            .entry("tool")
-            .or_insert(implicit())
-            .as_table_mut()
-            .ok_or(Error::MalformedSources)?
-            .entry("uv")
-            .or_insert(implicit())
-            .as_table_mut()
-            .ok_or(Error::MalformedSources)?
-            .insert("index", Item::ArrayOfTables(updated));
+
+        // Push the item to the table.
+        existing.push(table);
 
         Ok(())
     }
