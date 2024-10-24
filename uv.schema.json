@@ -398,7 +398,7 @@
       ]
     },
     "sources": {
-      "description": "The sources to use (e.g., workspace members, Git repositories, local paths) when resolving dependencies.",
+      "description": "The sources to use when resolving dependencies.\n\n`tool.uv.sources` enriches the dependency metadata with additional sources, incorporated during development. A dependency source can be a Git repository, a URL, a local path, or an alternative registry.\n\nSee [Dependencies](https://docs.astral.sh/uv/concepts/dependencies/) for more.",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvSources"

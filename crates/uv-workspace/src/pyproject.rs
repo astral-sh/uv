@@ -152,8 +152,23 @@ pub struct Tool {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
-    /// The sources to use (e.g., workspace members, Git repositories, local paths) when resolving
-    /// dependencies.
+    /// The sources to use when resolving dependencies.
+    ///
+    /// `tool.uv.sources` enriches the dependency metadata with additional sources, incorporated
+    /// during development. A dependency source can be a Git repository, a URL, a local path, or an
+    /// alternative registry.
+    ///
+    /// See [Dependencies](https://docs.astral.sh/uv/concepts/dependencies/) for more.
+    #[option(
+        default = "\"[]\"",
+        value_type = "dict",
+        example = r#"
+            [tool.uv.sources]
+            httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
+            pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
+            pydantic = { path = "/path/to/pydantic", editable = true }
+        "#
+    )]
     pub sources: Option<ToolUvSources>,
 
     /// The indexes to use when resolving dependencies.
