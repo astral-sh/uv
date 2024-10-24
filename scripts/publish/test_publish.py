@@ -157,7 +157,7 @@ def build_new_version(project_name: str, uv: Path) -> Version:
     return new_version
 
 
-def wait_for_index(index_url: str, project_name: str, version: Version):
+def wait_for_index(index_url: str, project_name: str, version: Version, uv: Path):
     """Check that the index URL was updated, wait up to 10s if necessary.
 
     Often enough the index takes a few seconds until the index is updated after an
@@ -168,7 +168,7 @@ def wait_for_index(index_url: str, project_name: str, version: Version):
     for _ in range(10):
         output = check_output(
             [
-                "uv",
+                uv,
                 "pip",
                 "compile",
                 "--index",
@@ -225,7 +225,7 @@ def publish_project(target: str, uv: Path):
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
         print(f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===")
-        wait_for_index(index_url, project_name, version)
+        wait_for_index(index_url, project_name, version, uv)
         args = [uv, "publish", "-v", "--publish-url", publish_url, *extra_args]
         output = run(
             args, cwd=uv_cwd, env=env, text=True, check=True, stderr=PIPE
@@ -241,7 +241,7 @@ def publish_project(target: str, uv: Path):
             )
 
     print(f"\n=== 3. Publishing {project_name} {version} again with skip existing ===")
-    wait_for_index(index_url, project_name, version)
+    wait_for_index(index_url, project_name, version, uv)
     args = [
         uv,
         "publish",
