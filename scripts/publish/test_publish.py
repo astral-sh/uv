@@ -91,14 +91,14 @@ project_urls = {
 }
 
 
-def get_new_version(project_name: str) -> str:
+def get_new_version(project_name: str, client: httpx.Client) -> str:
     """Return the next free path version on pypi"""
     # To keep the number of packages small we reuse them across targets, so we have to
     # pick a version that doesn't exist on any target yet
     versions = set()
     for url in project_urls[project_name]:
         try:
-            data = httpx.get(url).text
+            data = client.get(url).text
         except httpx.HTTPError as err:
             raise RuntimeError(f"Failed to fetch {url}") from err
         href_text = "<a[^>]+>([^<>]+)</a>"
@@ -116,7 +116,7 @@ def get_new_version(project_name: str) -> str:
     return ".".join(str(i) for i in release)
 
 
-def create_project(project_name: str, uv: Path):
+def create_project(project_name: str, uv: Path, client: httpx.Client):
     if cwd.joinpath(project_name).exists():
         rmtree(cwd.joinpath(project_name))
     check_call([uv, "init", "--lib", project_name], cwd=cwd)
@@ -124,18 +124,18 @@ def create_project(project_name: str, uv: Path):
 
     # Set to an unclaimed version
     toml = pyproject_toml.read_text()
-    new_version = get_new_version(project_name)
+    new_version = get_new_version(project_name, client)
     toml = re.sub('version = ".*"', f'version = "{new_version}"', toml)
     pyproject_toml.write_text(toml)
 
 
-def publish_project(target: str, uv: Path):
+def publish_project(target: str, uv: Path, client: httpx.Client):
     project_name = all_targets[target]
 
     print(f"\nPublish {project_name} for {target}")
 
     # Create the project
-    create_project(project_name, uv)
+    create_project(project_name, uv, client)
 
     # Build the project
     check_call([uv, "build"], cwd=cwd.joinpath(project_name))
@@ -264,8 +264,9 @@ def main():
     else:
         targets = args.targets
 
-    for project_name in targets:
-        publish_project(project_name, uv)
+    with httpx.Client(timeout=120) as client:
+        for project_name in targets:
+            publish_project(project_name, uv, client)
 
 
 if __name__ == "__main__":
