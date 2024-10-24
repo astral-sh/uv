@@ -193,46 +193,42 @@ def wait_for_index(index_url: str, project_name: str, version: Version):
         sleep(1)
 
 
-def publish_and_skip_existing(
-    project_name: str,
-    version: Version,
-    uv: Path,
-    publish_url: str,
-    index_url: str,
-    extra_args: list[str],
-    env: dict[str, str] | None,
-):
+def publish_project(target: str, uv: Path):
     """Test that:
 
     1. An upload with a fresh version succeeds.
     2. If we're using PyPI, uploading the same files again succeeds.
     3. Skip existing works and reports the files as skipped.
     """
+    project_name = all_targets[target][0]
+
+    print(f"\nPublish {project_name} for {target}")
+
+    # The distributions are build to the dist directory of the project.
+    version = build_new_version(project_name, uv)
+
+    # Upload configuration
+    env, extra_args, publish_url = target_configuration(target)
+    index_url = all_targets[target][1]
+    env = {**os.environ, **env}
+    uv_cwd = cwd.joinpath(project_name)
+    expected_filenames = [path.name for path in uv_cwd.joinpath("dist").iterdir()]
+    # Ignore the gitignore file in dist
+    expected_filenames.remove(".gitignore")
+
     print(
         f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ==="
     )
-    call_cwd = cwd.joinpath(project_name)
-    check_call(
-        [uv, "publish", "--publish-url", publish_url, *extra_args],
-        cwd=call_cwd,
-        env=env,
-    )
-
-    # Ignore the gitignore file in dist
-    expected_filenames = [path.name for path in call_cwd.joinpath("dist").iterdir()]
-    expected_filenames.remove(".gitignore")
+    args = [uv, "publish", "--publish-url", publish_url, *extra_args]
+    check_call(args, cwd=uv_cwd, env=env)
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
         print(f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===")
         wait_for_index(index_url, project_name, version)
+        args = [uv, "publish", "-v", "--publish-url", publish_url, *extra_args]
         output = run(
-            [uv, "publish", "-v", "--publish-url", publish_url, *extra_args],
-            cwd=call_cwd,
-            env=env,
-            text=True,
-            check=True,
-            stderr=PIPE,
+            args, cwd=uv_cwd, env=env, text=True, check=True, stderr=PIPE
         ).stderr
         if (
             output.count("Uploading") != len(expected_filenames)
@@ -246,23 +242,17 @@ def publish_and_skip_existing(
 
     print(f"\n=== 3. Publishing {project_name} {version} again with skip existing ===")
     wait_for_index(index_url, project_name, version)
-    output = run(
-        [
-            uv,
-            "publish",
-            "-v",
-            "--publish-url",
-            publish_url,
-            "--skip-existing",
-            index_url,
-            *extra_args,
-        ],
-        cwd=call_cwd,
-        env=env,
-        text=True,
-        check=True,
-        stderr=PIPE,
-    ).stderr
+    args = [
+        uv,
+        "publish",
+        "-v",
+        "--publish-url",
+        publish_url,
+        "--skip-existing",
+        index_url,
+        *extra_args,
+    ]
+    output = run(args, cwd=uv_cwd, env=env, text=True, check=True, stderr=PIPE).stderr
 
     if output.count("Uploading") != 0 or output.count("already exists") != len(
         expected_filenames
@@ -274,98 +264,43 @@ def publish_and_skip_existing(
         )
 
 
-def publish_project(target: str, uv: Path):
-    project_name = all_targets[target][0]
-
-    print(f"\nPublish {project_name} for {target}")
-
-    # The distributions are build to the dist directory of the project.
-    version = build_new_version(project_name, uv)
-
-    # Upload the project
+def target_configuration(target: str) -> tuple[dict[str, str], list[str], str]:
     if target == "pypi-token":
-        env = os.environ.copy()
-        env["UV_PUBLISH_TOKEN"] = os.environ["UV_TEST_PUBLISH_TOKEN"]
-        publish_and_skip_existing(
-            project_name,
-            version,
-            uv,
-            TEST_PYPI_PUBLISH_URL,
-            all_targets[target][1],
-            [],
-            env,
-        )
+        publish_url = TEST_PYPI_PUBLISH_URL
+        extra_args = []
+        env = {"UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_TOKEN"]}
     elif target == "pypi-password-env":
-        env = os.environ.copy()
-        env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_PASSWORD"]
-        publish_and_skip_existing(
-            project_name,
-            version,
-            uv,
-            TEST_PYPI_PUBLISH_URL,
-            all_targets[target][1],
-            ["--username", "__token__"],
-            env,
-        )
+        publish_url = TEST_PYPI_PUBLISH_URL
+        extra_args = ["--username", "__token__"]
+        env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_PASSWORD"]}
     elif target == "pypi-keyring":
-        publish_and_skip_existing(
-            project_name,
-            version,
-            uv,
-            "https://test.pypi.org/legacy/?astral-test-keyring",
-            all_targets[target][1],
-            ["--username", "__token__", "--keyring-provider", "subprocess"],
-            None,
-        )
+        publish_url = "https://test.pypi.org/legacy/?astral-test-keyring"
+        extra_args = ["--username", "__token__", "--keyring-provider", "subprocess"]
+        env = {}
     elif target == "pypi-trusted-publishing":
-        publish_and_skip_existing(
-            project_name,
-            version,
-            uv,
-            TEST_PYPI_PUBLISH_URL,
-            all_targets[target][1],
-            ["--trusted-publishing", "always"],
-            None,
-        )
+        publish_url = TEST_PYPI_PUBLISH_URL
+        extra_args = ["--trusted-publishing", "always"]
+        env = {}
     elif target == "gitlab":
-        env = os.environ.copy()
-        env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]
-        publish_and_skip_existing(
-            project_name,
-            version,
-            uv,
-            "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
-            all_targets[target][1],
-            ["--username", "astral-test-gitlab-pat"],
-            env,
-        )
+        env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]}
+        publish_url = "https://gitlab.com/api/v4/projects/61853105/packages/pypi"
+        extra_args = ["--username", "astral-test-gitlab-pat"]
     elif target == "codeberg":
-        env = os.environ.copy()
-        env["UV_PUBLISH_USERNAME"] = "astral-test-user"
-        env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_CODEBERG_TOKEN"]
-        publish_and_skip_existing(
-            project_name,
-            version,
-            uv,
-            "https://codeberg.org/api/packages/astral-test-user/pypi",
-            all_targets[target][1],
-            [],
-            env,
-        )
+        publish_url = "https://codeberg.org/api/packages/astral-test-user/pypi"
+        extra_args = []
+        env = {
+            "UV_PUBLISH_USERNAME": "astral-test-user",
+            "UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_CODEBERG_TOKEN"],
+        }
     elif target == "cloudsmith":
-        env = os.environ.copy()
-        env["UV_PUBLISH_TOKEN"] = os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"]
-        publish_and_skip_existing(
-            project_name,
-            version,
-            uv,
-            "https://python.cloudsmith.io/astral-test/astral-test-1/",
-            all_targets[target][1],
-            [],
-            env,
-        )
+        publish_url = "https://python.cloudsmith.io/astral-test/astral-test-1/"
+        extra_args = []
+        env = {
+            "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"],
+        }
     else:
         raise ValueError(f"Unknown target: {target}")
+    return env, extra_args, publish_url
 
 
 def main():
