@@ -1595,7 +1595,9 @@ uv lock [OPTIONS]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
-</dd><dt><code>--dry-run</code></dt><dd><p>Perform a dry run, i.e., don&#8217;t actually install anything but resolve the dependencies and print the resulting plan</p>
+</dd><dt><code>--dry-run</code></dt><dd><p>Perform a dry run, without writing the lockfile.</p>
+
+<p>In dry-run mode, uv will resolve the project&#8217;s dependencies and report on the resulting changes, but will not write the lockfile to disk.</p>
 
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 

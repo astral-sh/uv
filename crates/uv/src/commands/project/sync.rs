@@ -105,6 +105,7 @@ pub(crate) async fn sync(
     let lock = match do_safe_lock(
         locked,
         frozen,
+        false,
         target.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),

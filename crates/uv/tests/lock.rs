@@ -13372,7 +13372,6 @@ fn lock_dry_run() -> Result<()> {
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    Planned lockfile modifications:
     Remove anyio v2.2.0, v3.7.1
     Add certifi v2024.2.2
     Add chardet v4.0.0
@@ -13417,7 +13416,10 @@ fn lock_dry_run_noop() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Existing lockfile not detected
+    Add anyio v2.2.0, v3.7.1
+    Add idna v3.6
+    Add project v0.1.0
+    Add sniffio v1.3.1
     "###);
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -13437,6 +13439,15 @@ fn lock_dry_run_noop() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     No lockfile changes detected
+    "###);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run").arg("-U"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
     "###);
 
     Ok(())

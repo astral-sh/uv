@@ -82,12 +82,6 @@ pub(crate) async fn lock(
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    if dry_run && frozen {
-        warn_user_once!("`--dry_run` is a no-op when used with `--frozen`");
-    } else if dry_run && locked {
-        warn_user_once!("`--dry_run` is a no-op when used with `--locked`");
-    }
-
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
@@ -105,92 +99,62 @@ pub(crate) async fn lock(
     .await?
     .into_interpreter();
 
-    if dry_run {
-        let state = SharedState::default();
-
-        let existing = read(&workspace).await?;
-
-        let result = do_lock(
-            &workspace,
-            &interpreter,
-            existing,
-            dry_run,
-            settings.as_ref(),
-            &state,
-            Box::new(DefaultResolveLogger),
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
-
-        match result {
-            LockResult::Changed(Some(previous), lock) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    "Planned lockfile modifications:".bold()
-                )?;
-                report_upgrades(&previous, &lock, printer, true)?;
-            }
-            LockResult::Changed(None, _) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    "Existing lockfile not detected".bold()
-                )?;
-            }
-            LockResult::Unchanged(_) => {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    "No lockfile changes detected".bold()
-                )?;
-            }
-        }
-
-        Ok(ExitStatus::Success)
-    } else {
-        // Perform the lock operation.
-        match do_safe_lock(
-            locked,
-            frozen,
-            &workspace,
-            &interpreter,
-            settings.as_ref(),
-            Box::new(DefaultResolveLogger),
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await
-        {
-            Ok(lock) => {
-                if let LockResult::Changed(Some(previous), lock) = &lock {
-                    report_upgrades(previous, lock, printer, false)?;
+    // Perform the lock operation.
+    match do_safe_lock(
+        locked,
+        frozen,
+        dry_run,
+        &workspace,
+        &interpreter,
+        settings.as_ref(),
+        Box::new(DefaultResolveLogger),
+        connectivity,
+        concurrency,
+        native_tls,
+        cache,
+        printer,
+    )
+    .await
+    {
+        Ok(lock) => {
+            if dry_run {
+                let changed = if let LockResult::Changed(previous, lock) = &lock {
+                    report_upgrades(previous.as_ref(), lock, printer, dry_run)?
+                } else {
+                    false
+                };
+                if !changed {
+                    writeln!(
+                        printer.stderr(),
+                        "{}",
+                        "No lockfile changes detected".bold()
+                    )?;
                 }
-                Ok(ExitStatus::Success)
+            } else {
+                if let LockResult::Changed(Some(previous), lock) = &lock {
+                    report_upgrades(Some(previous), lock, printer, dry_run)?;
+                }
             }
-            Err(ProjectError::Operation(pip::operations::Error::Resolve(
-                uv_resolver::ResolveError::NoSolution(err),
-            ))) => {
-                let report = miette::Report::msg(format!("{err}")).context(err.header());
-                eprint!("{report:?}");
-                Ok(ExitStatus::Failure)
-            }
-            Err(err) => Err(err.into()),
+
+            Ok(ExitStatus::Success)
         }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::NoSolution(err),
+        ))) => {
+            let report = miette::Report::msg(format!("{err}")).context(err.header());
+            eprint!("{report:?}");
+            Ok(ExitStatus::Failure)
+        }
+        Err(err) => Err(err.into()),
     }
 }
 
 /// Perform a lock operation, respecting the `--locked` and `--frozen` parameters.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_safe_lock(
     locked: bool,
     frozen: bool,
+    dry_run: bool,
     workspace: &Workspace,
     interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
@@ -229,7 +193,6 @@ pub(super) async fn do_safe_lock(
             workspace,
             interpreter,
             Some(existing),
-            false,
             settings,
             &state,
             logger,
@@ -256,7 +219,6 @@ pub(super) async fn do_safe_lock(
             workspace,
             interpreter,
             existing,
-            false,
             settings,
             &state,
             logger,
@@ -269,8 +231,10 @@ pub(super) async fn do_safe_lock(
         .await?;
 
         // If the lockfile changed, write it to disk.
-        if let LockResult::Changed(_, lock) = &result {
-            commit(lock, workspace).await?;
+        if !dry_run {
+            if let LockResult::Changed(_, lock) = &result {
+                commit(lock, workspace).await?;
+            }
         }
 
         Ok(result)
@@ -282,7 +246,6 @@ async fn do_lock(
     workspace: &Workspace,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
-    dry_run: bool,
     settings: ResolverSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn ResolveLogger>,
@@ -505,7 +468,6 @@ async fn do_lock(
             index_locations,
             build_options,
             upgrade,
-            dry_run,
             &options,
             &database,
             printer,
@@ -680,7 +642,6 @@ impl ValidatedLock {
         index_locations: &IndexLocations,
         build_options: &BuildOptions,
         upgrade: &Upgrade,
-        dry_run: bool,
         options: &Options,
         database: &DistributionDatabase<'_, Context>,
         printer: Printer,
@@ -753,19 +714,17 @@ impl ValidatedLock {
             };
         }
 
-        if !dry_run {
-            match upgrade {
-                Upgrade::None => {}
-                Upgrade::All => {
-                    // If the user specified `--upgrade`, then we can't use the existing lockfile.
-                    debug!("Ignoring existing lockfile due to `--upgrade`");
-                    return Ok(Self::Unusable(lock));
-                }
-                Upgrade::Packages(_) => {
-                    // If the user specified `--upgrade-package`, then at best we can prefer some of
-                    // the existing versions.
-                    return Ok(Self::Preferable(lock));
-                }
+        match upgrade {
+            Upgrade::None => {}
+            Upgrade::All => {
+                // If the user specified `--upgrade`, then we can't use the existing lockfile.
+                debug!("Ignoring existing lockfile due to `--upgrade`");
+                return Ok(Self::Unusable(lock));
+            }
+            Upgrade::Packages(_) => {
+                // If the user specified `--upgrade-package`, then at best we can prefer some of
+                // the existing versions.
+                return Ok(Self::Preferable(lock));
             }
         }
 
@@ -937,22 +896,28 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
 }
 
 /// Reports on the versions that were upgraded in the new lockfile.
+///
+/// Returns `true` if any upgrades were reported.
 fn report_upgrades(
-    existing_lock: &Lock,
+    existing_lock: Option<&Lock>,
     new_lock: &Lock,
     printer: Printer,
     dry_run: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let existing_packages: FxHashMap<&PackageName, BTreeSet<&Version>> =
-        existing_lock.packages().iter().fold(
-            FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
-            |mut acc, package| {
-                acc.entry(package.name())
-                    .or_default()
-                    .insert(package.version());
-                acc
-            },
-        );
+        if let Some(existing_lock) = existing_lock {
+            existing_lock.packages().iter().fold(
+                FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
+                |mut acc, package| {
+                    acc.entry(package.name())
+                        .or_default()
+                        .insert(package.version());
+                    acc
+                },
+            )
+        } else {
+            FxHashMap::default()
+        };
 
     let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
         new_lock.packages().iter().fold(
@@ -965,11 +930,13 @@ fn report_upgrades(
             },
         );
 
+    let mut updated = false;
     for name in existing_packages
         .keys()
         .chain(new_distributions.keys())
         .collect::<BTreeSet<_>>()
     {
+        updated = true;
         match (existing_packages.get(name), new_distributions.get(name)) {
             (Some(existing_versions), Some(new_versions)) => {
                 if existing_versions != new_versions {
@@ -1020,5 +987,5 @@ fn report_upgrades(
         }
     }
 
-    Ok(())
+    Ok(updated)
 }

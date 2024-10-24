@@ -2752,6 +2752,13 @@ pub struct LockArgs {
     #[arg(long, conflicts_with = "locked")]
     pub frozen: bool,
 
+    /// Perform a dry run, without writing the lockfile.
+    ///
+    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
+    /// changes, but will not write the lockfile to disk.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "locked")]
+    pub dry_run: bool,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
@@ -2779,11 +2786,6 @@ pub struct LockArgs {
         help_heading = "Python options"
     )]
     pub python: Option<String>,
-
-    /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
-    /// print the resulting plan.
-    #[arg(long)]
-    pub dry_run: bool,
 }
 
 #[derive(Args)]

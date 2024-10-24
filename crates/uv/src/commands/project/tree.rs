@@ -62,6 +62,7 @@ pub(crate) async fn tree(
     let lock = project::lock::do_safe_lock(
         locked,
         frozen,
+        false,
         &workspace,
         &interpreter,
         settings.as_ref(),
