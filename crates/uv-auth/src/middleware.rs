@@ -71,11 +71,11 @@ impl AuthMiddleware {
         }
     }
 
-    /// Configure the [`netrc::Netrc`] credential file to use.
+    /// Configure the [`Netrc`] credential file to use.
     ///
     /// `None` disables authentication via netrc.
     #[must_use]
-    pub fn with_netrc(mut self, netrc: Option<netrc::Netrc>) -> Self {
+    pub fn with_netrc(mut self, netrc: Option<Netrc>) -> Self {
         self.netrc = if let Some(netrc) = netrc {
             NetrcMode::Enabled(netrc)
         } else {
