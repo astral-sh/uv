@@ -368,6 +368,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.build_extra_env_vars.clone(),
             build_output,
             self.concurrency.builds,
+            self.cache,
         )
         .boxed_local()
         .await?;
