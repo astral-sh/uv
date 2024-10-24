@@ -605,14 +605,19 @@ enum License {
 /// The entry is derived from the email format of `John Doe <john.doe@example.net>`. You need to
 /// provide at least name or email.
 #[derive(Deserialize, Debug, Clone)]
-#[serde(untagged, expecting = "a table with 'name' and/or 'email' keys")]
+// deny_unknown_fields prevents using the name field when the email is not a string.
+#[serde(
+    untagged,
+    deny_unknown_fields,
+    expecting = "a table with 'name' and/or 'email' keys"
+)]
 enum Contact {
+    /// TODO(konsti): RFC 822 validation.
+    NameEmail { name: String, email: String },
     /// TODO(konsti): RFC 822 validation.
     Name { name: String },
     /// TODO(konsti): RFC 822 validation.
     Email { email: String },
-    /// TODO(konsti): RFC 822 validation.
-    NameEmail { name: String, email: String },
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
