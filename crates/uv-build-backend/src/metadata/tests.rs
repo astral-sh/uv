@@ -104,35 +104,37 @@ fn valid() {
     let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
     assert_snapshot!(metadata.core_metadata_format(), @r###"
-        Metadata-Version: 2.3
-        Name: hello-world
-        Version: 0.1.0
-        Summary: A Python package
-        Keywords: demo,example,package
-        Author: Ferris the crab
-        License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-                 INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-                 PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-                 HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
-                 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
-                 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-        Classifier: Development Status :: 6 - Mature
-        Classifier: License :: OSI Approved :: MIT License
-        Classifier: License :: OSI Approved :: Apache Software License
-        Classifier: Programming Language :: Python
-        Requires-Dist: flask>=3,<4
-        Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
-        Maintainer: Konsti
-        Project-URL: Homepage, https://github.com/astral-sh/uv
-        Project-URL: Repository, https://astral.sh
-        Provides-Extra: mysql
-        Provides-Extra: postgres
-        Description-Content-Type: text/markdown
+    Metadata-Version: 2.3
+    Name: hello-world
+    Version: 0.1.0
+    Summary: A Python package
+    Keywords: demo,example,package
+    Author: Ferris the crab
+    Author-email: Ferris the crab <ferris@rustacean.net>
+    License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+             INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+             PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+             HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+             CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+             OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+    Classifier: Development Status :: 6 - Mature
+    Classifier: License :: OSI Approved :: MIT License
+    Classifier: License :: OSI Approved :: Apache Software License
+    Classifier: Programming Language :: Python
+    Requires-Dist: flask>=3,<4
+    Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
+    Maintainer: Konsti
+    Maintainer-email: Konsti <konstin@mailbox.org>
+    Project-URL: Homepage, https://github.com/astral-sh/uv
+    Project-URL: Repository, https://astral.sh
+    Provides-Extra: mysql
+    Provides-Extra: postgres
+    Description-Content-Type: text/markdown
 
-        # Foo
+    # Foo
 
-        This is the foo library.
-        "###);
+    This is the foo library.
+    "###);
 
     assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
         [console_scripts]
