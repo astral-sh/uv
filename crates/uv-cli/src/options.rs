@@ -123,7 +123,6 @@ impl From<ResolverInstallerArgs> for PipOptions {
             reinstall_package,
             index_strategy,
             keyring_provider,
-            allow_insecure_host,
             resolution,
             prerelease,
             pre,
@@ -145,12 +144,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
-            allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
-                allow_insecure_host
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
+            allow_insecure_host: None,
             resolution,
             prerelease: if pre {
                 Some(PrereleaseMode::Allow)
@@ -310,7 +304,6 @@ pub fn resolver_installer_options(
         reinstall_package,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         pre,
@@ -376,12 +369,7 @@ pub fn resolver_installer_options(
         },
         index_strategy,
         keyring_provider,
-        allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
-            allow_insecure_host
-                .into_iter()
-                .filter_map(Maybe::into_option)
-                .collect()
-        }),
+        allow_insecure_host: None,
         resolution,
         prerelease: if pre {
             Some(PrereleaseMode::Allow)

@@ -4515,26 +4515,6 @@ pub struct ResolverInstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-        help_heading = "Index options"
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
-
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
