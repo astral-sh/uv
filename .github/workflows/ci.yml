@@ -1606,9 +1606,23 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Install pyenv"
-        uses: "gabrielfalcao/pyenv-action@v18"
-        with:
-          default: 3.9.7
+        run: |
+          # Install pyenv
+          curl https://pyenv.run | bash
+
+          # Set up environment variables for current step
+          export PYENV_ROOT="$HOME/.pyenv"
+          export PATH="$PYENV_ROOT/bin:$PATH"
+          eval "$(pyenv init -)"
+
+          # Install Python 3.9
+          pyenv install 3.9
+          pyenv global 3.9
+
+          # Make environment variables persist across steps
+          echo "PYENV_ROOT=$HOME/.pyenv" >> $GITHUB_ENV
+          echo "$HOME/.pyenv/bin" >> $GITHUB_PATH
+          echo "$HOME/.pyenv/shims" >> $GITHUB_PATH
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
