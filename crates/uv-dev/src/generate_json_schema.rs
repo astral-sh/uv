@@ -33,8 +33,8 @@ pub(crate) struct Args {
 }
 
 pub(crate) fn main(args: &Args) -> Result<()> {
-    let schema = schema_for!(CombinedOptions);
-    let schema_string = serde_json::to_string_pretty(&schema).unwrap();
+    // Generate the schema.
+    let schema_string = generate();
     let filename = "uv.schema.json";
     let schema_path = PathBuf::from(ROOT_DIR).join(filename);
 
@@ -78,6 +78,33 @@ pub(crate) fn main(args: &Args) -> Result<()> {
     }
 
     Ok(())
+}
+
+const REPLACEMENTS: &[(&str, &str)] = &[
+    // Use the fully-resolved URL rather than the relative Markdown path.
+    (
+        "(../concepts/dependencies.md)",
+        "(https://docs.astral.sh/uv/concepts/dependencies/)",
+    ),
+];
+
+/// Generate the JSON schema for the combined options as a string.
+fn generate() -> String {
+    let schema = schema_for!(CombinedOptions);
+    let mut output = serde_json::to_string_pretty(&schema).unwrap();
+
+    for (value, replacement) in REPLACEMENTS {
+        assert_ne!(
+            value, replacement,
+            "`value` and `replacement` must be different, but both are `{value}`"
+        );
+        let before = &output;
+        let after = output.replace(value, replacement);
+        assert_ne!(*before, after, "Could not find `{value}` in the output");
+        output = after;
+    }
+
+    output
 }
 
 #[cfg(test)]
