@@ -1423,7 +1423,7 @@ pub struct PipSyncArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
-    /// Validate the Python environment after completing the installation, to detect and with
+    /// Validate the Python environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
     #[arg(long, overrides_with("no_strict"))]
     pub strict: bool,
@@ -1711,7 +1711,7 @@ pub struct PipInstallArgs {
     #[arg(long, overrides_with("inexact"))]
     pub exact: bool,
 
-    /// Validate the Python environment after completing the installation, to detect and with
+    /// Validate the Python environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
     #[arg(long, overrides_with("no_strict"))]
     pub strict: bool,
