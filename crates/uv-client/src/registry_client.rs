@@ -12,7 +12,7 @@ use std::time::Duration;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
+use uv_cache::{Cache, CacheBucket, CacheEntry, Refresh, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
@@ -286,7 +286,12 @@ impl RegistryClient {
 
         Ok(results)
     }
-
+    
+    /// Invalidate the cache after the index changed.
+    pub fn refresh(&mut self, refresh: Refresh) {
+        self.cache = self.cache.clone().with_refresh(refresh);
+    }
+    
     /// Fetch the [`SimpleMetadata`] from a single index for a given package.
     ///
     /// The index can either be a PEP 503-compatible remote repository, or a local directory laid

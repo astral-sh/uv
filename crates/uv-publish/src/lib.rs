@@ -32,6 +32,7 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
 pub use trusted_publishing::TrustedPublishingToken;
+use uv_cache::Refresh;
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::{HashReader, Hasher};
 
@@ -315,7 +316,7 @@ pub async fn upload(
     retries: u32,
     username: Option<&str>,
     password: Option<&str>,
-    index_client: &Option<(IndexUrl, RegistryClient)>,
+    index_client: &mut Option<(IndexUrl, RegistryClient)>,
     index_capabilities: &IndexCapabilities,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
@@ -380,14 +381,17 @@ pub async fn upload(
 
 /// Check whether we should skip the upload of a file because it already exists on the index.
 pub async fn skip_existing(
-    index_client: &Option<(IndexUrl, RegistryClient)>,
+    index_client: &mut Option<(IndexUrl, RegistryClient)>,
     index_capabilities: &IndexCapabilities,
     file: &Path,
     filename: &DistFilename,
 ) -> Result<bool, PublishError> {
-    let Some((index_url, registry_client)) = &index_client else {
+    let Some((index_url, registry_client)) = index_client.as_mut() else {
         return Ok(false);
     };
+
+    // Avoid using the PyPI 10min default cache.
+    registry_client.refresh(Refresh::from_args(None, vec![filename.name().clone()]));
 
     debug!("Checking for {filename} in the registry");
     let response = registry_client

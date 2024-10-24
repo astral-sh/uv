@@ -67,7 +67,7 @@ pub(crate) async fn publish(
         .wrap_existing(&upload_client);
 
     // Initialize the registry client.
-    let index_client = if let Some(index_url) = skip_existing {
+    let mut index_client = if let Some(index_url) = skip_existing {
         let index_urls = IndexLocations::new(
             vec![Index::from_index_url(index_url.clone())],
             Vec::new(),
@@ -117,7 +117,7 @@ pub(crate) async fn publish(
     }
 
     for (file, raw_filename, filename) in files {
-        if uv_publish::skip_existing(&index_client, &index_capabilities, &file, &filename).await? {
+        if uv_publish::skip_existing(&mut index_client, &index_capabilities, &file, &filename).await? {
             writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
             continue;
         }
@@ -140,7 +140,7 @@ pub(crate) async fn publish(
             DEFAULT_RETRIES,
             username.as_deref(),
             password.as_deref(),
-            &index_client,
+            &mut index_client,
             &index_capabilities,
             // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
             Arc::new(reporter),
