@@ -9365,6 +9365,7 @@ fn not_found_direct_url() -> Result<()> {
 
     ----- stderr -----
     error: Failed to download: `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
+      Caused by: Failed to fetch https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl
       Caused by: HTTP status client error (404 Not Found) for url (https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl)
     "###
     );

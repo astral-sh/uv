@@ -800,14 +800,19 @@ async fn read_url_to_string(
 
     let url = Url::from_str(path_utf8)
         .map_err(|err| RequirementsTxtParserError::InvalidUrl(path_utf8.to_string(), err))?;
-    Ok(client
+    let response = client
         .for_host(&url)
-        .get(url)
+        .get(url.clone())
         .send()
-        .await?
-        .error_for_status()?
+        .await
+        .map_err(|err| RequirementsTxtParserError::from_reqwest_middleware(url.clone(), err))?;
+    let text = response
+        .error_for_status()
+        .map_err(|err| RequirementsTxtParserError::from_reqwest(url.clone(), err))?
         .text()
-        .await?)
+        .await
+        .map_err(|err| RequirementsTxtParserError::from_reqwest(url.clone(), err))?;
+    Ok(text)
 }
 
 /// Error parsing requirements.txt, wrapper with filename
@@ -891,7 +896,7 @@ pub enum RequirementsTxtParserError {
         url: PathBuf,
     },
     #[cfg(feature = "http")]
-    Reqwest(reqwest_middleware::Error),
+    Reqwest(Url, reqwest_middleware::Error),
     #[cfg(feature = "http")]
     InvalidUrl(String, url::ParseError),
 }
@@ -957,8 +962,8 @@ impl Display for RequirementsTxtParserError {
                 )
             }
             #[cfg(feature = "http")]
-            Self::Reqwest(err) => {
-                write!(f, "Error while accessing remote requirements file {err}")
+            Self::Reqwest(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]
             Self::InvalidUrl(url, err) => {
@@ -989,7 +994,7 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::Parser { .. } => None,
             Self::NonUnicodeUrl { .. } => None,
             #[cfg(feature = "http")]
-            Self::Reqwest(err) => err.source(),
+            Self::Reqwest(_, err) => err.source(),
             #[cfg(feature = "http")]
             Self::InvalidUrl(_, err) => err.source(),
         }
@@ -1117,12 +1122,8 @@ impl Display for RequirementsTxtFileError {
                 )
             }
             #[cfg(feature = "http")]
-            RequirementsTxtParserError::Reqwest(err) => {
-                write!(
-                    f,
-                    "Error while accessing remote requirements file {}: {err}",
-                    self.file.user_display(),
-                )
+            RequirementsTxtParserError::Reqwest(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]
             RequirementsTxtParserError::InvalidUrl(url, err) => {
@@ -1145,16 +1146,13 @@ impl From<io::Error> for RequirementsTxtParserError {
 }
 
 #[cfg(feature = "http")]
-impl From<reqwest::Error> for RequirementsTxtParserError {
-    fn from(err: reqwest::Error) -> Self {
-        Self::Reqwest(reqwest_middleware::Error::Reqwest(err))
+impl RequirementsTxtParserError {
+    fn from_reqwest(url: Url, err: reqwest::Error) -> Self {
+        Self::Reqwest(url, reqwest_middleware::Error::Reqwest(err))
     }
-}
 
-#[cfg(feature = "http")]
-impl From<reqwest_middleware::Error> for RequirementsTxtParserError {
-    fn from(err: reqwest_middleware::Error) -> Self {
-        Self::Reqwest(err)
+    fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
+        Self::Reqwest(url, err)
     }
 }
 

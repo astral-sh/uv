@@ -73,7 +73,7 @@ impl Error {
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            ErrorKind::WrappedReqwestError(err) => {
+            ErrorKind::WrappedReqwestError(_url, err) => {
                 if let Some(status) = err.status() {
                     // If the server doesn't support HEAD requests, we can't check for range
                     // requests.
@@ -180,8 +180,8 @@ pub enum ErrorKind {
     MetadataNotFound(WheelFilename, String),
 
     /// An error that happened while making a request or in a reqwest middleware.
-    #[error(transparent)]
-    WrappedReqwestError(#[from] WrappedReqwestError),
+    #[error("Failed to fetch {0}")]
+    WrappedReqwestError(Url, #[source] WrappedReqwestError),
 
     #[error("Received some unexpected JSON from {url}")]
     BadJson { source: serde_json::Error, url: Url },
@@ -208,7 +208,7 @@ pub enum ErrorKind {
     CacheWrite(#[source] std::io::Error),
 
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
 
     #[error("Cache deserialization failed")]
     Decode(#[source] rmp_serde::decode::Error),
@@ -235,21 +235,19 @@ pub enum ErrorKind {
     Offline(String),
 }
 
-impl From<reqwest::Error> for ErrorKind {
-    fn from(error: reqwest::Error) -> Self {
-        Self::WrappedReqwestError(WrappedReqwestError::from(error))
+impl ErrorKind {
+    pub(crate) fn from_reqwest(url: Url, error: reqwest::Error) -> Self {
+        Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
     }
-}
 
-impl From<reqwest_middleware::Error> for ErrorKind {
-    fn from(err: reqwest_middleware::Error) -> Self {
+    pub(crate) fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(err) = underlying.downcast_ref::<OfflineError>() {
                 return Self::Offline(err.url().to_string());
             }
         }
 
-        Self::WrappedReqwestError(WrappedReqwestError(err))
+        Self::WrappedReqwestError(url, WrappedReqwestError(err))
     }
 }
 

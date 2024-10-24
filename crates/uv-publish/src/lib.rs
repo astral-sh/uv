@@ -79,7 +79,7 @@ pub enum PublishPrepareError {
 #[derive(Error, Debug)]
 pub enum PublishSendError {
     #[error("Failed to send POST request")]
-    ReqwestMiddleware(#[from] reqwest_middleware::Error),
+    ReqwestMiddleware(#[source] reqwest_middleware::Error),
     #[error("Upload failed with status {0}")]
     StatusNoBody(StatusCode, #[source] reqwest::Error),
     #[error("Upload failed with status code {0}. Server says: {1}")]
@@ -336,7 +336,11 @@ pub async fn upload(
         }
 
         let response = result.map_err(|err| {
-            PublishError::PublishSend(file.to_path_buf(), registry.clone(), err.into())
+            PublishError::PublishSend(
+                file.to_path_buf(),
+                registry.clone(),
+                PublishSendError::ReqwestMiddleware(err),
+            )
         })?;
 
         return handle_response(registry, response)
