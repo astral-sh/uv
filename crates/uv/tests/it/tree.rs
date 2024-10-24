@@ -46,6 +46,73 @@ fn nested_dependencies() -> Result<()> {
 }
 
 #[test]
+fn nested_platform_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "jupyter-client"
+        ]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("linux"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── jupyter-client v8.6.1
+        ├── jupyter-core v5.7.2
+        │   ├── platformdirs v4.2.0
+        │   └── traitlets v5.14.2
+        ├── python-dateutil v2.9.0.post0
+        │   └── six v1.16.0
+        ├── pyzmq v25.1.2
+        ├── tornado v6.4
+        └── traitlets v5.14.2
+
+    ----- stderr -----
+    Resolved 12 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── jupyter-client v8.6.1
+        ├── jupyter-core v5.7.2
+        │   ├── platformdirs v4.2.0
+        │   ├── pywin32 v306
+        │   └── traitlets v5.14.2
+        ├── python-dateutil v2.9.0.post0
+        │   └── six v1.16.0
+        ├── pyzmq v25.1.2
+        │   └── cffi v1.16.0
+        │       └── pycparser v2.21
+        ├── tornado v6.4
+        └── traitlets v5.14.2
+
+    ----- stderr -----
+    Resolved 12 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
 fn invert() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -267,8 +334,7 @@ fn platform_dependencies_inverted() -> Result<()> {
     )?;
 
     // When `--universal` is _not_ provided, `colorama` should _not_ be included.
-    #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("linux"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
