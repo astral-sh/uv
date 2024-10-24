@@ -72,6 +72,25 @@ configuration files (e.g., user-level configuration will be ignored).
 
 See the [settings reference](../reference/settings.md) for an enumeration of the available settings.
 
+## `.env`
+
+By default, `uv run` will load environment variables from a `.env` file in the current working
+directory, following the discovery and parsing rules of the
+[`dotenvy`](https://github.com/allan2/dotenvy) crate.
+
+To load a `.env` file from a dedicated location, set the `UV_ENV_FILE` environment variable, or pass
+the `--env-file` flag to `uv run`.
+
+The `--env-file` flag can be provided multiple times, with subsequent files overriding values
+defined in previous files. To provide multiple files via the `UV_ENV_FILE` environment variable,
+separate the paths with a space (e.g., `UV_ENV_FILE="/path/to/file1 /path/to/file2"`).
+
+To disable this behavior, set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the
+`--no-env-file` flag to `uv run`.
+
+If the same variable is defined in the environment and in a `.env` file, the value from the
+environment will take precedence.
+
 ## Configuring the pip interface
 
 A dedicated [`[tool.uv.pip]`](../reference/settings.md#pip) section is provided for configuring

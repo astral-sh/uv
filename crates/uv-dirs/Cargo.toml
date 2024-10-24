@@ -19,6 +19,4 @@ workspace = true
 [dependencies]
 uv-static = { workspace = true }
 
-dirs-sys = { workspace = true }
-directories = { workspace = true }
 etcetera = { workspace = true }

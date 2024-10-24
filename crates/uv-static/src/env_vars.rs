@@ -247,6 +247,9 @@ impl EnvVars {
     /// Used to detect an activated Conda environment.
     pub const CONDA_PREFIX: &'static str = "CONDA_PREFIX";
 
+    /// Used to determine if an active Conda environment is the base environment or not.
+    pub const CONDA_DEFAULT_ENV: &'static str = "CONDA_DEFAULT_ENV";
+
     /// Disables prepending virtual environment name to the terminal prompt.
     pub const VIRTUAL_ENV_DISABLE_PROMPT: &'static str = "VIRTUAL_ENV_DISABLE_PROMPT";
 
@@ -383,4 +386,10 @@ impl EnvVars {
 
     /// Used to set test credentials for keyring tests.
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
+
+    /// Used to overwrite path for loading `.env` files when executing `uv run` commands.
+    pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
+
+    /// Used to ignore `.env` files when executing `uv run` commands.
+    pub const UV_NO_ENV_FILE: &'static str = "UV_NO_ENV_FILE";
 }

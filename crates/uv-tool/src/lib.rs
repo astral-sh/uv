@@ -1,5 +1,4 @@
 use core::fmt;
-
 use fs_err as fs;
 
 use uv_dirs::user_executable_directory;

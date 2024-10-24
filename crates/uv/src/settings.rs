@@ -74,11 +74,14 @@ impl GlobalSettings {
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
-            color: if args.no_color
-                || std::env::var_os(EnvVars::NO_COLOR)
-                    .filter(|v| !v.is_empty())
-                    .is_some()
+            color: if let Some(color_choice) = args.color {
+                // If `--color` is passed explicitly, use its value.
+                color_choice
+            } else if std::env::var_os(EnvVars::NO_COLOR)
+                .filter(|v| !v.is_empty())
+                .is_some()
             {
+                // If the `NO_COLOR` is set, disable color output.
                 ColorChoice::Never
             } else if std::env::var_os(EnvVars::FORCE_COLOR)
                 .filter(|v| !v.is_empty())
@@ -87,9 +90,10 @@ impl GlobalSettings {
                     .filter(|v| !v.is_empty())
                     .is_some()
             {
+                // If `FORCE_COLOR` or `CLICOLOR_FORCE` is set, always enable color output.
                 ColorChoice::Always
             } else {
-                args.color
+                ColorChoice::Auto
             },
             native_tls: flag(args.native_tls, args.no_native_tls)
                 .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
@@ -240,6 +244,8 @@ pub(crate) struct RunSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) env_file: Vec<PathBuf>,
+    pub(crate) no_env_file: bool,
 }
 
 impl RunSettings {
@@ -271,6 +277,8 @@ impl RunSettings {
             no_project,
             python,
             show_resolution,
+            env_file,
+            no_env_file,
         } = args;
 
         Self {
@@ -299,6 +307,8 @@ impl RunSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            env_file,
+            no_env_file,
         }
     }
 }
