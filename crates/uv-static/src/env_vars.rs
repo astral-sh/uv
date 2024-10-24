@@ -111,6 +111,9 @@ impl EnvVars {
     /// Equivalent to the `--frozen` argument. Run without updating the `uv.lock` file.
     pub const UV_FROZEN: &'static str = "UV_FROZEN";
 
+    /// Equivalent to the `--all-extras` argument. Install all extras.
+    pub const UV_SYNC_ALL_EXTRAS: &'static str = "UV_SYNC_ALL_EXTRAS";
+
     /// Equivalent to the `--preview` argument. Enables preview mode.
     pub const UV_PREVIEW: &'static str = "UV_PREVIEW";
 

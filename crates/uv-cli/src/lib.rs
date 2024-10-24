@@ -2768,7 +2768,7 @@ pub struct SyncArgs {
     ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
-    #[arg(long, conflicts_with = "extra")]
+    #[arg(long, env = EnvVars::UV_SYNC_ALL_EXTRAS, conflicts_with = "extra")]
     pub all_extras: bool,
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
