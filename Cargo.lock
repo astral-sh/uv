@@ -4952,7 +4952,6 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "reqwest-retry",
- "rkyv",
  "rustc-hash",
  "serde",
  "serde_json",
