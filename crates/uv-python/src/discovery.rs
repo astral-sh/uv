@@ -1250,6 +1250,16 @@ impl PythonVariant {
             PythonVariant::Freethreaded => interpreter.gil_disabled(),
         }
     }
+
+    /// Return the lib or executable suffix for the variant, e.g., `t` for `python3.13t`.
+    ///
+    /// Returns an empty string for the default Python variant.
+    pub fn suffix(self) -> &'static str {
+        match self {
+            Self::Default => "",
+            Self::Freethreaded => "t",
+        }
+    }
 }
 impl PythonRequest {
     /// Create a request from a string.
@@ -1651,12 +1661,7 @@ impl std::fmt::Display for ExecutableName {
         if let Some(prerelease) = &self.prerelease {
             write!(f, "{prerelease}")?;
         }
-        match self.variant {
-            PythonVariant::Default => {}
-            PythonVariant::Freethreaded => {
-                f.write_str("t")?;
-            }
-        };
+        f.write_str(self.variant.suffix())?;
         f.write_str(std::env::consts::EXE_SUFFIX)?;
         Ok(())
     }

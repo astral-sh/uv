@@ -305,6 +305,17 @@ impl PythonInstallationKey {
     pub fn libc(&self) -> &Libc {
         &self.libc
     }
+
+    /// Return a canonical name for a versioned executable.
+    pub fn versioned_executable_name(&self) -> String {
+        format!(
+            "python{maj}.{min}{var}{exe}",
+            maj = self.major,
+            min = self.minor,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
 }
 
 impl fmt::Display for PythonInstallationKey {

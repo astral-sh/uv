@@ -697,7 +697,7 @@ jobs:
 
       - name: "Install free-threaded Python via uv"
         run: |
-          ./uv python install 3.13t
+          ./uv python install -v 3.13t
           ./uv venv -p 3.13t --python-preference only-managed
 
       - name: "Check version"
@@ -769,7 +769,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Install PyPy"
-        run: ./uv python install pypy3.9
+        run: ./uv python install -v pypy3.9
 
       - name: "Create a virtual environment"
         run: |

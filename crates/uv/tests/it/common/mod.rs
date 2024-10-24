@@ -646,11 +646,13 @@ impl TestContext {
     pub fn python_install(&self) -> Command {
         let mut command = Command::new(get_bin());
         let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
         command
             .arg("python")
             .arg("install")
             .env(EnvVars::UV_PREVIEW, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin)
             .current_dir(&self.temp_dir);
         self.add_shared_args(&mut command, true);
         command

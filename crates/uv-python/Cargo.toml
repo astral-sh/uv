@@ -20,6 +20,7 @@ uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
+uv-dirs = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
