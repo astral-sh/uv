@@ -119,7 +119,7 @@ ignored = [
 ]
 
 [features]
-default = ["python", "pypi", "git", "performance", "crates-io"]
+default = ["python", "python-managed", "pypi", "git", "performance", "crates-io"]
 # Use better memory allocators, etc. — also turns-on self-update.
 performance = [
     "performance-memory-allocator",
@@ -133,6 +133,8 @@ performance-flate2-backend = ["dep:uv-performance-flate2-backend"]
 python = []
 # Introduces a dependency on a local Python installation with specific patch versions.
 python-patch = []
+# Introduces a dependency on managed Python installations.
+python-managed = []
 # Introduces a dependency on PyPI.
 pypi = []
 # Introduces a dependency on Git.

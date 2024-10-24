@@ -212,6 +212,15 @@ impl TestContext {
         self
     }
 
+    /// Adds a filter that ignores platform information in a Python installation key.
+    pub fn with_filtered_python_keys(mut self) -> Self {
+        self.filters.push((
+            r"((?:cpython|pypy)-\d+\.\d+(:?\.\d+)?[a-z]?(:?\+[a-z]+)?)-.*".to_string(),
+            "$1-[PLATFORM]".to_string(),
+        ));
+        self
+    }
+
     /// Discover the path to the XDG state directory. We use this, rather than the OS-specific
     /// temporary directory, because on macOS (and Windows on GitHub Actions), they involve
     /// symlinks. (On macOS, the temporary directory is, like `/var/...`, which resolves to
@@ -628,6 +637,20 @@ impl TestContext {
             .arg("find")
             .env(EnvVars::UV_PREVIEW, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
+            .current_dir(&self.temp_dir);
+        self.add_shared_args(&mut command, true);
+        command
+    }
+
+    /// Create a `uv python install` command with options shared across scenarios.
+    pub fn python_install(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        let managed = self.temp_dir.join("managed");
+        command
+            .arg("python")
+            .arg("install")
+            .env(EnvVars::UV_PREVIEW, "1")
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
             .current_dir(&self.temp_dir);
         self.add_shared_args(&mut command, true);
         command
