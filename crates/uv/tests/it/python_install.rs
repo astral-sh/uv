@@ -39,6 +39,23 @@ fn python_install() {
     Found existing installation for Python 3.13: cpython-3.13.0-[PLATFORM]
     "###);
 
+    // You can opt-in to a reinstall
+    uv_snapshot!(context.filters(), context.python_install().arg("--reinstall"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Found: cpython-3.13.0-[PLATFORM]
+    Installed Python 3.13.0 in [TIME]
+     ~ cpython-3.13.0-[PLATFORM]
+    warning: `[TEMP_DIR]/bin` is not on your PATH. To use the installed Python executable, run `export PATH="[TEMP_DIR]/bin:$PATH"`.
+    "###);
+
+    // The executable should still be present in the bin directory
+    bin_python.assert(predicate::path::exists());
+
     // Uninstallation requires an argument
     uv_snapshot!(context.filters(), context.python_uninstall(), @r###"
     success: false
