@@ -206,7 +206,7 @@ The sources to use when resolving dependencies.
 during development. A dependency source can be a Git repository, a URL, a local path, or an
 alternative registry.
 
-See [Dependencies](https://docs.astral.sh/uv/concepts/dependencies/) for more.
+See [Dependencies](../concepts/dependencies.md) for more.
 
 **Default value**: `"[]"`
 
@@ -215,7 +215,7 @@ See [Dependencies](https://docs.astral.sh/uv/concepts/dependencies/) for more.
 **Example usage**:
 
 ```toml title="pyproject.toml"
-[tool.uv]
+
 [tool.uv.sources]
 httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
 pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }

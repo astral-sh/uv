@@ -86,8 +86,7 @@ pub struct Options {
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
-    // They're respected in both `pyproject.toml` and `uv.toml` files.
+    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
@@ -1552,15 +1551,13 @@ pub struct OptionsWire {
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
-    // They're respected in both `pyproject.toml` and `uv.toml` files.
+    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
-    // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
+    // `crates/uv-workspace/src/pyproject.rs`.
     #[allow(dead_code)]
     workspace: Option<serde::de::IgnoredAny>,
     #[allow(dead_code)]

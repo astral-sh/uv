@@ -158,7 +158,7 @@ pub struct ToolUv {
     /// during development. A dependency source can be a Git repository, a URL, a local path, or an
     /// alternative registry.
     ///
-    /// See [Dependencies](https://docs.astral.sh/uv/concepts/dependencies/) for more.
+    /// See [Dependencies](../concepts/dependencies.md) for more.
     #[option(
         default = "\"[]\"",
         value_type = "dict",
