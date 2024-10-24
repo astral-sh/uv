@@ -52,45 +52,8 @@ Request a specific version by including it in the URL:
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-#### Configuring installation
-
-By default, uv is installed to `~/.cargo/bin`. To change the installation path, use
-`UV_INSTALL_DIR`:
-
-=== "macOS and Linux"
-
-    ```console
-    $ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/custom/path" sh
-    ```
-
-=== "Windows"
-
-    ```powershell
-    $env:UV_INSTALL_DIR = "C:\Custom\Path" powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-    ```
-
-The installer will also update your shell profiles to ensure the uv binary is on your `PATH`. To
-disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
-
-```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
-```
-
-Using environment variables is recommended because they are consistent across platforms. However,
-options can be passed directly to the install script. For example, to see the available options:
-
-```console
-$ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
-```
-
-In ephemeral environments like CI, use `UV_UNMANAGED_INSTALL` to install uv to a specific path while
-preventing the installer from modifying shell profiles or environment variables:
-
-```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/custom/path" sh
-```
-
-The use of `UV_UNMANAGED_INSTALL` will also disable self-updates (via `uv self update`).
+See the documentation on [installer configuration](../configuration/installer.md) for details on
+customizing your uv installation.
 
 ### PyPI
 

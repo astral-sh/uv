@@ -107,6 +107,7 @@ nav:
       - Environment variables: configuration/environment.md
       - Authentication: configuration/authentication.md
       - Package indexes: configuration/indexes.md
+      - Installer: configuration/installer.md
   - Integration guides:
       - guides/integration/index.md
       - Docker: guides/integration/docker.md
