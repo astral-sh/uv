@@ -3,7 +3,7 @@ mod trusted_publishing;
 use crate::trusted_publishing::TrustedPublishingError;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use fs_err::File;
+use fs_err::tokio::File;
 use futures::TryStreamExt;
 use glob::{glob, GlobError, PatternError};
 use itertools::Itertools;
@@ -14,26 +14,27 @@ use reqwest_middleware::RequestBuilder;
 use reqwest_retry::{Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{env, fmt, io};
 use thiserror::Error;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, BufReader};
 use tokio_util::io::ReaderStream;
 use tracing::{debug, enabled, trace, Level};
 use url::Url;
-use uv_client::{BaseClient, UvRetryableStrategy};
+use uv_client::{BaseClient, OwnedArchive, RegistryClient, UvRetryableStrategy};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
-use uv_pypi_types::{Metadata23, MetadataError};
+use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
 pub use trusted_publishing::TrustedPublishingToken;
+use uv_cache::Refresh;
+use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_extract::hash::{HashReader, Hasher};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -54,6 +55,17 @@ pub enum PublishError {
     PublishSend(PathBuf, Url, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
+    #[error("Failed to query skip existing index")]
+    SkipExistingIndex(#[source] uv_client::Error),
+    #[error("Local file and index file for {filename} do not match. Local: {hash_algorithm}={local}, Remote: {hash_algorithm}={remote}")]
+    HashMismatch {
+        filename: Box<DistFilename>,
+        hash_algorithm: HashAlgorithm,
+        local: Box<str>,
+        remote: Box<str>,
+    },
+    #[error("Hash is missing in index for {0}")]
+    MissingHash(Box<DistFilename>),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -304,6 +316,8 @@ pub async fn upload(
     retries: u32,
     username: Option<&str>,
     password: Option<&str>,
+    index_client: &mut Option<(IndexUrl, RegistryClient)>,
+    index_capabilities: &IndexCapabilities,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
     let form_metadata = form_metadata(file, filename)
@@ -339,26 +353,123 @@ pub async fn upload(
             PublishError::PublishSend(file.to_path_buf(), registry.clone(), err.into())
         })?;
 
-        return handle_response(registry, response)
+        return match handle_response(registry, response).await {
+            Ok(()) => {
+                // Upload successful; for PyPI this can also mean a hash match in a raced upload
+                // (but it doesn't tell us), for other registries it should mean a fresh upload.
+                Ok(true)
+            }
+            Err(err) => {
+                if matches!(
+                    err,
+                    PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
+                ) && skip_existing(index_client, index_capabilities, file, filename).await?
+                {
+                    // There was a raced upload of the same file, so even though our upload failed,
+                    // the right file now exists in the registry.
+                    return Ok(false);
+                }
+                Err(PublishError::PublishSend(
+                    file.to_path_buf(),
+                    registry.clone(),
+                    err,
+                ))
+            }
+        };
+    }
+}
+
+/// Check whether we should skip the upload of a file because it already exists on the index.
+pub async fn skip_existing(
+    index_client: &mut Option<(IndexUrl, RegistryClient)>,
+    index_capabilities: &IndexCapabilities,
+    file: &Path,
+    filename: &DistFilename,
+) -> Result<bool, PublishError> {
+    let Some((index_url, registry_client)) = index_client.as_mut() else {
+        return Ok(false);
+    };
+
+    // Avoid using the PyPI 10min default cache.
+    registry_client.refresh(Refresh::from_args(None, vec![filename.name().clone()]));
+
+    debug!("Checking for {filename} in the registry");
+    let response = registry_client
+        .simple(filename.name(), Some(index_url), index_capabilities)
+        .await
+        .map_err(PublishError::SkipExistingIndex)?;
+    let [(_, simple_metadata)] = response.as_slice() else {
+        unreachable!("We queried a single index, we must get a single response");
+    };
+    let simple_metadata = OwnedArchive::deserialize(simple_metadata);
+    let Some(metadatum) = simple_metadata
+        .iter()
+        .find(|metadatum| &metadatum.version == filename.version())
+    else {
+        return Ok(false);
+    };
+
+    let archived_file = match filename {
+        DistFilename::SourceDistFilename(source_dist) => metadatum
+            .files
+            .source_dists
+            .iter()
+            .find(|entry| &entry.name == source_dist)
+            .map(|entry| &entry.file),
+        DistFilename::WheelFilename(wheel) => metadatum
+            .files
+            .wheels
+            .iter()
+            .find(|entry| &entry.name == wheel)
+            .map(|entry| &entry.file),
+    };
+    let Some(archived_file) = archived_file else {
+        return Ok(false);
+    };
+
+    // TODO(konsti): Do we have a preference for a hash here?
+    if let Some(remote_hash) = archived_file.hashes.first() {
+        // We accept the risk for TOCTOU errors here, since we already read the file once before the
+        // streaming upload to compute the hash for the form metadata.
+        let local_hash = hash_file(file, Hasher::from(remote_hash.algorithm))
             .await
-            .map_err(|err| PublishError::PublishSend(file.to_path_buf(), registry.clone(), err));
+            .map_err(|err| {
+                PublishError::PublishPrepare(
+                    file.to_path_buf(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?;
+        if local_hash.digest == remote_hash.digest {
+            debug!(
+                "Found {filename} in the registry with matching hash {}",
+                remote_hash.digest
+            );
+            Ok(true)
+        } else {
+            Err(PublishError::HashMismatch {
+                filename: Box::new(filename.clone()),
+                hash_algorithm: remote_hash.algorithm,
+                local: local_hash.digest,
+                remote: remote_hash.digest.clone(),
+            })
+        }
+    } else {
+        Err(PublishError::MissingHash(Box::new(filename.clone())))
     }
 }
 
 /// Calculate the SHA256 of a file.
-fn hash_file(path: impl AsRef<Path>) -> Result<String, io::Error> {
-    // Ideally, this would be async, but in case we actually want to make parallel uploads we should
-    // use `spawn_blocking` since sha256 is cpu intensive.
-    let mut file = BufReader::new(File::open(path.as_ref())?);
-    let mut hasher = Sha256::new();
-    io::copy(&mut file, &mut hasher)?;
-    Ok(format!("{:x}", hasher.finalize()))
+async fn hash_file(path: impl AsRef<Path>, hasher: Hasher) -> Result<HashDigest, io::Error> {
+    debug!("Hashing {}", path.as_ref().display());
+    let file = BufReader::new(File::open(path.as_ref()).await?);
+    let mut hashers = vec![hasher];
+    HashReader::new(file, &mut hashers).finish().await?;
+    Ok(HashDigest::from(hashers.remove(0)))
 }
 
 // Not in `uv-metadata` because we only support tar files here.
 async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
-    let file = fs_err::tokio::File::open(&file).await?;
-    let reader = tokio::io::BufReader::new(file);
+    let reader = BufReader::new(File::open(&file).await?);
     let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
     let mut archive = tokio_tar::Archive::new(decoded);
     let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
@@ -411,8 +522,7 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
             source_dist_pkg_info(file).await?
         }
         DistFilename::WheelFilename(wheel) => {
-            let file = fs_err::tokio::File::open(&file).await?;
-            let reader = tokio::io::BufReader::new(file);
+            let reader = BufReader::new(File::open(&file).await?);
             read_metadata_async_seek(wheel, reader).await?
         }
     };
@@ -426,13 +536,13 @@ async fn form_metadata(
     file: &Path,
     filename: &DistFilename,
 ) -> Result<Vec<(&'static str, String)>, PublishPrepareError> {
-    let hash_hex = hash_file(file)?;
+    let hash_hex = hash_file(file, Hasher::from(HashAlgorithm::Sha256)).await?;
 
     let metadata = metadata(file, filename).await?;
 
     let mut form_metadata = vec![
         (":action", "file_upload".to_string()),
-        ("sha256_digest", hash_hex),
+        ("sha256_digest", hash_hex.digest.to_string()),
         ("protocol_version", "1".to_string()),
         ("metadata_version", metadata.metadata_version.clone()),
         // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
@@ -515,7 +625,7 @@ async fn build_request(
         form = form.text(*key, value.clone());
     }
 
-    let file = fs_err::tokio::File::open(file).await?;
+    let file = File::open(file).await?;
     let idx = reporter.on_download_start(&filename.to_string(), Some(file.metadata().await?.len()));
     let reader = ProgressReader::new(file, move |read| {
         reporter.on_download_progress(idx, read as u64);
@@ -561,8 +671,8 @@ async fn build_request(
     Ok((request, idx))
 }
 
-/// Returns `true` if the file was newly uploaded and `false` if it already existed.
-async fn handle_response(registry: &Url, response: Response) -> Result<bool, PublishSendError> {
+/// Error handling.
+async fn handle_response(registry: &Url, response: Response) -> Result<(), PublishSendError> {
     let status_code = response.status();
     debug!("Response code for {registry}: {status_code}");
     trace!("Response headers for {registry}: {response:?}");
@@ -589,7 +699,7 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
                 }
             }
         }
-        return Ok(true);
+        return Ok(());
     }
 
     let content_type = response
@@ -620,39 +730,11 @@ async fn handle_response(registry: &Url, response: Response) -> Result<bool, Pub
         ));
     }
 
-    // Detect existing file errors the way twine does.
-    // https://github.com/pypa/twine/blob/c512bbf166ac38239e58545a39155285f8747a7b/twine/commands/upload.py#L34-L72
-    if status_code == StatusCode::FORBIDDEN {
-        if upload_error.contains("overwrite artifact") {
-            // Artifactory (https://jfrog.com/artifactory/)
-            Ok(false)
-        } else {
-            Err(PublishSendError::PermissionDenied(
-                status_code,
-                PublishSendError::extract_error_message(
-                    upload_error.to_string(),
-                    content_type.as_deref(),
-                ),
-            ))
-        }
-    } else if status_code == StatusCode::CONFLICT {
-        // conflict, pypiserver (https://pypi.org/project/pypiserver)
-        Ok(false)
-    } else if status_code == StatusCode::BAD_REQUEST
-        && (upload_error.contains("updating asset") || upload_error.contains("already been taken"))
-    {
-        // Nexus Repository OSS (https://www.sonatype.com/nexus-repository-oss)
-        // and Gitlab Enterprise Edition (https://about.gitlab.com)
-        Ok(false)
-    } else {
-        Err(PublishSendError::Status(
-            status_code,
-            PublishSendError::extract_error_message(
-                upload_error.to_string(),
-                content_type.as_deref(),
-            ),
-        ))
-    }
+    // Raced uploads of the same file are handled by the caller.
+    Err(PublishSendError::Status(
+        status_code,
+        PublishSendError::extract_error_message(upload_error.to_string(), content_type.as_deref()),
+    ))
 }
 
 #[cfg(test)]

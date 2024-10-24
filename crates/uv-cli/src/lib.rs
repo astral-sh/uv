@@ -4675,6 +4675,22 @@ pub struct PublishArgs {
         value_parser = parse_insecure_host,
     )]
     pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
+
+    /// Don't upload files that already exists on the index. The value is the index URL.
+    ///
+    /// This option allows retrying publishing that failed after only some, but not all files have
+    /// been uploaded, and handles error due to parallel uploads of the same file.
+    ///
+    /// Before uploading, the index is checked. If the exact same file already exists in the index,
+    /// the file will not be uploaded. If an error occurred during the upload, the index is checked
+    /// again, if the file may have been added in the meantime.
+    ///
+    /// The exact behavior varies from index to index. On PyPI, uploading the same file succeeds
+    /// even without `--skip-existing`, while most other indexes error.
+    ///
+    /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
+    #[arg(long,env = EnvVars::UV_PUBLISH_SKIP_EXISTING)]
+    pub skip_existing: Option<IndexUrl>,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

@@ -24,7 +24,7 @@ use uv_configuration::{
     NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, SourceStrategy, TargetTriple,
     TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
@@ -2569,6 +2569,7 @@ pub(crate) struct PublishSettings {
     pub(crate) trusted_publishing: TrustedPublishing,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
+    pub(crate) skip_existing: Option<IndexUrl>,
 }
 
 impl PublishSettings {
@@ -2622,6 +2623,7 @@ impl PublishSettings {
                 })
                 .combine(allow_insecure_host)
                 .unwrap_or_default(),
+            skip_existing: args.skip_existing,
         }
     }
 }

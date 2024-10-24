@@ -43,18 +43,24 @@ $ uv publish
 ```
 
 Set a PyPI token with `--token` or `UV_PUBLISH_TOKEN`, or set a username with `--username` or
-`UV_PUBLISH_USERNAME` and password with `--password` or `UV_PUBLISH_PASSWORD`.
-
-!!! info
-
-    For publishing to PyPI from GitHub Actions, you don't need to set any credentials. Instead,
-    [add a trusted publisher to the PyPI project](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).
+`UV_PUBLISH_USERNAME` and password with `--password` or `UV_PUBLISH_PASSWORD`. For publishing to
+PyPI from GitHub Actions, you don't need to set any credentials. Instead,
+[add a trusted publisher to the PyPI project](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).
 
 !!! note
 
     PyPI does not support publishing with username and password anymore, instead you need to
     generate a token. Using a token is equivalent to setting `--username __token__` and using the
     token as password.
+
+Even though `uv publish` retries failed uploads, it can happen that publishing fails in the middle,
+with some files uploaded and some files still missing. With PyPI, you can retry the exact same
+command, existing identical files will be ignored. With other registries, use
+`--skip-existing <index url>` with the index URL (not the publish URL) the packages belong to. uv
+will skip uploading files that are identical to files in the registry, and it will also handle raced
+parallel uploads. Note that existing files need to match exactly with those previously uploaded to
+the registry, this avoids accidentally publishing source distribution and wheels with different
+contents for the same version.
 
 ## Installing your package
 
