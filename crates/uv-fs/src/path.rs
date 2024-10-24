@@ -250,6 +250,24 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
     }
 }
 
+/// Resolve a symlink for an executable. Unlike `fs_err::canonicalize`, this does not resolve
+/// symlinks recursively.
+pub fn read_executable_link(executable: &Path) -> Result<Option<PathBuf>, std::io::Error> {
+    let Ok(link) = executable.read_link() else {
+        return Ok(None);
+    };
+    if link.is_absolute() {
+        Ok(Some(link))
+    } else {
+        executable
+            .parent()
+            .map(|parent| parent.join(link))
+            .as_deref()
+            .map(normalize_absolute_path)
+            .transpose()
+    }
+}
+
 /// Compute a path describing `path` relative to `base`.
 ///
 /// `lib/python/site-packages/foo/__init__.py` and `lib/python/site-packages` -> `foo/__init__.py`
