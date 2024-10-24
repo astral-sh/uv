@@ -397,3 +397,21 @@ reading and extracting archives in the following formats:
 
 For more details about the internals of the resolver, see the
 [resolver reference](../reference/resolver-internals.md) documentation.
+
+## Lockfile versioning
+
+The `uv.lock` file uses a versioned schema. The schema version is included in the `version` field of
+the lockfile.
+
+Any given version of uv can read and write lockfiles with the same schema version, but will reject
+lockfiles with a greater schema version. For example, if your uv version supports schema v1,
+`uv lock` will error if it encounters an existing lockfile with schema v2.
+
+uv versions that support schema v2 _may_ be able to read lockfiles with schema v1 if the schema
+update was backwards-compatible. However, this is not guaranteed, and uv may exit with an error if
+it encounters a lockfile with an outdated schema version.
+
+The schema version is considered part of the public API, and so is only bumped in minor releases, as
+a breaking change (see [Versioning](../reference/versioning.md)). As such, all uv patch versions
+within a given minor uv release are guaranteed to have full lockfile compatibility. In other words,
+lockfiles may only be rejected across minor releases.

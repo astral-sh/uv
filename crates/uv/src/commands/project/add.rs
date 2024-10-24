@@ -556,8 +556,8 @@ pub(crate) async fn add(
 
     // Update the `pypackage.toml` in-memory.
     let project = project
-        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
-        .ok_or(ProjectError::TomlUpdate)?;
+        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)
+        .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     // Set the Ctrl-C handler to revert changes on exit.
     let _ = ctrlc::set_handler({
@@ -759,8 +759,10 @@ async fn lock_and_sync(
 
             // Update the `pypackage.toml` in-memory.
             project = project
-                .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
-                .ok_or(ProjectError::TomlUpdate)?;
+                .with_pyproject_toml(
+                    toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?,
+                )
+                .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
             // Invalidate the project metadata.
             if let VirtualProject::Project(ref project) = project {

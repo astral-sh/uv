@@ -50,7 +50,7 @@ mod requirements_txt;
 mod tree;
 
 /// The current version of the lockfile format.
-const VERSION: u32 = 1;
+pub const VERSION: u32 = 1;
 
 static LINUX_MARKERS: LazyLock<MarkerTree> = LazyLock::new(|| {
     MarkerTree::from_str(
@@ -492,6 +492,11 @@ impl Lock {
             .map(|marker| self.requires_python.complexify_markers(marker))
             .collect();
         self
+    }
+
+    /// Returns the lockfile version.
+    pub fn version(&self) -> u32 {
+        self.version
     }
 
     /// Returns the number of packages in the lockfile.
@@ -1506,6 +1511,21 @@ impl TryFrom<LockWire> for Lock {
         )?;
 
         Ok(lock)
+    }
+}
+
+/// Like [`Lock`], but limited to the version field. Used for error reporting: by limiting parsing
+/// to the version field, we can verify compatibility for lockfiles that may otherwise be
+/// unparsable.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct LockVersion {
+    version: u32,
+}
+
+impl LockVersion {
+    /// Returns the lockfile version.
+    pub fn version(&self) -> u32 {
+        self.version
     }
 }
 
