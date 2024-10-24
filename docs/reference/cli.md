@@ -5540,7 +5540,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </ul>
 
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p>
-</dd><dt><code>--strict</code></dt><dd><p>Validate the Python environment after completing the installation, to detect and with missing dependencies or other issues</p>
+</dd><dt><code>--strict</code></dt><dd><p>Validate the Python environment after completing the installation, to detect packages with missing dependencies or other issues</p>
 
 </dd><dt><code>--system</code></dt><dd><p>Install packages into the system Python environment.</p>
 
@@ -5957,7 +5957,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
 </ul>
-</dd><dt><code>--strict</code></dt><dd><p>Validate the Python environment after completing the installation, to detect and with missing dependencies or other issues</p>
+</dd><dt><code>--strict</code></dt><dd><p>Validate the Python environment after completing the installation, to detect packages with missing dependencies or other issues</p>
 
 </dd><dt><code>--system</code></dt><dd><p>Install packages into the system Python environment.</p>
 
