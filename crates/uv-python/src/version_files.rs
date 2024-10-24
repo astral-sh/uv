@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use fs_err as fs;
 use itertools::Itertools;
 use tracing::debug;
+use uv_fs::Simplified;
 
 use crate::PythonRequest;
 
@@ -22,38 +23,91 @@ pub struct PythonVersionFile {
     versions: Vec<PythonRequest>,
 }
 
+/// Whether to prefer the `.python-version` or `.python-versions` file.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum FilePreference {
+    #[default]
+    Version,
+    Versions,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct DiscoveryOptions<'a> {
+    /// The path to stop discovery at.
+    stop_discovery_at: Option<&'a Path>,
+    /// When `no_config` is set, Python version files will be ignored.
+    ///
+    /// Discovery will still run in order to display a log about the ignored file.
+    no_config: bool,
+    preference: FilePreference,
+}
+
+impl<'a> DiscoveryOptions<'a> {
+    #[must_use]
+    pub fn with_no_config(self, no_config: bool) -> Self {
+        Self { no_config, ..self }
+    }
+
+    #[must_use]
+    pub fn with_preference(self, preference: FilePreference) -> Self {
+        Self { preference, ..self }
+    }
+
+    #[must_use]
+    pub fn with_stop_discovery_at(self, stop_discovery_at: Option<&'a Path>) -> Self {
+        Self {
+            stop_discovery_at,
+            ..self
+        }
+    }
+}
+
 impl PythonVersionFile {
-    /// Find a Python version file in the given directory.
+    /// Find a Python version file in the given directory or any of its parents.
     pub async fn discover(
         working_directory: impl AsRef<Path>,
-        // TODO(zanieb): Create a `DiscoverySettings` struct for these options
-        no_config: bool,
-        prefer_versions: bool,
+        options: &DiscoveryOptions<'_>,
     ) -> Result<Option<Self>, std::io::Error> {
-        let versions_path = working_directory.as_ref().join(PYTHON_VERSIONS_FILENAME);
-        let version_path = working_directory.as_ref().join(PYTHON_VERSION_FILENAME);
+        let Some(path) = Self::find_nearest(working_directory, options) else {
+            return Ok(None);
+        };
 
-        if no_config {
-            if version_path.exists() {
-                debug!("Ignoring `.python-version` file due to `--no-config`");
-            } else if versions_path.exists() {
-                debug!("Ignoring `.python-versions` file due to `--no-config`");
-            };
+        if options.no_config {
+            debug!(
+                "Ignoring Python version file at `{}` due to `--no-config`",
+                path.user_display()
+            );
             return Ok(None);
         }
 
-        let paths = if prefer_versions {
-            [versions_path, version_path]
-        } else {
-            [version_path, versions_path]
-        };
-        for path in paths {
-            if let Some(result) = Self::try_from_path(path).await? {
-                return Ok(Some(result));
-            };
-        }
+        // Uses `try_from_path` instead of `from_path` to avoid TOCTOU failures.
+        Self::try_from_path(path).await
+    }
 
-        Ok(None)
+    fn find_nearest(path: impl AsRef<Path>, options: &DiscoveryOptions<'_>) -> Option<PathBuf> {
+        path.as_ref()
+            .ancestors()
+            .take_while(|path| {
+                // Only walk up the given directory, if any.
+                options
+                    .stop_discovery_at
+                    .and_then(Path::parent)
+                    .map(|stop_discovery_at| stop_discovery_at != *path)
+                    .unwrap_or(true)
+            })
+            .find_map(|path| Self::find_in_directory(path, options))
+    }
+
+    fn find_in_directory(path: &Path, options: &DiscoveryOptions<'_>) -> Option<PathBuf> {
+        let version_path = path.join(PYTHON_VERSION_FILENAME);
+        let versions_path = path.join(PYTHON_VERSIONS_FILENAME);
+
+        let paths = match options.preference {
+            FilePreference::Versions => [versions_path, version_path],
+            FilePreference::Version => [version_path, versions_path],
+        };
+
+        paths.into_iter().find(|path| path.is_file())
     }
 
     /// Try to read a Python version file at the given path.
@@ -62,7 +116,10 @@ impl PythonVersionFile {
     pub async fn try_from_path(path: PathBuf) -> Result<Option<Self>, std::io::Error> {
         match fs::tokio::read_to_string(&path).await {
             Ok(content) => {
-                debug!("Reading requests from `{}`", path.display());
+                debug!(
+                    "Reading Python requests from version file at `{}`",
+                    path.display()
+                );
                 let versions = content
                     .lines()
                     .filter(|line| {
@@ -104,7 +161,7 @@ impl PythonVersionFile {
         }
     }
 
-    /// Return the first version declared in the file, if any.
+    /// Return the first request declared in the file, if any.
     pub fn version(&self) -> Option<&PythonRequest> {
         self.versions.first()
     }

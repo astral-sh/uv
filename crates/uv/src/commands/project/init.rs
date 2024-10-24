@@ -16,7 +16,7 @@ use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVariant, PythonVersionFile, VersionRequest,
+    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
@@ -24,7 +24,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
-use crate::commands::project::{find_requires_python, script_python_requirement};
+use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -219,7 +219,7 @@ async fn init_script(
         }
     };
 
-    let requires_python = script_python_requirement(
+    let requires_python = init_script_python_requirement(
         python.as_deref(),
         &CWD,
         no_pin_python,
@@ -681,7 +681,7 @@ impl InitProjectKind {
 
         // Write .python-version if it doesn't exist.
         if let Some(python_request) = python_request {
-            if PythonVersionFile::discover(path, false, false)
+            if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
                 .is_none()
             {
@@ -735,7 +735,7 @@ impl InitProjectKind {
 
         // Write .python-version if it doesn't exist.
         if let Some(python_request) = python_request {
-            if PythonVersionFile::discover(path, false, false)
+            if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
                 .is_none()
             {

@@ -12,7 +12,10 @@ use tracing::debug;
 use uv_client::Connectivity;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
-use uv_python::{PythonDownloads, PythonRequest, PythonVersionFile};
+use uv_python::{
+    PythonDownloads, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionFilePreference,
+};
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -39,10 +42,15 @@ pub(crate) async fn install(
 
     let targets = targets.into_iter().collect::<BTreeSet<_>>();
     let requests: Vec<_> = if targets.is_empty() {
-        PythonVersionFile::discover(project_dir, no_config, true)
-            .await?
-            .map(PythonVersionFile::into_versions)
-            .unwrap_or_else(|| vec![PythonRequest::Default])
+        PythonVersionFile::discover(
+            project_dir,
+            &VersionFileDiscoveryOptions::default()
+                .with_no_config(no_config)
+                .with_preference(VersionFilePreference::Versions),
+        )
+        .await?
+        .map(PythonVersionFile::into_versions)
+        .unwrap_or_else(|| vec![PythonRequest::Default])
     } else {
         targets
             .iter()
