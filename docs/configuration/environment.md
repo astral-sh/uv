@@ -134,6 +134,7 @@ In addition, uv respects the following environment variables:
 - `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: The proxy to use for all HTTP/HTTPS requests.
 - `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
   for HTTP reads (default: 30 s).
+- `NETRC`: If set, uv will read authentication information from this file instead of `~/.netrc`.
 - `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`. See:
   [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
