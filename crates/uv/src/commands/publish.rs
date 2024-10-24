@@ -117,7 +117,9 @@ pub(crate) async fn publish(
     }
 
     for (file, raw_filename, filename) in files {
-        if uv_publish::skip_existing(&mut index_client, &index_capabilities, &file, &filename).await? {
+        if uv_publish::skip_existing(&mut index_client, &index_capabilities, &file, &filename)
+            .await?
+        {
             writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
             continue;
         }

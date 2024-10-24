@@ -286,12 +286,12 @@ impl RegistryClient {
 
         Ok(results)
     }
-    
+
     /// Invalidate the cache after the index changed.
     pub fn refresh(&mut self, refresh: Refresh) {
         self.cache = self.cache.clone().with_refresh(refresh);
     }
-    
+
     /// Fetch the [`SimpleMetadata`] from a single index for a given package.
     ///
     /// The index can either be a PEP 503-compatible remote repository, or a local directory laid
