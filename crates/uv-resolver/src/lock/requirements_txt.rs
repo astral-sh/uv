@@ -10,13 +10,13 @@ use petgraph::{Directed, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
-use distribution_filename::{DistExtension, SourceDistExtension};
-use pep508_rs::MarkerTree;
-use pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 use uv_configuration::{DevSpecification, EditableMode, ExtrasSpecification, InstallOptions};
+use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
 use crate::graph_ops::marker_reachability;
 use crate::lock::{Package, PackageId, Source};

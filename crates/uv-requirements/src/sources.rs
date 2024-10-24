@@ -5,8 +5,6 @@ use console::Term;
 use uv_fs::Simplified;
 use uv_warnings::warn_user;
 
-use crate::confirm;
-
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
     /// A package was provided on the command line (e.g., `pip install flask`).
@@ -82,7 +80,8 @@ impl RequirementsSource {
         Self::RequirementsTxt(path)
     }
 
-    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a package.
+    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a positional
+    /// package (e.g., `uv pip install flask`).
     ///
     /// If the user provided a value that appears to be a `requirements.txt` file or a local
     /// directory, prompt them to correct it (if the terminal is interactive).
@@ -96,7 +95,7 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -113,7 +112,49 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = confirm::confirm(&prompt, &term, true).unwrap();
+                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
+                if confirmation {
+                    return Self::from_requirements_file(name.into());
+                }
+            }
+        }
+
+        Self::Package(name)
+    }
+
+    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a `--with`
+    /// package (e.g., `uvx --with flask ruff`).
+    ///
+    /// If the user provided a value that appears to be a `requirements.txt` file or a local
+    /// directory, prompt them to correct it (if the terminal is interactive).
+    pub fn from_with_package(name: String) -> Self {
+        // If the user provided a `requirements.txt` file without `--with-requirements` (as in
+        // `uvx --with requirements.txt ruff`), prompt them to correct it.
+        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt = format!(
+                    "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `--with-requirements {name}`?"
+                );
+                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
+                if confirmation {
+                    return Self::from_requirements_file(name.into());
+                }
+            }
+        }
+
+        // Similarly, if the user provided a `pyproject.toml` file without `--with-requirements` (as in
+        // `uvx --with pyproject.toml ruff`), prompt them to correct it.
+        if (name == "pyproject.toml" || name == "setup.py" || name == "setup.cfg")
+            && Path::new(&name).is_file()
+        {
+            let term = Term::stderr();
+            if term.is_term() {
+                let prompt = format!(
+                    "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `--with-requirements {name}`?"
+                );
+                let confirmation = uv_console::confirm(&prompt, &term, true).unwrap();
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }

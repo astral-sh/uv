@@ -8,10 +8,10 @@ use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
-use distribution_types::{IndexLocations, IndexUrl};
-use pep440_rs::Version;
 use uv_configuration::IndexStrategy;
+use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ErrorTree;
@@ -19,7 +19,7 @@ use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
-use crate::{RequiresPython, ResolverMarkers};
+use crate::{Flexibility, Options, RequiresPython, ResolverMarkers};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 
@@ -505,12 +505,14 @@ impl PubGrubReportFormatter<'_> {
         derivation_tree: &ErrorTree,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
         markers: &ResolverMarkers,
         workspace_members: &BTreeSet<PackageName>,
+        options: Options,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         match derivation_tree {
@@ -519,15 +521,17 @@ impl PubGrubReportFormatter<'_> {
             ) => {
                 if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
-                    if !fork_urls.contains_key(name) {
-                        self.prerelease_available_hint(
-                            package,
-                            name,
-                            set,
-                            selector,
-                            markers,
-                            output_hints,
-                        );
+                    if options.flexibility == Flexibility::Configurable {
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_available_hint(
+                                package,
+                                name,
+                                set,
+                                selector,
+                                markers,
+                                output_hints,
+                            );
+                        }
                     }
 
                     // Check for no versions due to no `--find-links` flat index.
@@ -537,6 +541,7 @@ impl PubGrubReportFormatter<'_> {
                         set,
                         selector,
                         index_locations,
+                        index_capabilities,
                         available_indexes,
                         unavailable_packages,
                         incomplete_packages,
@@ -586,24 +591,28 @@ impl PubGrubReportFormatter<'_> {
                     &derived.cause1,
                     selector,
                     index_locations,
+                    index_capabilities,
                     available_indexes,
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
                     markers,
                     workspace_members,
+                    options,
                     output_hints,
                 );
                 self.generate_hints(
                     &derived.cause2,
                     selector,
                     index_locations,
+                    index_capabilities,
                     available_indexes,
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
                     markers,
                     workspace_members,
+                    options,
                     output_hints,
                 );
             }
@@ -616,12 +625,13 @@ impl PubGrubReportFormatter<'_> {
         set: &Range<Version>,
         selector: &CandidateSelector,
         index_locations: &IndexLocations,
+        index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
-        let no_find_links = index_locations.flat_index().peekable().peek().is_none();
+        let no_find_links = index_locations.flat_indexes().peekable().peek().is_none();
 
         // Add hints due to the package being entirely unavailable.
         match unavailable_packages.get(name) {
@@ -703,6 +713,7 @@ impl PubGrubReportFormatter<'_> {
                 // indexes were not queried, and could contain a compatible version.
                 if let Some(next_index) = index_locations
                     .indexes()
+                    .map(Index::url)
                     .skip_while(|url| *url != found_index)
                     .nth(1)
                 {
@@ -713,6 +724,20 @@ impl PubGrubReportFormatter<'_> {
                         next_index: next_index.clone(),
                     });
                 }
+            }
+        }
+
+        // Add hints due to an index returning an unauthorized response.
+        for index in index_locations.indexes() {
+            if index_capabilities.unauthorized(&index.url) {
+                hints.insert(PubGrubHint::UnauthorizedIndex {
+                    index: index.url.clone(),
+                });
+            }
+            if index_capabilities.forbidden(&index.url) {
+                hints.insert(PubGrubHint::ForbiddenIndex {
+                    index: index.url.clone(),
+                });
             }
         }
     }
@@ -867,6 +892,10 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         next_index: IndexUrl,
     },
+    /// An index returned an Unauthorized (401) response.
+    UnauthorizedIndex { index: IndexUrl },
+    /// An index returned a Forbidden (403) response.
+    ForbiddenIndex { index: IndexUrl },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -914,6 +943,12 @@ enum PubGrubHintCore {
     },
     UncheckedIndex {
         package: PubGrubPackage,
+    },
+    UnauthorizedIndex {
+        index: IndexUrl,
+    },
+    ForbiddenIndex {
+        index: IndexUrl,
     },
 }
 
@@ -968,6 +1003,8 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 workspace,
             },
             PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
+            PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
+            PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
         }
     }
 }
@@ -995,29 +1032,32 @@ impl std::fmt::Display for PubGrubHint {
             Self::PrereleaseAvailable { package, version } => {
                 write!(
                     f,
-                    "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
+                    "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    version.bold()
+                    version.bold(),
+                    "--prerelease=allow".green(),
                 )
             }
             Self::PrereleaseRequested { package, range } => {
                 write!(
                     f,
-                    "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `--prerelease=allow`)",
+                    "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold(),
-                    PackageRange::compatibility(package, range, None).bold()
+                    PackageRange::compatibility(package, range, None).bold(),
+                    "--prerelease=allow".green(),
                 )
             }
             Self::NoIndex => {
                 write!(
                     f,
-                    "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)",
+                    "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
+                    "--find-links <uri>".green(),
                 )
             }
             Self::Offline => {
@@ -1183,8 +1223,8 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package,
-                    dependency,
+                    package.bold(),
+                    dependency.bold(),
                 )
             }
             Self::UncheckedIndex {
@@ -1198,11 +1238,31 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package,
+                    package.bold(),
                     found_index.cyan(),
                     PackageRange::compatibility(package, range, None).cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
+                )
+            }
+            Self::UnauthorizedIndex { index } => {
+                write!(
+                    f,
+                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    index.redacted().cyan(),
+                    "401 Unauthorized".bold().red(),
+                )
+            }
+            Self::ForbiddenIndex { index } => {
+                write!(
+                    f,
+                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    index.redacted().cyan(),
+                    "403 Forbidden".bold().red(),
                 )
             }
         }

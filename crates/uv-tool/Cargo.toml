@@ -9,23 +9,26 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
-install-wheel-rs = { workspace = true }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
 uv-cache = { workspace = true }
+uv-dirs = { workspace = true }
 uv-fs = { workspace = true }
+uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-settings = { workspace = true }
 uv-state = { workspace = true }
+uv-static = { workspace = true }
 uv-virtualenv = { workspace = true }
-
-dirs-sys = { workspace = true }
 fs-err = { workspace = true }
 pathdiff = { workspace = true }
 serde = { workspace = true }

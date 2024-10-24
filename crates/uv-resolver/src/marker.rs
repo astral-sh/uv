@@ -1,7 +1,7 @@
 use crate::requires_python::{LowerBound, RequiresPythonRange, UpperBound};
-use pep440_rs::Version;
-use pep508_rs::{MarkerTree, MarkerTreeKind, MarkerValueVersion};
 use pubgrub::Range;
+use uv_pep440::Version;
+use uv_pep508::{MarkerTree, MarkerTreeKind, MarkerValueVersion};
 
 /// Returns the bounding Python versions that can satisfy the [`MarkerTree`], if it's constrained.
 pub(crate) fn requires_python(tree: &MarkerTree) -> Option<RequiresPythonRange> {

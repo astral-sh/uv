@@ -1,10 +1,10 @@
 use std::future::Future;
 
-use distribution_types::{Dist, IndexLocations};
-use platform_tags::Tags;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
+use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl};
 use uv_normalize::PackageName;
+use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::flat_index::FlatIndex;
@@ -35,7 +35,7 @@ pub enum MetadataResponse {
     /// The wheel metadata was not found.
     MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(Box<pypi_types::MetadataError>),
+    InvalidMetadata(Box<uv_pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
     InconsistentMetadata(Box<uv_distribution::Error>),
     /// The wheel has an invalid structure.
@@ -49,6 +49,7 @@ pub trait ResolverProvider {
     fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
+        index: Option<&'io IndexUrl>,
     ) -> impl Future<Output = PackageVersionsResult> + 'io;
 
     /// Get the metadata for a distribution.
@@ -60,9 +61,6 @@ pub trait ResolverProvider {
         &'io self,
         dist: &'io Dist,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
-
-    /// Returns the [`IndexLocations`] used by this resolver.
-    fn index_locations(&self) -> &IndexLocations;
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.
     #[must_use]
@@ -82,6 +80,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     hasher: HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
     build_options: &'a BuildOptions,
+    capabilities: &'a IndexCapabilities,
 }
 
 impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
@@ -95,6 +94,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
         build_options: &'a BuildOptions,
+        capabilities: &'a IndexCapabilities,
     ) -> Self {
         Self {
             fetcher,
@@ -105,6 +105,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             hasher: hasher.clone(),
             exclude_newer,
             build_options,
+            capabilities,
         }
     }
 }
@@ -114,11 +115,12 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
     async fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
+        index: Option<&'io IndexUrl>,
     ) -> PackageVersionsResult {
         let result = self
             .fetcher
             .client()
-            .managed(|client| client.simple(package_name))
+            .managed(|client| client.simple(package_name, index, self.capabilities))
             .await;
 
         match result {
@@ -129,7 +131,7 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                         VersionMap::from_metadata(
                             metadata,
                             package_name,
-                            &index,
+                            index,
                             self.tags.as_ref(),
                             &self.requires_python,
                             &self.allowed_yanks,
@@ -204,10 +206,6 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 err => Err(err),
             },
         }
-    }
-
-    fn index_locations(&self) -> &IndexLocations {
-        self.fetcher.index_locations()
     }
 
     /// Set the [`uv_distribution::Reporter`] to use for this installer.

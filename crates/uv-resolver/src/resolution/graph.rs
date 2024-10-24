@@ -1,23 +1,23 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use distribution_types::{
-    Dist, DistributionMetadata, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
-    VersionOrUrlRef,
-};
 use indexmap::IndexSet;
-use pep440_rs::{Version, VersionSpecifier};
-use pep508_rs::{MarkerEnvironment, MarkerTree, MarkerTreeKind, VerbatimUrl};
 use petgraph::{
     graph::{Graph, NodeIndex},
     Directed, Direction,
 };
-use pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
+use uv_distribution_types::{
+    Dist, DistributionMetadata, IndexUrl, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
+    VersionOrUrlRef,
+};
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::{Version, VersionSpecifier};
+use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
+use uv_pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
 
 use crate::graph_ops::marker_reachability;
 use crate::pins::FilePins;
@@ -31,7 +31,7 @@ use crate::{
     ResolverMarkers, VersionsResponse,
 };
 
-pub(crate) type MarkersForDistribution = FxHashMap<(Version, Option<VerbatimUrl>), Vec<MarkerTree>>;
+pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
@@ -54,9 +54,6 @@ pub struct ResolutionGraph {
     pub(crate) overrides: Overrides,
     /// The options that were used to build the graph.
     pub(crate) options: Options,
-    /// If there are multiple options for a package, track which fork they belong to so we
-    /// can write that to the lockfile and later get the correct preference per fork back.
-    pub(crate) package_markers: FxHashMap<PackageName, MarkersForDistribution>,
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +85,7 @@ struct PackageRef<'a> {
     package_name: &'a PackageName,
     version: &'a Version,
     url: Option<&'a VerbatimParsedUrl>,
+    index: Option<&'a IndexUrl>,
     extra: Option<&'a ExtraName>,
     group: Option<&'a GroupName>,
 }
@@ -129,8 +127,6 @@ impl ResolutionGraph {
                     if let Some(markers) = resolution.markers.fork_markers() {
                         package_markers
                             .entry(package.name.clone())
-                            .or_default()
-                            .entry((version.clone(), package.url.clone().map(|url| url.verbatim)))
                             .or_default()
                             .push(markers.clone());
                     }
@@ -238,7 +234,6 @@ impl ResolutionGraph {
         let graph = Self {
             petgraph,
             requires_python,
-            package_markers,
             diagnostics,
             requirements: requirements.to_vec(),
             constraints: constraints.clone(),
@@ -284,6 +279,7 @@ impl ResolutionGraph {
                 package_name: from,
                 version: &edge.from_version,
                 url: edge.from_url.as_ref(),
+                index: edge.from_index.as_ref(),
                 extra: edge.from_extra.as_ref(),
                 group: edge.from_dev.as_ref(),
             }]
@@ -292,6 +288,7 @@ impl ResolutionGraph {
             package_name: &edge.to,
             version: &edge.to_version,
             url: edge.to_url.as_ref(),
+            index: edge.to_index.as_ref(),
             extra: edge.to_extra.as_ref(),
             group: edge.to_dev.as_ref(),
         }];
@@ -320,7 +317,7 @@ impl ResolutionGraph {
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
         pins: &FilePins,
-        index: &InMemoryIndex,
+        in_memory: &InMemoryIndex,
         git: &GitResolver,
         package: &'a ResolutionPackage,
         version: &'a Version,
@@ -330,16 +327,18 @@ impl ResolutionGraph {
             extra,
             dev,
             url,
+            index,
         } = &package;
         // Map the package to a distribution.
         let (dist, hashes, metadata) = Self::parse_dist(
             name,
+            index.as_ref(),
             url.as_ref(),
             version,
             pins,
             diagnostics,
             preferences,
-            index,
+            in_memory,
             git,
         )?;
 
@@ -366,7 +365,7 @@ impl ResolutionGraph {
         }
 
         // Add the distribution to the graph.
-        let index = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
+        let node = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
             dist,
             name: name.clone(),
             version: version.clone(),
@@ -381,22 +380,24 @@ impl ResolutionGraph {
                 package_name: name,
                 version,
                 url: url.as_ref(),
+                index: index.as_ref(),
                 extra: extra.as_ref(),
                 group: dev.as_ref(),
             },
-            index,
+            node,
         );
         Ok(())
     }
 
     fn parse_dist(
         name: &PackageName,
+        index: Option<&IndexUrl>,
         url: Option<&VerbatimParsedUrl>,
         version: &Version,
         pins: &FilePins,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
-        index: &InMemoryIndex,
+        in_memory: &InMemoryIndex,
         git: &GitResolver,
     ) -> Result<(ResolvedDist, Vec<HashDigest>, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
@@ -406,14 +407,24 @@ impl ResolutionGraph {
             let version_id = VersionId::from_url(&url.verbatim);
 
             // Extract the hashes.
-            let hashes =
-                Self::get_hashes(name, Some(url), &version_id, version, preferences, index);
+            let hashes = Self::get_hashes(
+                name,
+                index,
+                Some(url),
+                &version_id,
+                version,
+                preferences,
+                in_memory,
+            );
 
             // Extract the metadata.
             let metadata = {
-                let response = index.distributions().get(&version_id).unwrap_or_else(|| {
-                    panic!("Every URL distribution should have metadata: {version_id:?}")
-                });
+                let response = in_memory
+                    .distributions()
+                    .get(&version_id)
+                    .unwrap_or_else(|| {
+                        panic!("Every URL distribution should have metadata: {version_id:?}")
+                    });
 
                 let MetadataResponse::Found(archive) = &*response else {
                     panic!("Every URL distribution should have metadata: {version_id:?}")
@@ -449,17 +460,28 @@ impl ResolutionGraph {
             }
 
             // Extract the hashes.
-            let hashes = Self::get_hashes(name, None, &version_id, version, preferences, index);
+            let hashes = Self::get_hashes(
+                name,
+                index,
+                None,
+                &version_id,
+                version,
+                preferences,
+                in_memory,
+            );
 
             // Extract the metadata.
             let metadata = {
-                index.distributions().get(&version_id).and_then(|response| {
-                    if let MetadataResponse::Found(archive) = &*response {
-                        Some(archive.metadata.clone())
-                    } else {
-                        None
-                    }
-                })
+                in_memory
+                    .distributions()
+                    .get(&version_id)
+                    .and_then(|response| {
+                        if let MetadataResponse::Found(archive) = &*response {
+                            Some(archive.metadata.clone())
+                        } else {
+                            None
+                        }
+                    })
             };
 
             (dist, hashes, metadata)
@@ -470,11 +492,12 @@ impl ResolutionGraph {
     /// lockfile.
     fn get_hashes(
         name: &PackageName,
+        index: Option<&IndexUrl>,
         url: Option<&VerbatimParsedUrl>,
         version_id: &VersionId,
         version: &Version,
         preferences: &Preferences,
-        index: &InMemoryIndex,
+        in_memory: &InMemoryIndex,
     ) -> Vec<HashDigest> {
         // 1. Look for hashes from the lockfile.
         if let Some(digests) = preferences.match_hashes(name, version) {
@@ -484,7 +507,7 @@ impl ResolutionGraph {
         }
 
         // 2. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
-        if let Some(metadata_response) = index.distributions().get(version_id) {
+        if let Some(metadata_response) = in_memory.distributions().get(version_id) {
             if let MetadataResponse::Found(ref archive) = *metadata_response {
                 let mut digests = archive.hashes.clone();
                 digests.sort_unstable();
@@ -496,7 +519,13 @@ impl ResolutionGraph {
 
         // 3. Look for hashes from the registry, which are served at the package level.
         if url.is_none() {
-            if let Some(versions_response) = index.packages().get(name) {
+            let versions_response = if let Some(index) = index {
+                in_memory.explicit().get(&(name.clone(), index.clone()))
+            } else {
+                in_memory.implicit().get(name)
+            };
+
+            if let Some(versions_response) = versions_response {
                 if let VersionsResponse::Found(ref version_maps) = *versions_response {
                     if let Some(digests) = version_maps
                         .iter()
@@ -572,7 +601,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
-        use pep508_rs::{
+        use uv_pep508::{
             MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
         };
 
@@ -692,22 +721,6 @@ impl ResolutionGraph {
         Ok(conjunction)
     }
 
-    /// If there are multiple distributions for the same package name, return the markers of the
-    /// fork(s) that contained this distribution, otherwise return `None`.
-    pub fn fork_markers(
-        &self,
-        package_name: &PackageName,
-        version: &Version,
-        url: Option<&VerbatimUrl>,
-    ) -> Option<&Vec<MarkerTree>> {
-        let package_markers = &self.package_markers.get(package_name)?;
-        if package_markers.len() == 1 {
-            None
-        } else {
-            Some(&package_markers[&(version.clone(), url.cloned())])
-        }
-    }
-
     /// Returns a sequence of conflicting distribution errors from this
     /// resolution.
     ///
@@ -787,7 +800,7 @@ impl std::fmt::Display for ConflictingDistributionError {
     }
 }
 
-impl From<ResolutionGraph> for distribution_types::Resolution {
+impl From<ResolutionGraph> for uv_distribution_types::Resolution {
     fn from(graph: ResolutionGraph) -> Self {
         Self::new(
             graph

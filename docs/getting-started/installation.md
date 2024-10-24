@@ -83,6 +83,15 @@ options can be passed directly to the install script. For example, to see the av
 $ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
 ```
 
+In ephemeral environments like CI, use `UV_UNMANAGED_INSTALL` to install uv to a specific path while
+preventing the installer from modifying shell profiles or environment variables:
+
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/custom/path" sh
+```
+
+The use of `UV_UNMANAGED_INSTALL` will also disable self-updates (via `uv self update`).
+
 ### PyPI
 
 For convenience, uv is published to [PyPI](https://pypi.org/project/uv/).
@@ -210,9 +219,18 @@ Then restart the shell or source the shell config file.
 
 If you need to remove uv from your system, just remove the `uv` and `uvx` binaries:
 
-```console
-$ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
-```
+=== "macOS and Linux"
+
+    ```console
+    $ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
+    ```
+
+=== "Windows"
+
+    ```powershell
+    $ rm $HOME\.cargo\bin\uv.exe
+    $ rm $HOME\.cargo\bin\uvx.exe
+    ```
 
 !!! tip
 

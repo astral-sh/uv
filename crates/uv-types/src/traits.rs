@@ -3,15 +3,17 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use distribution_types::{
+use uv_cache::Cache;
+use uv_configuration::{
+    BuildKind, BuildOptions, BuildOutput, ConfigSettings, LowerBound, SourceStrategy,
+};
+use uv_distribution_types::{
     CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist, Resolution,
     SourceDist,
 };
-use pep508_rs::PackageName;
-use pypi_types::Requirement;
-use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_git::GitResolver;
+use uv_pep508::PackageName;
+use uv_pypi_types::Requirement;
 use uv_python::PythonEnvironment;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
@@ -75,11 +77,14 @@ pub trait BuildContext {
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
 
+    /// Whether to warn on missing lower bounds.
+    fn bounds(&self) -> LowerBound;
+
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;
 
     /// The index locations being searched.
-    fn index_locations(&self) -> &IndexLocations;
+    fn locations(&self) -> &IndexLocations;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
@@ -106,8 +111,10 @@ pub trait BuildContext {
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
+        install_path: &'a Path,
         version_id: Option<String>,
         dist: Option<&'a SourceDist>,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;

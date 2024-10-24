@@ -21,7 +21,7 @@ $ docker run ghcr.io/astral-sh/uv --help
 uv provides a distroless Docker image including the `uv` binary. The following tags are published:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.4.17`
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.4.26`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.4` (the latest patch
   version)
 
@@ -38,18 +38,21 @@ In addition, uv publishes the following images:
     - `ghcr.io/astral-sh/uv:debian`
     - `ghcr.io/astral-sh/uv:bookworm`
 - Based on `python3.x-alpine`:
+    - `ghcr.io/astral-sh/uv:python3.13-alpine`
     - `ghcr.io/astral-sh/uv:python3.12-alpine`
     - `ghcr.io/astral-sh/uv:python3.11-alpine`
     - `ghcr.io/astral-sh/uv:python3.10-alpine`
     - `ghcr.io/astral-sh/uv:python3.9-alpine`
     - `ghcr.io/astral-sh/uv:python3.8-alpine`
 - Based on `python3.x-bookworm`:
+    - `ghcr.io/astral-sh/uv:python3.13-bookworm`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm`
     - `ghcr.io/astral-sh/uv:python3.10-bookworm`
     - `ghcr.io/astral-sh/uv:python3.9-bookworm`
     - `ghcr.io/astral-sh/uv:python3.8-bookworm`
 - Based on `python3.x-slim-bookworm`:
+    - `ghcr.io/astral-sh/uv:python3.13-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.10-bookworm-slim`
@@ -59,7 +62,7 @@ In addition, uv publishes the following images:
 
 As with the distroless image, each image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.4.17-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.4.26-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -71,7 +74,7 @@ official distroless Docker image:
 
 ```dockerfile title="Dockerfile"
 FROM python:3.12-slim-bookworm
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 ```
 
 Or, with the installer:
@@ -97,13 +100,13 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.4.17 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.26 /uv /uvx /bin/
 ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.4.17/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.4.26/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -339,7 +342,7 @@ a big time saver.
 ```dockerfile title="Dockerfile"
 # Install uv
 FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Change the working directory to the `app` directory
 WORKDIR /app
@@ -385,7 +388,7 @@ For example:
 ```dockerfile title="Dockerfile"
 # Install uv
 FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Change the working directory to the `app` directory
 WORKDIR /app

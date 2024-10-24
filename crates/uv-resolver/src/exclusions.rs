@@ -1,6 +1,6 @@
-use pep508_rs::PackageName;
 use rustc_hash::FxHashSet;
 use uv_configuration::{Reinstall, Upgrade};
+use uv_pep508::PackageName;
 
 /// Tracks locally installed packages that should not be selected during resolution.
 #[derive(Debug, Default, Clone)]

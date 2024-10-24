@@ -7,26 +7,26 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
+use url::Url;
 
-use cache_key::RepositoryUrl;
-use distribution_types::UnresolvedRequirement;
-use pep508_rs::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
-use pypi_types::{redact_git_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
-use uv_auth::{store_credentials_from_url, Credentials};
 use uv_cache::Cache;
+use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
-    SourceStrategy,
+    LowerBound, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
 use uv_normalize::PackageName;
+use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
+use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -44,7 +44,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
 use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{pip, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
@@ -59,6 +59,7 @@ pub(crate) async fn add(
     editable: Option<bool>,
     dependency_type: DependencyType,
     raw_sources: bool,
+    indexes: Vec<Index>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -116,7 +117,7 @@ pub(crate) async fn add(
         }
         if no_sync {
             warn_user_once!(
-                "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
 
@@ -159,7 +160,10 @@ pub(crate) async fn add(
                 .requires_python
                 .clone()
                 .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(requires_python, false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        requires_python,
+                        PythonVariant::Default,
+                    ))
                 })
         };
 
@@ -230,6 +234,7 @@ pub(crate) async fn add(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
+    let bounds = LowerBound::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::default();
@@ -242,8 +247,10 @@ pub(crate) async fn add(
         resolution_environment(python_version, python_platform, target.interpreter())?;
 
     // Add all authenticated sources to the cache.
-    for url in settings.index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in settings.index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -272,7 +279,9 @@ pub(crate) async fn add(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(settings.index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(settings.index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
     };
 
@@ -296,6 +305,7 @@ pub(crate) async fn add(
         &settings.build_options,
         &build_hasher,
         settings.exclude_newer,
+        bounds,
         sources,
         concurrency,
     );
@@ -324,13 +334,12 @@ pub(crate) async fn add(
         if !unnamed.is_empty() {
             requirements.extend(
                 NamedRequirementsResolver::new(
-                    unnamed,
                     &hasher,
                     &state.index,
                     DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
-                .resolve()
+                .resolve(unnamed.into_iter())
                 .await?,
             );
         }
@@ -339,16 +348,13 @@ pub(crate) async fn add(
     };
 
     // If any of the requirements are self-dependencies, bail.
-    if matches!(
-        dependency_type,
-        DependencyType::Production | DependencyType::Dev
-    ) {
+    if matches!(dependency_type, DependencyType::Production) {
         if let Target::Project(project, _) = &target {
             if let Some(project_name) = project.project_name() {
                 for requirement in &requirements {
                     if requirement.name == *project_name {
                         bail!(
-                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
+                            "Requirement name `{}` matches project name `{}`, but self-dependencies are not permitted without the `--dev` or `--optional` flags. If your project name (`{}`) is shadowing that of a third-party dependency, consider renaming the project.",
                             requirement.name.cyan(),
                             project_name.cyan(),
                             project_name.cyan(),
@@ -358,6 +364,16 @@ pub(crate) async fn add(
             }
         }
     }
+
+    // If the user provides a single, named index, pin all requirements to that index.
+    let index = indexes
+        .first()
+        .as_ref()
+        .and_then(|index| index.name.as_ref())
+        .filter(|_| indexes.len() == 1)
+        .inspect(|index| {
+            debug!("Pinning all requirements to index: `{index}`");
+        });
 
     // Add the requirements to the `pyproject.toml` or script.
     let mut toml = match &target {
@@ -378,7 +394,7 @@ pub(crate) async fn add(
 
         let (requirement, source) = match target {
             Target::Script(_, _) | Target::Project(_, _) if raw_sources => {
-                (pep508_rs::Requirement::from(requirement), None)
+                (uv_pep508::Requirement::from(requirement), None)
             }
             Target::Script(ref script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
@@ -387,6 +403,7 @@ pub(crate) async fn add(
                     requirement,
                     false,
                     editable,
+                    index.cloned(),
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
@@ -402,6 +419,7 @@ pub(crate) async fn add(
                     requirement,
                     workspace,
                     editable,
+                    index.cloned(),
                     rev.clone(),
                     tag.clone(),
                     branch.clone(),
@@ -422,14 +440,15 @@ pub(crate) async fn add(
                 rev,
                 tag,
                 branch,
+                marker,
             }) => {
-                let credentials = Credentials::from_url(&git);
+                let credentials = uv_auth::Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
                     GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
 
                     // Redact the credentials.
-                    redact_git_credentials(&mut git);
+                    redact_credentials(&mut git);
                 };
                 Some(Source::Git {
                     git,
@@ -437,6 +456,7 @@ pub(crate) async fn add(
                     rev,
                     tag,
                     branch,
+                    marker,
                 })
             }
             _ => source,
@@ -477,6 +497,13 @@ pub(crate) async fn add(
             source,
             edit,
         });
+    }
+
+    // Add any indexes that were provided on the command-line.
+    if !raw_sources {
+        for index in indexes {
+            toml.add_index(&index)?;
+        }
     }
 
     let content = toml.to_string();
@@ -563,6 +590,7 @@ pub(crate) async fn add(
         &dependency_type,
         raw_sources,
         settings.as_ref(),
+        bounds,
         connectivity,
         concurrency,
         native_tls,
@@ -572,26 +600,39 @@ pub(crate) async fn add(
     .await
     {
         Ok(()) => Ok(ExitStatus::Success),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            let header = err.header();
-            let report = miette::Report::new(WithHelp { header, cause: err, help: Some("If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.") });
-            anstream::eprint!("{report:?}");
-
-            // Revert the changes to the `pyproject.toml`, if necessary.
-            if modified {
-                fs_err::write(root.join("pyproject.toml"), &existing)?;
-            }
-
-            Ok(ExitStatus::Failure)
-        }
         Err(err) => {
             // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
                 fs_err::write(root.join("pyproject.toml"), &existing)?;
             }
-            Err(err.into())
+
+            match err {
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(err),
+                )) => {
+                    diagnostics::no_solution_hint(err, format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()));
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                )) => {
+                    diagnostics::fetch_and_build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::Build(dist, err),
+                )) => {
+                    diagnostics::build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                err => {
+                    // Revert the changes to the `pyproject.toml`, if necessary.
+                    if modified {
+                        fs_err::write(root.join("pyproject.toml"), &existing)?;
+                    }
+                    Err(err.into())
+                }
+            }
         }
     }
 }
@@ -610,6 +651,7 @@ async fn lock_and_sync(
     dependency_type: &DependencyType,
     raw_sources: bool,
     settings: ResolverInstallerSettingsRef<'_>,
+    bounds: LowerBound,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -623,6 +665,8 @@ async fn lock_and_sync(
         project.workspace(),
         venv.interpreter(),
         settings.into(),
+        bounds,
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -662,7 +706,11 @@ async fn lock_and_sync(
             };
 
             // Only set a minimum version for registry requirements.
-            if edit.source.is_some() {
+            if edit
+                .source
+                .as_ref()
+                .is_some_and(|source| !matches!(source, Source::Registry { .. }))
+            {
                 continue;
             }
 
@@ -714,6 +762,15 @@ async fn lock_and_sync(
                 .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
                 .ok_or(ProjectError::TomlUpdate)?;
 
+            // Invalidate the project metadata.
+            if let VirtualProject::Project(ref project) = project {
+                let url = Url::from_file_path(project.project_root())
+                    .expect("project root is a valid URL");
+                let version_id = VersionId::from_url(&url);
+                let existing = state.index.distributions().remove(&version_id);
+                debug_assert!(existing.is_some(), "distribution should exist");
+            }
+
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::do_safe_lock(
@@ -723,6 +780,8 @@ async fn lock_and_sync(
                 project.workspace(),
                 venv.interpreter(),
                 settings.into(),
+                bounds,
+                &state,
                 Box::new(SummaryResolveLogger),
                 connectivity,
                 concurrency,
@@ -768,7 +827,6 @@ async fn lock_and_sync(
         InstallOptions::default(),
         Modifications::Sufficient,
         settings.into(),
-        &state,
         Box::new(DefaultInstallLogger),
         connectivity,
         concurrency,
@@ -791,7 +849,7 @@ fn augment_requirement(
 ) -> UnresolvedRequirement {
     match requirement {
         UnresolvedRequirement::Named(requirement) => {
-            UnresolvedRequirement::Named(pypi_types::Requirement {
+            UnresolvedRequirement::Named(uv_pypi_types::Requirement {
                 source: match requirement.source {
                     RequirementSource::Git {
                         repository,
@@ -851,9 +909,10 @@ fn augment_requirement(
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
 fn resolve_requirement(
-    requirement: pypi_types::Requirement,
+    requirement: uv_pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
+    index: Option<IndexName>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -864,6 +923,7 @@ fn resolve_requirement(
         requirement.source.clone(),
         workspace,
         editable,
+        index,
         rev,
         tag,
         branch,
@@ -882,7 +942,7 @@ fn resolve_requirement(
     };
 
     // Ignore the PEP 508 source by clearing the URL.
-    let mut processed_requirement = pep508_rs::Requirement::from(requirement);
+    let mut processed_requirement = uv_pep508::Requirement::from(requirement);
     processed_requirement.clear_url();
 
     Ok((processed_requirement, source))
@@ -913,21 +973,4 @@ struct DependencyEdit<'a> {
     requirement: Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
-}
-
-/// Render a [`uv_resolver::NoSolutionError`] with a help message.
-#[derive(Debug, miette::Diagnostic, thiserror::Error)]
-#[error("{header}")]
-#[diagnostic()]
-struct WithHelp {
-    /// The header to render in the error message.
-    header: uv_resolver::NoSolutionHeader,
-
-    /// The underlying error.
-    #[source]
-    cause: uv_resolver::NoSolutionError,
-
-    /// The help message to display.
-    #[help]
-    help: Option<&'static str>,
 }

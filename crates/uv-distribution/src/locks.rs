@@ -3,7 +3,7 @@ use std::rc::Rc;
 use rustc_hash::FxHashMap;
 use tokio::sync::Mutex;
 
-use distribution_types::{Identifier, ResourceId};
+use uv_distribution_types::{Identifier, ResourceId};
 
 /// A set of locks used to prevent concurrent access to the same resource.
 #[derive(Debug, Default)]

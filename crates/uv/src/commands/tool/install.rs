@@ -2,17 +2,17 @@ use std::fmt::Write;
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
-use distribution_types::UnresolvedRequirementSpecification;
 use owo_colors::OwoColorize;
-use pep440_rs::{VersionSpecifier, VersionSpecifiers};
-use pep508_rs::MarkerTree;
-use pypi_types::{Requirement, RequirementSource};
-use tracing::trace;
+use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, Upgrade};
+use uv_distribution_types::UnresolvedRequirementSpecification;
 use uv_normalize::PackageName;
+use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -403,7 +403,12 @@ pub(crate) async fn install(
             &cache,
             printer,
         )
-        .await?
+        .await
+        .inspect_err(|_| {
+            // If we failed to sync, remove the newly created environment.
+            debug!("Failed to sync environment; removing `{}`", from.name);
+            let _ = installed_tools.remove_environment(&from.name);
+        })?
     };
 
     install_executables(

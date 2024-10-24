@@ -17,6 +17,7 @@ Usage:
 import argparse
 import json
 import logging
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +30,7 @@ WORKSPACE_ROOT = CRATE_ROOT.parent.parent
 VERSION_METADATA = CRATE_ROOT / "download-metadata.json"
 TEMPLATE = CRATE_ROOT / "src" / "downloads.inc.mustache"
 TARGET = TEMPLATE.with_suffix("")
+PRERELEASE_PATTERN = re.compile(r"(a|b|rc)(\d+)")
 
 
 def prepare_name(name: str) -> str:
@@ -48,6 +50,18 @@ def prepare_libc(libc: str) -> str | None:
         return libc.title()
 
 
+def prepare_variant(variant: str | None) -> str | None:
+    match variant:
+        case None:
+            return "PythonVariant::Default"
+        case "freethreaded":
+            return "PythonVariant::Freethreaded"
+        case "debug":
+            return "PythonVariant::Debug"
+        case _:
+            raise ValueError(f"Unknown variant: {variant}")
+
+
 def prepare_arch(arch: str) -> str:
     match arch:
         # Special constructors
@@ -61,11 +75,22 @@ def prepare_arch(arch: str) -> str:
             return arch.capitalize()
 
 
+def prepare_prerelease(prerelease: str) -> str:
+    if not prerelease:
+        return "None"
+    if not (match := PRERELEASE_PATTERN.match(prerelease)):
+        raise ValueError(f"Invalid prerelease: {prerelease!r}")
+    kind, number = match.groups()
+    return f"Some(Prerelease {{ kind: PrereleaseKind::{kind.capitalize()}, number: {number} }})"
+
+
 def prepare_value(value: dict) -> dict:
     value["os"] = value["os"].title()
     value["arch"] = prepare_arch(value["arch"])
     value["name"] = prepare_name(value["name"])
     value["libc"] = prepare_libc(value["libc"])
+    value["prerelease"] = prepare_prerelease(value["prerelease"])
+    value["variant"] = prepare_variant(value["variant"])
     return value
 
 
@@ -78,6 +103,8 @@ def main() -> None:
     data["versions"] = [
         {"key": key, "value": prepare_value(value)}
         for key, value in json.loads(VERSION_METADATA.read_text()).items()
+        # Exclude debug variants for now, we don't support them in the Rust side
+        if value["variant"] != "debug"
     ]
 
     # Render the template
@@ -88,7 +115,7 @@ def main() -> None:
 
     # Update the file
     logging.info(f"Updating `{TARGET}`...")
-    TARGET.write_text(output)
+    TARGET.write_text("// DO NOT EDIT\n//\n" + output)
     subprocess.check_call(
         ["rustfmt", str(TARGET)],
         stderr=subprocess.STDOUT,

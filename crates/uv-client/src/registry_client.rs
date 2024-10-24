@@ -1,29 +1,30 @@
+use async_http_range_reader::AsyncHttpRangeReader;
+use futures::{FutureExt, TryStreamExt};
+use http::HeaderMap;
+use itertools::Either;
+use reqwest::{Client, Response, StatusCode};
+use reqwest_middleware::ClientWithMiddleware;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
-
-use async_http_range_reader::AsyncHttpRangeReader;
-use futures::{FutureExt, TryStreamExt};
-use http::HeaderMap;
-use reqwest::{Client, Response, StatusCode};
-use reqwest_middleware::ClientWithMiddleware;
+use std::time::Duration;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexUrl, IndexUrls, Name,
-};
-use pep440_rs::Version;
-use pep508_rs::MarkerEnvironment;
-use platform_tags::Platform;
-use pypi_types::{ResolutionMetadata, SimpleJson};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
+use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
+use uv_distribution_types::{
+    BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexUrl, IndexUrls, Name,
+};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_pep508::MarkerEnvironment;
+use uv_platform_tags::Platform;
+use uv_pypi_types::{ResolutionMetadata, SimpleJson};
 
 use crate::base_client::BaseClientBuilder;
 use crate::cached_client::CacheControl;
@@ -171,7 +172,7 @@ pub struct RegistryClient {
     /// The connectivity mode to use.
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
-    timeout: u64,
+    timeout: Duration,
 }
 
 impl RegistryClient {
@@ -191,7 +192,7 @@ impl RegistryClient {
     }
 
     /// Return the timeout this client is configured with, in seconds.
-    pub fn timeout(&self) -> u64 {
+    pub fn timeout(&self) -> Duration {
         self.timeout
     }
 
@@ -201,11 +202,19 @@ impl RegistryClient {
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the pypi json api approximately implements.
     #[instrument("simple_api", skip_all, fields(package = % package_name))]
-    pub async fn simple(
-        &self,
+    pub async fn simple<'index>(
+        &'index self,
         package_name: &PackageName,
-    ) -> Result<Vec<(IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
-        let mut it = self.index_urls.indexes().peekable();
+        index: Option<&'index IndexUrl>,
+        capabilities: &IndexCapabilities,
+    ) -> Result<Vec<(&'index IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
+        let indexes = if let Some(index) = index {
+            Either::Left(std::iter::once(index))
+        } else {
+            Either::Right(self.index_urls.indexes().map(Index::url))
+        };
+
+        let mut it = indexes.peekable();
         if it.peek().is_none() {
             return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }
@@ -214,7 +223,7 @@ impl RegistryClient {
         for index in it {
             match self.simple_single_index(package_name, index).await {
                 Ok(metadata) => {
-                    results.push((index.clone(), metadata));
+                    results.push((index, metadata));
 
                     // If we're only using the first match, we can stop here.
                     if self.index_strategy == IndexStrategy::FirstIndex {
@@ -222,22 +231,23 @@ impl RegistryClient {
                     }
                 }
                 Err(err) => match err.into_kind() {
-                    // The package is unavailable due to a lack of connectivity.
-                    ErrorKind::Offline(_) => continue,
-
                     // The package could not be found in the remote index.
-                    ErrorKind::WrappedReqwestError(err) => {
-                        if err.status() == Some(StatusCode::NOT_FOUND)
-                            || err.status() == Some(StatusCode::UNAUTHORIZED)
-                            || err.status() == Some(StatusCode::FORBIDDEN)
-                        {
-                            continue;
+                    ErrorKind::WrappedReqwestError(err) => match err.status() {
+                        Some(StatusCode::NOT_FOUND) => {}
+                        Some(StatusCode::UNAUTHORIZED) => {
+                            capabilities.set_unauthorized(index.clone());
                         }
-                        return Err(ErrorKind::from(err).into());
-                    }
+                        Some(StatusCode::FORBIDDEN) => {
+                            capabilities.set_forbidden(index.clone());
+                        }
+                        _ => return Err(ErrorKind::from(err).into()),
+                    },
+
+                    // The package is unavailable due to a lack of connectivity.
+                    ErrorKind::Offline(_) => {}
 
                     // The package could not be found in the local index.
-                    ErrorKind::FileNotFound(_) => continue,
+                    ErrorKind::FileNotFound(_) => {}
 
                     other => return Err(other.into()),
                 },
@@ -419,7 +429,7 @@ impl RegistryClient {
 
                 let location = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => {
-                        let url = pypi_types::base_url_join_relative(base, url)
+                        let url = uv_pypi_types::base_url_join_relative(base, url)
                             .map_err(ErrorKind::JoinRelativeUrl)?;
                         if url.scheme() == "file" {
                             let path = url
@@ -625,7 +635,7 @@ impl RegistryClient {
                         headers,
                     )
                     .await
-                    .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                    .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
                     let metadata =
@@ -663,7 +673,7 @@ impl RegistryClient {
 
                         // Mark the index as not supporting range requests.
                         if let Some(index) = index {
-                            capabilities.set_supports_range_requests(index.clone(), false);
+                            capabilities.set_no_range_requests(index.clone());
                         }
                     } else {
                         return Err(err);
@@ -713,7 +723,7 @@ impl RegistryClient {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout().as_secs()
                 ),
             )
         } else {
@@ -783,7 +793,7 @@ impl SimpleMetadata {
         self.0.iter()
     }
 
-    fn from_files(files: Vec<pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
+    fn from_files(files: Vec<uv_pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
         let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
         // Group the distributions by version and kind
@@ -901,107 +911,4 @@ impl Connectivity {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use url::Url;
-
-    use pypi_types::{JoinRelativeError, SimpleJson};
-    use uv_normalize::PackageName;
-
-    use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};
-
-    #[test]
-    fn ignore_failing_files() {
-        // 1.7.7 has an invalid requires-python field (double comma), 1.7.8 is valid
-        let response = r#"
-        {
-          "files": [
-            {
-              "core-metadata": false,
-              "data-dist-info-metadata": false,
-              "filename": "pyflyby-1.7.7.tar.gz",
-              "hashes": {
-                "sha256": "0c4d953f405a7be1300b440dbdbc6917011a07d8401345a97e72cd410d5fb291"
-              },
-              "requires-python": ">=2.5, !=3.0.*, !=3.1.*, !=3.2.*, !=3.2.*, !=3.3.*, !=3.4.*,, !=3.5.*, !=3.6.*, <4",
-              "size": 427200,
-              "upload-time": "2022-05-19T09:14:36.591835Z",
-              "url": "https://files.pythonhosted.org/packages/61/93/9fec62902d0b4fc2521333eba047bff4adbba41f1723a6382367f84ee522/pyflyby-1.7.7.tar.gz",
-              "yanked": false
-            },
-            {
-              "core-metadata": false,
-              "data-dist-info-metadata": false,
-              "filename": "pyflyby-1.7.8.tar.gz",
-              "hashes": {
-                "sha256": "1ee37474f6da8f98653dbcc208793f50b7ace1d9066f49e2707750a5ba5d53c6"
-              },
-              "requires-python": ">=2.5, !=3.0.*, !=3.1.*, !=3.2.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*, !=3.6.*, <4",
-              "size": 424460,
-              "upload-time": "2022-08-04T10:42:02.190074Z",
-              "url": "https://files.pythonhosted.org/packages/ad/39/17180d9806a1c50197bc63b25d0f1266f745fc3b23f11439fccb3d6baa50/pyflyby-1.7.8.tar.gz",
-              "yanked": false
-            }
-          ]
-        }
-        "#;
-        let data: SimpleJson = serde_json::from_str(response).unwrap();
-        let base = Url::parse("https://pypi.org/simple/pyflyby/").unwrap();
-        let simple_metadata = SimpleMetadata::from_files(
-            data.files,
-            &PackageName::from_str("pyflyby").unwrap(),
-            &base,
-        );
-        let versions: Vec<String> = simple_metadata
-            .iter()
-            .map(|SimpleMetadatum { version, .. }| version.to_string())
-            .collect();
-        assert_eq!(versions, ["1.7.8".to_string()]);
-    }
-
-    /// Test for AWS Code Artifact registry
-    ///
-    /// See: <https://github.com/astral-sh/uv/issues/1388>
-    #[test]
-    fn relative_urls_code_artifact() -> Result<(), JoinRelativeError> {
-        let text = r#"
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Links for flask</title>
-            </head>
-            <body>
-                <h1>Links for flask</h1>
-                <a href="0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237"  data-gpg-sig="false" >Flask-0.1.tar.gz</a>
-                <br/>
-                <a href="0.10.1/Flask-0.10.1.tar.gz#sha256=4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373"  data-gpg-sig="false" >Flask-0.10.1.tar.gz</a>
-                <br/>
-                <a href="3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403" data-requires-python="&gt;=3.8" data-gpg-sig="false" >flask-3.0.1.tar.gz</a>
-                <br/>
-            </body>
-            </html>
-        "#;
-
-        // Note the lack of a trailing `/` here is important for coverage of url-join behavior
-        let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
-            .unwrap();
-        let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
-
-        // Test parsing of the file urls
-        let urls = files
-            .iter()
-            .map(|file| pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
-            .collect::<Result<Vec<_>, JoinRelativeError>>()?;
-        let urls = urls.iter().map(reqwest::Url::as_str).collect::<Vec<_>>();
-        insta::assert_debug_snapshot!(urls, @r###"
-        [
-            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
-            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz#sha256=4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
-            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
-        ]
-        "###);
-
-        Ok(())
-    }
-}
+mod tests;

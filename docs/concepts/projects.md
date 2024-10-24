@@ -165,11 +165,11 @@ example-lib
         └── __init__.py
 ```
 
-When creating a library, uv defines a build system and places the source code in placed in a `src`
-directory. These changes ensure that the library is isolated from any `python` invocations in the
-project root and that distributed library code is well separated from the rest of the project source
-code. The project includes a package at `src/example_lib` that will be built and installed into the
-project environment.
+When creating a library, uv defines a build system and places the source code in a `src` directory.
+These changes ensure that the library is isolated from any `python` invocations in the project root
+and that distributed library code is well separated from the rest of the project source code. The
+project includes a package at `src/example_lib` that will be built and installed into the project
+environment.
 
 ```toml title="pyproject.toml"
 [project]
@@ -203,9 +203,40 @@ def hello() -> str:
 And you can import and execute it using `uv run`:
 
 ```console
-$ uv run python -c "import example_lib; print(example_lib.hello())"
+$ uv run --directory example-lib python -c "import example_lib; print(example_lib.hello())"
 Hello from example-lib!
 ```
+
+You can select a different build backend template by using `--build-backend` with `hatchling`,
+`flit-core`, `pdm-backend`, `setuptools`, `maturin`, or `scikit-build-core`.
+
+```console
+$ uv init --lib --build-backend maturin example-lib
+$ tree example-lib
+example-lib
+├── .python-version
+├── Cargo.toml
+├── README.md
+├── pyproject.toml
+└── src
+    ├── lib.rs
+    └── example_lib
+        ├── py.typed
+        ├── __init__.py
+        └── _core.pyi
+```
+
+And you can import and execute it using `uv run`:
+
+```console
+$ uv run --directory example-lib python -c "import example_lib; print(example_lib.hello())"
+Hello from example-lib!
+```
+
+!!! tip
+
+Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
+backends such as `maturin` and `scikit-build-core`.
 
 ### Packaged applications
 
@@ -231,7 +262,7 @@ example-packaged-app
 But the module defines a CLI function:
 
 ```python title="__init__.py"
-def hello() -> None:
+def main() -> None:
     print("Hello from example-packaged-app!")
 ```
 
@@ -247,7 +278,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-hello = "example_packaged_app:hello"
+example-packaged-app = "example_packaged_app:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -257,7 +288,7 @@ build-backend = "hatchling.build"
 Which can be executed with `uv run`:
 
 ```console
-$ uv run hello
+$ uv run --directory example-packaged-app example-packaged-app
 Hello from example-packaged-app!
 ```
 
@@ -267,13 +298,40 @@ Hello from example-packaged-app!
     However, this may require changes to the project directory structure, depending on the build
     backend.
 
+In addition, you can further customize the build backend of a packaged application by specifying
+`--build-backend` including binary build backends such as `maturin`.
+
+```console
+$ uv init --app --package --build-backend maturin example-packaged-app
+$ tree example-packaged-app
+example-packaged-app
+├── .python-version
+├── Cargo.toml
+├── README.md
+├── pyproject.toml
+└── src
+    ├── lib.rs
+    └── example_packaged_app
+        ├── __init__.py
+        └── _core.pyi
+```
+
+Which can also be executed with `uv run`:
+
+```console
+$ uv run --directory example-packaged-app example-packaged-app
+Hello from example-packaged-app!
+```
+
 ## Project environments
 
-uv creates a virtual environment in a `.venv` directory next to the `pyproject.toml`. This virtual
-environment contains the project and its dependencies. It is stored inside the project to make it
-easy for editors to find — they need the environment to give code completions and type hints. It is
-not recommended to include the `.venv` directory in version control; it is automatically excluded
-from `git` with an internal `.gitignore` file.
+When working on a project with uv, uv will create a virtual environment as needed. While some uv
+commands will create a temporary environment (e.g., `uv run --isolated`), uv also manages a
+persistent environment with the project and its dependencies in a `.venv` directory next to the
+`pyproject.toml`. It is stored inside the project to make it easy for editors to find — they need
+the environment to give code completions and type hints. It is not recommended to include the
+`.venv` directory in version control; it is automatically excluded from `git` with an internal
+`.gitignore` file.
 
 To run a command in the project environment, use `uv run`. Alternatively the project environment can
 be activated as normal for a virtual environment.
@@ -797,3 +855,9 @@ You could run the following sequence of commands to sync `flash-attn`:
 $ uv sync --extra build
 $ uv sync --extra build --extra compile
 ```
+
+!!! note
+
+    The `version` field in `tool.uv.dependency-metadata` is optional for registry-based
+    dependencies (when omitted, uv will assume the metadata applies to all versions of the package),
+    but _required_ for direct URL dependencies (like Git dependencies).

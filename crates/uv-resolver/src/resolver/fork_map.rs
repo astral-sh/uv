@@ -1,6 +1,6 @@
-use pep508_rs::{MarkerTree, PackageName};
-use pypi_types::Requirement;
 use rustc_hash::FxHashMap;
+use uv_pep508::{MarkerTree, PackageName};
+use uv_pypi_types::Requirement;
 
 use crate::ResolverMarkers;
 
@@ -42,6 +42,11 @@ impl<T> ForkMap<T> {
     /// given fork.
     pub(crate) fn contains(&self, package_name: &PackageName, markers: &ResolverMarkers) -> bool {
         !self.get(package_name, markers).is_empty()
+    }
+
+    /// Returns `true` if the map contains any values for a package.
+    pub(crate) fn contains_key(&self, package_name: &PackageName) -> bool {
+        self.0.contains_key(package_name)
     }
 
     /// Returns a list of values associated with a package that are compatible with the given fork.

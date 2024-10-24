@@ -10,22 +10,23 @@ use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
 
-use distribution_types::{Name, UnresolvedRequirementSpecification};
-use pep440_rs::{VersionSpecifier, VersionSpecifiers};
-use pep508_rs::MarkerTree;
-use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
+use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
 
@@ -36,7 +37,9 @@ use crate::commands::pip::operations;
 use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
-use crate::commands::{project::environment::CachedEnvironment, tool::common::matching_packages};
+use crate::commands::{
+    diagnostics, project::environment::CachedEnvironment, tool::common::matching_packages,
+};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -125,12 +128,10 @@ pub(crate) async fn run(
         Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report =
-                miette::Report::msg(format!("{err}")).context(err.header().with_context("tool"));
-            eprint!("{report:?}");
+            diagnostics::no_solution_context(&err, "tool");
             return Ok(ExitStatus::Failure);
         }
-        Err(ProjectError::NamedRequirements(err)) => {
+        Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}")).context("Invalid `--with` requirement");
             eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
@@ -148,13 +149,13 @@ pub(crate) async fn run(
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
         std::iter::once(environment.scripts().to_path_buf()).chain(
-            std::env::var_os("PATH")
+            std::env::var_os(EnvVars::PATH)
                 .as_ref()
                 .iter()
                 .flat_map(std::env::split_paths),
         ),
     )?;
-    process.env("PATH", new_path);
+    process.env(EnvVars::PATH, new_path);
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
@@ -206,6 +207,15 @@ pub(crate) async fn run(
                         for (name, _) in entrypoints {
                             writeln!(printer.stdout(), "- {}", name.cyan())?;
                         }
+                        let suggested_command = format!(
+                            "{} --from {} <EXECUTABLE_NAME>",
+                            invocation_source, from.name
+                        );
+                        writeln!(
+                            printer.stdout(),
+                            "Consider using `{}` instead.",
+                            suggested_command.green()
+                        )?;
                     }
                     return Ok(ExitStatus::Failure);
                 }
@@ -361,7 +371,7 @@ fn warn_executable_not_provided_by_package(
                 let suggested_command = format!("{invocation_source} --from PKG {executable}");
                 let provided_by = packages
                     .iter()
-                    .map(distribution_types::Name::name)
+                    .map(uv_distribution_types::Name::name)
                     .map(|name| format!("- {}", name.cyan()))
                     .join("\n");
                 warn_user!(

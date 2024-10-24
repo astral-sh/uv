@@ -11,25 +11,26 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use tracing::{debug, instrument};
 
-use distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
-    SourceDist, VersionOrUrlRef,
-};
-use pypi_types::Requirement;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, Reinstall,
+    SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
+    SourceDist, VersionOrUrlRef,
+};
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
+use uv_pypi_types::Requirement;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
-    ResolverMarkers,
+    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
+    PythonRequirement, Resolver, ResolverMarkers,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -49,13 +50,14 @@ pub struct BuildDispatch<'a> {
     dependency_metadata: &'a DependencyMetadata,
     in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
-    link_mode: install_wheel_rs::linker::LinkMode,
+    link_mode: uv_install_wheel::linker::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     hasher: &'a HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
+    bounds: LowerBound,
     sources: SourceStrategy,
     concurrency: Concurrency,
 }
@@ -76,10 +78,11 @@ impl<'a> BuildDispatch<'a> {
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
-        link_mode: install_wheel_rs::linker::LinkMode,
+        link_mode: uv_install_wheel::linker::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
+        bounds: LowerBound,
         sources: SourceStrategy,
         concurrency: Concurrency,
     ) -> Self {
@@ -104,6 +107,7 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
+            bounds,
             sources,
             concurrency,
         }
@@ -152,11 +156,15 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.config_settings
     }
 
+    fn bounds(&self) -> LowerBound {
+        self.bounds
+    }
+
     fn sources(&self) -> SourceStrategy {
         self.sources
     }
 
-    fn index_locations(&self) -> &IndexLocations {
+    fn locations(&self) -> &IndexLocations {
         self.index_locations
     }
 
@@ -170,6 +178,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer)
                 .index_strategy(self.index_strategy)
+                .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
             ResolverMarkers::specific_environment(markers),
@@ -184,7 +193,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let graph = resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
-                requirements.iter().map(ToString::to_string).join(", "),
+                requirements
+                    .iter()
+                    .map(|requirement| format!("`{requirement}`"))
+                    .join(", ")
             )
         })?;
         Ok(Resolution::from(graph))
@@ -213,28 +225,24 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
         // Determine the current environment markers.
         let tags = self.interpreter.tags()?;
-        let markers = self.interpreter.resolver_markers();
 
         // Determine the set of installed packages.
         let site_packages = SitePackages::from_environment(venv)?;
-
-        let requirements = resolution.requirements().collect::<Vec<_>>();
 
         let Plan {
             cached,
             remote,
             reinstalls,
             extraneous: _,
-        } = Planner::new(&requirements).build(
+        } = Planner::new(resolution).build(
             site_packages,
             &Reinstall::default(),
-            &BuildOptions::default(),
+            self.build_options,
             self.hasher,
             self.index_locations,
             self.config_settings,
             self.cache(),
             venv,
-            &markers,
             tags,
         )?;
 
@@ -243,17 +251,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             debug!("No build requirements to install for build");
             return Ok(vec![]);
         }
-
-        // Resolve any registry-based requirements.
-        let remote = remote
-            .iter()
-            .map(|dist| {
-                resolution
-                    .get_remote(&dist.name)
-                    .cloned()
-                    .expect("Resolution should contain all packages")
-            })
-            .collect::<Vec<_>>();
 
         // Download any missing distributions.
         let wheels = if remote.is_empty() {
@@ -321,14 +318,16 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         source: &'data Path,
         subdirectory: Option<&'data Path>,
+        install_path: &'data Path,
         version_id: Option<String>,
         dist: Option<&'data SourceDist>,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
-        let dist_name = dist.map(distribution_types::Name::name);
+        let dist_name = dist.map(uv_distribution_types::Name::name);
         let dist_version = dist
-            .map(distribution_types::DistributionMetadata::version_or_url)
+            .map(uv_distribution_types::DistributionMetadata::version_or_url)
             .and_then(|version| match version {
                 VersionOrUrlRef::Version(version) => Some(version),
                 VersionOrUrlRef::Url(_) => None,
@@ -354,12 +353,15 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let builder = SourceBuild::setup(
             source,
             subdirectory,
+            install_path,
             dist_name,
             dist_version,
             self.interpreter,
             self,
             self.source_build_context.clone(),
             version_id,
+            self.index_locations,
+            sources,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,

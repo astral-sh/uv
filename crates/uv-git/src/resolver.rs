@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use tracing::debug;
 
-use cache_key::RepositoryUrl;
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fs_err::tokio as fs;
 use reqwest_middleware::ClientWithMiddleware;
+use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_fs::LockedFile;
 
 use crate::{Fetch, GitReference, GitSha, GitSource, GitUrl, Reporter};
@@ -38,6 +38,50 @@ impl GitResolver {
         self.0.get(reference)
     }
 
+    /// Resolve a Git URL to a specific commit.
+    pub async fn resolve(
+        &self,
+        url: &GitUrl,
+        client: ClientWithMiddleware,
+        cache: PathBuf,
+        reporter: Option<impl Reporter + 'static>,
+    ) -> Result<GitSha, GitResolverError> {
+        debug!("Resolving source distribution from Git: {url}");
+
+        let reference = RepositoryReference::from(url);
+
+        // If we know the precise commit already, return it.
+        if let Some(precise) = self.get(&reference) {
+            return Ok(*precise);
+        }
+
+        // Avoid races between different processes, too.
+        let lock_dir = cache.join("locks");
+        fs::create_dir_all(&lock_dir).await?;
+        let repository_url = RepositoryUrl::new(url.repository());
+        let _lock = LockedFile::acquire(
+            lock_dir.join(cache_digest(&repository_url)),
+            &repository_url,
+        )
+        .await?;
+
+        // Fetch the Git repository.
+        let source = if let Some(reporter) = reporter {
+            GitSource::new(url.clone(), client, cache).with_reporter(reporter)
+        } else {
+            GitSource::new(url.clone(), client, cache)
+        };
+        let precise = tokio::task::spawn_blocking(move || source.resolve())
+            .await?
+            .map_err(GitResolverError::Git)?;
+
+        // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
+        // resolve to the same precise commit.
+        self.insert(reference, precise);
+
+        Ok(precise)
+    }
+
     /// Fetch a remote Git repository.
     pub async fn fetch(
         &self,
@@ -65,7 +109,7 @@ impl GitResolver {
         fs::create_dir_all(&lock_dir).await?;
         let repository_url = RepositoryUrl::new(url.repository());
         let _lock = LockedFile::acquire(
-            lock_dir.join(cache_key::cache_digest(&repository_url)),
+            lock_dir.join(cache_digest(&repository_url)),
             &repository_url,
         )
         .await?;

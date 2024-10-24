@@ -4,11 +4,14 @@ version = "0.0.1"
 edition = "2021"
 description = "Common uv pubgrub types."
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
-pep440_rs = { workspace = true }
+uv-pep440 = { workspace = true }
 
 itertools = { workspace = true }
 thiserror = { workspace = true }

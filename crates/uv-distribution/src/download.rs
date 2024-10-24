@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::Error;
-use distribution_filename::WheelFilename;
-use distribution_types::{CachedDist, Dist, Hashed};
-use pypi_types::{HashDigest, ResolutionMetadata};
+use uv_distribution_filename::WheelFilename;
+use uv_distribution_types::{CachedDist, Dist, Hashed};
 use uv_metadata::read_flat_wheel_metadata;
+use uv_pypi_types::{HashDigest, ResolutionMetadata};
 
 use uv_cache_info::CacheInfo;
 

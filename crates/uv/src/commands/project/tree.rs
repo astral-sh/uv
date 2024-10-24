@@ -1,19 +1,20 @@
-use anyhow::Result;
-use std::fmt::Write;
 use std::path::Path;
 
-use pep508_rs::PackageName;
+use anstream::print;
+use anyhow::Result;
+
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, TargetTriple};
+use uv_configuration::{Concurrency, DevMode, LowerBound, TargetTriple};
+use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::FoundInterpreter;
-use crate::commands::{project, ExitStatus};
+use crate::commands::project::ProjectInterpreter;
+use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -21,6 +22,7 @@ use crate::settings::ResolverSettings;
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
+    dev: DevMode,
     locked: bool,
     frozen: bool,
     universal: bool,
@@ -45,7 +47,7 @@ pub(crate) async fn tree(
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
     // Find an interpreter for the project
-    let interpreter = FoundInterpreter::discover(
+    let interpreter = ProjectInterpreter::discover(
         &workspace,
         python.as_deref().map(PythonRequest::parse),
         python_preference,
@@ -58,6 +60,9 @@ pub(crate) async fn tree(
     .await?
     .into_interpreter();
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Update the lockfile, if necessary.
     let lock = project::lock::do_safe_lock(
         locked,
@@ -66,6 +71,8 @@ pub(crate) async fn tree(
         &workspace,
         &interpreter,
         settings.as_ref(),
+        LowerBound::Allow,
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -88,13 +95,14 @@ pub(crate) async fn tree(
         &lock,
         (!universal).then_some(&markers),
         depth.into(),
-        prune,
-        package,
+        &prune,
+        &package,
+        dev,
         no_dedupe,
         invert,
     );
 
-    write!(printer.stdout(), "{tree}")?;
+    print!("{tree}");
 
     Ok(ExitStatus::Success)
 }

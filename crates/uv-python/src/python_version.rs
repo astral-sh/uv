@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 
-use pep440_rs::Version;
-use pep508_rs::{MarkerEnvironment, StringVersion};
+use uv_pep440::Version;
+use uv_pep508::{MarkerEnvironment, StringVersion};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PythonVersion(StringVersion);
@@ -168,37 +168,4 @@ impl PythonVersion {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use pep440_rs::{Prerelease, PrereleaseKind, Version};
-
-    use crate::PythonVersion;
-
-    #[test]
-    fn python_markers() {
-        let version = PythonVersion::from_str("3.11.0").expect("valid python version");
-        assert_eq!(version.python_version(), Version::new([3, 11]));
-        assert_eq!(version.python_version().to_string(), "3.11");
-        assert_eq!(version.python_full_version(), Version::new([3, 11, 0]));
-        assert_eq!(version.python_full_version().to_string(), "3.11.0");
-
-        let version = PythonVersion::from_str("3.11").expect("valid python version");
-        assert_eq!(version.python_version(), Version::new([3, 11]));
-        assert_eq!(version.python_version().to_string(), "3.11");
-        assert_eq!(version.python_full_version(), Version::new([3, 11, 0]));
-        assert_eq!(version.python_full_version().to_string(), "3.11.0");
-
-        let version = PythonVersion::from_str("3.11.8a1").expect("valid python version");
-        assert_eq!(version.python_version(), Version::new([3, 11]));
-        assert_eq!(version.python_version().to_string(), "3.11");
-        assert_eq!(
-            version.python_full_version(),
-            Version::new([3, 11, 8]).with_pre(Some(Prerelease {
-                kind: PrereleaseKind::Alpha,
-                number: 1
-            }))
-        );
-        assert_eq!(version.python_full_version().to_string(), "3.11.8a1");
-    }
-}
+mod tests;

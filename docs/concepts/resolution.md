@@ -302,6 +302,15 @@ For example, you can declare the metadata for `flash-attn`, allowing uv to resol
 the package from source (which itself requires installing `torch`):
 
 ```toml
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["flash-attn"]
+
+[tool.uv.sources]
+flash-attn = { git = "https://github.com/Dao-AILab/flash-attention", tag = "v2.6.3" }
+
 [[tool.uv.dependency-metadata]]
 name = "flash-attn"
 version = "2.6.3"
@@ -312,6 +321,12 @@ Like dependency overrides, `tool.uv.dependency-metadata` can also be used for ca
 package's metadata is incorrect or incomplete, or when a package is not available in the package
 index. While dependency overrides allow overriding the allowed versions of a package globally,
 metadata overrides allow overriding the declared metadata of a _specific package_.
+
+!!! note
+
+    The `version` field in `tool.uv.dependency-metadata` is optional for registry-based
+    dependencies (when omitted, uv will assume the metadata applies to all versions of the package),
+    but _required_ for direct URL dependencies (like Git dependencies).
 
 Entries in the `tool.uv.dependency-metadata` table follow the
 [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) specification,
@@ -356,6 +371,12 @@ packages.
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
 as if they do not exist.
+
+!!! note
+
+    The `--exclude-newer` option is only applied to packages that are read from a registry (as opposed to, e.g., Git
+    dependencies). Further, when using the `uv pip` interface, uv will not downgrade previously installed packages
+    unless the `--reinstall` flag is provided, in which case uv will perform a new resolution.
 
 ## Source distribution
 

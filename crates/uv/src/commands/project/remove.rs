@@ -3,11 +3,13 @@ use std::fmt::Write;
 use std::path::Path;
 
 use owo_colors::OwoColorize;
-use pep508_rs::PackageName;
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions};
+use uv_configuration::{
+    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+};
 use uv_fs::Simplified;
+use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
@@ -61,7 +63,7 @@ pub(crate) async fn remove(
         }
         if no_sync {
             warn_user_once!(
-                "`--no_sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
         Target::Script(script)
@@ -166,6 +168,9 @@ pub(crate) async fn remove(
     )
     .await?;
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
     // Lock and sync the environment, if necessary.
     let lock = project::lock::do_safe_lock(
         locked,
@@ -174,6 +179,8 @@ pub(crate) async fn remove(
         project.workspace(),
         venv.interpreter(),
         settings.as_ref().into(),
+        LowerBound::Allow,
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -194,9 +201,6 @@ pub(crate) async fn remove(
     let extras = ExtrasSpecification::All;
     let install_options = InstallOptions::default();
 
-    // Initialize any shared state.
-    let state = SharedState::default();
-
     project::sync::do_sync(
         InstallTarget::from(&project),
         &venv,
@@ -207,7 +211,6 @@ pub(crate) async fn remove(
         install_options,
         Modifications::Exact,
         settings.as_ref().into(),
-        &state,
         Box::new(DefaultInstallLogger),
         connectivity,
         concurrency,

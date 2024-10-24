@@ -7,7 +7,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thiserror::Error;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use uv_state::{StateBucket, StateStore};
 
@@ -20,8 +20,9 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::PythonRequest;
+use crate::{PythonRequest, PythonVariant};
 use uv_fs::{LockedFile, Simplified};
+use uv_static::EnvVars;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -39,6 +40,15 @@ pub enum Error {
     ExtractError(#[from] uv_extract::Error),
     #[error("Failed to copy to: {0}", to.user_display())]
     CopyError {
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Missing expected Python executable at {}", _0.user_display())]
+    MissingExecutable(PathBuf),
+    #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
+    CanonicalizeExecutable {
+        from: PathBuf,
         to: PathBuf,
         #[source]
         err: io::Error,
@@ -80,7 +90,7 @@ impl ManagedPythonInstallations {
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`
     /// 3. A directory in the local data directory, e.g., `./.uv/python`
     pub fn from_settings() -> Result<Self, Error> {
-        if let Some(install_dir) = std::env::var_os("UV_PYTHON_INSTALL_DIR") {
+        if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
@@ -322,6 +332,48 @@ impl ManagedPythonInstallation {
         }
     }
 
+    /// Ensure the environment contains the canonical Python executable names.
+    pub fn ensure_canonical_executables(&self) -> Result<(), Error> {
+        let python = self.executable();
+
+        // Workaround for python-build-standalone v20241016 which is missing the standard
+        // `python.exe` executable in free-threaded distributions on Windows.
+        //
+        // See https://github.com/astral-sh/uv/issues/8298
+        if !python.try_exists()? {
+            match self.key.variant {
+                PythonVariant::Default => return Err(Error::MissingExecutable(python.clone())),
+                PythonVariant::Freethreaded => {
+                    // This is the alternative executable name for the freethreaded variant
+                    let python_in_dist = self.python_dir().join(format!(
+                        "python{}.{}t{}",
+                        self.key.major,
+                        self.key.minor,
+                        std::env::consts::EXE_SUFFIX
+                    ));
+                    debug!(
+                        "Creating link {} -> {}",
+                        python.user_display(),
+                        python_in_dist.user_display()
+                    );
+                    uv_fs::symlink_copy_fallback_file(&python_in_dist, &python).map_err(|err| {
+                        if err.kind() == io::ErrorKind::NotFound {
+                            Error::MissingExecutable(python_in_dist.clone())
+                        } else {
+                            Error::CanonicalizeExecutable {
+                                from: python_in_dist,
+                                to: python,
+                                err,
+                            }
+                        }
+                    })?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
@@ -329,13 +381,17 @@ impl ManagedPythonInstallation {
         let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
             self.python_dir().join("Lib")
         } else {
+            let lib_suffix = match self.key.variant {
+                PythonVariant::Default => "",
+                PythonVariant::Freethreaded => "t",
+            };
             let python = if matches!(
                 self.key.implementation,
                 LenientImplementationName::Known(ImplementationName::PyPy)
             ) {
                 format!("pypy{}", self.key.version().python_version())
             } else {
-                format!("python{}", self.key.version().python_version())
+                format!("python{}{lib_suffix}", self.key.version().python_version())
             };
             self.python_dir().join("lib").join(python)
         };

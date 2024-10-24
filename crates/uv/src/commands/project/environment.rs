@@ -7,11 +7,11 @@ use crate::commands::project::{
 use crate::commands::SharedState;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
-use cache_key::{cache_digest, hash_digest};
-use distribution_types::Resolution;
 use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::Connectivity;
 use uv_configuration::Concurrency;
+use uv_distribution_types::Resolution;
 use uv_python::{Interpreter, PythonEnvironment};
 
 /// A [`PythonEnvironment`] stored in the cache.

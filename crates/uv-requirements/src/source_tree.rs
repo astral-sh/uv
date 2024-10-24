@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -7,13 +7,15 @@ use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
 use url::Url;
 
-use distribution_types::{BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId};
-use pep508_rs::RequirementOrigin;
-use pypi_types::Requirement;
 use uv_configuration::ExtrasSpecification;
 use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
+use uv_distribution_types::{
+    BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId,
+};
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep508::RequirementOrigin;
+use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
@@ -32,8 +34,6 @@ pub struct SourceTreeResolution {
 /// Used, e.g., to determine the input requirements when a user specifies a `pyproject.toml`
 /// file, which may require running PEP 517 build hooks to extract metadata.
 pub struct SourceTreeResolver<'a, Context: BuildContext> {
-    /// The requirements for the project.
-    source_trees: Vec<PathBuf>,
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
     /// The hash policy to enforce.
@@ -47,14 +47,12 @@ pub struct SourceTreeResolver<'a, Context: BuildContext> {
 impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
-        source_trees: Vec<PathBuf>,
         extras: &'a ExtrasSpecification,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
-            source_trees,
             extras,
             hasher,
             index,
@@ -72,10 +70,11 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     }
 
     /// Resolve the requirements from the provided source trees.
-    pub async fn resolve(self) -> Result<Vec<SourceTreeResolution>> {
-        let resolutions: Vec<_> = self
-            .source_trees
-            .iter()
+    pub async fn resolve(
+        self,
+        source_trees: impl Iterator<Item = &Path>,
+    ) -> Result<Vec<SourceTreeResolution>> {
+        let resolutions: Vec<_> = source_trees
             .map(|source_tree| async { self.resolve_source_tree(source_tree).await })
             .collect::<FuturesOrdered<_>>()
             .try_collect()

@@ -1,6 +1,6 @@
-use distribution_types::Hashed;
-use pypi_types::HashDigest;
 use uv_cache::{ArchiveId, Cache};
+use uv_distribution_types::Hashed;
+use uv_pypi_types::HashDigest;
 
 /// An archive (unzipped wheel) that exists in the local cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

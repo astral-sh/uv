@@ -5,6 +5,32 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use fs_err::tokio as fs;
+use futures::{FutureExt, TryStreamExt};
+use reqwest::Response;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::{debug, info_span, instrument, warn, Instrument};
+use url::Url;
+use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
+use uv_cache_info::CacheInfo;
+use uv_cache_key::cache_digest;
+use uv_client::{
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+};
+use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
+use uv_distribution_filename::{SourceDistExtension, WheelFilename};
+use uv_distribution_types::{
+    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
+    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+};
+use uv_extract::hash::Hasher;
+use uv_fs::{rename_with_retry, write_atomic, LockedFile};
+use uv_metadata::read_archive_metadata;
+use uv_platform_tags::Tags;
+use uv_pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
+use uv_types::{BuildContext, SourceBuildTrait};
+use zip::ZipArchive;
+
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -12,30 +38,6 @@ use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
-use distribution_filename::{SourceDistExtension, WheelFilename};
-use distribution_types::{
-    BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
-    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
-};
-use fs_err::tokio as fs;
-use futures::{FutureExt, TryStreamExt};
-use platform_tags::Tags;
-use pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
-use reqwest::Response;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, warn, Instrument};
-use url::Url;
-use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
-use uv_cache_info::CacheInfo;
-use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
-};
-use uv_configuration::{BuildKind, BuildOutput};
-use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, write_atomic, LockedFile};
-use uv_metadata::read_archive_metadata;
-use uv_types::{BuildContext, SourceBuildTrait};
-use zip::ZipArchive;
 
 mod built_wheel_metadata;
 mod revision;
@@ -94,7 +96,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 let url = match &dist.file.url {
                     FileLocation::RelativeUrl(base, url) => {
-                        pypi_types::base_url_join_relative(base, url)?
+                        uv_pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
                 };
@@ -253,7 +255,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 let url = match &dist.file.url {
                     FileLocation::RelativeUrl(base, url) => {
-                        pypi_types::base_url_join_relative(base, url)?
+                        uv_pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
                 };
@@ -387,7 +389,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             project_root,
+            self.build_context.locations(),
             self.build_context.sources(),
+            self.build_context.bounds(),
         )
         .await?;
         Ok(requires_dist)
@@ -432,7 +436,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -464,7 +468,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Build the source distribution.
         let (disk_filename, wheel_filename, metadata) = self
-            .build_distribution(source, source_dist_entry.path(), subdirectory, &cache_shard)
+            .build_distribution(
+                source,
+                source_dist_entry.path(),
+                subdirectory,
+                &cache_shard,
+                SourceStrategy::Disabled,
+            )
             .await?;
 
         if let Some(task) = task {
@@ -566,13 +576,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // Otherwise, we either need to build the metadata.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, source_dist_entry.path(), subdirectory)
+            .build_metadata(
+                source,
+                source_dist_entry.path(),
+                subdirectory,
+                SourceStrategy::Disabled,
+            )
             .boxed_local()
             .await?
         {
@@ -597,7 +612,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Build the source distribution.
         let (_disk_filename, _wheel_filename, metadata) = self
-            .build_distribution(source, source_dist_entry.path(), subdirectory, &cache_shard)
+            .build_distribution(
+                source,
+                source_dist_entry.path(),
+                subdirectory,
+                &cache_shard,
+                SourceStrategy::Disabled,
+            )
             .await?;
 
         // Store the metadata.
@@ -727,7 +748,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -749,7 +770,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, source_entry.path(), None, &cache_shard)
+            .build_distribution(
+                source,
+                source_entry.path(),
+                None,
+                &cache_shard,
+                SourceStrategy::Disabled,
+            )
             .await?;
 
         if let Some(task) = task {
@@ -835,7 +862,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, source_entry.path(), None)
+            .build_metadata(source, source_entry.path(), None, SourceStrategy::Disabled)
             .boxed_local()
             .await?
         {
@@ -858,7 +885,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // Otherwise, we need to build a wheel.
@@ -868,7 +895,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, source_entry.path(), None, &cache_shard)
+            .build_distribution(
+                source,
+                source_entry.path(),
+                None,
+                &cache_shard,
+                SourceStrategy::Disabled,
+            )
             .await?;
 
         if let Some(task) = task {
@@ -982,7 +1015,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -997,7 +1030,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, &resource.install_path, None, &cache_shard)
+            .build_distribution(
+                source,
+                &resource.install_path,
+                None,
+                &cache_shard,
+                self.build_context.sources(),
+            )
             .await?;
 
         if let Some(task) = task {
@@ -1044,7 +1083,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1078,7 +1119,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1086,7 +1129,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, &resource.install_path, None)
+            .build_metadata(
+                source,
+                &resource.install_path,
+                None,
+                self.build_context.sources(),
+            )
             .boxed_local()
             .await?
         {
@@ -1102,7 +1150,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    self.build_context.locations(),
                     self.build_context.sources(),
+                    self.build_context.bounds(),
                 )
                 .await?,
             ));
@@ -1113,7 +1163,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // Otherwise, we need to build a wheel.
@@ -1123,7 +1173,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, &resource.install_path, None, &cache_shard)
+            .build_distribution(
+                source,
+                &resource.install_path,
+                None,
+                &cache_shard,
+                self.build_context.sources(),
+            )
             .await?;
 
         if let Some(task) = task {
@@ -1141,7 +1197,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 resource.install_path.as_ref(),
+                self.build_context.locations(),
                 self.build_context.sources(),
+                self.build_context.bounds(),
             )
             .await?,
         ))
@@ -1231,7 +1289,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // If the cache contains a compatible wheel, return it.
@@ -1245,7 +1303,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (disk_filename, filename, metadata) = self
-            .build_distribution(source, fetch.path(), resource.subdirectory, &cache_shard)
+            .build_distribution(
+                source,
+                fetch.path(),
+                resource.subdirectory,
+                &cache_shard,
+                self.build_context.sources(),
+            )
             .await?;
 
         if let Some(task) = task {
@@ -1315,7 +1379,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                Metadata::from_workspace(
+                    metadata,
+                    &path,
+                    self.build_context.locations(),
+                    self.build_context.sources(),
+                    self.build_context.bounds(),
+                )
+                .await?,
             ));
         }
 
@@ -1336,14 +1407,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
-                    Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                    Metadata::from_workspace(
+                        metadata,
+                        &path,
+                        self.build_context.locations(),
+                        self.build_context.sources(),
+                        self.build_context.bounds(),
+                    )
+                    .await?,
                 ));
             }
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
-            .build_metadata(source, fetch.path(), resource.subdirectory)
+            .build_metadata(
+                source,
+                fetch.path(),
+                resource.subdirectory,
+                self.build_context.sources(),
+            )
             .boxed_local()
             .await?
         {
@@ -1356,7 +1439,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .map_err(Error::CacheWrite)?;
 
             return Ok(ArchiveMetadata::from(
-                Metadata::from_workspace(metadata, &path, self.build_context.sources()).await?,
+                Metadata::from_workspace(
+                    metadata,
+                    &path,
+                    self.build_context.locations(),
+                    self.build_context.sources(),
+                    self.build_context.bounds(),
+                )
+                .await?,
             ));
         }
 
@@ -1365,7 +1455,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = if config_settings.is_empty() {
             cache_shard
         } else {
-            cache_shard.shard(cache_key::cache_digest(config_settings))
+            cache_shard.shard(cache_digest(config_settings))
         };
 
         // Otherwise, we need to build a wheel.
@@ -1375,7 +1465,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map(|reporter| reporter.on_build_start(source));
 
         let (_disk_filename, _filename, metadata) = self
-            .build_distribution(source, fetch.path(), resource.subdirectory, &cache_shard)
+            .build_distribution(
+                source,
+                fetch.path(),
+                resource.subdirectory,
+                &cache_shard,
+                self.build_context.sources(),
+            )
             .await?;
 
         if let Some(task) = task {
@@ -1390,8 +1486,49 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(ArchiveMetadata::from(
-            Metadata::from_workspace(metadata, fetch.path(), self.build_context.sources()).await?,
+            Metadata::from_workspace(
+                metadata,
+                fetch.path(),
+                self.build_context.locations(),
+                self.build_context.sources(),
+                self.build_context.bounds(),
+            )
+            .await?,
         ))
+    }
+
+    /// Resolve a source to a specific revision.
+    pub(crate) async fn resolve_revision(
+        &self,
+        source: &BuildableSource<'_>,
+        client: &ManagedClient<'_>,
+    ) -> Result<(), Error> {
+        match source {
+            BuildableSource::Dist(SourceDist::Git(source)) => {
+                self.build_context
+                    .git()
+                    .fetch(
+                        &source.git,
+                        client.unmanaged.uncached_client(&source.url).clone(),
+                        self.build_context.cache().bucket(CacheBucket::Git),
+                        self.reporter.clone().map(Facade::from),
+                    )
+                    .await?;
+            }
+            BuildableSource::Url(SourceUrl::Git(source)) => {
+                self.build_context
+                    .git()
+                    .fetch(
+                        source.git,
+                        client.unmanaged.uncached_client(source.url).clone(),
+                        self.build_context.cache().bucket(CacheBucket::Git),
+                        self.reporter.clone().map(Facade::from),
+                    )
+                    .await?;
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     /// Heal a [`Revision`] for a local archive.
@@ -1583,6 +1720,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source_root: &Path,
         subdirectory: Option<&Path>,
         cache_shard: &CacheShard,
+        source_strategy: SourceStrategy,
     ) -> Result<(String, WheelFilename, ResolutionMetadata), Error> {
         debug!("Building: {source}");
 
@@ -1608,8 +1746,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
+                source_root,
                 Some(source.to_string()),
                 source.as_dist(),
+                source_strategy,
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
@@ -1641,6 +1781,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         source_root: &Path,
         subdirectory: Option<&Path>,
+        source_strategy: SourceStrategy,
     ) -> Result<Option<ResolutionMetadata>, Error> {
         debug!("Preparing metadata for: {source}");
 
@@ -1650,8 +1791,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .setup_build(
                 source_root,
                 subdirectory,
+                source_root,
                 Some(source.to_string()),
                 source.as_dist(),
+                source_strategy,
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
@@ -1699,10 +1842,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Err(
                 err @ (Error::MissingPyprojectToml
                 | Error::PyprojectToml(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::DynamicField(_)
-                    | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::PoetrySyntax,
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::PoetrySyntax,
                 )),
             ) => {
                 debug!("No static `pyproject.toml` available for: {source} ({err:?})");
@@ -1729,10 +1872,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Err(
                 err @ (Error::MissingPkgInfo
                 | Error::PkgInfo(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::DynamicField(_)
-                    | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
                 )),
             ) => {
                 debug!("No static `PKG-INFO` available for: {source} ({err:?})");
@@ -1755,14 +1898,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 | Error::MissingRequiresTxt
                 | Error::MissingPkgInfo
                 | Error::RequiresTxt(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::RequiresTxtContents(_),
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::RequiresTxtContents(_),
                 )
                 | Error::PkgInfo(
-                    pypi_types::MetadataError::Pep508Error(_)
-                    | pypi_types::MetadataError::DynamicField(_)
-                    | pypi_types::MetadataError::FieldNotFound(_)
-                    | pypi_types::MetadataError::UnsupportedMetadataVersion(_),
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::UnsupportedMetadataVersion(_),
                 )),
             ) => {
                 debug!("No static `egg-info` available for: {source} ({err:?})");
@@ -2110,7 +2253,7 @@ async fn read_pyproject_toml(
 }
 
 /// Return the [`pypi_types::RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-async fn read_requires_dist(project_root: &Path) -> Result<pypi_types::RequiresDist, Error> {
+async fn read_requires_dist(project_root: &Path) -> Result<uv_pypi_types::RequiresDist, Error> {
     // Read the `pyproject.toml` file.
     let pyproject_toml = project_root.join("pyproject.toml");
     let content = match fs::read_to_string(pyproject_toml).await {
@@ -2122,8 +2265,8 @@ async fn read_requires_dist(project_root: &Path) -> Result<pypi_types::RequiresD
     };
 
     // Parse the metadata.
-    let requires_dist =
-        pypi_types::RequiresDist::parse_pyproject_toml(&content).map_err(Error::PyprojectToml)?;
+    let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(&content)
+        .map_err(Error::PyprojectToml)?;
 
     Ok(requires_dist)
 }

@@ -1,9 +1,10 @@
 use crate::metadata::{LoweredRequirement, MetadataError};
 use crate::Metadata;
-use pypi_types::Requirement;
+
 use std::collections::BTreeMap;
 use std::path::Path;
-use uv_configuration::SourceStrategy;
+use uv_configuration::{LowerBound, SourceStrategy};
+use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::pyproject::ToolUvSources;
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
@@ -11,21 +12,21 @@ use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
     pub name: PackageName,
-    pub requires_dist: Vec<pypi_types::Requirement>,
+    pub requires_dist: Vec<uv_pypi_types::Requirement>,
     pub provides_extras: Vec<ExtraName>,
-    pub dev_dependencies: BTreeMap<GroupName, Vec<pypi_types::Requirement>>,
+    pub dev_dependencies: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
 }
 
 impl RequiresDist {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: pypi_types::RequiresDist) -> Self {
+    pub fn from_metadata23(metadata: uv_pypi_types::RequiresDist) -> Self {
         Self {
             name: metadata.name,
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(pypi_types::Requirement::from)
+                .map(uv_pypi_types::Requirement::from)
                 .collect(),
             provides_extras: metadata.provides_extras,
             dev_dependencies: BTreeMap::default(),
@@ -35,9 +36,11 @@ impl RequiresDist {
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
     pub async fn from_project_maybe_workspace(
-        metadata: pypi_types::RequiresDist,
+        metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
+        locations: &IndexLocations,
         sources: SourceStrategy,
+        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
@@ -48,17 +51,39 @@ impl RequiresDist {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(metadata, &project_workspace, sources)
+        Self::from_project_workspace(
+            metadata,
+            &project_workspace,
+            locations,
+            sources,
+            lower_bound,
+        )
     }
 
     fn from_project_workspace(
-        metadata: pypi_types::RequiresDist,
+        metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
+        // Collect any `tool.uv.index` entries.
+        let empty = vec![];
+        let project_indexes = match source_strategy {
+            SourceStrategy::Enabled => project_workspace
+                .current_project()
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.index.as_deref())
+                .unwrap_or(&empty),
+            SourceStrategy::Disabled => &empty,
+        };
+
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let sources = match source_strategy {
+        let project_sources = match source_strategy {
             SourceStrategy::Enabled => project_workspace
                 .current_project()
                 .pyproject_toml()
@@ -84,22 +109,29 @@ impl RequiresDist {
                 .cloned();
             let dev_dependencies = match source_strategy {
                 SourceStrategy::Enabled => dev_dependencies
-                    .map(|requirement| {
+                    .flat_map(|requirement| {
                         let requirement_name = requirement.name.clone();
                         LoweredRequirement::from_requirement(
                             requirement,
                             &metadata.name,
                             project_workspace.project_root(),
-                            sources,
+                            project_sources,
+                            project_indexes,
+                            locations,
                             project_workspace.workspace(),
+                            lower_bound,
                         )
-                        .map(LoweredRequirement::into_inner)
-                        .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                        .map(move |requirement| match requirement {
+                            Ok(requirement) => Ok(requirement.into_inner()),
+                            Err(err) => {
+                                Err(MetadataError::LoweringError(requirement_name.clone(), err))
+                            }
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
                 SourceStrategy::Disabled => dev_dependencies
                     .into_iter()
-                    .map(Requirement::from)
+                    .map(uv_pypi_types::Requirement::from)
                     .collect(),
             };
             if dev_dependencies.is_empty() {
@@ -112,20 +144,30 @@ impl RequiresDist {
         let requires_dist = metadata.requires_dist.into_iter();
         let requires_dist = match source_strategy {
             SourceStrategy::Enabled => requires_dist
-                .map(|requirement| {
+                .flat_map(|requirement| {
                     let requirement_name = requirement.name.clone();
                     LoweredRequirement::from_requirement(
                         requirement,
                         &metadata.name,
                         project_workspace.project_root(),
-                        sources,
+                        project_sources,
+                        project_indexes,
+                        locations,
                         project_workspace.workspace(),
+                        lower_bound,
                     )
-                    .map(LoweredRequirement::into_inner)
-                    .map_err(|err| MetadataError::LoweringError(requirement_name.clone(), err))
+                    .map(move |requirement| match requirement {
+                        Ok(requirement) => Ok(requirement.into_inner()),
+                        Err(err) => {
+                            Err(MetadataError::LoweringError(requirement_name.clone(), err))
+                        }
+                    })
                 })
-                .collect::<Result<_, _>>()?,
-            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
+                .collect::<Result<Vec<_>, _>>()?,
+            SourceStrategy::Disabled => requires_dist
+                .into_iter()
+                .map(uv_pypi_types::Requirement::from)
+                .collect(),
         };
 
         Ok(Self {
@@ -155,7 +197,8 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
-    use uv_configuration::SourceStrategy;
+    use uv_configuration::{LowerBound, SourceStrategy};
+    use uv_distribution_types::IndexLocations;
     use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -177,11 +220,13 @@ mod test {
             },
         )
         .await?;
-        let requires_dist = pypi_types::RequiresDist::parse_pyproject_toml(contents)?;
+        let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(contents)?;
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
-            SourceStrategy::Enabled,
+            &IndexLocations::default(),
+            SourceStrategy::default(),
+            LowerBound::default(),
         )?)
     }
 
@@ -216,6 +261,29 @@ mod test {
     }
 
     #[tokio::test]
+    async fn wrong_type() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = [
+              "tqdm",
+            ]
+            [tool.uv.sources]
+            tqdm = true
+        "#};
+
+        assert_snapshot!(format_err(input).await, @r###"
+        error: TOML parse error at line 8, column 8
+          |
+        8 | tqdm = true
+          |        ^^^^
+        invalid type: boolean `true`, expected a single source (as a map) or list of sources
+
+        "###);
+    }
+
+    #[tokio::test]
     async fn too_many_git_specs() {
         let input = indoc! {r#"
             [project]
@@ -229,8 +297,11 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry for: `tqdm`
-          Caused by: Can only specify one of: `rev`, `tag`, or `branch`
+        error: TOML parse error at line 8, column 8
+          |
+        8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
+          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        expected at most one of `rev`, `tag`, or `branch`
         "###);
     }
 
@@ -247,14 +318,12 @@ mod test {
             tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
         "#};
 
-        // TODO(konsti): This should tell you the set of valid fields
         assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        error: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
-          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
-
+          |                                                ^^^
+        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `index`, `workspace`, `marker`
         "###);
     }
 
@@ -271,14 +340,12 @@ mod test {
             tqdm = { path = "tqdm", index = "torch" }
         "#};
 
-        // TODO(konsti): This should tell you the set of valid fields
         assert_snapshot!(format_err(input).await, @r###"
         error: TOML parse error at line 8, column 8
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
-
+        cannot specify both `path` and `index`
         "###);
     }
 
@@ -315,7 +382,6 @@ mod test {
           |                ^
         invalid string
         expected `"`, `'`
-
         "###);
     }
 
@@ -333,11 +399,11 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        error: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
-          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        data did not match any variant of untagged enum Source
+          |                ^^^^^^^^^^^^^^^^^
+        invalid value: string "§invalid#+#*Ä", expected relative URL without a base
 
         "###);
     }

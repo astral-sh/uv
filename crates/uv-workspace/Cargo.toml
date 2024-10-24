@@ -9,23 +9,31 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-pypi-types = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
-uv-warnings = { workspace = true }
 uv-options-metadata = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-static = { workspace = true }
+uv-warnings = { workspace = true }
 
 either = { workspace = true }
 fs-err = { workspace = true }
 glob = { workspace = true }
+itertools = { workspace = true }
+owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
@@ -36,7 +44,6 @@ toml =  { workspace = true }
 toml_edit =  { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-itertools = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
