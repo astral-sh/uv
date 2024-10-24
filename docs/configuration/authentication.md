@@ -42,7 +42,7 @@ If authentication is found for a single net location (scheme, host, and port), i
 the duration of the command and used for other queries to that net location. Authentication is not
 cached across invocations of uv.
 
-`.netc` authentication is enabled by default, and will respect the `NETRC` environment variable if
+`.netrc` authentication is enabled by default, and will respect the `NETRC` environment variable if
 defined, falling back to `~/.netrc` if not.
 
 To enable keyring-based authentication, pass the `--keyring-provider subprocess` command-line
