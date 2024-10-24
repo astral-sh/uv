@@ -44,10 +44,19 @@ impl Pep723Item {
             Self::Remote(metadata) => metadata,
         }
     }
+
+    /// Return the path of the PEP 723 item, if any.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Script(script) => Some(&script.path),
+            Self::Stdin(_) => None,
+            Self::Remote(_) => None,
+        }
+    }
 }
 
 /// A PEP 723 script, including its [`Pep723Metadata`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pep723Script {
     /// The path to the Python script.
     pub path: PathBuf,
@@ -188,7 +197,7 @@ impl Pep723Script {
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
 /// See: <https://peps.python.org/pep-0723/>
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
     pub dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
@@ -248,13 +257,13 @@ impl FromStr for Pep723Metadata {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ToolUv {
     #[serde(flatten)]
