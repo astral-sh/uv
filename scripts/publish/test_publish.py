@@ -6,9 +6,10 @@
 # ]
 # ///
 
-"""
-Test `uv publish` by uploading a new version of astral-test-<test case> to one of
-multiple indexes, exercising different options of passing credentials.
+"""Test `uv publish`.
+
+Upload a new version of astral-test-<test case> to one of multiple indexes, exercising
+different options of passing credentials.
 
 Locally, execute the credentials setting script, then run:
 ```shell
@@ -43,66 +44,66 @@ Web: https://gitlab.com/astral-test-publish/astral-test-token/-/packages
 Docs: https://docs.gitlab.com/ee/user/packages/pypi_repository/
 
 **codeberg**
-The username is astral-test-user, the password is a token (the actual account password would also
-work).
+The username is astral-test-user, the password is a token (the actual account password
+would also work).
 Web: https://codeberg.org/astral-test-user/-/packages/pypi/astral-test-token/0.1.0
 Docs: https://forgejo.org/docs/latest/user/packages/pypi/
 """
 
 import os
 import re
+import time
 from argparse import ArgumentParser
 from pathlib import Path
 from shutil import rmtree
-from subprocess import check_call
+from subprocess import PIPE, check_call, check_output, run
+from time import sleep
 
 import httpx
 from packaging.utils import parse_sdist_filename, parse_wheel_filename
+from packaging.version import Version
+
+TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
 
 cwd = Path(__file__).parent
 
-# Map CLI target name to package name.
+# Map CLI target name to package name and index url.
 # Trusted publishing can only be tested on GitHub Actions, so we have separate local
 # and all targets.
-local_targets = {
-    "pypi-token": "astral-test-token",
-    "pypi-password-env": "astral-test-password",
-    "pypi-keyring": "astral-test-keyring",
-    "gitlab": "astral-test-token",
-    "codeberg": "astral-test-token",
-    "cloudsmith": "astral-test-token",
+local_targets: dict[str, tuple[str, str]] = {
+    "pypi-token": ("astral-test-token", "https://test.pypi.org/simple/"),
+    "pypi-password-env": ("astral-test-password", "https://test.pypi.org/simple/"),
+    "pypi-keyring": ("astral-test-keyring", "https://test.pypi.org/simple/"),
+    "gitlab": (
+        "astral-test-token",
+        "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/",
+    ),
+    "codeberg": (
+        "astral-test-token",
+        "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
+    ),
+    "cloudsmith": (
+        "astral-test-token",
+        "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
+    ),
 }
-all_targets = local_targets | {
-    "pypi-trusted-publishing": "astral-test-trusted-publishing"
-}
-
-project_urls = {
-    "astral-test-password": ["https://test.pypi.org/simple/astral-test-password/"],
-    "astral-test-keyring": ["https://test.pypi.org/simple/astral-test-keyring/"],
-    "astral-test-trusted-publishing": [
-        "https://test.pypi.org/simple/astral-test-trusted-publishing/"
-    ],
-    "astral-test-token": [
-        "https://test.pypi.org/simple/astral-test-token/",
-        "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/astral-test-token",
-        "https://codeberg.org/api/packages/astral-test-user/pypi/simple/astral-test-token",
-        "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/astral-test-token/",
-    ],
+all_targets: dict[str, tuple[str, str]] = local_targets | {
+    "pypi-trusted-publishing": (
+        "astral-test-trusted-publishing",
+        "https://test.pypi.org/simple/",
+    )
 }
 
 
-def get_new_version(project_name: str) -> str:
-    """Return the next free path version on pypi"""
+def get_new_version(project_name: str) -> Version:
+    """Return the next free patch version on all indexes of the package."""
     # To keep the number of packages small we reuse them across targets, so we have to
     # pick a version that doesn't exist on any target yet
     versions = set()
-    for url in project_urls[project_name]:
-        try:
-            data = httpx.get(url).text
-        except httpx.HTTPError as err:
-            raise RuntimeError(f"Failed to fetch {url}") from err
-        href_text = "<a[^>]+>([^<>]+)</a>"
-        for filename in list(m.group(1) for m in re.finditer(href_text, data)):
+    for project_name_, index_url in all_targets.values():
+        if project_name_ != project_name:
+            continue
+        for filename in get_filenames((index_url + project_name + "/")):
             if filename.endswith(".whl"):
                 [_name, version, _build, _tags] = parse_wheel_filename(filename)
             else:
@@ -113,10 +114,32 @@ def get_new_version(project_name: str) -> str:
     # Bump the path version to obtain an empty version
     release = list(max_version.release)
     release[-1] += 1
-    return ".".join(str(i) for i in release)
+    return Version(".".join(str(i) for i in release))
 
 
-def create_project(project_name: str, uv: Path):
+def get_filenames(url: str) -> list[str]:
+    """Get the filenames (source dists and wheels) from an index URL."""
+    # Get with retries
+    error = None
+    for _ in range(5):
+        try:
+            response = httpx.get(url)
+            data = response.text
+            break
+        except httpx.HTTPError as err:
+            error = err
+            print(f"Error getting version, sleeping for 1s: {err}")
+            time.sleep(1)
+    else:
+        raise RuntimeError(f"Failed to fetch {url}") from error
+    # Works for the indexes in the list
+    href_text = r"<a(?: +[\w-]+=(?:'[^']+'|\"[^\"]+\"))* *>([^<>]+)</a>"
+    return [m.group(1) for m in re.finditer(href_text, data)]
+
+
+def build_new_version(project_name: str, uv: Path) -> Version:
+    """Build a source dist and a wheel with the project name and an unclaimed
+    version."""
     if cwd.joinpath(project_name).exists():
         rmtree(cwd.joinpath(project_name))
     check_call([uv, "init", "--lib", project_name], cwd=cwd)
@@ -128,114 +151,218 @@ def create_project(project_name: str, uv: Path):
     toml = re.sub('version = ".*"', f'version = "{new_version}"', toml)
     pyproject_toml.write_text(toml)
 
+    # Build the project
+    check_call([uv, "build"], cwd=cwd.joinpath(project_name))
+
+    return new_version
+
+
+def wait_for_index(index_url: str, project_name: str, version: Version):
+    """Check that the index URL was updated, wait up to 10s if necessary.
+
+    Often enough the index takes a few seconds until the index is updated after an
+    upload. We need to specifically run this through uv since to query the same cache
+    (invalidation) as the registry client in skip existing in uv publish will later,
+    just `get_filenames` fails non-deterministically.
+    """
+    for _ in range(10):
+        output = check_output(
+            [
+                "uv",
+                "pip",
+                "compile",
+                "--index",
+                index_url,
+                "--quiet",
+                "--generate-hashes",
+                "--no-header",
+                "--refresh-package",
+                project_name,
+                "-",
+            ],
+            text=True,
+            input=project_name,
+        )
+        if f"{project_name}=={version}" in output and output.count("--hash") == 2:
+            break
+
+        print(
+            f"uv pip compile not updated, missing 2 files for {version}: `{output.replace("\\\n    ", "")}`, "
+            f"sleeping for 1s: `{index_url}`"
+        )
+        sleep(1)
+
+
+def publish_and_skip_existing(
+    project_name: str,
+    version: Version,
+    uv: Path,
+    publish_url: str,
+    index_url: str,
+    extra_args: list[str],
+    env: dict[str, str] | None,
+):
+    """Test that:
+
+    1. An upload with a fresh version succeeds.
+    2. If we're using PyPI, uploading the same files again succeeds.
+    3. Skip existing works and reports the files as skipped.
+    """
+    print(
+        f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ==="
+    )
+    call_cwd = cwd.joinpath(project_name)
+    check_call(
+        [uv, "publish", "--publish-url", publish_url, *extra_args],
+        cwd=call_cwd,
+        env=env,
+    )
+
+    # Ignore the gitignore file in dist
+    expected_filenames = [path.name for path in call_cwd.joinpath("dist").iterdir()]
+    expected_filenames.remove(".gitignore")
+
+    if publish_url == TEST_PYPI_PUBLISH_URL:
+        # Confirm pypi behaviour: Uploading the same file again is fine.
+        print(f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===")
+        wait_for_index(index_url, project_name, version)
+        output = run(
+            [uv, "publish", "-v", "--publish-url", publish_url, *extra_args],
+            cwd=call_cwd,
+            env=env,
+            text=True,
+            check=True,
+            stderr=PIPE,
+        ).stderr
+        if (
+            output.count("Uploading") != len(expected_filenames)
+            or output.count("already exists") != 0
+        ):
+            raise RuntimeError(
+                f"PyPI re-upload of the same files failed: "
+                f"{output.count("Uploading")}, {output.count("already exists")}\n"
+                f"---\n{output}\n---"
+            )
+
+    print(f"\n=== 3. Publishing {project_name} {version} again with skip existing ===")
+    wait_for_index(index_url, project_name, version)
+    output = run(
+        [
+            uv,
+            "publish",
+            "-v",
+            "--publish-url",
+            publish_url,
+            "--skip-existing",
+            index_url,
+            *extra_args,
+        ],
+        cwd=call_cwd,
+        env=env,
+        text=True,
+        check=True,
+        stderr=PIPE,
+    ).stderr
+
+    if output.count("Uploading") != 0 or output.count("already exists") != len(
+        expected_filenames
+    ):
+        raise RuntimeError(
+            f"Re-upload with skip existing failed: "
+            f"{output.count("Uploading")}, {output.count("already exists")}\n"
+            f"---\n{output}\n---"
+        )
+
 
 def publish_project(target: str, uv: Path):
-    project_name = all_targets[target]
+    project_name = all_targets[target][0]
 
     print(f"\nPublish {project_name} for {target}")
 
-    # Create the project
-    create_project(project_name, uv)
-
-    # Build the project
-    check_call([uv, "build"], cwd=cwd.joinpath(project_name))
+    # The distributions are build to the dist directory of the project.
+    version = build_new_version(project_name, uv)
 
     # Upload the project
     if target == "pypi-token":
         env = os.environ.copy()
         env["UV_PUBLISH_TOKEN"] = os.environ["UV_TEST_PUBLISH_TOKEN"]
-        check_call(
-            [
-                uv,
-                "publish",
-                "--publish-url",
-                "https://test.pypi.org/legacy/",
-            ],
-            cwd=cwd.joinpath(project_name),
-            env=env,
+        publish_and_skip_existing(
+            project_name,
+            version,
+            uv,
+            TEST_PYPI_PUBLISH_URL,
+            all_targets[target][1],
+            [],
+            env,
         )
     elif target == "pypi-password-env":
         env = os.environ.copy()
         env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_PASSWORD"]
-        check_call(
-            [
-                uv,
-                "publish",
-                "--publish-url",
-                "https://test.pypi.org/legacy/",
-                "--username",
-                "__token__",
-            ],
-            cwd=cwd.joinpath(project_name),
-            env=env,
+        publish_and_skip_existing(
+            project_name,
+            version,
+            uv,
+            TEST_PYPI_PUBLISH_URL,
+            all_targets[target][1],
+            ["--username", "__token__"],
+            env,
         )
     elif target == "pypi-keyring":
-        check_call(
-            [
-                uv,
-                "publish",
-                "--publish-url",
-                "https://test.pypi.org/legacy/?astral-test-keyring",
-                "--username",
-                "__token__",
-                "--keyring-provider",
-                "subprocess",
-            ],
-            cwd=cwd.joinpath(project_name),
+        publish_and_skip_existing(
+            project_name,
+            version,
+            uv,
+            "https://test.pypi.org/legacy/?astral-test-keyring",
+            all_targets[target][1],
+            ["--username", "__token__", "--keyring-provider", "subprocess"],
+            None,
         )
     elif target == "pypi-trusted-publishing":
-        check_call(
-            [
-                uv,
-                "publish",
-                "--publish-url",
-                "https://test.pypi.org/legacy/",
-                "--trusted-publishing",
-                "always",
-            ],
-            cwd=cwd.joinpath(project_name),
+        publish_and_skip_existing(
+            project_name,
+            version,
+            uv,
+            TEST_PYPI_PUBLISH_URL,
+            all_targets[target][1],
+            ["--trusted-publishing", "always"],
+            None,
         )
     elif target == "gitlab":
         env = os.environ.copy()
         env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]
-        check_call(
-            [
-                uv,
-                "publish",
-                "--publish-url",
-                "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
-                "--username",
-                "astral-test-gitlab-pat",
-            ],
-            cwd=cwd.joinpath(project_name),
-            env=env,
+        publish_and_skip_existing(
+            project_name,
+            version,
+            uv,
+            "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
+            all_targets[target][1],
+            ["--username", "astral-test-gitlab-pat"],
+            env,
         )
     elif target == "codeberg":
         env = os.environ.copy()
         env["UV_PUBLISH_USERNAME"] = "astral-test-user"
         env["UV_PUBLISH_PASSWORD"] = os.environ["UV_TEST_PUBLISH_CODEBERG_TOKEN"]
-        check_call(
-            [
-                uv,
-                "publish",
-                "--publish-url",
-                "https://codeberg.org/api/packages/astral-test-user/pypi",
-            ],
-            cwd=cwd.joinpath(project_name),
-            env=env,
+        publish_and_skip_existing(
+            project_name,
+            version,
+            uv,
+            "https://codeberg.org/api/packages/astral-test-user/pypi",
+            all_targets[target][1],
+            [],
+            env,
         )
     elif target == "cloudsmith":
         env = os.environ.copy()
         env["UV_PUBLISH_TOKEN"] = os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"]
-        check_call(
-            [
-                uv,
-                "publish",
-                "--publish-url",
-                "https://python.cloudsmith.io/astral-test/astral-test-1/",
-            ],
-            cwd=cwd.joinpath(project_name),
-            env=env,
+        publish_and_skip_existing(
+            project_name,
+            version,
+            uv,
+            "https://python.cloudsmith.io/astral-test/astral-test-1/",
+            all_targets[target][1],
+            [],
+            env,
         )
     else:
         raise ValueError(f"Unknown target: {target}")
@@ -243,7 +370,7 @@ def publish_project(target: str, uv: Path):
 
 def main():
     parser = ArgumentParser()
-    target_choices = list(all_targets) + ["local", "all"]
+    target_choices = [*all_targets, "local", "all"]
     parser.add_argument("targets", choices=target_choices, nargs="+")
     parser.add_argument("--uv")
     args = parser.parse_args()
