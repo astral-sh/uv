@@ -2903,6 +2903,13 @@ pub struct LockArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "locked")]
     pub frozen: bool,
 
+    /// Perform a dry run, without writing the lockfile.
+    ///
+    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
+    /// changes, but will not write the lockfile to disk.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "locked")]
+    pub dry_run: bool,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 

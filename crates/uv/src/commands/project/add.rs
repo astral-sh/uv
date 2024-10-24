@@ -661,6 +661,7 @@ async fn lock_and_sync(
     let mut lock = project::lock::do_safe_lock(
         locked,
         frozen,
+        false,
         project.workspace(),
         venv.interpreter(),
         settings.into(),
@@ -775,6 +776,7 @@ async fn lock_and_sync(
             lock = project::lock::do_safe_lock(
                 locked,
                 frozen,
+                false,
                 project.workspace(),
                 venv.interpreter(),
                 settings.into(),

@@ -95,6 +95,7 @@ pub(crate) async fn export(
     let lock = match do_safe_lock(
         locked,
         frozen,
+        false,
         project.workspace(),
         &interpreter,
         settings.as_ref(),

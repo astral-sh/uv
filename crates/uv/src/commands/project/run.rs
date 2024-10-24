@@ -543,6 +543,7 @@ pub(crate) async fn run(
                 let result = match project::lock::do_safe_lock(
                     locked,
                     frozen,
+                    false,
                     project.workspace(),
                     venv.interpreter(),
                     settings.as_ref().into(),

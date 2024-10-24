@@ -767,6 +767,7 @@ impl SyncSettings {
 pub(crate) struct LockSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) dry_run: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
@@ -779,6 +780,7 @@ impl LockSettings {
         let LockArgs {
             locked,
             frozen,
+            dry_run,
             resolver,
             build,
             refresh,
@@ -788,6 +790,7 @@ impl LockSettings {
         Self {
             locked,
             frozen,
+            dry_run,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
