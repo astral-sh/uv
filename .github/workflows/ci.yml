@@ -1633,12 +1633,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Print Python path"
-        run: |
-          echo "Python version: $(python --version)"
-          echo "Python path: $(which python)"
-          echo "Python3.9 path: $(which python3.9)"
-          echo "Pyenv path: $(which pyenv)"
-          echo "PATH: $PATH"
+        run: echo $(which python3.9)
 
       - name: "Validate global Python install"
         run: python3.9 scripts/check_system_python.py --uv ./uv
