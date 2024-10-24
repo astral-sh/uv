@@ -162,7 +162,7 @@ Pinned `.python-version` to `pypy@3.11`
 
 See the [installing Python guide](./guides/install-python.md) to get started.
 
-### Script support
+## Script support
 
 uv manages dependencies and environments for single-file scripts.
 
