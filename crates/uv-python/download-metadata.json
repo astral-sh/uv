@@ -99,8 +99,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "b5e74d1e16402b633c6f04519618231fc0dbae7d2f9e4b1ac17c294cc3d3d076",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "5c10c0b05c66bc6fc9a87f456ac1606057fe1865cc525eb7ecd9a5640f15426a",
     "variant": null
   },
   "cpython-3.13.0-linux-x86_64-musl": {
@@ -112,8 +112,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "10978500ab6589760716c644aeadffa0f2c0bf31ea10f0c6160fee933933a567",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "6797067b7da58c29384cd32cb77f62dc18e813e6c72f6b0baf39672d84431bf2",
     "variant": null
   },
   "cpython-3.13.0-windows-i686-none": {
@@ -242,8 +242,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
-    "sha256": "a73adeda301ad843cce05f31a2d3e76222b656984535a7b87696a24a098b216c",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+    "sha256": "6dd725b5866e193d201b4d6361bf03b2a954eeb8b67788d875ca4991776f852f",
     "variant": "freethreaded"
   },
   "cpython-3.13.0+freethreaded-windows-i686-none": {
@@ -346,8 +346,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "cb96109e25c85e202a14aa6034a09bb474e4a5237a2b46e732300c93e0f443cc",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "af1c336f4827ad86f4bead527145bc99afc5c1100afa7f1a1fa5550bab06d2b1",
     "variant": "debug"
   },
   "cpython-3.13.0+debug-linux-x86_64-musl": {
@@ -359,8 +359,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "2647425970b209fc546b0ff94d25567db5575847a8a852a0d79445a3c3806c85",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "8a14b35b54a1d13d2cd3ce4075fa0baa02a51dcaeb277648a9c1c11a7ac83e4e",
     "variant": "debug"
   },
   "cpython-3.13.0rc3-darwin-aarch64-none": {
@@ -463,8 +463,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "rc3",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "445156c61e1cc167f7b8777ad08cc36e5598e12cd27e07453f6e6dc0f62e421e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "ae477db35ccec397a19c9d61271455adf4917ab35993dbcacae8d126890f6b12",
     "variant": null
   },
   "cpython-3.13.0rc3-linux-x86_64-musl": {
@@ -476,8 +476,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "rc3",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "4df6b7665c735a728d72e6f49034f1a6b7d9a54b0fbc472dc2ca525eb3dd513f",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "8c73e28a683b7e826ed5bda4cf119ec8270238fdf936e3a2b3ca0938cfcde8c9",
     "variant": null
   },
   "cpython-3.13.0rc3-windows-i686-none": {
@@ -580,8 +580,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "rc3",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "92a80f38919a852edcff68fd489152a408e43c65e67b800c02801cc58f239b95",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "20795d2bae8b26de5554907353fa4bc022e0912b772803298f4b5679dceec71e",
     "variant": "debug"
   },
   "cpython-3.13.0rc3+debug-linux-x86_64-musl": {
@@ -593,8 +593,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "rc3",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "59b19a2ae830bd67bc8190bd839ebdf2423e871ef2e5114f38b84dab652c2e1b",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "903df7b90162528c218d5bf2eaa42bea9ff329332670afa98bbeaad1aba0cc40",
     "variant": "debug"
   },
   "cpython-3.13.0rc2-darwin-aarch64-none": {
@@ -697,8 +697,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "rc2",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "1893a218709d3664b7a2b80f5598b5f25c0c3fe2bcc8d0a1c75eec6bbb93d602",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "e60fc176fad636bbd287e92f9e9954b8b10d164984e98f51e4dc3d47314fa8a5",
     "variant": null
   },
   "cpython-3.13.0rc2-linux-x86_64-musl": {
@@ -710,8 +710,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "rc2",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "6f09aa5ba6aab8bf21955dbc3d6bab19125130ef0ebe29242b0e5ac1eebb3161",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "16f23e539336fb45895b3c4fac981365b53fbbd86115feb9516b50a0716394b1",
     "variant": null
   },
   "cpython-3.13.0rc2-windows-i686-none": {
@@ -814,8 +814,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "rc2",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "8595be42ea7fa43ffe66761c713ad4b60e6270dca1771491d54e8d6556bb617b",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "dcfd016f90f4cd7a8c09cd62e4ed3e809301ddbfca1d17d97b3dca3d40c4e729",
     "variant": "debug"
   },
   "cpython-3.13.0rc2+debug-linux-x86_64-musl": {
@@ -827,8 +827,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "rc2",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "634e538c9d9e8cec2f27aa278a1e99d6e652d7b013b4f27a0242265e0d8ad0ff",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "7646e5e1f544c67d6c6d093c3c6f83a10753337d5304ff994068d20abc00ad04",
     "variant": "debug"
   },
   "cpython-3.12.7-darwin-aarch64-none": {
@@ -931,8 +931,8 @@
     "minor": 12,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "3a4d53a7ba3916c0c1f35cbbe57068e2571b138389f29cf5c35367fec8f4c617",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "205395841e6e7cbd33d504b78ac81792364831911866416da7a34d9b4a06d7d1",
     "variant": null
   },
   "cpython-3.12.7-linux-x86_64-musl": {
@@ -944,8 +944,8 @@
     "minor": 12,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "9314cb4d5aa525f2dc9f8d6ac204bebcfdfa8eb0dd4d3788af68769184355484",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "bfdd008fb669ddd023a8c36c16987c98b0d2bdfb99c9d45e2c9a792d87710b72",
     "variant": null
   },
   "cpython-3.12.7-windows-i686-none": {
@@ -1048,8 +1048,8 @@
     "minor": 12,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "fcc678bdb212c2f33d67b9de1caed7a2ed6439d271de8a1e765dda4d3d7a638b",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "0f089b56633c90757bd7027ea2548f024dd187a08c1702d8bd76ff9c507723b4",
     "variant": "debug"
   },
   "cpython-3.12.7+debug-linux-x86_64-musl": {
@@ -1061,8 +1061,8 @@
     "minor": 12,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "5c73361c6bede4dbe8de2bf81fd3006451a7941f547e5474141c3fcb400d648e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "d959ee1efc3c9f4ab99399f1250a60f7bbb636da4a844929075c0f6fe1d66020",
     "variant": "debug"
   },
   "cpython-3.12.6-darwin-aarch64-none": {
@@ -1165,8 +1165,8 @@
     "minor": 12,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "b080463e4f0c452e592cdac1ca97936a6a19bb3d9a64da669a50ca843fce0108",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "3ce9eb5d974dc2109c3e2c3986f4883ec5403b3479259ea781475a319f9a6787",
     "variant": null
   },
   "cpython-3.12.6-linux-x86_64-musl": {
@@ -1178,8 +1178,8 @@
     "minor": 12,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "661e2a4b03d6eccbb5b15f5bd2869fbdd39132513394d758287e46115e48d4ef",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "6dab95cdd6d3f165aaaa7dcd7cb263add390d97c7b57eb62d2d1ca9a304353da",
     "variant": null
   },
   "cpython-3.12.6-windows-i686-none": {
@@ -1282,8 +1282,8 @@
     "minor": 12,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "110a8ba95943af6b30198c7f925bb655d4257704abe28b4cfddc374ff367312e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "115a15f1341223ff81a20a65470f41049a7af335a4029e9b83e84679798fb550",
     "variant": "debug"
   },
   "cpython-3.12.6+debug-linux-x86_64-musl": {
@@ -1295,8 +1295,8 @@
     "minor": 12,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "1d678f6f70dc0cf32c6f5edd18f81a560ff087c7d1bb4185a810ccd1f145b0c3",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "fac68ab9823b6dab76720f806a5a8bcb2caa7bfd31c025c5b0ce70c57d505100",
     "variant": "debug"
   },
   "cpython-3.12.5-darwin-aarch64-none": {
@@ -1399,8 +1399,8 @@
     "minor": 12,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "10680b593b5e31833218fd83104dee74af970a3463403a22bae613b952a34e8d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "c0064dcd97e5a09b5ff9529fc65cf6fd7a8a20f71a7050f584ecaa0cc8c33f2d",
     "variant": null
   },
   "cpython-3.12.5-linux-x86_64-musl": {
@@ -1412,8 +1412,8 @@
     "minor": 12,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "e61b1274e1195f227cb30ba5d89ea32d743796d992adcaffad4819e4b0405d24",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "35ffd76881bef5ce09a123175f4f3419eb250802e60a6bb78649585325b8409f",
     "variant": null
   },
   "cpython-3.12.5-windows-i686-none": {
@@ -1516,8 +1516,8 @@
     "minor": 12,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "580caa10b1c661409d35623d20b2b56f6c8f4c263122b0e8228a3cdaa482c8be",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "38d30a3118b51d3502af6c35582a321fad85f49a93437ddf6e72b4d3c5bcbd5b",
     "variant": "debug"
   },
   "cpython-3.12.5+debug-linux-x86_64-musl": {
@@ -1529,8 +1529,8 @@
     "minor": 12,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "a2766d5627353e8ce8a8c43b0b5c3007a77f4f095bf773739f5bb936860546cd",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "e11f010a082c1ce7c55a62169d15f12fa28575bb1183d0d0044e56ac42cc36f7",
     "variant": "debug"
   },
   "cpython-3.12.4-darwin-aarch64-none": {
@@ -1633,8 +1633,8 @@
     "minor": 12,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "ca076aee4329f53f988346eb0521ad2a2cf7f723b6296088d03b98d8f22f5420",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "798e562eb68b8d825c25c747b9995046b700c5bafbe8f7e558f41a3d8a57ceb7",
     "variant": null
   },
   "cpython-3.12.4-linux-x86_64-musl": {
@@ -1646,8 +1646,8 @@
     "minor": 12,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "de4983ffa610ff2c3b9bcb62882366f017d94bf11b194c1fce17ad9e502acce6",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "762dc23608111f49729f02c19fa8459219ac886e8694b79f541ef01141bf58c5",
     "variant": null
   },
   "cpython-3.12.4-windows-i686-none": {
@@ -1750,8 +1750,8 @@
     "minor": 12,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "54324b36cf7b68af3ddbabd1ec482691a23bf059a7f46a8cb3f3615f5fd5d86d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "5449d31ad213cb19eb4e724f7cf4b8d16e5b7028593aacad0bfda722189ef4a7",
     "variant": "debug"
   },
   "cpython-3.12.4+debug-linux-x86_64-musl": {
@@ -1763,8 +1763,8 @@
     "minor": 12,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "797b3d36a9df38925b7a7c5facb47e56a0d1c4031ae7b121ce41c07433fa1d2e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "1fffb6494f6540d915b05141ee452e76d6f59b92483bc85161f5dadd1f73b9c5",
     "variant": "debug"
   },
   "cpython-3.12.3-darwin-aarch64-none": {
@@ -1867,8 +1867,8 @@
     "minor": 12,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "a73ba777b5d55ca89edef709e6b8521e3f3d4289581f174c8699adfb608d09d6",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "b9b91f486e2a52b6cc392101245705d6ab5dd6ad4a4e2b3492baec8e4b96508b",
     "variant": null
   },
   "cpython-3.12.3-linux-x86_64-musl": {
@@ -1880,8 +1880,8 @@
     "minor": 12,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "eb70814dc254f02714c77305de01b8ed2250c146320e22d0ed14b39021f89a8a",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "e47a8d25c2348bf9b0e818642e4dae90700fc3fbd96ffd7f4ad9518a7206d369",
     "variant": null
   },
   "cpython-3.12.3-windows-i686-none": {
@@ -1984,8 +1984,8 @@
     "minor": 12,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "ded92cd034b33df953c490d3343ef187ac065d1fcd78e8cee894be197c5f977e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "4e7c111a3ee36e3adf99b94de0b1ab945a856b33d67ea36e66c985ea93acbda9",
     "variant": "debug"
   },
   "cpython-3.12.3+debug-linux-x86_64-musl": {
@@ -1997,8 +1997,8 @@
     "minor": 12,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "81d9fc9ffd6860229e09b11be5d800db5966080ba6f4b7524ae7917423fd09c6",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "3a1da112630be57fe088cd07568b1ce0743b133fc6aa8fe95b3c6f6cfe526e11",
     "variant": "debug"
   },
   "cpython-3.12.2-darwin-aarch64-none": {
@@ -2075,8 +2075,8 @@
     "minor": 12,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "57a37b57f8243caa4cdac016176189573ad7620f0b6da5941c5e40660f9468ab",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "adfe5c1a6039b8806b3dee0aed5fe860540d55231be87df48891a7844279d76a",
     "variant": null
   },
   "cpython-3.12.2-linux-x86_64-musl": {
@@ -2088,8 +2088,8 @@
     "minor": 12,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "b428b4151c70b85339ac2659e5f69f7e47142d34a506e05ecd095efe2e3dec81",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "e5c0adb646defd55791bbdd217f64d08a51855e818ee67e3ea6207521f92abee",
     "variant": null
   },
   "cpython-3.12.2-windows-i686-none": {
@@ -2166,8 +2166,8 @@
     "minor": 12,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "15b61ed9d33b35ad014a13a68a55d8ea5ba7fb70945644747f4e53c659f2fed6",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "e8632e829f3e43fd0a9aa16ec8ca14418d78ba4e042673a01dcd20e6c53ad7cc",
     "variant": "debug"
   },
   "cpython-3.12.2+debug-linux-x86_64-musl": {
@@ -2179,8 +2179,8 @@
     "minor": 12,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "2f5f088639e17981b0aeeeeab0fbb6858002d5f10bf57e26eaf32f99b4b6c765",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "763aa4af52e78e571264d7c809bacc2079ace19192ad6485c7adddb7062e7d99",
     "variant": "debug"
   },
   "cpython-3.12.1-darwin-aarch64-none": {
@@ -2257,8 +2257,8 @@
     "minor": 12,
     "patch": 1,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "74e330b8212ca22fd4d9a2003b9eec14892155566738febc8e5e572f267b9472",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "9dd6fc5a1326985896493d475e7eae0d07f6de0d932faef3c4b04bdd81b88c0c",
     "variant": null
   },
   "cpython-3.12.1-linux-x86_64-musl": {
@@ -2270,8 +2270,8 @@
     "minor": 12,
     "patch": 1,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "876389f071d62ee9a4bdd7ce31e69c3cdd256fe498e4dd6bb2b80e674e7351fe",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "db45fc29b4c0389b23af6ccd2d1427c3200ed7db4a81e5fd3bfbd9a4fd011c41",
     "variant": null
   },
   "cpython-3.12.1-windows-i686-none": {
@@ -2348,8 +2348,8 @@
     "minor": 12,
     "patch": 1,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "89ef67b617b8c9804965509b2d256f53439ceede83b5b64085315f038ad81e60",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "21a5182c499954bde10344c7cc3ba9f69a39f0b485a9420871bdf65f26587bb7",
     "variant": "debug"
   },
   "cpython-3.12.1+debug-linux-x86_64-musl": {
@@ -2361,8 +2361,8 @@
     "minor": 12,
     "patch": 1,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "0823ed21f7b79129677c51c6a73d3ca53a37179931a5a40a1d53b565d54679ec",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "d3d402944634b22e2d023ff6356a6e341fecbce67578e1d1ff39f5b76a22aad7",
     "variant": "debug"
   },
   "cpython-3.12.0-darwin-aarch64-none": {
@@ -2439,8 +2439,8 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "e51a5293f214053ddb4645b2c9f84542e2ef86870b8655704367bd4b29d39fe9",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "6d7710c9a74f624d1fe60a5a01ed6db874659d906220b1d98a0a79a36bbcb2e6",
     "variant": null
   },
   "cpython-3.12.0-linux-x86_64-musl": {
@@ -2452,8 +2452,8 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "922f9404f39dc4edb8558a93cef5c3330895a4c87acb1de2a2cf662ab942dbe5",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "927de631f2f37b950c2ea8ca53dc36ce8389026f34c31add31c5f730e7227bae",
     "variant": null
   },
   "cpython-3.12.0-windows-i686-none": {
@@ -2530,8 +2530,8 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "a8c38cd2e53136c579632e2938d1b857f22e496c7dba99ad9a7ad6a67b43274a",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "572f8559f0e8a086c4380ea4417d44f6f3751afd18d01e14e04099ec33e1b199",
     "variant": "debug"
   },
   "cpython-3.12.0+debug-linux-x86_64-musl": {
@@ -2543,8 +2543,8 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "0b4380904d53f3322d3e5276de47bfa91a19289b7c734494c127ed0793017dde",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "e07e32143dd406a2e70ab573b9bc301ea765bfcb3d5092eb06a01a39d67a636f",
     "variant": "debug"
   },
   "cpython-3.11.10-darwin-aarch64-none": {
@@ -2647,8 +2647,8 @@
     "minor": 11,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "03f15e19e2452641b6375b59ba094ff6cf2fc118315d24a6ca63ce60e4d4a6e0",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "64aefc042352e6bd10c4f600f1962af7dfec4586385f723c218b6369d3f211a2",
     "variant": null
   },
   "cpython-3.11.10-linux-x86_64-musl": {
@@ -2660,8 +2660,8 @@
     "minor": 11,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "5b33f0ff29552f15daacf81c426ed585fae24987b47d614142a7906eae6f2b04",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "3714fec489d93c1ea458788a348d3380f98de22679a40a063e761753e7a48e71",
     "variant": null
   },
   "cpython-3.11.10-windows-i686-none": {
@@ -2764,8 +2764,8 @@
     "minor": 11,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "a51ec678e86286da1ac4a0d7ef85eef2e889018631f0463e6b871b1a3591ad65",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "9239d2bdd139c9c461df44de59e111e2ea00c54a34775d0a9df7e7f267dba475",
     "variant": "debug"
   },
   "cpython-3.11.10+debug-linux-x86_64-musl": {
@@ -2777,8 +2777,8 @@
     "minor": 11,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "b18e2b848bbbf75ecda2329dd2aef00bf603dc510c8775cc36bb9cec0318f6e2",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "03fa1596eb6800ff596219e93cb62c78f5a8cf1ee47a283d57beae50cc37d20c",
     "variant": "debug"
   },
   "cpython-3.11.9-darwin-aarch64-none": {
@@ -2881,8 +2881,8 @@
     "minor": 11,
     "patch": 9,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "daa487c7e73005c4426ac393273117cf0e2dc4ab9b2eeda366e04cd00eea00c9",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "6f579d9b2ec635b7cc4eb983719ae8b4ee34248f2054939cc3b1b23b44c65c60",
     "variant": null
   },
   "cpython-3.11.9-linux-x86_64-musl": {
@@ -2894,8 +2894,8 @@
     "minor": 11,
     "patch": 9,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "b3e94cbf19bd08bf02f6e6945f6c2211453f601c7c6f79721da63a06bf99b1f9",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "d776c6bfd09719f0a18fe23e25b314fed8e32c0c0474c21524020d5481bdcda1",
     "variant": null
   },
   "cpython-3.11.9-windows-i686-none": {
@@ -2998,8 +2998,8 @@
     "minor": 11,
     "patch": 9,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "1fbae62bc303512d4024bb69cab26766a5a8d12386aa79ed03b5fd8f4c08c77b",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "a09cd9e3516b3b1a1e654b768f1037b7878d27836a81e484151bb0bb61ca7cc5",
     "variant": "debug"
   },
   "cpython-3.11.9+debug-linux-x86_64-musl": {
@@ -3011,8 +3011,8 @@
     "minor": 11,
     "patch": 9,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "dc4fd5dd161a0c09375457f29b2c03b1aa026702abbdaedb9db01d2ccc17650b",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "8fdd84f3b942020aee8398cebb0e974d4852e24a855c9e566595990c51fb1709",
     "variant": "debug"
   },
   "cpython-3.11.8-darwin-aarch64-none": {
@@ -3089,8 +3089,8 @@
     "minor": 11,
     "patch": 8,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "94e13d0e5ad417035b80580f3e893a72e094b0900d5d64e7e34ab08e95439987",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "e4f70dcb40acc2342d63103808a19f728a1c1dc9e0fad5344061daaab03a4ce5",
     "variant": null
   },
   "cpython-3.11.8-linux-x86_64-musl": {
@@ -3102,8 +3102,8 @@
     "minor": 11,
     "patch": 8,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "08e1ebf51b5965e23f8e68664d17274c1cdabb5b2d7509a2003920e5d58172c7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "a3f12605552d5450cfc8fe6c8fc468f99a42b2ae33f1ef42d5f49356d66ad305",
     "variant": null
   },
   "cpython-3.11.8-windows-i686-none": {
@@ -3180,8 +3180,8 @@
     "minor": 11,
     "patch": 8,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "d959c43184878d564b5368ce4d753cf059600aafdf3e50280e850f94b5a4ba61",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "1bed92aabc3175da3981a2fe5360d8aec3c78f55c557a1f68a5e17b1fce3b303",
     "variant": "debug"
   },
   "cpython-3.11.8+debug-linux-x86_64-musl": {
@@ -3193,8 +3193,8 @@
     "minor": 11,
     "patch": 8,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "868adbcbef61c119d10f4da18ecab180423443aa64be0d6c79790df2ed1d12b7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "3f25e51e767c2ad7b1e76ccd80c1eb19018164eda41f0b969fa2ba63f9db3a80",
     "variant": "debug"
   },
   "cpython-3.11.7-darwin-aarch64-none": {
@@ -3271,8 +3271,8 @@
     "minor": 11,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "4a51ce60007a6facf64e5495f4cf322e311ba9f39a8cd3f3e4c026eae488e140",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "2cdd399100e647aa9d381e197e6a8c98e822ecb8fc1b6bda4b1eb554dbfb8177",
     "variant": null
   },
   "cpython-3.11.7-linux-x86_64-musl": {
@@ -3284,8 +3284,8 @@
     "minor": 11,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "1a919a35172eb9419eba841eeb0ec9879dbc2b006b284ee5c454c08197b50f74",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "e9387d628e6f49587206655e61295cdbfea43944c4259c24566fa19e0596ba4e",
     "variant": null
   },
   "cpython-3.11.7-windows-i686-none": {
@@ -3362,8 +3362,8 @@
     "minor": 11,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "01bca7a2f457d4bd2b367640d9337d12b31db73d670a16500b7a751194942103",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "24dba70107ca3999c0a2742b3bf898f740a063736f3cd208e80e056adf19cd7f",
     "variant": "debug"
   },
   "cpython-3.11.7+debug-linux-x86_64-musl": {
@@ -3375,8 +3375,8 @@
     "minor": 11,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "766fd4a583fdfbe65e99b1e3caea843d0eeefde5675d73f3214a53c17a832320",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "8490ae566f8f573031a7bfe1af403c98f42afd47bcddac09fed66573ebc11b9d",
     "variant": "debug"
   },
   "cpython-3.11.6-darwin-aarch64-none": {
@@ -3453,8 +3453,8 @@
     "minor": 11,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "ee37a7eae6e80148c7e3abc56e48a397c1664f044920463ad0df0fc706eacea8",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "d93961f7d6df53f5e888ce070b92d19a7fce588bb03abfac2b6f3c5bf2923c80",
     "variant": null
   },
   "cpython-3.11.6-linux-x86_64-musl": {
@@ -3466,8 +3466,8 @@
     "minor": 11,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "c929e5fe676ad20afcf6807a797d21261ae0827e84ec18742031a9582aed0d46",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "3bb96293951e613fc3f36e7132dcfc34190e5ed634448b12dd1e496723bedbd0",
     "variant": null
   },
   "cpython-3.11.6-windows-i686-none": {
@@ -3544,8 +3544,8 @@
     "minor": 11,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "6e7889a15d861f1860ed84f3f5ea4586d198aa003b22556d91e180a44184dcd7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "2ef8df0de9c400b5d57971fe5bcff36b4dca2410504a9edbd407572ea61044e0",
     "variant": "debug"
   },
   "cpython-3.11.6+debug-linux-x86_64-musl": {
@@ -3557,8 +3557,8 @@
     "minor": 11,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "c2178b505ac315ede0a2659511841acd022bc7290ef65648e052bb1acebff59f",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "baf76c20f6f9dd1384ac7c8985d55922400f220a268ee9a2644a16526235add4",
     "variant": "debug"
   },
   "cpython-3.11.5-darwin-aarch64-none": {
@@ -3648,8 +3648,8 @@
     "minor": 11,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "fbed6f7694b2faae5d7c401a856219c945397f772eea5ca50c6eb825cbc9d1e1",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "6f25769f73827cfc9f80114dbbc04fa959e96f82bf1b1297bc56ae08afaa6a90",
     "variant": null
   },
   "cpython-3.11.5-linux-x86_64-musl": {
@@ -3661,8 +3661,8 @@
     "minor": 11,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "fe09ecd87f69a724acf26ca508d7ead91a951abb2da18dfb98fe22c284454121",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "f442249bea0a61dfec2911d86aa49f4c047eabfa2322914d040f2377c1228b48",
     "variant": null
   },
   "cpython-3.11.5-windows-i686-none": {
@@ -3752,8 +3752,8 @@
     "minor": 11,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "93ee095b53de5a74af18e612f55095fcf3118c3c0a87eb6344d8eaca396bfb2d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "d7f5abc89c66a8a1d086394c80a94a17b5b26887983dbf5a80998302f3626ab2",
     "variant": "debug"
   },
   "cpython-3.11.5+debug-linux-x86_64-musl": {
@@ -3765,8 +3765,8 @@
     "minor": 11,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "96c77d4b1cbb47ac5eca384d21d689995c46e6a86d487acb73c9210eed3c5614",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "0471941b959dc707dfaadaeb730792302ddc203198d18b8a9ec64b8f0e73bb65",
     "variant": "debug"
   },
   "cpython-3.11.4-darwin-aarch64-none": {
@@ -3856,8 +3856,8 @@
     "minor": 11,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "e26247302bc8e9083a43ce9e8dd94905b40d464745b1603041f7bc9a93c65d05",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "dd1530d8a2e002f68e3d7ed1aa568a0e9278a5c87ba1f2ec4b9bae75777a6bc2",
     "variant": null
   },
   "cpython-3.11.4-linux-x86_64-musl": {
@@ -3869,8 +3869,8 @@
     "minor": 11,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "1218ca44595aeaf34271508db64a2abc581c3ee1eb307c1b0537ea746922b806",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "9bea574e0f01eda7154ab1972a3d413c462a731568b5923ed2ae30174167a408",
     "variant": null
   },
   "cpython-3.11.4-windows-i686-none": {
@@ -3960,8 +3960,8 @@
     "minor": 11,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "1b5fdeb2dc56c30843e7350f1684178755fae91666a0a987e5eb39074c42a052",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "95ac78a3d834ce1feaa45bfe4997563df0bc65c3d2711a5d6d4f39d3c240ffd4",
     "variant": "debug"
   },
   "cpython-3.11.4+debug-linux-x86_64-musl": {
@@ -3973,8 +3973,8 @@
     "minor": 11,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "d5467468ddee2b779096c5c4c0dcc74065d35fb38fea6c1c6630e7c2c904b1b9",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "0e81ab103e2bccbf61de2b968ae705ca52c5fbd650911a89f9c412b45407a31e",
     "variant": "debug"
   },
   "cpython-3.11.3-darwin-aarch64-none": {
@@ -4051,8 +4051,8 @@
     "minor": 11,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "da50b87d1ec42b3cb577dfd22a3655e43a53150f4f98a4bfb40757c9d7839ab5",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "d0191c35051ade259d3324f437c6f2422743ccb79197af6dc64c161b06eddca9",
     "variant": null
   },
   "cpython-3.11.3-linux-x86_64-musl": {
@@ -4064,8 +4064,8 @@
     "minor": 11,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "82eed5ae1ca9e60ed9b9cac97e910927ffe2e80e91161c74b2d70e44d5227de0",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "9715fc26b9a6de09ebc29c978ce1bea81c0a64f730125f1230743c18f536de27",
     "variant": null
   },
   "cpython-3.11.3-windows-i686-none": {
@@ -4142,8 +4142,8 @@
     "minor": 11,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "4f1192179e1f62e69b8b45f7f699e6f0100fb0b8a39aad7a48472794d0c24bd4",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "f42165d39624cd664ad2c77401b03f2b86c1eaa346a8d97595dc3da9477f7ba7",
     "variant": "debug"
   },
   "cpython-3.11.3+debug-linux-x86_64-musl": {
@@ -4155,8 +4155,8 @@
     "minor": 11,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "b753e060ccfb783b369f1e375ff6cc7a38d864a00506ec2e01ca01ba1956abc6",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "ed1ce259ea39c292606097efeee52909b013303d9b6d6d0a0e7001137e75f334",
     "variant": "debug"
   },
   "cpython-3.11.1-darwin-aarch64-none": {
@@ -4220,8 +4220,8 @@
     "minor": 11,
     "patch": 1,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "02a551fefab3750effd0e156c25446547c238688a32fabde2995c941c03a6423",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "cc322d17b9ead6aeee4ac116fa2f802d525b4d97343fac8b8ada458810b47b40",
     "variant": null
   },
   "cpython-3.11.1-linux-x86_64-musl": {
@@ -4233,8 +4233,8 @@
     "minor": 11,
     "patch": 1,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "7f0425d3e9b2283aba205493e9fe431bc2c2d67cc369bc922825b827a1b06b82",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "0e7dae505cdb31bee4095f7c004a9f89d78263d6f24fe32eb225bfbc34d7f6ab",
     "variant": null
   },
   "cpython-3.11.1-windows-i686-none": {
@@ -4298,8 +4298,8 @@
     "minor": 11,
     "patch": 1,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "b5bf700afc77588d853832d10b74ba793811cbec41b02ebc2c39a8b9987aacdd",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "ea2d1de07fbd276723d61cb9f3c8fe4415f1207b3351593a6985e8e4338e89e0",
     "variant": "debug"
   },
   "cpython-3.11.1+debug-linux-x86_64-musl": {
@@ -4311,8 +4311,8 @@
     "minor": 11,
     "patch": 1,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "7773aab3d1cbddbd0c6095c931fe841a2c511369e21744097276d22f4bc05621",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "bfb7b5328faf30048be5d1d102d6c37ff36c13c5f56137b05bb62f2d2e224f62",
     "variant": "debug"
   },
   "cpython-3.10.15-darwin-aarch64-none": {
@@ -4415,8 +4415,8 @@
     "minor": 10,
     "patch": 15,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "25fb8e23cd3b82b748075a04fd18f3183cc7316c11d6f59eb4b0326843892600",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "a85f3481c8117a11b5aa4fda0a6eb174b54e97b122cc8f83cf773a876751785b",
     "variant": null
   },
   "cpython-3.10.15-linux-x86_64-musl": {
@@ -4428,8 +4428,8 @@
     "minor": 10,
     "patch": 15,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "a169bdcd98f62421062fb9066763495913f4a86ee88c7d36e51df86d5d3cbe62",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "3f78660fd377d6073fa0ab642c20729c16fbc74fd67f8f35688e648fee014f4a",
     "variant": null
   },
   "cpython-3.10.15-windows-i686-none": {
@@ -4532,8 +4532,8 @@
     "minor": 10,
     "patch": 15,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "817fa16f1a2bda3435cf99743049fd0744ae7bf1ddb52913189b702bb74408dd",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "5f931215e13368ce05ed20837e3ad99cd425564d95b33b12b4fd1e5216c428e4",
     "variant": "debug"
   },
   "cpython-3.10.15+debug-linux-x86_64-musl": {
@@ -4545,8 +4545,8 @@
     "minor": 10,
     "patch": 15,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "13db15f74f19efc646544ddf7c46df543d2d6a1c3d7fba493d8b64dd3a379d5c",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "edbe61dbdd6c765e1036d12ba9ea681139bbad73c1c96d83ac0a052ae3735110",
     "variant": "debug"
   },
   "cpython-3.10.14-darwin-aarch64-none": {
@@ -4649,8 +4649,8 @@
     "minor": 10,
     "patch": 14,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "159c456bb4a3802bafbce065ff54b99ddb16422500d75c1315573ee3b673af17",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "327049baeb8319f0a31a14d28fce5608af546c27fb09994f56e3c0e17efb48c3",
     "variant": null
   },
   "cpython-3.10.14-linux-x86_64-musl": {
@@ -4662,8 +4662,8 @@
     "minor": 10,
     "patch": 14,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "8803a748f2197ec2360af6feebe9c936f4f6beabcae1db5557fdd98fc922982c",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "cc2ed06f898466616c6534de1fd3b00d02fae415274ecb7210f5199b2550c38c",
     "variant": null
   },
   "cpython-3.10.14-windows-i686-none": {
@@ -4766,8 +4766,8 @@
     "minor": 10,
     "patch": 14,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "060bcd01e5ba9cbd3f5b8da98c16480320b19fa9f67cf9ecf94a0c20ba08db6e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "5480ed19c17a087deb3e63b51217ec5fb6a299d53152721cc152f1175dd1b63e",
     "variant": "debug"
   },
   "cpython-3.10.14+debug-linux-x86_64-musl": {
@@ -4779,8 +4779,8 @@
     "minor": 10,
     "patch": 14,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "cd33d23d8fb79ca99db1398a555daad44af4122d01fb4065fd79e121929c5cb3",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "09d771b9f11e7492cc775c7853bf34d6e8b3dcb424db0be0df762f408a814118",
     "variant": "debug"
   },
   "cpython-3.10.13-darwin-aarch64-none": {
@@ -4870,8 +4870,8 @@
     "minor": 10,
     "patch": 13,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "d995d032ca702afd2fc3a689c1f84a6c64972ecd82bba76a61d525f08eb0e195",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "ee43e708b6c4c1ffb5b17b41c51305672e3af2fd686960e4e024a86f969c1a1e",
     "variant": null
   },
   "cpython-3.10.13-linux-x86_64-musl": {
@@ -4883,8 +4883,8 @@
     "minor": 10,
     "patch": 13,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "48365ea10aa1b0768a153bfff50d1515a757d42409b02a4af4db354803f2d180",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "779be1530f099b4ce0b87fe03f4621e6edca926393c7c857d581f50ffc4df66b",
     "variant": null
   },
   "cpython-3.10.13-windows-i686-none": {
@@ -4974,8 +4974,8 @@
     "minor": 10,
     "patch": 13,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "41b20e9d87f57d27f608685b714a57eea81c9e079aa647d59837ec6659536626",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "375fa4880952a1e78c095704cb50bb001d38c93c3172d0c554c1751ab4138329",
     "variant": "debug"
   },
   "cpython-3.10.13+debug-linux-x86_64-musl": {
@@ -4987,8 +4987,8 @@
     "minor": 10,
     "patch": 13,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "3eec53aef154273c0bc30bb9905734762171f474f73ba256c8883022915b7439",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "8fda4d7bc57ab9a83644b5ba867bf45b229264c9ccdfdcc7260b41d445ae651f",
     "variant": "debug"
   },
   "cpython-3.10.12-darwin-aarch64-none": {
@@ -5078,8 +5078,8 @@
     "minor": 10,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "a476dbca9184df9fc69fe6309cda5ebaf031d27ca9e529852437c94ec1bc43d3",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "843504ad0f655f19614f2edb689808ed5fd2712bbf5a0eb0331ff1ebf871d457",
     "variant": null
   },
   "cpython-3.10.12-linux-x86_64-musl": {
@@ -5091,8 +5091,8 @@
     "minor": 10,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "9080014bee2d4bd1f96bcbebf447d40c35ae9354382246add1160bd0d433ebf7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "d5d33effa6d64c83392f12b63fdf122843d943c7cfaa05ab734677699241cf93",
     "variant": null
   },
   "cpython-3.10.12-windows-i686-none": {
@@ -5182,8 +5182,8 @@
     "minor": 10,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "fb7354fcee7b17dd0793ebd3f6f1fc8b7b205332afcf8d700cc1119f2dc33ff7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "b4d606147bcb75735dd55928330e111dec35fb2c825d2e3fd71eca23eaa11e5f",
     "variant": "debug"
   },
   "cpython-3.10.12+debug-linux-x86_64-musl": {
@@ -5195,8 +5195,8 @@
     "minor": 10,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "ebff76754ae37694581afe80749efb1260a6da95a9d88f8e60aa2cab75fd5497",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "e177cbab8330071fe7c7362c266ec6de6b11f8262c43d0c4a9d38f00b7c2fcba",
     "variant": "debug"
   },
   "cpython-3.10.11-darwin-aarch64-none": {
@@ -5273,8 +5273,8 @@
     "minor": 10,
     "patch": 11,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "c5bcaac91bc80bfc29cf510669ecad12d506035ecb3ad85ef213416d54aecd79",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "7e6281f9ff93ac54c38abfffe874907591ae6db431df7633b73fa5e62066582c",
     "variant": null
   },
   "cpython-3.10.11-linux-x86_64-musl": {
@@ -5286,8 +5286,8 @@
     "minor": 10,
     "patch": 11,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "c5dde3276541a8ad000ba631ec70012aa2261926c13f54d2b1de83dad61d59c1",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "bc168048359070be77bf7cf03af1e4cf8c9144d348e59bd5849ebf046694462c",
     "variant": null
   },
   "cpython-3.10.11-windows-i686-none": {
@@ -5364,8 +5364,8 @@
     "minor": 10,
     "patch": 11,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "544e5020f71ad1525dbc92b08e429cc1e1e11866c48c07d91e99f531b9ba68b0",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "cd6316c2731d2282587475e781e240677c89a678694cf3e58f12e4c2e57add43",
     "variant": "debug"
   },
   "cpython-3.10.11+debug-linux-x86_64-musl": {
@@ -5377,8 +5377,8 @@
     "minor": 10,
     "patch": 11,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "0d5bd092b85ada04f6f27a5ef30e026ec2df8ddc73f89d7d1d397623405011c1",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "30563500ff2d568a376fbeea09ad1ab8b377574d75806d555970b233f03034f0",
     "variant": "debug"
   },
   "cpython-3.10.9-darwin-aarch64-none": {
@@ -5442,8 +5442,8 @@
     "minor": 10,
     "patch": 9,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "d196347aeb701a53fe2bb2b095abec38d27d0fa0443f8a1c2023a1bed6e18cdf",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "e69b2e48696f1e19231bed30616aa4ac6ef0fb4b3760e9e525e2c9c4c30ddb61",
     "variant": null
   },
   "cpython-3.10.9-linux-x86_64-musl": {
@@ -5455,8 +5455,8 @@
     "minor": 10,
     "patch": 9,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "cf17e6d042777170e423c6b80e096ad8273d9848708875db0d23dd45bdb3d516",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "89d13b06e73bd347e46b1424f8c56823e13920cc3cdb32a75c247852cbc84f76",
     "variant": null
   },
   "cpython-3.10.9-windows-i686-none": {
@@ -5520,8 +5520,8 @@
     "minor": 10,
     "patch": 9,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "a90a45ba7afcbd1df9aef96a614acbb210607299ac74dadbb6bd66af22be34db",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "fbd196fc7680e499f374a6946b3618b42980e2890a6d533993337b563bd8abb0",
     "variant": "debug"
   },
   "cpython-3.10.9+debug-linux-x86_64-musl": {
@@ -5533,8 +5533,8 @@
     "minor": 10,
     "patch": 9,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "7e0a0094b580d285163ede7797945e86bd4905d6af3340e6554e6abba7bcb832",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "ab0cd574172c836fa74fa15423a4bf6571854c26f40f65f4b4d63363facec6d8",
     "variant": "debug"
   },
   "cpython-3.10.8-darwin-aarch64-none": {
@@ -5598,8 +5598,8 @@
     "minor": 10,
     "patch": 8,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "6c8db44ae0e18e320320bbaaafd2d69cde8bfea171ae2d651b7993d1396260b7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "81eaeef0c63349f296d6c9fed6bb6ff3f2f29db649f0725351e6af147413cc90",
     "variant": null
   },
   "cpython-3.10.8-linux-x86_64-musl": {
@@ -5611,8 +5611,8 @@
     "minor": 10,
     "patch": 8,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "9f035bbe53f55fb406f95cb68459ba245b386084eeb5760f1660f416b730328d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "efe550859e00a15325b6c4fff0d5df23ae08017ba8f74616bc0e9e73f899871d",
     "variant": null
   },
   "cpython-3.10.8-windows-i686-none": {
@@ -5676,8 +5676,8 @@
     "minor": 10,
     "patch": 8,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "c86182951a82e761588476a0155afe99ae4ae1030e4a8e1e8bcb8e1d42f6327c",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "96c8f51e23a1bd8b9a2d9adc0e2457fa74062f16d25d2d0d659b8a6c94631824",
     "variant": "debug"
   },
   "cpython-3.10.8+debug-linux-x86_64-musl": {
@@ -5689,8 +5689,8 @@
     "minor": 10,
     "patch": 8,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "935eb97e0c3ef358a2f25e78b0b56aebad68d371e3b63979a157c7588a03585b",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "9e4ca2b0141e336ee1cc137e907809e13836883df661c33c8e564921b99a58f5",
     "variant": "debug"
   },
   "cpython-3.10.7-darwin-aarch64-none": {
@@ -5754,8 +5754,8 @@
     "minor": 10,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "c12c9ad2b2c75464541d897c0528013adecd8be5b30acf4411f7759729841711",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "ae5ad8fe84d8b1fd2e6fe2f47a632c9a1244686c12ce98cdd4a553be1fda2f9e",
     "variant": null
   },
   "cpython-3.10.7-linux-x86_64-musl": {
@@ -5767,8 +5767,8 @@
     "minor": 10,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "3e0cab6e49ad5ef95851049463797ec713eee6e1f2fa1d99e30516d37797c3f0",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "4af5e7eb30ae33db0729c019cbca4d76c973dac27167ad4131902078531eb05b",
     "variant": null
   },
   "cpython-3.10.7-windows-i686-none": {
@@ -5832,8 +5832,8 @@
     "minor": 10,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "ce3fe27e6ca3a0e75a7f4f3b6568cd1bf967230a67e73393e94a23380dddaf10",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "fb44d19c8e4da5d5c467b6bbfc1b0350fa7faee71462fbd6ac3d69633c2b334a",
     "variant": "debug"
   },
   "cpython-3.10.7+debug-linux-x86_64-musl": {
@@ -5845,8 +5845,8 @@
     "minor": 10,
     "patch": 7,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "08f725cdb4d4f6bd76c582b798f7d7685c8f5c5afa03e1553e28e55a3859014e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "8aadba22a811555789a2d8c94a3deba594a82278d77ea51a4c684290915cb825",
     "variant": "debug"
   },
   "cpython-3.10.6-darwin-aarch64-none": {
@@ -5910,8 +5910,8 @@
     "minor": 10,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "55aa2190d28dcfdf414d96dc5dcea9fe048fadcd583dc3981fec020869826111",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "e5478adc739ecd6f7b770e613fa0e5757f13fe9cbeb34f7990e5522b0593d6db",
     "variant": null
   },
   "cpython-3.10.6-linux-x86_64-musl": {
@@ -5923,8 +5923,8 @@
     "minor": 10,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "8cafe6409e9d192b288b84a21bc0c309f1d3f6b809a471b2858c7bf1bb09f3a7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "6097200a90aa57ad5fe8d4446f4f09d6653b3db6dd1fec80f96cbeafcf76de12",
     "variant": null
   },
   "cpython-3.10.6-windows-i686-none": {
@@ -5988,8 +5988,8 @@
     "minor": 10,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "407e5951e39f5652b32b72b715c4aa772dd8c2da1065161c58c30a1f976dd1b2",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "4a0cc9f5b57ca1eff38d0c9ee71f38f9bf28fbc34d150edd4914b32b69a84f17",
     "variant": "debug"
   },
   "cpython-3.10.6+debug-linux-x86_64-musl": {
@@ -6001,8 +6001,8 @@
     "minor": 10,
     "patch": 6,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "6cd58957e286c132dc7cdbd937144aa180b557772be8a2b70bd1c3f2644ebe65",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "7440ade465fb52a8da42ab9360b998465100ef50fbce9fe0aee87839a6e2e2e3",
     "variant": "debug"
   },
   "cpython-3.10.5-darwin-aarch64-none": {
@@ -6066,8 +6066,8 @@
     "minor": 10,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "460f87a389be28c953c24c6f942f172f9ce7f331367b4daf89cb450baedd51d7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "81e0c857175472f62641c49186f637cd1a391e4741b43afff5f55688512de1f1",
     "variant": null
   },
   "cpython-3.10.5-linux-x86_64-musl": {
@@ -6079,8 +6079,8 @@
     "minor": 10,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "6aad42c7b03989173dd0e4d066e8c1e9f176f4b31d5bde26dbb5297f38f656d0",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "febb7ebb1df876145be4f25a1caabbb8ec05758950e7efdebc33587f7ad3ca3c",
     "variant": null
   },
   "cpython-3.10.5-windows-i686-none": {
@@ -6144,8 +6144,8 @@
     "minor": 10,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "f8dfb83885d1cbc82febfa613258c1f6954ea88ef43ed7dc710d6df20efecdab",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "fdf3ade3f03f4a755f378d9abea1e9eb6a6a3fb18ce4620d5b7a6cb223a59741",
     "variant": "debug"
   },
   "cpython-3.10.5+debug-linux-x86_64-musl": {
@@ -6157,8 +6157,8 @@
     "minor": 10,
     "patch": 5,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "5217476a38b5273fd98ce45b7f0efcd579b8740c4d2911c6900fa16d59368fcc",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "8301d837c1e7799d0a4b80b62dc8058cfff9f52e8c75c3ebb49079c511161cdc",
     "variant": "debug"
   },
   "cpython-3.10.4-darwin-aarch64-none": {
@@ -6222,8 +6222,8 @@
     "minor": 10,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "1f8423808ad84c0e56c8e14c32685cbfbc1159e0d9f943ac946f29e84cf1b5ee",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "a94db687c197ac8fd9ade2695fe93ce9da392818ed52980459c25c7d39bcd73f",
     "variant": null
   },
   "cpython-3.10.4-linux-x86_64-musl": {
@@ -6235,8 +6235,8 @@
     "minor": 10,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "74c8da0aa24233c76bdd984d3c9e44442eca316be8a2cb4972d9264fedb0d5e8",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "c2bfbee97c9a4c4f5f5722ea68ea1a4d9f0e2510d02919af0f989d3061c66b3f",
     "variant": null
   },
   "cpython-3.10.4-windows-i686-none": {
@@ -6300,8 +6300,8 @@
     "minor": 10,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "7699f76ef89b436b452eacdbab508da3cd94146ba29b099f5cb6e250afba3210",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "e0849600bee6c588f1aa5f4b0b9342292cfb6eb40de0c705f60bd71f22b713d0",
     "variant": "debug"
   },
   "cpython-3.10.4+debug-linux-x86_64-musl": {
@@ -6313,8 +6313,8 @@
     "minor": 10,
     "patch": 4,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "8fb78fbf9266b23ee0eaf569f7a36d1696f7102c396106c1d71b3a991b27ad27",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "91e5e1021266da3917e64240bd209a9caff35e29d1a3223766f02b445050a92e",
     "variant": "debug"
   },
   "cpython-3.10.3-darwin-aarch64-none": {
@@ -6378,8 +6378,8 @@
     "minor": 10,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "b9989411bed71ba4867538c991f20b55f549dd9131905733f0df9f3fde81ad1d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "56b36066cda53fb371d92e769b7dc4b18df2d857930871946052d6be724febce",
     "variant": null
   },
   "cpython-3.10.3-linux-x86_64-musl": {
@@ -6391,8 +6391,8 @@
     "minor": 10,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "a60b589176879bdd465659660b87e954f969bed072c03c578ec828d6134f4ae1",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "f2cd3e6824d768603d6adc911aeb31de87f12bff9d3dc93624e944c6312acbdf",
     "variant": null
   },
   "cpython-3.10.3-windows-i686-none": {
@@ -6456,8 +6456,8 @@
     "minor": 10,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "04760d869234ee8f801feb08edc042a6965320f6c0a7aedf92ec35501fef3b21",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "65215230eacebebb87aa1e56d539fc1770870024dcfdadb5d0e18365c1b3b0a9",
     "variant": "debug"
   },
   "cpython-3.10.3+debug-linux-x86_64-musl": {
@@ -6469,8 +6469,8 @@
     "minor": 10,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "47637777bc44c6476e499bfcb214959c7abc386879dd66683a0d8e1b714c07cf",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "855b17a3210d08f06ab136816bafc9c25bd816cef37a6f381cdef30109c2fd06",
     "variant": "debug"
   },
   "cpython-3.10.2-darwin-aarch64-none": {
@@ -6534,8 +6534,8 @@
     "minor": 10,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "9b64eca2a94f7aff9409ad70bdaa7fbbf8148692662e764401883957943620dd",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "1cbd17424d858fbb37e6184bf355f72830a47d2e33a4b8de872fa87aaa49a15e",
     "variant": null
   },
   "cpython-3.10.2-linux-x86_64-musl": {
@@ -6547,8 +6547,8 @@
     "minor": 10,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "c4f398f6f7f9bbf0df98407ad66bc5760f3afc2cd8ba33a99cf4dcc8c90fd9ae",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "1067c4c6fc40bbd2d8b747177296bbeb4abfcb54e700226f2f211c3a2b90be46",
     "variant": null
   },
   "cpython-3.10.2-windows-i686-none": {
@@ -6638,8 +6638,8 @@
     "minor": 10,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "d22d85f60b2ef982b747adda2d1bde4a32c23c3d8f652c00ce44526750859e4e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "8c772010a27d7fd5a3e271c835c37b73bd41bc04a737523f12a3920bf721598b",
     "variant": "debug"
   },
   "cpython-3.10.2+debug-linux-x86_64-musl": {
@@ -6651,8 +6651,8 @@
     "minor": 10,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "a696f058a0cf69fa49c7e65c0b0b630c3fdc23474d45795e5c742c474abb8f24",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "6541c4c356146280e57b327dfc8f3f6b4985534d06a64cc20cd1cbdf6fb743b8",
     "variant": "debug"
   },
   "cpython-3.10.0-darwin-aarch64-none": {
@@ -6937,8 +6937,8 @@
     "minor": 9,
     "patch": 20,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "44d9d016f9820f39e5bb542782557d46876b69d23d0a204eb2f367739da623e0",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "1461b5364d07a56f1879390eaec72542fe0dd48fa369ce4507c555677bfe07ea",
     "variant": null
   },
   "cpython-3.9.20-linux-x86_64-musl": {
@@ -6950,8 +6950,8 @@
     "minor": 9,
     "patch": 20,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "332ce515daa15173f73d0ecebc988fadfac5583af8355d8895b3eb8086dac813",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "237ec3d144e488130476c1d2c70d8ca7f2b36f423eb0ead348a78c6fc1fb7abb",
     "variant": null
   },
   "cpython-3.9.20-windows-i686-none": {
@@ -7054,8 +7054,8 @@
     "minor": 9,
     "patch": 20,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "25cd1c9e92090f02212a649fa9d5c5dec9842917ea11fa504c66bd02e03d3d15",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "76bee8dde45cd59987d0919898d7dcd0cfee17d876c00e8f35934452b63604ff",
     "variant": "debug"
   },
   "cpython-3.9.20+debug-linux-x86_64-musl": {
@@ -7067,8 +7067,8 @@
     "minor": 9,
     "patch": 20,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "acbe099ea4851fd477b8dbac410ba213331d2129f6e2e4d0967dfb1675799f6c",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "e1410d1c912faf10bc51294665c16fd790fc0764b39cd8645d3f79c617d6628a",
     "variant": "debug"
   },
   "cpython-3.9.19-darwin-aarch64-none": {
@@ -7171,8 +7171,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "3b7d574b6bbf8303789a1d26b96a81dcca907381441ce15818c784e18d1db299",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "1d8179bde4db3e6cffac45f5c6a105e342a50a854b316b26760c17ba32bb164a",
     "variant": null
   },
   "cpython-3.9.19-linux-x86_64-musl": {
@@ -7184,8 +7184,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-    "sha256": "5c6605b1cfa6a952420f2267d10bed9ae20a02858a769b7275d8805f6b9fe40b",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+    "sha256": "2f9eac6ff7bc42a06b0f04cc28f5f24e851dcbb5d4a025a170e036ac1511a226",
     "variant": null
   },
   "cpython-3.9.19-windows-i686-none": {
@@ -7288,8 +7288,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "9e938140a8ecd343045a0c0cad77165db8bb0b24cc68012f628c937ae8748216",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "30aec1d450111fc618973d35a17831e77e9003cdd77395e5891e304ade874cd1",
     "variant": "debug"
   },
   "cpython-3.9.19+debug-linux-x86_64-musl": {
@@ -7301,8 +7301,8 @@
     "minor": 9,
     "patch": 19,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "bb16ecadf1bbd907da5f0e9c65e2b2bd66770e73c1f3a38ac0ca5fa9ac6fc7a2",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "59598e9108b795695c1b2f3c592236a0f81bad8a750026be52c519647aee859e",
     "variant": "debug"
   },
   "cpython-3.9.18-darwin-aarch64-none": {
@@ -7392,8 +7392,8 @@
     "minor": 9,
     "patch": 18,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "0e5663025121186bd17d331538a44f48b41baff247891d014f3f962cbe2716b4",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "ff8e33905d114a590cd13f5e17590efd6ad56c4eb841c9820863da2f55b13860",
     "variant": null
   },
   "cpython-3.9.18-linux-x86_64-musl": {
@@ -7405,8 +7405,8 @@
     "minor": 9,
     "patch": 18,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "cb47455810ae63d98501b3bb4fcdfdb9924633fb2e86e62d77e523a3bdee44ba",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "2ab7781e0d14d92272d7bcfb1383328ded38213fa9ad9ca00d1d08dae1ada26e",
     "variant": null
   },
   "cpython-3.9.18-windows-i686-none": {
@@ -7496,8 +7496,8 @@
     "minor": 9,
     "patch": 18,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "e1fa92798fab6f3b44a48f24b8e284660c34738d560681b206f0deb0616465f9",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "1574a99758cae4dbfaa7ff0f06464fe90ab5fe6e7dadcd567aa31d8a25a53f32",
     "variant": "debug"
   },
   "cpython-3.9.18+debug-linux-x86_64-musl": {
@@ -7509,8 +7509,8 @@
     "minor": 9,
     "patch": 18,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "6f199ddd447d3946381c3ccbb89c0f67643fb8a98205b89caa8e217ad0a20fd7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "13c4edbc64b62c7d3fedcde6cae58dbacc05ef2bf03c0f8a50e385066a0f7690",
     "variant": "debug"
   },
   "cpython-3.9.17-darwin-aarch64-none": {
@@ -7600,8 +7600,8 @@
     "minor": 9,
     "patch": 17,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "26c4a712b4b8e11ed5c027db5654eb12927c02da4857b777afb98f7a930ce637",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "3d9275e70d39030030f7e9db5f05fc07e2be6fb4964af0053f4a461bac9ba1bd",
     "variant": null
   },
   "cpython-3.9.17-linux-x86_64-musl": {
@@ -7613,8 +7613,8 @@
     "minor": 9,
     "patch": 17,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "194316e9cc7add1dd12be3e3eea2908fd4d623799edd7df69e360c6a446b750d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "cdfe58799d017947c414bc8513ddb51bc7f4c25b2e603faa8dfcfd931a47392f",
     "variant": null
   },
   "cpython-3.9.17-windows-i686-none": {
@@ -7704,8 +7704,8 @@
     "minor": 9,
     "patch": 17,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "649fff6048f4cb9e64a85eaf8e720eb4c3257e27e7c4ee46f75bfa48c18c6826",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "3faab5cb6c0bbb601be92575540036454fb34c0d7e4045760c62d782d8455f88",
     "variant": "debug"
   },
   "cpython-3.9.17+debug-linux-x86_64-musl": {
@@ -7717,8 +7717,8 @@
     "minor": 9,
     "patch": 17,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "5a117bc64d6545821083afbfb4a381afee05ddaeb0dd45d2c5adbf3b0a67ec88",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "e3da342005da3bc938a5869e2f4da7c21056470afb31465aa83f39cd362408c9",
     "variant": "debug"
   },
   "cpython-3.9.16-darwin-aarch64-none": {
@@ -7795,8 +7795,8 @@
     "minor": 9,
     "patch": 16,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "2b6e146234a4ef2a8946081fc3fbfffe0765b80b690425a49ebe40b47c33445b",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "08acda6031601b35291fa54f98888dc17d36c9ff35bdb2adea4631df81e24271",
     "variant": null
   },
   "cpython-3.9.16-linux-x86_64-musl": {
@@ -7808,8 +7808,8 @@
     "minor": 9,
     "patch": 16,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "5d9b13e8d5ee7a26fd0cf6e6d7e5a1ea90ddddd1f30ed2400bda60506f7dcea3",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "b78dbd216e23a8f4adda881fbe11f6749371c09b4235dd519a4b4be761dd1504",
     "variant": null
   },
   "cpython-3.9.16-windows-i686-none": {
@@ -7886,8 +7886,8 @@
     "minor": 9,
     "patch": 16,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "cdc1290b9bdb2f74a6c48ab24531919551128e39773365c6f3e17668216275a0",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "35dcaff7a658b8c6bf5ffe1c4e2db95df5d647d28b4880a90f09bf3a70f42e8b",
     "variant": "debug"
   },
   "cpython-3.9.16+debug-linux-x86_64-musl": {
@@ -7899,8 +7899,8 @@
     "minor": 9,
     "patch": 16,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "e698c7a51e7e998e893b0dd25886d477778a14296bd560e6e585352b9d6194f8",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "f5fb5562fd733ac97a703638bd2c0cf24ec15ec9986083a7883282feeb710ddb",
     "variant": "debug"
   },
   "cpython-3.9.15-darwin-aarch64-none": {
@@ -7964,8 +7964,8 @@
     "minor": 9,
     "patch": 15,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "cdc3a4cfddcd63b6cebdd75b14970e02d8ef0ac5be4d350e57ab5df56c19e85e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "436c35bd809abdd028f386cc623ae020c77e6b544eaaca405098387c4daa444c",
     "variant": null
   },
   "cpython-3.9.15-linux-x86_64-musl": {
@@ -7977,8 +7977,8 @@
     "minor": 9,
     "patch": 15,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "81b1c76ac789521fcececdcdc643f6de6fc282083b1a36a9973d835fc8a39391",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "52e774f1ccbbc61a30da2a95286348700ee7d7707412ef10035420f43469c39f",
     "variant": null
   },
   "cpython-3.9.15-windows-i686-none": {
@@ -8042,8 +8042,8 @@
     "minor": 9,
     "patch": 15,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "6a08761bb725b8d3a92144f81628febeab8b12326ca264ffe28255fa67c7bf17",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "6222695583b32845fbbf17ec4a43981126ce0d6bb08b47a8c8853396e0f5e9f7",
     "variant": "debug"
   },
   "cpython-3.9.15+debug-linux-x86_64-musl": {
@@ -8055,8 +8055,8 @@
     "minor": 9,
     "patch": 15,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "c4bf3bd40dc301eb41984b205a204fb85ebe190bfe35fe73c79b749b48ec7a31",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "0369aee7ce8a0f208e9146d17f903e3a3acaa594975a1ae5d1799388c2990d7f",
     "variant": "debug"
   },
   "cpython-3.9.14-darwin-aarch64-none": {
@@ -8120,8 +8120,8 @@
     "minor": 9,
     "patch": 14,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "e63d0c00a499e0202ba7a0f53ce69fca6d30237af39af9bc3c76bce6c7bf14d7",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "3b858cd4a187db8cd1eaedddd5ff80a077783092ca4d84970097127220f55cd4",
     "variant": null
   },
   "cpython-3.9.14-linux-x86_64-musl": {
@@ -8133,8 +8133,8 @@
     "minor": 9,
     "patch": 14,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "ceb26ef5f5a9b7b47fa95225fffce9c8ef0c9c1fbeca69fbda236a0c10de7ad8",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "d912966b120f5406046bf5a5252a6585cfb7620fe5d570a265cd221dfd8fbeb3",
     "variant": null
   },
   "cpython-3.9.14-windows-i686-none": {
@@ -8198,8 +8198,8 @@
     "minor": 9,
     "patch": 14,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "54529c0a8ffe621f5c9c6bdd22968cac9d3207cbd5dcd9c07bbe61140c49937e",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "a78cb80ca372ea98aca28d33a220b3fe91761c6dadaf92f646b82f3b569822c1",
     "variant": "debug"
   },
   "cpython-3.9.14+debug-linux-x86_64-musl": {
@@ -8211,8 +8211,8 @@
     "minor": 9,
     "patch": 14,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "598de16fbb955c2de02ac7765f162bee74601e28b3de9b6efeeecf30d97aecd6",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "b9a1b56faaade8fdfe646f3893487ee76463277c65df1dfe7b9d0ca7a0df0aaf",
     "variant": "debug"
   },
   "cpython-3.9.13-darwin-aarch64-none": {
@@ -8276,8 +8276,8 @@
     "minor": 9,
     "patch": 13,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "ce1cfca2715e7e646dd618a8cb9baff93000e345ccc979b801fc6ccde7ce97df",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "1e1b522a91ed805287793427013762bc8f6c02440147e9fa5306316369307e58",
     "variant": null
   },
   "cpython-3.9.13-linux-x86_64-musl": {
@@ -8289,8 +8289,8 @@
     "minor": 9,
     "patch": 13,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "766ed7e805e8c7abc4e50f1c94814575e7978ed7bd1f9e9ccec82d66b47b567f",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "e3142427ed091bfe0986cf49954fa3fcbe7754f42d66e4fd0ce68f41a513c3c1",
     "variant": null
   },
   "cpython-3.9.13-windows-i686-none": {
@@ -8354,8 +8354,8 @@
     "minor": 9,
     "patch": 13,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "352d00a4630d0665387bcb158aec3f6c7fc5a4d14d65ac26e1b826e20611222f",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "37ace8159aa2f5157abea2c0d854434f21e6676b90eeaf58d313778f64540ca7",
     "variant": "debug"
   },
   "cpython-3.9.13+debug-linux-x86_64-musl": {
@@ -8367,8 +8367,8 @@
     "minor": 9,
     "patch": 13,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "fd18bcb560764e7456431b577ce3b35057c3dd4cda60dfb98a9af8739ec95c43",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "145f9fec457ac6f3ea642b5d90d275cb9f317cf36f0ef7df4902f871db9725bf",
     "variant": "debug"
   },
   "cpython-3.9.12-darwin-aarch64-none": {
@@ -8432,8 +8432,8 @@
     "minor": 9,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "ccca12f698b3b810d79c52f007078f520d588232a36bc12ede944ec3ea417816",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "72085205843949f783c9245ad42902a63a00dd35367f1e5ea6f4aa709b2029ce",
     "variant": null
   },
   "cpython-3.9.12-linux-x86_64-musl": {
@@ -8445,8 +8445,8 @@
     "minor": 9,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "dd0eaf7ef64008d4a51a73243f368e0311b7936b0ac18f8d1305fffb0dfb76e6",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "140ea77e2924fc312ecd266337f1add09e560084422843673b08ff847259a93f",
     "variant": null
   },
   "cpython-3.9.12-windows-i686-none": {
@@ -8510,8 +8510,8 @@
     "minor": 9,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "7290ac14e43749afdb37d3c9690f300f5f0786f19982e8960566ecdc3e42c3eb",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "53dadc107ce8d1ba5f94ca87edbeef485c8a07b2c0e942a99a7c7e163fafb6f4",
     "variant": "debug"
   },
   "cpython-3.9.12+debug-linux-x86_64-musl": {
@@ -8523,8 +8523,8 @@
     "minor": 9,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "410d7e68366f0e4fce4540a73ab3228060aa469949154fc08dc00d9da8ad51c6",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "465ef90b1462dc316bd14c5368d88acdeb2074464efdfeb9f35d3d1a47ec8f99",
     "variant": "debug"
   },
   "cpython-3.9.11-darwin-aarch64-none": {
@@ -8588,8 +8588,8 @@
     "minor": 9,
     "patch": 11,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "0429d5ceb095d5e24c292bf1a39208b88ae236a680ef8fa3e1830e3a1a7e8882",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "bd9d808283eef69882e8e0c2529fe400c8605b7c08ef64e679d1766c1a87ef95",
     "variant": null
   },
   "cpython-3.9.11-linux-x86_64-musl": {
@@ -8601,8 +8601,8 @@
     "minor": 9,
     "patch": 11,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "ae8f55d90ae173f96e81f376daa5a9969a77531a6f7b8eacbe8ad90b41bbca1d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "69439fb7c2e8f8bda28f2d5f4c71634116800d71a06f7cbeeb8f21ebca829fd2",
     "variant": null
   },
   "cpython-3.9.11-windows-i686-none": {
@@ -8666,8 +8666,8 @@
     "minor": 9,
     "patch": 11,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "020bcbfff16dc5ce35a898763be3d847c97df2e14dabf483a8ec88b0455ff971",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "7d7a745a3d6eade5fd7352b444c4c91ce562a2d188716d6995155c2ed5d1e337",
     "variant": "debug"
   },
   "cpython-3.9.11+debug-linux-x86_64-musl": {
@@ -8679,8 +8679,8 @@
     "minor": 9,
     "patch": 11,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "046c027a79ab60b70f2853ef978d89a97d2d35d9af3e7d7e9684d20b66afa6bc",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "b0b1389d83b844aed6bfa73270fefd902a9869403e9dae79772506f9a0344578",
     "variant": "debug"
   },
   "cpython-3.9.10-darwin-aarch64-none": {
@@ -8744,8 +8744,8 @@
     "minor": 9,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-gnu-install_only.tar.gz",
-    "sha256": "455089cc576bd9a58db45e919d1fc867ecdbb0208067dffc845cc9bbf0701b70",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "f9c6b0412c0773e604a1f95d5db97f79f98d960bcf0e85215e533ea573721216",
     "variant": null
   },
   "cpython-3.9.10-linux-x86_64-musl": {
@@ -8757,8 +8757,8 @@
     "minor": 9,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-musl-install_only.tar.gz",
-    "sha256": "30add63ec16e07ad13e19f6d7061f7e4c7b971962354f48ab3e85656ce3b393d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+    "sha256": "5e4bde1751608e7f3ae2d9029c8866d0325db24c5a3b8441b62bef14fb8484be",
     "variant": null
   },
   "cpython-3.9.10-windows-i686-none": {
@@ -8848,8 +8848,8 @@
     "minor": 9,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "d453abf741c3196ffc8470f3ea6404a3e2b55b2674a501bb79162f06122423e5",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v2-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "8317251d7480b9fc8b4f0b76dbb91b339bc55760cc92715e66f91a3055396497",
     "variant": "debug"
   },
   "cpython-3.9.10+debug-linux-x86_64-musl": {
@@ -8861,8 +8861,8 @@
     "minor": 9,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-musl-debug-full.tar.zst",
-    "sha256": "3ea1f4b06710a87a4f817b9084f60cc7ea481eb1090adc81306031ac4b382131",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v2-unknown-linux-musl-debug-full.tar.zst",
+    "sha256": "2d99f49e6ae4c56f63653a0a85eccf3d8e39077c1f9585e8d15d77835ecab976",
     "variant": "debug"
   },
   "cpython-3.9.7-darwin-aarch64-none": {

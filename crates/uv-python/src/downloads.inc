@@ -124,8 +124,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("b5e74d1e16402b633c6f04519618231fc0dbae7d2f9e4b1ac17c294cc3d3d076")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("5c10c0b05c66bc6fc9a87f456ac1606057fe1865cc525eb7ecd9a5640f15426a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -139,8 +139,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("10978500ab6589760716c644aeadffa0f2c0bf31ea10f0c6160fee933933a567")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("6797067b7da58c29384cd32cb77f62dc18e813e6c72f6b0baf39672d84431bf2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -289,8 +289,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
-        sha256: Some("a73adeda301ad843cce05f31a2d3e76222b656984535a7b87696a24a098b216c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("6dd725b5866e193d201b4d6361bf03b2a954eeb8b67788d875ca4991776f852f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -439,8 +439,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("445156c61e1cc167f7b8777ad08cc36e5598e12cd27e07453f6e6dc0f62e421e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("ae477db35ccec397a19c9d61271455adf4917ab35993dbcacae8d126890f6b12")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -454,8 +454,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("4df6b7665c735a728d72e6f49034f1a6b7d9a54b0fbc472dc2ca525eb3dd513f")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("8c73e28a683b7e826ed5bda4cf119ec8270238fdf936e3a2b3ca0938cfcde8c9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -604,8 +604,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("1893a218709d3664b7a2b80f5598b5f25c0c3fe2bcc8d0a1c75eec6bbb93d602")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("e60fc176fad636bbd287e92f9e9954b8b10d164984e98f51e4dc3d47314fa8a5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -619,8 +619,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6f09aa5ba6aab8bf21955dbc3d6bab19125130ef0ebe29242b0e5ac1eebb3161")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("16f23e539336fb45895b3c4fac981365b53fbbd86115feb9516b50a0716394b1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -769,8 +769,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("3a4d53a7ba3916c0c1f35cbbe57068e2571b138389f29cf5c35367fec8f4c617")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("205395841e6e7cbd33d504b78ac81792364831911866416da7a34d9b4a06d7d1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -784,8 +784,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("9314cb4d5aa525f2dc9f8d6ac204bebcfdfa8eb0dd4d3788af68769184355484")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("bfdd008fb669ddd023a8c36c16987c98b0d2bdfb99c9d45e2c9a792d87710b72")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -934,8 +934,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("b080463e4f0c452e592cdac1ca97936a6a19bb3d9a64da669a50ca843fce0108")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("3ce9eb5d974dc2109c3e2c3986f4883ec5403b3479259ea781475a319f9a6787")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -949,8 +949,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("661e2a4b03d6eccbb5b15f5bd2869fbdd39132513394d758287e46115e48d4ef")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("6dab95cdd6d3f165aaaa7dcd7cb263add390d97c7b57eb62d2d1ca9a304353da")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1099,8 +1099,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("10680b593b5e31833218fd83104dee74af970a3463403a22bae613b952a34e8d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("c0064dcd97e5a09b5ff9529fc65cf6fd7a8a20f71a7050f584ecaa0cc8c33f2d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1114,8 +1114,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("e61b1274e1195f227cb30ba5d89ea32d743796d992adcaffad4819e4b0405d24")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("35ffd76881bef5ce09a123175f4f3419eb250802e60a6bb78649585325b8409f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1264,8 +1264,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("ca076aee4329f53f988346eb0521ad2a2cf7f723b6296088d03b98d8f22f5420")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("798e562eb68b8d825c25c747b9995046b700c5bafbe8f7e558f41a3d8a57ceb7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1279,8 +1279,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("de4983ffa610ff2c3b9bcb62882366f017d94bf11b194c1fce17ad9e502acce6")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("762dc23608111f49729f02c19fa8459219ac886e8694b79f541ef01141bf58c5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1429,8 +1429,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("a73ba777b5d55ca89edef709e6b8521e3f3d4289581f174c8699adfb608d09d6")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("b9b91f486e2a52b6cc392101245705d6ab5dd6ad4a4e2b3492baec8e4b96508b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1444,8 +1444,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("eb70814dc254f02714c77305de01b8ed2250c146320e22d0ed14b39021f89a8a")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("e47a8d25c2348bf9b0e818642e4dae90700fc3fbd96ffd7f4ad9518a7206d369")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1564,8 +1564,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("57a37b57f8243caa4cdac016176189573ad7620f0b6da5941c5e40660f9468ab")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("adfe5c1a6039b8806b3dee0aed5fe860540d55231be87df48891a7844279d76a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1579,8 +1579,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("b428b4151c70b85339ac2659e5f69f7e47142d34a506e05ecd095efe2e3dec81")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("e5c0adb646defd55791bbdd217f64d08a51855e818ee67e3ea6207521f92abee")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1699,8 +1699,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("74e330b8212ca22fd4d9a2003b9eec14892155566738febc8e5e572f267b9472")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("9dd6fc5a1326985896493d475e7eae0d07f6de0d932faef3c4b04bdd81b88c0c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1714,8 +1714,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("876389f071d62ee9a4bdd7ce31e69c3cdd256fe498e4dd6bb2b80e674e7351fe")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("db45fc29b4c0389b23af6ccd2d1427c3200ed7db4a81e5fd3bfbd9a4fd011c41")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1834,8 +1834,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("e51a5293f214053ddb4645b2c9f84542e2ef86870b8655704367bd4b29d39fe9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("6d7710c9a74f624d1fe60a5a01ed6db874659d906220b1d98a0a79a36bbcb2e6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1849,8 +1849,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("922f9404f39dc4edb8558a93cef5c3330895a4c87acb1de2a2cf662ab942dbe5")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("927de631f2f37b950c2ea8ca53dc36ce8389026f34c31add31c5f730e7227bae")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1999,8 +1999,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("03f15e19e2452641b6375b59ba094ff6cf2fc118315d24a6ca63ce60e4d4a6e0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("64aefc042352e6bd10c4f600f1962af7dfec4586385f723c218b6369d3f211a2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2014,8 +2014,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("5b33f0ff29552f15daacf81c426ed585fae24987b47d614142a7906eae6f2b04")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("3714fec489d93c1ea458788a348d3380f98de22679a40a063e761753e7a48e71")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2164,8 +2164,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("daa487c7e73005c4426ac393273117cf0e2dc4ab9b2eeda366e04cd00eea00c9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("6f579d9b2ec635b7cc4eb983719ae8b4ee34248f2054939cc3b1b23b44c65c60")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2179,8 +2179,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("b3e94cbf19bd08bf02f6e6945f6c2211453f601c7c6f79721da63a06bf99b1f9")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("d776c6bfd09719f0a18fe23e25b314fed8e32c0c0474c21524020d5481bdcda1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2299,8 +2299,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("94e13d0e5ad417035b80580f3e893a72e094b0900d5d64e7e34ab08e95439987")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("e4f70dcb40acc2342d63103808a19f728a1c1dc9e0fad5344061daaab03a4ce5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2314,8 +2314,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("08e1ebf51b5965e23f8e68664d17274c1cdabb5b2d7509a2003920e5d58172c7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("a3f12605552d5450cfc8fe6c8fc468f99a42b2ae33f1ef42d5f49356d66ad305")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2434,8 +2434,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("4a51ce60007a6facf64e5495f4cf322e311ba9f39a8cd3f3e4c026eae488e140")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("2cdd399100e647aa9d381e197e6a8c98e822ecb8fc1b6bda4b1eb554dbfb8177")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2449,8 +2449,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("1a919a35172eb9419eba841eeb0ec9879dbc2b006b284ee5c454c08197b50f74")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("e9387d628e6f49587206655e61295cdbfea43944c4259c24566fa19e0596ba4e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2569,8 +2569,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("ee37a7eae6e80148c7e3abc56e48a397c1664f044920463ad0df0fc706eacea8")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("d93961f7d6df53f5e888ce070b92d19a7fce588bb03abfac2b6f3c5bf2923c80")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2584,8 +2584,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c929e5fe676ad20afcf6807a797d21261ae0827e84ec18742031a9582aed0d46")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("3bb96293951e613fc3f36e7132dcfc34190e5ed634448b12dd1e496723bedbd0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2719,8 +2719,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("fbed6f7694b2faae5d7c401a856219c945397f772eea5ca50c6eb825cbc9d1e1")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("6f25769f73827cfc9f80114dbbc04fa959e96f82bf1b1297bc56ae08afaa6a90")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2734,8 +2734,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("fe09ecd87f69a724acf26ca508d7ead91a951abb2da18dfb98fe22c284454121")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("f442249bea0a61dfec2911d86aa49f4c047eabfa2322914d040f2377c1228b48")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2869,8 +2869,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("e26247302bc8e9083a43ce9e8dd94905b40d464745b1603041f7bc9a93c65d05")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("dd1530d8a2e002f68e3d7ed1aa568a0e9278a5c87ba1f2ec4b9bae75777a6bc2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2884,8 +2884,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("1218ca44595aeaf34271508db64a2abc581c3ee1eb307c1b0537ea746922b806")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("9bea574e0f01eda7154ab1972a3d413c462a731568b5923ed2ae30174167a408")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3004,8 +3004,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("da50b87d1ec42b3cb577dfd22a3655e43a53150f4f98a4bfb40757c9d7839ab5")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("d0191c35051ade259d3324f437c6f2422743ccb79197af6dc64c161b06eddca9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3019,8 +3019,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("82eed5ae1ca9e60ed9b9cac97e910927ffe2e80e91161c74b2d70e44d5227de0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("9715fc26b9a6de09ebc29c978ce1bea81c0a64f730125f1230743c18f536de27")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3124,8 +3124,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("02a551fefab3750effd0e156c25446547c238688a32fabde2995c941c03a6423")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("cc322d17b9ead6aeee4ac116fa2f802d525b4d97343fac8b8ada458810b47b40")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3139,8 +3139,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("7f0425d3e9b2283aba205493e9fe431bc2c2d67cc369bc922825b827a1b06b82")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("0e7dae505cdb31bee4095f7c004a9f89d78263d6f24fe32eb225bfbc34d7f6ab")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3289,8 +3289,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("25fb8e23cd3b82b748075a04fd18f3183cc7316c11d6f59eb4b0326843892600")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("a85f3481c8117a11b5aa4fda0a6eb174b54e97b122cc8f83cf773a876751785b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3304,8 +3304,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("a169bdcd98f62421062fb9066763495913f4a86ee88c7d36e51df86d5d3cbe62")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("3f78660fd377d6073fa0ab642c20729c16fbc74fd67f8f35688e648fee014f4a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3454,8 +3454,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("159c456bb4a3802bafbce065ff54b99ddb16422500d75c1315573ee3b673af17")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("327049baeb8319f0a31a14d28fce5608af546c27fb09994f56e3c0e17efb48c3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3469,8 +3469,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8803a748f2197ec2360af6feebe9c936f4f6beabcae1db5557fdd98fc922982c")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("cc2ed06f898466616c6534de1fd3b00d02fae415274ecb7210f5199b2550c38c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3604,8 +3604,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("d995d032ca702afd2fc3a689c1f84a6c64972ecd82bba76a61d525f08eb0e195")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("ee43e708b6c4c1ffb5b17b41c51305672e3af2fd686960e4e024a86f969c1a1e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3619,8 +3619,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("48365ea10aa1b0768a153bfff50d1515a757d42409b02a4af4db354803f2d180")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("779be1530f099b4ce0b87fe03f4621e6edca926393c7c857d581f50ffc4df66b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3754,8 +3754,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("a476dbca9184df9fc69fe6309cda5ebaf031d27ca9e529852437c94ec1bc43d3")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("843504ad0f655f19614f2edb689808ed5fd2712bbf5a0eb0331ff1ebf871d457")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3769,8 +3769,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9080014bee2d4bd1f96bcbebf447d40c35ae9354382246add1160bd0d433ebf7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("d5d33effa6d64c83392f12b63fdf122843d943c7cfaa05ab734677699241cf93")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3889,8 +3889,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("c5bcaac91bc80bfc29cf510669ecad12d506035ecb3ad85ef213416d54aecd79")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("7e6281f9ff93ac54c38abfffe874907591ae6db431df7633b73fa5e62066582c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3904,8 +3904,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c5dde3276541a8ad000ba631ec70012aa2261926c13f54d2b1de83dad61d59c1")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("bc168048359070be77bf7cf03af1e4cf8c9144d348e59bd5849ebf046694462c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4009,8 +4009,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("d196347aeb701a53fe2bb2b095abec38d27d0fa0443f8a1c2023a1bed6e18cdf")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("e69b2e48696f1e19231bed30616aa4ac6ef0fb4b3760e9e525e2c9c4c30ddb61")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4024,8 +4024,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("cf17e6d042777170e423c6b80e096ad8273d9848708875db0d23dd45bdb3d516")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("89d13b06e73bd347e46b1424f8c56823e13920cc3cdb32a75c247852cbc84f76")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4129,8 +4129,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("6c8db44ae0e18e320320bbaaafd2d69cde8bfea171ae2d651b7993d1396260b7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("81eaeef0c63349f296d6c9fed6bb6ff3f2f29db649f0725351e6af147413cc90")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4144,8 +4144,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9f035bbe53f55fb406f95cb68459ba245b386084eeb5760f1660f416b730328d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("efe550859e00a15325b6c4fff0d5df23ae08017ba8f74616bc0e9e73f899871d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4249,8 +4249,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("c12c9ad2b2c75464541d897c0528013adecd8be5b30acf4411f7759729841711")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("ae5ad8fe84d8b1fd2e6fe2f47a632c9a1244686c12ce98cdd4a553be1fda2f9e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4264,8 +4264,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("3e0cab6e49ad5ef95851049463797ec713eee6e1f2fa1d99e30516d37797c3f0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("4af5e7eb30ae33db0729c019cbca4d76c973dac27167ad4131902078531eb05b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4369,8 +4369,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("55aa2190d28dcfdf414d96dc5dcea9fe048fadcd583dc3981fec020869826111")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("e5478adc739ecd6f7b770e613fa0e5757f13fe9cbeb34f7990e5522b0593d6db")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4384,8 +4384,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("8cafe6409e9d192b288b84a21bc0c309f1d3f6b809a471b2858c7bf1bb09f3a7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("6097200a90aa57ad5fe8d4446f4f09d6653b3db6dd1fec80f96cbeafcf76de12")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4489,8 +4489,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("460f87a389be28c953c24c6f942f172f9ce7f331367b4daf89cb450baedd51d7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("81e0c857175472f62641c49186f637cd1a391e4741b43afff5f55688512de1f1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4504,8 +4504,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("6aad42c7b03989173dd0e4d066e8c1e9f176f4b31d5bde26dbb5297f38f656d0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("febb7ebb1df876145be4f25a1caabbb8ec05758950e7efdebc33587f7ad3ca3c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4609,8 +4609,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("1f8423808ad84c0e56c8e14c32685cbfbc1159e0d9f943ac946f29e84cf1b5ee")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("a94db687c197ac8fd9ade2695fe93ce9da392818ed52980459c25c7d39bcd73f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4624,8 +4624,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("74c8da0aa24233c76bdd984d3c9e44442eca316be8a2cb4972d9264fedb0d5e8")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("c2bfbee97c9a4c4f5f5722ea68ea1a4d9f0e2510d02919af0f989d3061c66b3f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4729,8 +4729,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("b9989411bed71ba4867538c991f20b55f549dd9131905733f0df9f3fde81ad1d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("56b36066cda53fb371d92e769b7dc4b18df2d857930871946052d6be724febce")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4744,8 +4744,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("a60b589176879bdd465659660b87e954f969bed072c03c578ec828d6134f4ae1")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("f2cd3e6824d768603d6adc911aeb31de87f12bff9d3dc93624e944c6312acbdf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4849,8 +4849,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("9b64eca2a94f7aff9409ad70bdaa7fbbf8148692662e764401883957943620dd")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("1cbd17424d858fbb37e6184bf355f72830a47d2e33a4b8de872fa87aaa49a15e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4864,8 +4864,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c4f398f6f7f9bbf0df98407ad66bc5760f3afc2cd8ba33a99cf4dcc8c90fd9ae")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("1067c4c6fc40bbd2d8b747177296bbeb4abfcb54e700226f2f211c3a2b90be46")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5134,8 +5134,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("44d9d016f9820f39e5bb542782557d46876b69d23d0a204eb2f367739da623e0")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("1461b5364d07a56f1879390eaec72542fe0dd48fa369ce4507c555677bfe07ea")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5149,8 +5149,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("332ce515daa15173f73d0ecebc988fadfac5583af8355d8895b3eb8086dac813")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("237ec3d144e488130476c1d2c70d8ca7f2b36f423eb0ead348a78c6fc1fb7abb")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5299,8 +5299,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("3b7d574b6bbf8303789a1d26b96a81dcca907381441ce15818c784e18d1db299")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("1d8179bde4db3e6cffac45f5c6a105e342a50a854b316b26760c17ba32bb164a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5314,8 +5314,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("5c6605b1cfa6a952420f2267d10bed9ae20a02858a769b7275d8805f6b9fe40b")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("2f9eac6ff7bc42a06b0f04cc28f5f24e851dcbb5d4a025a170e036ac1511a226")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5449,8 +5449,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("0e5663025121186bd17d331538a44f48b41baff247891d014f3f962cbe2716b4")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("ff8e33905d114a590cd13f5e17590efd6ad56c4eb841c9820863da2f55b13860")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5464,8 +5464,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("cb47455810ae63d98501b3bb4fcdfdb9924633fb2e86e62d77e523a3bdee44ba")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("2ab7781e0d14d92272d7bcfb1383328ded38213fa9ad9ca00d1d08dae1ada26e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5599,8 +5599,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("26c4a712b4b8e11ed5c027db5654eb12927c02da4857b777afb98f7a930ce637")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("3d9275e70d39030030f7e9db5f05fc07e2be6fb4964af0053f4a461bac9ba1bd")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5614,8 +5614,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("194316e9cc7add1dd12be3e3eea2908fd4d623799edd7df69e360c6a446b750d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("cdfe58799d017947c414bc8513ddb51bc7f4c25b2e603faa8dfcfd931a47392f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5734,8 +5734,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("2b6e146234a4ef2a8946081fc3fbfffe0765b80b690425a49ebe40b47c33445b")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("08acda6031601b35291fa54f98888dc17d36c9ff35bdb2adea4631df81e24271")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5749,8 +5749,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("5d9b13e8d5ee7a26fd0cf6e6d7e5a1ea90ddddd1f30ed2400bda60506f7dcea3")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("b78dbd216e23a8f4adda881fbe11f6749371c09b4235dd519a4b4be761dd1504")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5854,8 +5854,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("cdc3a4cfddcd63b6cebdd75b14970e02d8ef0ac5be4d350e57ab5df56c19e85e")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("436c35bd809abdd028f386cc623ae020c77e6b544eaaca405098387c4daa444c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5869,8 +5869,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("81b1c76ac789521fcececdcdc643f6de6fc282083b1a36a9973d835fc8a39391")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("52e774f1ccbbc61a30da2a95286348700ee7d7707412ef10035420f43469c39f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5974,8 +5974,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("e63d0c00a499e0202ba7a0f53ce69fca6d30237af39af9bc3c76bce6c7bf14d7")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("3b858cd4a187db8cd1eaedddd5ff80a077783092ca4d84970097127220f55cd4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5989,8 +5989,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("ceb26ef5f5a9b7b47fa95225fffce9c8ef0c9c1fbeca69fbda236a0c10de7ad8")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("d912966b120f5406046bf5a5252a6585cfb7620fe5d570a265cd221dfd8fbeb3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6094,8 +6094,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("ce1cfca2715e7e646dd618a8cb9baff93000e345ccc979b801fc6ccde7ce97df")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("1e1b522a91ed805287793427013762bc8f6c02440147e9fa5306316369307e58")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6109,8 +6109,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("766ed7e805e8c7abc4e50f1c94814575e7978ed7bd1f9e9ccec82d66b47b567f")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("e3142427ed091bfe0986cf49954fa3fcbe7754f42d66e4fd0ce68f41a513c3c1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6214,8 +6214,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("ccca12f698b3b810d79c52f007078f520d588232a36bc12ede944ec3ea417816")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("72085205843949f783c9245ad42902a63a00dd35367f1e5ea6f4aa709b2029ce")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6229,8 +6229,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("dd0eaf7ef64008d4a51a73243f368e0311b7936b0ac18f8d1305fffb0dfb76e6")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("140ea77e2924fc312ecd266337f1add09e560084422843673b08ff847259a93f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6334,8 +6334,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("0429d5ceb095d5e24c292bf1a39208b88ae236a680ef8fa3e1830e3a1a7e8882")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("bd9d808283eef69882e8e0c2529fe400c8605b7c08ef64e679d1766c1a87ef95")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6349,8 +6349,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("ae8f55d90ae173f96e81f376daa5a9969a77531a6f7b8eacbe8ad90b41bbca1d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("69439fb7c2e8f8bda28f2d5f4c71634116800d71a06f7cbeeb8f21ebca829fd2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6454,8 +6454,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-gnu-install_only.tar.gz",
-        sha256: Some("455089cc576bd9a58db45e919d1fc867ecdbb0208067dffc845cc9bbf0701b70")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
+        sha256: Some("f9c6b0412c0773e604a1f95d5db97f79f98d960bcf0e85215e533ea573721216")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6469,8 +6469,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("30add63ec16e07ad13e19f6d7061f7e4c7b971962354f48ab3e85656ce3b393d")
+        url: "https://github.com/indygreg/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
+        sha256: Some("5e4bde1751608e7f3ae2d9029c8866d0325db24c5a3b8441b62bef14fb8484be")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
