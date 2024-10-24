@@ -1,18 +1,26 @@
+use std::collections::BTreeSet;
+use std::fmt::Write;
+use std::io::ErrorKind;
+use std::path::Path;
+
 use anyhow::Result;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
-use std::collections::BTreeSet;
-use std::fmt::Write;
-use std::path::Path;
+use same_file::is_same_file;
 use tracing::debug;
 
 use uv_client::Connectivity;
+use uv_fs::Simplified;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
-use uv_python::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
+use uv_python::managed::{
+    python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
+};
 use uv_python::{PythonDownloads, PythonRequest, PythonVersionFile};
+use uv_shell::Shell;
+use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -156,6 +164,8 @@ pub(crate) async fn install(
         });
     }
 
+    let bin = python_executable_dir()?;
+
     let mut installed = FxHashSet::default();
     let mut errors = vec![];
     while let Some((key, result)) = tasks.next().await {
@@ -173,9 +183,39 @@ pub(crate) async fn install(
                 let managed = ManagedPythonInstallation::new(path.clone())?;
                 managed.ensure_externally_managed()?;
                 managed.ensure_canonical_executables()?;
+                match managed.create_bin_link(&bin) {
+                    Ok(executable) => {
+                        debug!("Installed {} executable to {}", key, executable.display());
+                    }
+                    Err(uv_python::managed::Error::LinkExecutable { from, to, err })
+                        if err.kind() == ErrorKind::AlreadyExists =>
+                    {
+                        // TODO(zanieb): Add `--force`
+                        if reinstall {
+                            fs_err::remove_file(&to)?;
+                            let executable = managed.create_bin_link(&bin)?;
+                            debug!(
+                                "Replaced {} executable at {}",
+                                key,
+                                executable.user_display()
+                            );
+                        } else {
+                            if !is_same_file(&to, &from).unwrap_or_default() {
+                                errors.push((
+                                    key,
+                                    anyhow::anyhow!(
+                                        "Executable already exists at `{}`. Use `--reinstall` to force replacement.",
+                                        to.user_display()
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                    Err(err) => return Err(err.into()),
+                }
             }
             Err(err) => {
-                errors.push((key, err));
+                errors.push((key, anyhow::Error::new(err)));
             }
         }
     }
@@ -232,16 +272,36 @@ pub(crate) async fn install(
         {
             match event.kind {
                 ChangeEventKind::Added => {
-                    writeln!(printer.stderr(), " {} {}", "+".green(), event.key.bold())?;
+                    writeln!(
+                        printer.stderr(),
+                        " {} {} ({})",
+                        "+".green(),
+                        event.key.bold(),
+                        event.key.versioned_executable_name()
+                    )?;
                 }
                 ChangeEventKind::Removed => {
-                    writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold())?;
+                    writeln!(
+                        printer.stderr(),
+                        " {} {} ({})",
+                        "-".red(),
+                        event.key.bold(),
+                        event.key.versioned_executable_name()
+                    )?;
                 }
                 ChangeEventKind::Reinstalled => {
-                    writeln!(printer.stderr(), " {} {}", "~".yellow(), event.key.bold(),)?;
+                    writeln!(
+                        printer.stderr(),
+                        " {} {} ({})",
+                        "~".yellow(),
+                        event.key.bold(),
+                        event.key.versioned_executable_name()
+                    )?;
                 }
             }
         }
+
+        warn_if_not_on_path(&bin);
     }
 
     if !errors.is_empty() {
@@ -252,7 +312,7 @@ pub(crate) async fn install(
                 "error".red().bold(),
                 key.green()
             )?;
-            for err in anyhow::Error::new(err).chain() {
+            for err in err.chain() {
                 writeln!(
                     printer.stderr(),
                     "  {}: {}",
@@ -265,4 +325,37 @@ pub(crate) async fn install(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn warn_if_not_on_path(bin: &Path) {
+    if !Shell::contains_path(bin) {
+        if let Some(shell) = Shell::from_env() {
+            if let Some(command) = shell.prepend_path(bin) {
+                if shell.configuration_files().is_empty() {
+                    warn_user!(
+                        "`{}` is not on your PATH. To use the installed Python executable, run `{}`.",
+                        bin.simplified_display().cyan(),
+                        command.green()
+                    );
+                } else {
+                    // TODO(zanieb): Update when we add `uv python update-shell` to match `uv tool`
+                    warn_user!(
+                        "`{}` is not on your PATH. To use the installed Python executable, run `{}`.",
+                        bin.simplified_display().cyan(),
+                        command.green(),
+                    );
+                }
+            } else {
+                warn_user!(
+                    "`{}` is not on your PATH. To use the installed Python executable, add the directory to your PATH.",
+                    bin.simplified_display().cyan(),
+                );
+            }
+        } else {
+            warn_user!(
+                "`{}` is not on your PATH. To use the installed Python executable, add the directory to your PATH.",
+                bin.simplified_display().cyan(),
+            );
+        }
+    }
 }

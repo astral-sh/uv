@@ -141,6 +141,9 @@ impl EnvVars {
     /// Specifies the path to the project virtual environment.
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
 
+    /// Specifies the directory to place links to installed, managed Python executables.
+    pub const UV_PYTHON_BIN_DIR: &'static str = "UV_PYTHON_BIN_DIR";
+
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 
