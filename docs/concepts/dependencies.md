@@ -414,7 +414,7 @@ dev = [
 ```
 
 The `dev` group is special-cased; there are `--dev`, `--only-dev`, and `--no-dev` flags to toggle
-inclusion or exclusion of the dependencies. Additionally, the `dev` group is
+inclusion or exclusion of its dependencies. Additionally, the `dev` group is
 [synced by default](#default-groups).
 
 ### Dependency groups
@@ -440,7 +440,7 @@ lint = [
 ```
 
 Once groups are defined, the `--group`, `--only-group`, and `--no-group` options can be used to
-include their dependencies.
+include or exclude their dependencies.
 
 !!! tip
 
