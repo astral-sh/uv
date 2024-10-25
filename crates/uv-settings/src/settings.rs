@@ -449,22 +449,6 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-    /// Allow insecure connections to host.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            allow-insecure-host = ["localhost:8080"]
-        "#
-    )]
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -1450,7 +1434,6 @@ pub struct ToolOptions {
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
@@ -1477,7 +1460,6 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             dependency_metadata: value.dependency_metadata,
@@ -1506,7 +1488,6 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             dependency_metadata: value.dependency_metadata,
@@ -1679,7 +1660,6 @@ impl From<OptionsWire> for Options {
                 find_links,
                 index_strategy,
                 keyring_provider,
-                allow_insecure_host,
                 resolution,
                 prerelease,
                 dependency_metadata,

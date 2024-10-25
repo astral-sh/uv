@@ -369,7 +369,6 @@ pub fn resolver_installer_options(
         },
         index_strategy,
         keyring_provider,
-        allow_insecure_host: None,
         resolution,
         prerelease: if pre {
             Some(PrereleaseMode::Allow)
