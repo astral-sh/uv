@@ -17,9 +17,9 @@ pub enum TrustedPublishingError {
     Var(#[from] VarError),
     #[error(transparent)]
     Url(#[from] url::ParseError),
-    #[error("Failed to fetch {0}")]
+    #[error("Failed to fetch: `{0}`")]
     Reqwest(Url, #[source] reqwest::Error),
-    #[error("Failed to fetch {0}")]
+    #[error("Failed to fetch: `{0}`")]
     ReqwestMiddleware(Url, #[source] reqwest_middleware::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),

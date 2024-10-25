@@ -180,7 +180,7 @@ pub enum ErrorKind {
     MetadataNotFound(WheelFilename, String),
 
     /// An error that happened while making a request or in a reqwest middleware.
-    #[error("Failed to fetch {0}")]
+    #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(Url, #[source] WrappedReqwestError),
 
     #[error("Received some unexpected JSON from {url}")]
