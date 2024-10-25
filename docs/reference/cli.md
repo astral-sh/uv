@@ -7479,8 +7479,6 @@ uv publish [OPTIONS] [FILES]...
 
 <p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
 
-<p>The default value is publish URL for PyPI (&lt;https://upload.pypi.org/legacy/&gt;).</p>
-
 <p>May also be set with the <code>UV_PUBLISH_URL</code> environment variable.</p>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 

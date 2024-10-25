@@ -4614,8 +4614,6 @@ pub struct PublishArgs {
     /// and index upload.
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
-    ///
-    /// The default value is publish URL for PyPI (<https://upload.pypi.org/legacy/>).
     #[arg(long, env = EnvVars::UV_PUBLISH_URL)]
     pub publish_url: Option<Url>,
 
