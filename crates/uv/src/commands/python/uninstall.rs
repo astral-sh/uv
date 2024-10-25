@@ -7,8 +7,11 @@ use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
+use same_file::is_same_file;
+use tracing::{debug, warn};
+use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::ManagedPythonInstallations;
+use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
 use uv_python::PythonRequest;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -121,6 +124,40 @@ async fn do_uninstall(
         return Ok(ExitStatus::Failure);
     }
 
+    // Collect files in a directory
+    let executables = python_executable_dir()?
+        .read_dir()?
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry),
+            Err(err) => {
+                warn!("Failed to read executable: {}", err);
+                None
+            }
+        })
+        .filter(|entry| entry.file_type().is_ok_and(|file_type| !file_type.is_dir()))
+        .map(|entry| entry.path())
+        // Only include files that match the expected Python executable names
+        // TODO(zanieb): This is a minor optimization to avoid opening more files, but we could
+        // leave broken links behind, i.e., if the user created them.
+        .filter(|path| {
+            matching_installations.iter().any(|installation| {
+                path.file_name().and_then(|name| name.to_str())
+                    == Some(&installation.key().versioned_executable_name())
+            })
+        })
+        // Only include Python executables that match the installations
+        .filter(|path| {
+            matching_installations.iter().any(|installation| {
+                is_same_file(path, installation.executable()).unwrap_or_default()
+            })
+        })
+        .collect::<BTreeSet<_>>();
+
+    for executable in &executables {
+        fs_err::remove_file(executable)?;
+        debug!("Removed {}", executable.user_display());
+    }
+
     let mut tasks = FuturesUnordered::new();
     for installation in &matching_installations {
         tasks.push(async {
@@ -180,7 +217,13 @@ async fn do_uninstall(
         {
             match event.kind {
                 ChangeEventKind::Removed => {
-                    writeln!(printer.stderr(), " {} {}", "-".red(), event.key.bold())?;
+                    writeln!(
+                        printer.stderr(),
+                        " {} {} ({})",
+                        "-".red(),
+                        event.key.bold(),
+                        event.key.versioned_executable_name()
+                    )?;
                 }
                 _ => unreachable!(),
             }
