@@ -2596,34 +2596,38 @@ pub struct RunArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include development dependencies.
+    /// Include the development dependency group.
     ///
-    /// Development dependencies are defined via `tool.uv.dev-dependencies` in a
-    /// `pyproject.toml`.
+    /// Development dependencies are defined via `dependency-groups.dev` or
+    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
+    ///
+    /// This option is an alias for `--group dev`.
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit development dependencies.
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias of `--no-group dev`.
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Include dependencies from the specified local dependency group.
+    /// Include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with("only_group"))]
     pub group: Vec<GroupName>,
 
-    /// Exclude dependencies from the specified local dependency group.
+    /// Exclude dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Only include dependencies from the specified local dependency group.
+    /// Only include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     ///
@@ -2637,9 +2641,11 @@ pub struct RunArgs {
     #[arg(short, long, conflicts_with = "script")]
     pub module: bool,
 
-    /// Omit non-development dependencies.
+    /// Only include the development dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
@@ -2794,33 +2800,39 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include development dependencies.
+    /// Include the development dependency group.
+    ///
+    /// This option is an alias for `--group dev`.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit development dependencies.
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias for `--no-group dev`.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Omit non-development dependencies.
+    /// Only include the development dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
-    /// Include dependencies from the specified local dependency group.
+    /// Include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with("only_group"))]
     pub group: Vec<GroupName>,
 
-    /// Exclude dependencies from the specified local dependency group.
+    /// Exclude dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Only include dependencies from the specified local dependency group.
+    /// Only include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     ///
@@ -2992,7 +3004,9 @@ pub struct AddArgs {
     #[arg(long, short, group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
-    /// Add the requirements as development dependencies.
+    /// Add the requirements to the development dependency group.
+    ///
+    /// This option is an alias for `--group dev`.
     #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
     pub dev: bool,
 
@@ -3005,7 +3019,7 @@ pub struct AddArgs {
     #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
     pub optional: Option<ExtraName>,
 
-    /// Add the requirements to the specified local dependency group.
+    /// Add the requirements to the specified dependency group.
     ///
     /// These requirements will not be included in the published metadata for the project.
     #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
@@ -3114,7 +3128,9 @@ pub struct RemoveArgs {
     #[arg(required = true)]
     pub packages: Vec<PackageName>,
 
-    /// Remove the packages from the development dependencies.
+    /// Remove the packages from the development dependency group.
+    ///
+    /// This option is an alias for `--group dev`.
     #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
     pub dev: bool,
 
@@ -3122,7 +3138,7 @@ pub struct RemoveArgs {
     #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
     pub optional: Option<ExtraName>,
 
-    /// Remove the packages from the specified local dependency group.
+    /// Remove the packages from the specified dependency group.
     #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
     pub group: Option<GroupName>,
 
@@ -3194,36 +3210,42 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
-    /// Include development dependencies.
+    /// Include the development dependency group.
     ///
-    /// Development dependencies are defined via `tool.uv.dev-dependencies` in a
-    /// `pyproject.toml`.
+    /// Development dependencies are defined via `dependency-groups.dev` or
+    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
+    ///
+    /// This option is an alias for `--group dev`.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit non-development dependencies.
+    /// Only include the development dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
-    /// Omit development dependencies.
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias for `--no-group dev`.
     #[arg(long, overrides_with("dev"), conflicts_with = "invert")]
     pub no_dev: bool,
 
-    /// Include dependencies from the specified local dependency group.
+    /// Include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with("only_group"))]
     pub group: Vec<GroupName>,
 
-    /// Exclude dependencies from the specified local dependency group.
+    /// Exclude dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Only include dependencies from the specified local dependency group.
+    /// Only include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     ///
@@ -3318,33 +3340,39 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include development dependencies.
+    /// Include the development dependency group.
+    ///
+    /// This option is an alias for `--group dev`.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit development dependencies.
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias for `--no-group dev`.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Omit non-development dependencies.
+    /// Only include the development dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
-    /// Include dependencies from the specified local dependency group.
+    /// Include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with("only_group"))]
     pub group: Vec<GroupName>,
 
-    /// Exclude dependencies from the specified local dependency group.
+    /// Exclude dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Only include dependencies from the specified local dependency group.
+    /// Only include dependencies from the specified dependency group.
     ///
     /// May be provided multiple times.
     ///
