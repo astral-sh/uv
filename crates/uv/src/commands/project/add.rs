@@ -21,7 +21,7 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
@@ -203,8 +203,12 @@ pub(crate) async fn add(
                 DependencyType::Optional(_) => {
                     bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
                 }
+                DependencyType::Group(_) => {
+                    // TODO(charlie): Allow adding to `dependency-groups` in non-`[project]`
+                    // targets, per PEP 735.
+                    bail!("Project is missing a `[project]` table; add a `[project]` table to use `dependency-groups` dependencies, or run `{}` instead", "uv add --dev".green())
+                }
                 DependencyType::Dev => (),
-                DependencyType::Group(_) => (),
             }
         }
 
@@ -463,8 +467,49 @@ pub(crate) async fn add(
             _ => source,
         };
 
+        // Determine the dependency type.
+        let dependency_type = match &dependency_type {
+            DependencyType::Dev => {
+                let existing = toml.find_dependency(&requirement.name, None);
+                if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Group(group) if group == &*DEV_DEPENDENCIES)) {
+                    // If the dependency already exists in `dependency-groups.dev`, use that.
+                    DependencyType::Group(DEV_DEPENDENCIES.clone())
+                } else if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Dev)) {
+                    // If the dependency already exists in `dev-dependencies`, use that.
+                    DependencyType::Dev
+                } else if target.as_project().is_some_and(uv_workspace::VirtualProject::is_non_project) {
+                    // TODO(charlie): Allow adding to `dependency-groups` in non-`[project]` targets.
+                    DependencyType::Dev
+                } else {
+                    // Otherwise, use `dependency-groups.dev`, unless it would introduce a separate table.
+                    match (toml.has_dev_dependencies(), toml.has_dependency_group(&DEV_DEPENDENCIES)) {
+                        (true, false) => DependencyType::Dev,
+                        (false, true) => DependencyType::Group(DEV_DEPENDENCIES.clone()),
+                        (true, true) => DependencyType::Group(DEV_DEPENDENCIES.clone()),
+                        (false, false) => DependencyType::Group(DEV_DEPENDENCIES.clone()),
+                    }
+                }
+            }
+            DependencyType::Group(group) if group == &*DEV_DEPENDENCIES => {
+                let existing = toml.find_dependency(&requirement.name, None);
+                if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Group(group) if group == &*DEV_DEPENDENCIES)) {
+                    // If the dependency already exists in `dependency-groups.dev`, use that.
+                    DependencyType::Group(DEV_DEPENDENCIES.clone())
+                } else if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Dev)) {
+                    // If the dependency already exists in `dev-dependencies`, use that.
+                    DependencyType::Dev
+                } else {
+                    // Otherwise, use `dependency-groups.dev`.
+                    DependencyType::Group(DEV_DEPENDENCIES.clone())
+                }
+            }
+            DependencyType::Production => DependencyType::Production,
+            DependencyType::Optional(extra) => DependencyType::Optional(extra.clone()),
+            DependencyType::Group(group) => DependencyType::Group(group.clone()),
+        };
+
         // Update the `pyproject.toml`.
-        let edit = match dependency_type {
+        let edit = match &dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
             DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
             DependencyType::Optional(ref extra) => {
@@ -478,7 +523,7 @@ pub(crate) async fn add(
         // If the edit was inserted before the end of the list, update the existing edits.
         if let ArrayEdit::Add(index) = &edit {
             for edit in &mut edits {
-                if *edit.dependency_type == dependency_type {
+                if edit.dependency_type == dependency_type {
                     match &mut edit.edit {
                         ArrayEdit::Add(existing) => {
                             if *existing >= *index {
@@ -496,7 +541,7 @@ pub(crate) async fn add(
         }
 
         edits.push(DependencyEdit {
-            dependency_type: &dependency_type,
+            dependency_type,
             requirement,
             source,
             edit,
@@ -646,7 +691,7 @@ pub(crate) async fn add(
 async fn lock_and_sync(
     mut project: VirtualProject,
     toml: &mut PyProjectTomlMut,
-    edits: &[DependencyEdit<'_>],
+    edits: &[DependencyEdit],
     venv: &PythonEnvironment,
     state: SharedState,
     locked: bool,
@@ -973,6 +1018,14 @@ enum Target {
 }
 
 impl Target {
+    /// Returns the [`VirtualProject`] for the target, if it is a project.
+    fn as_project(&self) -> Option<&VirtualProject> {
+        match self {
+            Self::Project(project, _) => Some(project),
+            Self::Script(_, _) => None,
+        }
+    }
+
     /// Returns the [`Interpreter`] for the target.
     fn interpreter(&self) -> &Interpreter {
         match self {
@@ -983,8 +1036,8 @@ impl Target {
 }
 
 #[derive(Debug, Clone)]
-struct DependencyEdit<'a> {
-    dependency_type: &'a DependencyType,
+struct DependencyEdit {
+    dependency_type: DependencyType,
     requirement: Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
