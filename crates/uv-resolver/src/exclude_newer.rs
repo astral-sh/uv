@@ -4,6 +4,7 @@ use jiff::{tz::TimeZone, Timestamp, ToSpan};
 
 /// A timestamp that excludes files newer than it.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(try_from = "String")]
 pub struct ExcludeNewer(Timestamp);
 
 impl ExcludeNewer {
@@ -16,6 +17,14 @@ impl ExcludeNewer {
 impl From<Timestamp> for ExcludeNewer {
     fn from(timestamp: Timestamp) -> Self {
         Self(timestamp)
+    }
+}
+
+impl TryFrom<String> for ExcludeNewer {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_str(&value)
     }
 }
 

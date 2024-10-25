@@ -2391,3 +2391,45 @@ fn run_stdin_with_pep723() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn run_with_exclude_newer_date() -> Result<()> {
+    let context = TestContext::new("3.9");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        exclude-newer = "2020-01-01"
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+       import importlib.metadata
+
+       print(importlib.metadata.version("iniconfig"))
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py").env_remove(EnvVars::UV_EXCLUDE_NEWER),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1.0.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.0.0
+    "###);
+
+    Ok(())
+}
