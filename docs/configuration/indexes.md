@@ -36,7 +36,7 @@ default = true
 The default index is always treated as lowest priority, regardless of its position in the list of
 indexes.
 
-Index names many only contain alphanumeric characters, dashes, underscores, and periods, and must be
+Index names may only contain alphanumeric characters, dashes, underscores, and periods, and must be
 valid ASCII.
 
 ## Pinning a package to an index
