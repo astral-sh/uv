@@ -185,14 +185,14 @@ If you need to remove uv from your system, just remove the `uv` and `uvx` binari
 === "macOS and Linux"
 
     ```console
-    $ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
+    $ rm ~/.local/bin/uv ~/.local/bin/uvx
     ```
 
 === "Windows"
 
     ```powershell
-    $ rm $HOME\.cargo\bin\uv.exe
-    $ rm $HOME\.cargo\bin\uvx.exe
+    $ rm $HOME\.local\bin\uv.exe
+    $ rm $HOME\.local\bin\uvx.exe
     ```
 
 !!! tip
