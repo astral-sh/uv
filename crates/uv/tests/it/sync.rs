@@ -2385,7 +2385,7 @@ fn sync_custom_environment_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project virtual environment directory `[TEMP_DIR]/foo` cannot be used because because it is not a valid Python environment (no Python executable was found)
+    error: Project virtual environment directory `[TEMP_DIR]/foo` cannot be used because it is not a valid Python environment (no Python executable was found)
     "###);
 
     // But if it's just an incompatible virtual environment...
@@ -3554,7 +3554,7 @@ fn sync_invalid_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project virtual environment directory `[VENV]/` cannot be used because because it is not a valid Python environment (no Python executable was found)
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
     "###);
 
     // But if it's just an incompatible virtual environment...
@@ -3620,7 +3620,7 @@ fn sync_invalid_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Project virtual environment directory `[VENV]/` cannot be used because because it is not a valid Python environment (no Python executable was found)
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a valid Python environment (no Python executable was found)
     "###);
 
     // But if it's not a virtual environment...
