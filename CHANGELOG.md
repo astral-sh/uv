@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.4.27
+
+This release includes support for the `[dependency-groups]` table as recently standardized in [PEP 735](https://peps.python.org/pep-0735/). The table allows for declaration of optional dependency groups that are not published as part of the package metadata, unlike `[project.optional-dependencies]`. There are new `--group`, `--only-group`, and `--no-group` options throughout the uv interface.
+
+Previously, uv used a single `tool.uv.dev-dependencies` list for declaration of development dependencies. Now, uv supports declaring development dependencies in a standardized format and allows splitting development dependencies into multiple groups.
+
+For compatibility, and to simplify usage for people that do not need multiple groups, uv special-cases the group named `dev`. The `dev` group is equivalent to `tool.uv.dev-dependencies`. The contents of `tool.uv.dev-dependencies` will merged into the `dev` group in uv's resolver. The `--dev`, `--only-dev`, and `--no-dev` flags remain as aliases for the corresponding `--group` options. Support for `tool.uv.dev-dependencies` remains in this release, but will display warnings in a future release.
+
+uv syncs the `dev` group by default — this matches the exististing behavior for `tool.uv.dev-dependencies`. The default groups can be changed with the `tool.uv.default-groups` setting.
+
+Thank you to Stephen Rosen who authored PEP 735.
+
+### Enhancements
+
+- Support for PEP 735 ([#8272](https://github.com/astral-sh/uv/pull/8272))
+- Add support for `--dry-run` mode in `uv lock` ([#7783](https://github.com/astral-sh/uv/pull/7783))
+- Don't allow non-string email in authors ([#8520](https://github.com/astral-sh/uv/pull/8520))
+- Enforce lockfile schema versions ([#8509](https://github.com/astral-sh/uv/pull/8509))
+
+### Bug fixes
+
+- Always attach URL to network errors ([#8444](https://github.com/astral-sh/uv/pull/8444))
+- Fix dangling non-platform dependencies in `uv tree` ([#8532](https://github.com/astral-sh/uv/pull/8532))
+- Prefer `lto` over `debug` free-threaded managed Python builds ([#8515](https://github.com/astral-sh/uv/pull/8515))
+
+### Documentation
+
+- Add `tool.uv.sources` to the "Settings" reference ([#8543](https://github.com/astral-sh/uv/pull/8543))
+- Add reference to `uv build` and `uv publish` in the landing pages ([#8542](https://github.com/astral-sh/uv/pull/8542))
+- Avoid duplicate `[tool.uv]` header in TOML examples ([#8545](https://github.com/astral-sh/uv/pull/8545))
+- Document `.netrc` environment variable and path ([#8511](https://github.com/astral-sh/uv/pull/8511))
+- Fix `.netrc` typo in authentication docs ([#8521](https://github.com/astral-sh/uv/pull/8521))
+- Fix heading level of "Script support" on docs landing page ([#8544](https://github.com/astral-sh/uv/pull/8544))
+- Move the installation configuration docs to a separate page ([#8546](https://github.com/astral-sh/uv/pull/8546))
+- Update docs for `--publish-url` to avoid duplication. ([#8561](https://github.com/astral-sh/uv/pull/8561))
+- Fix typo ([#8554](https://github.com/astral-sh/uv/pull/8554))
+- Fix typo in description of `--strict` flag ([#8513](https://github.com/astral-sh/uv/pull/8513))
+
 ## 0.4.26
 
 ### Enhancements
