@@ -103,7 +103,7 @@ If an index is marked as `default = true`, it will be moved to the end of the pr
 given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
 PyPI default index.
 
-**Default value**: `"[]"`
+**Default value**: `[]`
 
 **Type**: `dict`
 
@@ -208,7 +208,7 @@ alternative registry.
 
 See [Dependencies](../concepts/dependencies.md) for more.
 
-**Default value**: `"[]"`
+**Default value**: `{}`
 
 **Type**: `dict`
 
