@@ -24,8 +24,8 @@ fn python_install() {
 
     ----- stderr -----
     Searching for Python installations
-    Installed Python 3.13.0 in [TIME]
-     + cpython-3.13.0-[PLATFORM]
+    Found: cpython-3.13.0-[PLATFORM]
+    Python is already available. Use `uv python install <request>` to install a specific version.
     "###);
 
     // Similarly, when a requested version is already installed
@@ -36,8 +36,7 @@ fn python_install() {
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.13
-    Installed Python 3.13.0 in [TIME]
-     + cpython-3.13.0-[PLATFORM]
+    Found existing installation for Python 3.13: cpython-3.13.0-[PLATFORM]
     "###);
 }
 
