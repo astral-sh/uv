@@ -86,7 +86,8 @@ pub struct Options {
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're respected in both `pyproject.toml` and `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
@@ -95,6 +96,27 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub workspace: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub sources: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub dev_dependencies: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub default_groups: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub managed: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub r#package: Option<serde::de::IgnoredAny>,
 }
 
 impl Options {
@@ -1551,24 +1573,20 @@ pub struct OptionsWire {
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`.
-    #[allow(dead_code)]
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
     workspace: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     sources: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     managed: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     r#package: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     default_groups: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     dev_dependencies: Option<serde::de::IgnoredAny>,
 }
 
@@ -1618,12 +1636,12 @@ impl From<OptionsWire> for Options {
             environments,
             publish_url,
             trusted_publishing,
-            workspace: _,
-            sources: _,
-            managed: _,
-            package: _,
-            default_groups: _,
-            dev_dependencies: _,
+            workspace,
+            sources,
+            default_groups,
+            dev_dependencies,
+            managed,
+            package,
         } = value;
 
         Self {
@@ -1667,15 +1685,21 @@ impl From<OptionsWire> for Options {
                 no_binary,
                 no_binary_package,
             },
-            publish: PublishOptions {
-                publish_url,
-                trusted_publishing,
-            },
             pip,
             cache_keys,
             override_dependencies,
             constraint_dependencies,
             environments,
+            publish: PublishOptions {
+                publish_url,
+                trusted_publishing,
+            },
+            workspace,
+            sources,
+            dev_dependencies,
+            default_groups,
+            managed,
+            package,
         }
     }
 }

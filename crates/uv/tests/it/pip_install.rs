@@ -201,6 +201,28 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn invalid_uv_toml_option_disallowed() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r"
+        managed = true
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
+    "###
+    );
+
+    Ok(())
+}
+
 /// For indirect, non-user controlled pyproject.toml, we don't enforce correctness.
 ///
 /// If we fail to extract the PEP 621 metadata, we fall back to treating it as a source
