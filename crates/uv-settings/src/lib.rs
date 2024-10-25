@@ -273,7 +273,6 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
 }
 
 #[derive(thiserror::Error, Debug)]
-#[allow(clippy::result_large_err)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
