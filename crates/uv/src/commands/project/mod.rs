@@ -7,7 +7,10 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, GroupsSpecification, LowerBound, Reinstall, TrustedHost, Upgrade};
+use uv_configuration::{
+    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, GroupsSpecification,
+    LowerBound, Reinstall, TrustedHost, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{

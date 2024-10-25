@@ -845,22 +845,6 @@ pub struct PipOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-    /// Allow insecure connections to host.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            allow-insecure-host = ["localhost:8080"]
-        "#
-    )]
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of

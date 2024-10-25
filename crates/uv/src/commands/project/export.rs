@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions, LowerBound, TrustedHost};
+use uv_configuration::{
+    Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
+    InstallOptions, LowerBound, TrustedHost,
+};
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;

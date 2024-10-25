@@ -5,7 +5,9 @@ use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, DevGroupsSpecification, LowerBound, TargetTriple, TrustedHost};
+use uv_configuration::{
+    Concurrency, DevGroupsSpecification, LowerBound, TargetTriple, TrustedHost,
+};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;

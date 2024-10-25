@@ -144,7 +144,6 @@ impl From<ResolverInstallerArgs> for PipOptions {
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
-            allow_insecure_host: None,
             resolution,
             prerelease: if pre {
                 Some(PrereleaseMode::Allow)

@@ -7,7 +7,10 @@ use itertools::Itertools;
 use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode, ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, TrustedHost};
+use uv_configuration::{
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
+    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, TrustedHost,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;

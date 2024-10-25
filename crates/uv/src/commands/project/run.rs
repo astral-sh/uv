@@ -18,7 +18,7 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
-    InstallOptions, LowerBound, SourceStrategy, TrustedHost
+    InstallOptions, LowerBound, SourceStrategy, TrustedHost,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;

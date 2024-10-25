@@ -66,22 +66,6 @@ pub(crate) struct GlobalSettings {
 impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
-        let preview = PreviewMode::from(
-            flag(args.preview, args.no_preview)
-                .combine(workspace.and_then(|workspace| workspace.globals.preview))
-                .unwrap_or(false),
-        );
-
-        let allow_insecure_host = if let Some(allow_insecure_host) = &args.allow_insecure_host {
-            allow_insecure_host
-                .iter()
-                .filter_map(|value| value.clone().into_option())
-                .collect()
-        } else {
-            workspace
-                .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
-                .unwrap_or_default()
-        };
         Self {
             quiet: args.quiet,
             verbose: args.verbose,
@@ -131,9 +115,29 @@ impl GlobalSettings {
             } else {
                 Connectivity::Online
             },
-            allow_insecure_host,
+            allow_insecure_host: args
+                .allow_insecure_host
+                .as_ref()
+                .map(|allow_insecure_host| {
+                    allow_insecure_host
+                        .iter()
+                        .filter_map(|value| value.clone().into_option())
+                })
+                .into_iter()
+                .flatten()
+                .chain(
+                    workspace
+                        .and_then(|workspace| workspace.globals.allow_insecure_host.clone())
+                        .into_iter()
+                        .flatten(),
+                )
+                .collect(),
             show_settings: args.show_settings,
-            preview,
+            preview: PreviewMode::from(
+                flag(args.preview, args.no_preview)
+                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
+                    .unwrap_or(false),
+            ),
             python_preference: args
                 .python_preference
                 .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
@@ -2211,7 +2215,6 @@ pub(crate) struct PipSettings {
     pub(crate) prefix: Option<Prefix>,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) build_options: BuildOptions,
@@ -2268,7 +2271,6 @@ impl PipSettings {
             find_links,
             index_strategy,
             keyring_provider,
-            allow_insecure_host,
             no_build,
             no_binary,
             only_binary,
@@ -2320,7 +2322,6 @@ impl PipSettings {
             find_links: top_level_find_links,
             index_strategy: top_level_index_strategy,
             keyring_provider: top_level_keyring_provider,
-            allow_insecure_host: top_level_allow_insecure_host,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
             dependency_metadata: top_level_dependency_metadata,
@@ -2352,7 +2353,6 @@ impl PipSettings {
         let find_links = find_links.combine(top_level_find_links);
         let index_strategy = index_strategy.combine(top_level_index_strategy);
         let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
-        let allow_insecure_host = allow_insecure_host.combine(top_level_allow_insecure_host);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
         let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
@@ -2427,10 +2427,6 @@ impl PipSettings {
             keyring_provider: args
                 .keyring_provider
                 .combine(keyring_provider)
-                .unwrap_or_default(),
-            allow_insecure_host: args
-                .allow_insecure_host
-                .combine(allow_insecure_host)
                 .unwrap_or_default(),
             generate_hashes: args
                 .generate_hashes
