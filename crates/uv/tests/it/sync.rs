@@ -1526,6 +1526,36 @@ fn sync_default_groups() -> Result<()> {
      - sniffio==1.3.1
     "###);
 
+    // Using `--group` should include the defaults
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "###);
+
+    // Using `--only-group` should exclude the defaults
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
+    "###);
+
     Ok(())
 }
 
