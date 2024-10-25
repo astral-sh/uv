@@ -9,6 +9,7 @@ use uv_configuration::{
     Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
 };
 use uv_fs::Simplified;
+use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::Pep723Script;
@@ -106,11 +107,13 @@ pub(crate) async fn remove(
                 }
             }
             DependencyType::Dev => {
-                let deps = toml.remove_dev_dependency(&package)?;
-                if deps.is_empty() {
+                let dev_deps = toml.remove_dev_dependency(&package)?;
+                let group_deps =
+                    toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
+                if dev_deps.is_empty() && group_deps.is_empty() {
                     warn_if_present(&package, &toml);
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dev-dependencies`"
+                        "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
                     );
                 }
             }
@@ -124,12 +127,24 @@ pub(crate) async fn remove(
                 }
             }
             DependencyType::Group(ref group) => {
-                let deps = toml.remove_dependency_group_requirement(&package, group)?;
-                if deps.is_empty() {
-                    warn_if_present(&package, &toml);
-                    anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dependency-groups`"
-                    );
+                if group == &*DEV_DEPENDENCIES {
+                    let dev_deps = toml.remove_dev_dependency(&package)?;
+                    let group_deps =
+                        toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
+                    if dev_deps.is_empty() && group_deps.is_empty() {
+                        warn_if_present(&package, &toml);
+                        anyhow::bail!(
+                            "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
+                        );
+                    }
+                } else {
+                    let deps = toml.remove_dependency_group_requirement(&package, group)?;
+                    if deps.is_empty() {
+                        warn_if_present(&package, &toml);
+                        anyhow::bail!(
+                            "The dependency `{package}` could not be found in `dependency-groups`"
+                        );
+                    }
                 }
             }
         }
@@ -262,8 +277,10 @@ fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
                     "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
                 );
             }
-            DependencyType::Group(_) => {
-                // TODO(zanieb): Once we support `remove --group`, add a warning here.
+            DependencyType::Group(group) => {
+                warn_user!(
+                    "`{name}` is in the `{group}` group; try calling `uv remove --group {group}`",
+                );
             }
         }
     }

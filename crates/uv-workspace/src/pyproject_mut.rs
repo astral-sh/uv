@@ -782,6 +782,26 @@ impl PyProjectTomlMut {
         Ok(())
     }
 
+    /// Returns `true` if the `tool.uv.dev-dependencies` table is present.
+    pub fn has_dev_dependencies(&self) -> bool {
+        self.doc
+            .get("tool")
+            .and_then(Item::as_table)
+            .and_then(|tool| tool.get("uv"))
+            .and_then(Item::as_table)
+            .and_then(|uv| uv.get("dev-dependencies"))
+            .is_some()
+    }
+
+    /// Returns `true` if the `dependency-groups` table is present and contains the given group.
+    pub fn has_dependency_group(&self, group: &GroupName) -> bool {
+        self.doc
+            .get("dependency-groups")
+            .and_then(Item::as_table)
+            .and_then(|groups| groups.get(group.as_ref()))
+            .is_some()
+    }
+
     /// Returns all the places in this `pyproject.toml` that contain a dependency with the given
     /// name.
     ///
