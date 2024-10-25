@@ -203,11 +203,7 @@ pub(crate) async fn add(
                 DependencyType::Optional(_) => {
                     bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
                 }
-                DependencyType::Group(_) => {
-                    // TODO(charlie): Allow adding to `dependency-groups` in non-`[project]`
-                    // targets, per PEP 735.
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use `dependency-groups` dependencies, or run `{}` instead", "uv add --dev".green())
-                }
+                DependencyType::Group(_) => {}
                 DependencyType::Dev => (),
             }
         }
@@ -476,9 +472,6 @@ pub(crate) async fn add(
                     DependencyType::Group(DEV_DEPENDENCIES.clone())
                 } else if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Dev)) {
                     // If the dependency already exists in `dev-dependencies`, use that.
-                    DependencyType::Dev
-                } else if target.as_project().is_some_and(uv_workspace::VirtualProject::is_non_project) {
-                    // TODO(charlie): Allow adding to `dependency-groups` in non-`[project]` targets.
                     DependencyType::Dev
                 } else {
                     // Otherwise, use `dependency-groups.dev`, unless it would introduce a separate table.
@@ -1018,14 +1011,6 @@ enum Target {
 }
 
 impl Target {
-    /// Returns the [`VirtualProject`] for the target, if it is a project.
-    fn as_project(&self) -> Option<&VirtualProject> {
-        match self {
-            Self::Project(project, _) => Some(project),
-            Self::Script(_, _) => None,
-        }
-    }
-
     /// Returns the [`Interpreter`] for the target.
     fn interpreter(&self) -> &Interpreter {
         match self {

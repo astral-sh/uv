@@ -1,18 +1,14 @@
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::str::FromStr;
 
-use tracing::warn;
-
+use crate::metadata::{LoweredRequirement, MetadataError};
+use crate::Metadata;
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_pypi_types::VerbatimParsedUrl;
-use uv_workspace::pyproject::{DependencyGroupSpecifier, ToolUvSources};
+use uv_workspace::dependency_groups::FlatDependencyGroups;
+use uv_workspace::pyproject::ToolUvSources;
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
-
-use crate::metadata::{Cycle, LoweredRequirement, MetadataError};
-use crate::Metadata;
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
@@ -121,54 +117,55 @@ impl RequiresDist {
                 .collect::<BTreeMap<_, _>>();
 
             // Resolve any `include-group` entries in `dependency-groups`.
-            let dependency_groups = resolve_dependency_groups(&dependency_groups)?
-                .into_iter()
-                .chain(
-                    // Only add the `dev` group if `dev-dependencies` is defined.
-                    dev_dependencies
-                        .into_iter()
-                        .map(|requirements| (DEV_DEPENDENCIES.clone(), requirements.clone())),
-                )
-                .map(|(name, requirements)| {
-                    let requirements = match source_strategy {
-                        SourceStrategy::Enabled => requirements
+            let dependency_groups =
+                FlatDependencyGroups::from_dependency_groups(&dependency_groups)?
+                    .into_iter()
+                    .chain(
+                        // Only add the `dev` group if `dev-dependencies` is defined.
+                        dev_dependencies
                             .into_iter()
-                            .flat_map(|requirement| {
-                                let group_name = name.clone();
-                                let requirement_name = requirement.name.clone();
-                                LoweredRequirement::from_requirement(
-                                    requirement,
-                                    &metadata.name,
-                                    project_workspace.project_root(),
-                                    project_sources,
-                                    project_indexes,
-                                    locations,
-                                    project_workspace.workspace(),
-                                    lower_bound,
-                                )
-                                .map(move |requirement| {
-                                    match requirement {
-                                        Ok(requirement) => Ok(requirement.into_inner()),
-                                        Err(err) => Err(MetadataError::GroupLoweringError(
-                                            group_name.clone(),
-                                            requirement_name.clone(),
-                                            Box::new(err),
-                                        )),
-                                    }
+                            .map(|requirements| (DEV_DEPENDENCIES.clone(), requirements.clone())),
+                    )
+                    .map(|(name, requirements)| {
+                        let requirements = match source_strategy {
+                            SourceStrategy::Enabled => requirements
+                                .into_iter()
+                                .flat_map(|requirement| {
+                                    let group_name = name.clone();
+                                    let requirement_name = requirement.name.clone();
+                                    LoweredRequirement::from_requirement(
+                                        requirement,
+                                        &metadata.name,
+                                        project_workspace.project_root(),
+                                        project_sources,
+                                        project_indexes,
+                                        locations,
+                                        project_workspace.workspace(),
+                                        lower_bound,
+                                    )
+                                    .map(move |requirement| {
+                                        match requirement {
+                                            Ok(requirement) => Ok(requirement.into_inner()),
+                                            Err(err) => Err(MetadataError::GroupLoweringError(
+                                                group_name.clone(),
+                                                requirement_name.clone(),
+                                                Box::new(err),
+                                            )),
+                                        }
+                                    })
                                 })
-                            })
-                            .collect::<Result<Vec<_>, _>>(),
-                        SourceStrategy::Disabled => Ok(requirements
-                            .into_iter()
-                            .map(uv_pypi_types::Requirement::from)
-                            .collect()),
-                    }?;
-                    Ok::<(GroupName, Vec<uv_pypi_types::Requirement>), MetadataError>((
-                        name,
-                        requirements,
-                    ))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+                                .collect::<Result<Vec<_>, _>>(),
+                            SourceStrategy::Disabled => Ok(requirements
+                                .into_iter()
+                                .map(uv_pypi_types::Requirement::from)
+                                .collect()),
+                        }?;
+                        Ok::<(GroupName, Vec<uv_pypi_types::Requirement>), MetadataError>((
+                            name,
+                            requirements,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
             // Merge any overlapping groups.
             let mut map = BTreeMap::new();
@@ -233,81 +230,6 @@ impl From<Metadata> for RequiresDist {
             dependency_groups: metadata.dependency_groups,
         }
     }
-}
-
-/// Resolve the dependency groups (which may contain references to other groups) into concrete
-/// lists of requirements.
-fn resolve_dependency_groups(
-    groups: &BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
-) -> Result<BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>, MetadataError> {
-    fn resolve_group<'data>(
-        resolved: &mut BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-        groups: &'data BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
-        name: &'data GroupName,
-        parents: &mut Vec<&'data GroupName>,
-    ) -> Result<(), MetadataError> {
-        let Some(specifiers) = groups.get(name) else {
-            // Missing group
-            let parent_name = parents
-                .iter()
-                .last()
-                .copied()
-                .expect("parent when group is missing");
-            return Err(MetadataError::GroupNotFound(
-                name.clone(),
-                parent_name.clone(),
-            ));
-        };
-
-        // "Dependency Group Includes MUST NOT include cycles, and tools SHOULD report an error if they detect a cycle."
-        if parents.contains(&name) {
-            return Err(MetadataError::DependencyGroupCycle(Cycle(
-                parents.iter().copied().cloned().collect(),
-            )));
-        }
-
-        // If we already resolved this group, short-circuit.
-        if resolved.contains_key(name) {
-            return Ok(());
-        }
-
-        parents.push(name);
-        let mut requirements = Vec::with_capacity(specifiers.len());
-        for specifier in *specifiers {
-            match specifier {
-                DependencyGroupSpecifier::Requirement(requirement) => {
-                    match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement) {
-                        Ok(requirement) => requirements.push(requirement),
-                        Err(err) => {
-                            return Err(MetadataError::GroupParseError(
-                                name.clone(),
-                                requirement.clone(),
-                                Box::new(err),
-                            ));
-                        }
-                    }
-                }
-                DependencyGroupSpecifier::IncludeGroup { include_group } => {
-                    resolve_group(resolved, groups, include_group, parents)?;
-                    requirements.extend(resolved.get(include_group).into_iter().flatten().cloned());
-                }
-                DependencyGroupSpecifier::Object(map) => {
-                    warn!("Ignoring Dependency Object Specifier referenced by `{name}`: {map:?}");
-                }
-            }
-        }
-        parents.pop();
-
-        resolved.insert(name.clone(), requirements);
-        Ok(())
-    }
-
-    let mut resolved = BTreeMap::new();
-    for name in groups.keys() {
-        let mut parents = Vec::new();
-        resolve_group(&mut resolved, groups, name, &mut parents)?;
-    }
-    Ok(resolved)
 }
 
 #[cfg(test)]

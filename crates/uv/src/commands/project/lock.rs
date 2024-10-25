@@ -299,7 +299,7 @@ async fn do_lock(
     } = settings;
 
     // Collect the requirements, etc.
-    let requirements = workspace.non_project_requirements().collect::<Vec<_>>();
+    let requirements = workspace.non_project_requirements()?;
     let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
     let dev: Vec<_> = workspace
