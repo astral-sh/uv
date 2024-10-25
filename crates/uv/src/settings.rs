@@ -245,6 +245,8 @@ pub(crate) struct RunSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) env_file: Option<PathBuf>,
+    pub(crate) no_env_file: bool,
 }
 
 impl RunSettings {
@@ -279,6 +281,8 @@ impl RunSettings {
             no_project,
             python,
             show_resolution,
+            env_file,
+            no_env_file,
         } = args;
 
         Self {
@@ -309,6 +313,8 @@ impl RunSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            env_file,
+            no_env_file,
         }
     }
 }

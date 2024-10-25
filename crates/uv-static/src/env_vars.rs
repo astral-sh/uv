@@ -389,4 +389,10 @@ impl EnvVars {
 
     /// Used to set test credentials for keyring tests.
     pub const KEYRING_TEST_CREDENTIALS: &'static str = "KEYRING_TEST_CREDENTIALS";
+
+    /// Used to overwrite path for loading `.env` files when executing `uv run` commands.
+    pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
+
+    /// Used to ignore `.env` files when executing `uv run` commands.
+    pub const UV_NO_ENV_FILE: &'static str = "UV_NO_ENV_FILE";
 }
