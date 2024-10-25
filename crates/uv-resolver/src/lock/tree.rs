@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, VecDeque};
+use std::path::Path;
 
 use itertools::Itertools;
+use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
-use petgraph::visit::Dfs;
 use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -11,7 +12,7 @@ use uv_configuration::DevGroupsManifest;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{Dependency, PackageId};
+use crate::lock::{Dependency, PackageId, Source};
 use crate::Lock;
 
 #[derive(Debug)]
@@ -24,6 +25,8 @@ pub struct TreeDisplay<'env> {
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
+    /// The packages considered as roots of the dependency tree.
+    roots: Vec<NodeIndex>,
 }
 
 impl<'env> TreeDisplay<'env> {
@@ -38,6 +41,38 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
+        // Identify the workspace members.
+        //
+        // The members are encoded directly in the lockfile, unless the workspace contains a
+        // single member at the root, in which case, we identify it by its source.
+        let members: FxHashSet<&PackageId> = if lock.members().is_empty() {
+            lock.packages
+                .iter()
+                .filter_map(|package| {
+                    let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source
+                    else {
+                        return None;
+                    };
+                    if path == Path::new("") {
+                        Some(&package.id)
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            lock.packages
+                .iter()
+                .filter_map(|package| {
+                    if lock.members().contains(&package.id.name) {
+                        Some(&package.id)
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
+
         // Create a graph.
         let mut graph = petgraph::graph::Graph::<&PackageId, Edge, petgraph::Directed>::new();
 
@@ -136,21 +171,14 @@ impl<'env> TreeDisplay<'env> {
 
         // Step 1: Filter out packages that aren't reachable on this platform.
         if let Some(environment_markers) = markers {
-            let mut reachable = FxHashSet::default();
-
             // Perform a DFS from the root nodes to find the reachable nodes, following only the
             // production edges.
-            let mut stack = graph
+            let mut reachable = graph
                 .node_indices()
-                .filter(|index| {
-                    graph
-                        .edges_directed(*index, Direction::Incoming)
-                        .next()
-                        .is_none()
-                })
-                .collect::<VecDeque<_>>();
+                .filter(|index| members.contains(graph[*index]))
+                .collect::<FxHashSet<_>>();
+            let mut stack = reachable.iter().copied().collect::<VecDeque<_>>();
             while let Some(node) = stack.pop_front() {
-                reachable.insert(node);
                 for edge in graph.edges_directed(node, Direction::Outgoing) {
                     if edge
                         .weight()
@@ -158,7 +186,9 @@ impl<'env> TreeDisplay<'env> {
                         .complexified_marker
                         .evaluate(environment_markers, &[])
                     {
-                        stack.push_back(edge.target());
+                        if reachable.insert(edge.target()) {
+                            stack.push_back(edge.target());
+                        }
                     }
                 }
             }
@@ -167,24 +197,16 @@ impl<'env> TreeDisplay<'env> {
             graph.retain_nodes(|_, index| reachable.contains(&index));
         }
 
-        // Step 2: Filter the graph to those that are reachable in production or development, if
-        // `--no-dev` or `--only-dev` were specified, respectively.
+        // Step 2: Filter the graph to those that are reachable in production or development.
         {
-            let mut reachable = FxHashSet::default();
-
             // Perform a DFS from the root nodes to find the reachable nodes, following only the
             // production edges.
-            let mut stack = graph
+            let mut reachable = graph
                 .node_indices()
-                .filter(|index| {
-                    graph
-                        .edges_directed(*index, Direction::Incoming)
-                        .next()
-                        .is_none()
-                })
-                .collect::<VecDeque<_>>();
+                .filter(|index| members.contains(graph[*index]))
+                .collect::<FxHashSet<_>>();
+            let mut stack = reachable.iter().copied().collect::<VecDeque<_>>();
             while let Some(node) = stack.pop_front() {
-                reachable.insert(node);
                 for edge in graph.edges_directed(node, Direction::Outgoing) {
                     let include = match edge.weight() {
                         Edge::Prod(_) => dev.prod(),
@@ -192,7 +214,9 @@ impl<'env> TreeDisplay<'env> {
                         Edge::Dev(group, _) => dev.iter().contains(*group),
                     };
                     if include {
-                        stack.push_back(edge.target());
+                        if reachable.insert(edge.target()) {
+                            stack.push_back(edge.target());
+                        }
                     }
                 }
             }
@@ -208,23 +232,61 @@ impl<'env> TreeDisplay<'env> {
 
         // Step 4: Filter the graph to those nodes reachable from the target packages.
         if !packages.is_empty() {
-            let mut reachable = FxHashSet::default();
-
             // Perform a DFS from the root nodes to find the reachable nodes.
-            let mut dfs = Dfs {
-                stack: graph
-                    .node_indices()
-                    .filter(|index| packages.contains(&graph[*index].name))
-                    .collect::<Vec<_>>(),
-                ..Dfs::empty(&graph)
-            };
-            while let Some(node) = dfs.next(&graph) {
-                reachable.insert(node);
+            let mut reachable = graph
+                .node_indices()
+                .filter(|index| packages.contains(&graph[*index].name))
+                .collect::<FxHashSet<_>>();
+            let mut stack = reachable.iter().copied().collect::<VecDeque<_>>();
+            while let Some(node) = stack.pop_front() {
+                for edge in graph.edges_directed(node, Direction::Outgoing) {
+                    if reachable.insert(edge.target()) {
+                        stack.push_back(edge.target());
+                    }
+                }
             }
 
             // Remove the unreachable nodes from the graph.
             graph.retain_nodes(|_, index| reachable.contains(&index));
         }
+
+        // Compute the list of roots.
+        let roots = {
+            let mut edges = vec![];
+
+            // Remove any cycles.
+            let feedback_set: Vec<EdgeIndex> = petgraph::algo::greedy_feedback_arc_set(&graph)
+                .map(|e| e.id())
+                .collect();
+            for edge_id in feedback_set {
+                if let Some((source, target)) = graph.edge_endpoints(edge_id) {
+                    if let Some(weight) = graph.remove_edge(edge_id) {
+                        edges.push((source, target, weight));
+                    }
+                }
+            }
+
+            // Find the root nodes.
+            let mut roots = graph
+                .node_indices()
+                .filter(|index| {
+                    graph
+                        .edges_directed(*index, Direction::Incoming)
+                        .next()
+                        .is_none()
+                })
+                .collect::<Vec<_>>();
+
+            // Sort the roots.
+            roots.sort_by_key(|index| &graph[*index]);
+
+            // Re-add the removed edges.
+            for (source, target, weight) in edges {
+                graph.add_edge(source, target, weight);
+            }
+
+            roots
+        };
 
         // Re-create the inverse map.
         {
@@ -239,6 +301,7 @@ impl<'env> TreeDisplay<'env> {
             inverse,
             depth,
             no_dedupe,
+            roots,
         }
     }
 
@@ -355,24 +418,9 @@ impl<'env> TreeDisplay<'env> {
         let mut path = Vec::new();
         let mut lines = Vec::new();
 
-        let roots = {
-            let mut roots = self
-                .graph
-                .node_indices()
-                .filter(|index| {
-                    self.graph
-                        .edges_directed(*index, petgraph::Direction::Incoming)
-                        .next()
-                        .is_none()
-                })
-                .collect::<Vec<_>>();
-            roots.sort_by_key(|index| &self.graph[*index]);
-            roots
-        };
-
-        for node in roots {
+        for node in &self.roots {
             path.clear();
-            lines.extend(self.visit(Node::Root(self.graph[node]), &mut visited, &mut path));
+            lines.extend(self.visit(Node::Root(self.graph[*node]), &mut visited, &mut path));
         }
 
         lines
