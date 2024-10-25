@@ -47,22 +47,33 @@ fn help() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet                      Do not print any output
-      -v, --verbose...                 Use verbose output
-          --color <COLOR_CHOICE>       Control colors in output [default: auto] [possible values: auto,
-                                       always, never]
-          --native-tls                 Whether to load TLS certificates from the platform's native
-                                       certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access
-          --no-progress                Hide all progress outputs
-          --directory <DIRECTORY>      Change to the given directory prior to running the command
-          --project <PROJECT>          Run the command within the given project directory
-          --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
-                                       UV_CONFIG_FILE=]
-          --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) [env: UV_NO_CONFIG=]
-      -h, --help                       Display the concise help for this command
-      -V, --version                    Display the uv version
+      -q, --quiet
+              Do not print any output
+      -v, --verbose...
+              Use verbose output
+          --color <COLOR_CHOICE>
+              Control colors in output [default: auto] [possible values: auto, always, never]
+          --native-tls
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
+          --offline
+              Disable network access
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host [env: UV_INSECURE_HOST=]
+          --no-progress
+              Hide all progress outputs
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command
+          --project <PROJECT>
+              Run the command within the given project directory
+          --config-file <CONFIG_FILE>
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help
+              Display the concise help for this command
+      -V, --version
+              Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 
@@ -116,22 +127,33 @@ fn help_flag() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet                      Do not print any output
-      -v, --verbose...                 Use verbose output
-          --color <COLOR_CHOICE>       Control colors in output [default: auto] [possible values: auto,
-                                       always, never]
-          --native-tls                 Whether to load TLS certificates from the platform's native
-                                       certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access
-          --no-progress                Hide all progress outputs
-          --directory <DIRECTORY>      Change to the given directory prior to running the command
-          --project <PROJECT>          Run the command within the given project directory
-          --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
-                                       UV_CONFIG_FILE=]
-          --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) [env: UV_NO_CONFIG=]
-      -h, --help                       Display the concise help for this command
-      -V, --version                    Display the uv version
+      -q, --quiet
+              Do not print any output
+      -v, --verbose...
+              Use verbose output
+          --color <COLOR_CHOICE>
+              Control colors in output [default: auto] [possible values: auto, always, never]
+          --native-tls
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
+          --offline
+              Disable network access
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host [env: UV_INSECURE_HOST=]
+          --no-progress
+              Hide all progress outputs
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command
+          --project <PROJECT>
+              Run the command within the given project directory
+          --config-file <CONFIG_FILE>
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help
+              Display the concise help for this command
+      -V, --version
+              Display the uv version
 
     Use `uv help` for more details.
 
@@ -184,22 +206,33 @@ fn help_short_flag() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet                      Do not print any output
-      -v, --verbose...                 Use verbose output
-          --color <COLOR_CHOICE>       Control colors in output [default: auto] [possible values: auto,
-                                       always, never]
-          --native-tls                 Whether to load TLS certificates from the platform's native
-                                       certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access
-          --no-progress                Hide all progress outputs
-          --directory <DIRECTORY>      Change to the given directory prior to running the command
-          --project <PROJECT>          Run the command within the given project directory
-          --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
-                                       UV_CONFIG_FILE=]
-          --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) [env: UV_NO_CONFIG=]
-      -h, --help                       Display the concise help for this command
-      -V, --version                    Display the uv version
+      -q, --quiet
+              Do not print any output
+      -v, --verbose...
+              Use verbose output
+          --color <COLOR_CHOICE>
+              Control colors in output [default: auto] [possible values: auto, always, never]
+          --native-tls
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
+          --offline
+              Disable network access
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host [env: UV_INSECURE_HOST=]
+          --no-progress
+              Hide all progress outputs
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command
+          --project <PROJECT>
+              Run the command within the given project directory
+          --config-file <CONFIG_FILE>
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help
+              Display the concise help for this command
+      -V, --version
+              Display the uv version
 
     Use `uv help` for more details.
 
@@ -211,7 +244,7 @@ fn help_short_flag() {
 fn help_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python"), @r##"
+    uv_snapshot!(context.filters(), context.help().arg("python"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -340,6 +373,20 @@ fn help_subcommand() {
               
               When disabled, uv will only use locally cached data and locally available files.
 
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host.
+              
+              Can be provided multiple times.
+              
+              Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+              `localhost:8080`), or a URL (e.g., `https://localhost`).
+              
+              WARNING: Hosts included in this list will not be verified against the system's certificate
+              store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+              bypasses SSL verification and could expose you to MITM attacks.
+              
+              [env: UV_INSECURE_HOST=]
+
           --no-progress
               Hide all progress outputs.
               
@@ -392,14 +439,14 @@ fn help_subcommand() {
 
 
     ----- stderr -----
-    "##);
+    "###);
 }
 
 #[test]
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r##"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -510,6 +557,20 @@ fn help_subsubcommand() {
               
               When disabled, uv will only use locally cached data and locally available files.
 
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host.
+              
+              Can be provided multiple times.
+              
+              Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+              `localhost:8080`), or a URL (e.g., `https://localhost`).
+              
+              WARNING: Hosts included in this list will not be verified against the system's certificate
+              store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+              bypasses SSL verification and could expose you to MITM attacks.
+              
+              [env: UV_INSECURE_HOST=]
+
           --no-progress
               Hide all progress outputs.
               
@@ -560,7 +621,7 @@ fn help_subsubcommand() {
 
 
     ----- stderr -----
-    "##);
+    "###);
 }
 
 #[test]
@@ -596,22 +657,33 @@ fn help_flag_subcommand() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet                      Do not print any output
-      -v, --verbose...                 Use verbose output
-          --color <COLOR_CHOICE>       Control colors in output [default: auto] [possible values: auto,
-                                       always, never]
-          --native-tls                 Whether to load TLS certificates from the platform's native
-                                       certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access
-          --no-progress                Hide all progress outputs
-          --directory <DIRECTORY>      Change to the given directory prior to running the command
-          --project <PROJECT>          Run the command within the given project directory
-          --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
-                                       UV_CONFIG_FILE=]
-          --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) [env: UV_NO_CONFIG=]
-      -h, --help                       Display the concise help for this command
-      -V, --version                    Display the uv version
+      -q, --quiet
+              Do not print any output
+      -v, --verbose...
+              Use verbose output
+          --color <COLOR_CHOICE>
+              Control colors in output [default: auto] [possible values: auto, always, never]
+          --native-tls
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
+          --offline
+              Disable network access
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host [env: UV_INSECURE_HOST=]
+          --no-progress
+              Hide all progress outputs
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command
+          --project <PROJECT>
+              Run the command within the given project directory
+          --config-file <CONFIG_FILE>
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help
+              Display the concise help for this command
+      -V, --version
+              Display the uv version
 
     Use `uv help python` for more details.
 
@@ -650,22 +722,33 @@ fn help_flag_subsubcommand() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet                      Do not print any output
-      -v, --verbose...                 Use verbose output
-          --color <COLOR_CHOICE>       Control colors in output [default: auto] [possible values: auto,
-                                       always, never]
-          --native-tls                 Whether to load TLS certificates from the platform's native
-                                       certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access
-          --no-progress                Hide all progress outputs
-          --directory <DIRECTORY>      Change to the given directory prior to running the command
-          --project <PROJECT>          Run the command within the given project directory
-          --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
-                                       UV_CONFIG_FILE=]
-          --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) [env: UV_NO_CONFIG=]
-      -h, --help                       Display the concise help for this command
-      -V, --version                    Display the uv version
+      -q, --quiet
+              Do not print any output
+      -v, --verbose...
+              Use verbose output
+          --color <COLOR_CHOICE>
+              Control colors in output [default: auto] [possible values: auto, always, never]
+          --native-tls
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
+          --offline
+              Disable network access
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host [env: UV_INSECURE_HOST=]
+          --no-progress
+              Hide all progress outputs
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command
+          --project <PROJECT>
+              Run the command within the given project directory
+          --config-file <CONFIG_FILE>
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help
+              Display the concise help for this command
+      -V, --version
+              Display the uv version
 
     ----- stderr -----
     "###);
@@ -796,22 +879,33 @@ fn help_with_global_option() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet                      Do not print any output
-      -v, --verbose...                 Use verbose output
-          --color <COLOR_CHOICE>       Control colors in output [default: auto] [possible values: auto,
-                                       always, never]
-          --native-tls                 Whether to load TLS certificates from the platform's native
-                                       certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access
-          --no-progress                Hide all progress outputs
-          --directory <DIRECTORY>      Change to the given directory prior to running the command
-          --project <PROJECT>          Run the command within the given project directory
-          --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
-                                       UV_CONFIG_FILE=]
-          --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) [env: UV_NO_CONFIG=]
-      -h, --help                       Display the concise help for this command
-      -V, --version                    Display the uv version
+      -q, --quiet
+              Do not print any output
+      -v, --verbose...
+              Use verbose output
+          --color <COLOR_CHOICE>
+              Control colors in output [default: auto] [possible values: auto, always, never]
+          --native-tls
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
+          --offline
+              Disable network access
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host [env: UV_INSECURE_HOST=]
+          --no-progress
+              Hide all progress outputs
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command
+          --project <PROJECT>
+              Run the command within the given project directory
+          --config-file <CONFIG_FILE>
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help
+              Display the concise help for this command
+      -V, --version
+              Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 
@@ -901,22 +995,33 @@ fn help_with_no_pager() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet                      Do not print any output
-      -v, --verbose...                 Use verbose output
-          --color <COLOR_CHOICE>       Control colors in output [default: auto] [possible values: auto,
-                                       always, never]
-          --native-tls                 Whether to load TLS certificates from the platform's native
-                                       certificate store [env: UV_NATIVE_TLS=]
-          --offline                    Disable network access
-          --no-progress                Hide all progress outputs
-          --directory <DIRECTORY>      Change to the given directory prior to running the command
-          --project <PROJECT>          Run the command within the given project directory
-          --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
-                                       UV_CONFIG_FILE=]
-          --no-config                  Avoid discovering configuration files (`pyproject.toml`,
-                                       `uv.toml`) [env: UV_NO_CONFIG=]
-      -h, --help                       Display the concise help for this command
-      -V, --version                    Display the uv version
+      -q, --quiet
+              Do not print any output
+      -v, --verbose...
+              Use verbose output
+          --color <COLOR_CHOICE>
+              Control colors in output [default: auto] [possible values: auto, always, never]
+          --native-tls
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
+          --offline
+              Disable network access
+          --allow-insecure-host <ALLOW_INSECURE_HOST>
+              Allow insecure connections to a host [env: UV_INSECURE_HOST=]
+          --no-progress
+              Hide all progress outputs
+          --directory <DIRECTORY>
+              Change to the given directory prior to running the command
+          --project <PROJECT>
+              Run the command within the given project directory
+          --config-file <CONFIG_FILE>
+              The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
+          --no-config
+              Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
+      -h, --help
+              Display the concise help for this command
+      -V, --version
+              Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 

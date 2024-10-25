@@ -11,7 +11,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall,
+    TrustedHost, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -82,6 +83,7 @@ pub(crate) async fn lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
@@ -96,6 +98,7 @@ pub(crate) async fn lock(
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -119,6 +122,7 @@ pub(crate) async fn lock(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -184,6 +188,7 @@ pub(super) async fn do_safe_lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
@@ -211,6 +216,7 @@ pub(super) async fn do_safe_lock(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -246,6 +252,7 @@ pub(super) async fn do_safe_lock(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -274,6 +281,7 @@ async fn do_lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
@@ -284,7 +292,6 @@ async fn do_lock(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         dependency_metadata,

@@ -7,7 +7,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, Upgrade};
+use uv_configuration::{Concurrency, TrustedHost, Upgrade};
 use uv_distribution_types::UnresolvedRequirementSpecification;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -49,12 +49,14 @@ pub(crate) async fn install(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -79,7 +81,8 @@ pub(crate) async fn install(
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Parse the input requirement.
     let target = Target::parse(&package, from.as_deref());
@@ -111,6 +114,7 @@ pub(crate) async fn install(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -180,6 +184,7 @@ pub(crate) async fn install(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -229,6 +234,7 @@ pub(crate) async fn install(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -352,6 +358,7 @@ pub(crate) async fn install(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             &cache,
             printer,
         )
@@ -377,6 +384,7 @@ pub(crate) async fn install(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             &cache,
             printer,
         )
@@ -400,6 +408,7 @@ pub(crate) async fn install(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             &cache,
             printer,
         )

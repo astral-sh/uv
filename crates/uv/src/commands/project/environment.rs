@@ -10,7 +10,7 @@ use crate::settings::ResolverInstallerSettings;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::Connectivity;
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, TrustedHost};
 use uv_distribution_types::Resolution;
 use uv_python::{Interpreter, PythonEnvironment};
 
@@ -37,6 +37,7 @@ impl CachedEnvironment {
         connectivity: Connectivity,
         concurrency: Concurrency,
         native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
         cache: &Cache,
         printer: Printer,
     ) -> Result<Self, ProjectError> {
@@ -66,6 +67,7 @@ impl CachedEnvironment {
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -116,6 +118,7 @@ impl CachedEnvironment {
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )

@@ -9,7 +9,7 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
-    HashCheckingMode, InstallOptions, LowerBound,
+    HashCheckingMode, InstallOptions, LowerBound, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
@@ -54,6 +54,7 @@ pub(crate) async fn sync(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -101,6 +102,7 @@ pub(crate) async fn sync(
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -122,6 +124,7 @@ pub(crate) async fn sync(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -164,6 +167,7 @@ pub(crate) async fn sync(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -188,6 +192,7 @@ pub(super) async fn do_sync(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
@@ -207,7 +212,6 @@ pub(super) async fn do_sync(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         dependency_metadata,
         config_setting,
         no_build_isolation,
