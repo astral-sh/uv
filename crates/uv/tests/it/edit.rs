@@ -4396,12 +4396,13 @@ fn add_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             pyproject_toml, @r###"
-        [tool.uv]
-        dev-dependencies = [
-            "iniconfig>=2.0.0",
-        ]
         [tool.uv.workspace]
         members = []
+
+        [dependency-groups]
+        dev = [
+            "iniconfig>=2.0.0",
+        ]
         "###
         );
     });

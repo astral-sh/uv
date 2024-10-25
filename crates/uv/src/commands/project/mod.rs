@@ -36,6 +36,7 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
+use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::Workspace;
 
@@ -150,6 +151,9 @@ pub(crate) enum ProjectError {
 
     #[error("Failed to update `pyproject.toml`")]
     PyprojectTomlUpdate,
+
+    #[error(transparent)]
+    DependencyGroup(#[from] DependencyGroupError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),

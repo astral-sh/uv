@@ -14,6 +14,14 @@ use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
+pub use crate::lock::requirements_txt::RequirementsTxtExport;
+pub use crate::lock::tree::TreeDisplay;
+use crate::requires_python::SimplifiedMarkerTree;
+use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
+use crate::{
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
+    ResolutionMode,
+};
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
 use uv_distribution::DistributionDatabase;
@@ -35,16 +43,8 @@ use uv_pypi_types::{
     ResolverMarkerEnvironment,
 };
 use uv_types::{BuildContext, HashStrategy};
+use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{InstallTarget, Workspace};
-
-pub use crate::lock::requirements_txt::RequirementsTxtExport;
-pub use crate::lock::tree::TreeDisplay;
-use crate::requires_python::SimplifiedMarkerTree;
-use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::{
-    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
-    ResolutionMode,
-};
 
 mod requirements_txt;
 mod tree;
@@ -638,8 +638,11 @@ impl Lock {
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in (legacy) non-project workspace roots).
+        let groups = project
+            .groups()
+            .map_err(|err| LockErrorKind::DependencyGroup { err })?;
         for group in dev.iter() {
-            for dependency in project.group(group) {
+            for dependency in groups.get(group).into_iter().flatten() {
                 if dependency.marker.evaluate(marker_env, &[]) {
                     let root_name = &dependency.name;
                     let root = self
@@ -4134,6 +4137,11 @@ enum LockErrorKind {
         /// The inner error we forward.
         #[source]
         err: uv_distribution::Error,
+    },
+    #[error("Failed to resolve `dependency-groups`")]
+    DependencyGroup {
+        #[source]
+        err: DependencyGroupError,
     },
 }
 
