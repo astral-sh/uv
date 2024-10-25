@@ -468,9 +468,9 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(ErrorKind::from)?
+            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
             .error_for_status()
-            .map_err(ErrorKind::from)?;
+            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
         match cached
             .cache_policy
             .after_response(new_cache_policy_builder, &response)
@@ -500,16 +500,17 @@ impl CachedClient {
         &self,
         req: Request,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
-        trace!("Sending fresh {} request for {}", req.method(), req.url());
+        let url = req.url().clone();
+        trace!("Sending fresh {} request for {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let response = self
             .0
-            .for_host(req.url())
+            .for_host(&url)
             .execute(req)
             .await
-            .map_err(ErrorKind::from)?
+            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
             .error_for_status()
-            .map_err(ErrorKind::from)?;
+            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
         let cache_policy = cache_policy_builder.build(&response);
         let cache_policy = if cache_policy.to_archived().is_storable() {
             Some(Box::new(cache_policy))
