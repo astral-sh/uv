@@ -230,7 +230,7 @@ pub struct ToolUv {
     ///
     /// See [Dependencies](../concepts/dependencies.md) for more.
     #[option(
-        default = "\"[]\"",
+        default = "{}",
         value_type = "dict",
         example = r#"
             [tool.uv.sources]
@@ -269,7 +269,7 @@ pub struct ToolUv {
     /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
     /// PyPI default index.
     #[option(
-        default = "\"[]\"",
+        default = "[]",
         value_type = "dict",
         example = r#"
             [[tool.uv.index]]
@@ -340,7 +340,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             dev-dependencies = ["ruff==0.5.0"]
@@ -374,7 +374,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
@@ -405,7 +405,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             # Ensure that the grpcio version is always less than 1.65, if it's requested by a
@@ -431,7 +431,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "str | list[str]",
         example = r#"
             # Resolve for macOS, but not for Linux or Windows.
@@ -511,7 +511,7 @@ pub struct ToolUvWorkspace {
     ///
     /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             members = ["member1", "path/to/member2", "libs/*"]
@@ -525,7 +525,7 @@ pub struct ToolUvWorkspace {
     ///
     /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             exclude = ["member1", "path/to/member2", "libs/*"]
