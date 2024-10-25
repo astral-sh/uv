@@ -49,8 +49,15 @@ default-groups = ["docs"]
 
 ### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
-The project's development dependencies. Development dependencies will be installed by
-default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
+The project's development dependencies.
+
+Development dependencies will be installed by default in `uv run` and `uv sync`, but will
+not appear in the project's published metadata.
+
+Use of this field is not recommend anymore. Instead, use the `dependency-groups.dev` field
+which is a standardized way to declare development dependencies. The contents of
+`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the the
+final requirements of the `dev` dependency group.
 
 **Default value**: `[]`
 
