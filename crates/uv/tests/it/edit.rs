@@ -1174,6 +1174,11 @@ fn add_remove_dev() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+
+        [package.metadata.dependency-groups]
+        dev = []
         "###
         );
     });
