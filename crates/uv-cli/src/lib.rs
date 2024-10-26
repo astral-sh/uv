@@ -2473,7 +2473,7 @@ pub struct InitArgs {
     ///
     /// Defines a `[build-system]` for the project.
     ///
-    /// This is the default behavior when using `--lib`.
+    /// This is the default behavior when using `--lib` or `--build-backend`.
     ///
     /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
     /// project structure.
@@ -2485,7 +2485,7 @@ pub struct InitArgs {
     /// Does not include a `[build-system]` for the project.
     ///
     /// This is the default behavior when using `--app`.
-    #[arg(long, overrides_with = "package", conflicts_with = "lib")]
+    #[arg(long, overrides_with = "package", conflicts_with_all = ["lib", "build_backend"])]
     pub r#no_package: bool,
 
     /// Create a project for an application.
@@ -2515,7 +2515,7 @@ pub struct InitArgs {
     ///
     /// By default, adds a requirement on the system Python version; use `--python` to specify an
     /// alternative Python version requirement.
-    #[arg(long, alias="script", conflicts_with_all=["app", "lib", "package"])]
+    #[arg(long, alias="script", conflicts_with_all=["app", "lib", "package", "build_backend"])]
     pub r#script: bool,
 
     /// Initialize a version control system for the project.
@@ -2526,6 +2526,8 @@ pub struct InitArgs {
     pub vcs: Option<VersionControlSystem>,
 
     /// Initialize a build-backend of choice for the project.
+    ///
+    /// Implicitly sets `--package`.
     #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
     pub build_backend: Option<ProjectBuildBackend>,
 
