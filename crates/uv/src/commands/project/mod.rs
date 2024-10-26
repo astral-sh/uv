@@ -439,7 +439,7 @@ impl ProjectInterpreter {
                         if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
                                 venv,
-                                "because it is not a valid Python environment (no Python executable was found)"
+                                "it is not a valid Python environment (no Python executable was found)"
                                     .to_string(),
                             ));
                         }
