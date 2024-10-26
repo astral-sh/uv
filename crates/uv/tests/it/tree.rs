@@ -835,3 +835,89 @@ fn group() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn cycle() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["testtools==2.3.0", "fixtures==3.0.0"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── fixtures v3.0.0
+    │   ├── pbr v6.0.0
+    │   ├── six v1.16.0
+    │   └── testtools v2.3.0
+    │       ├── extras v1.0.0
+    │       ├── fixtures v3.0.0 (*)
+    │       ├── pbr v6.0.0
+    │       ├── python-mimeparse v1.6.0
+    │       ├── six v1.16.0
+    │       ├── traceback2 v1.4.0
+    │       │   └── linecache2 v1.0.0
+    │       └── unittest2 v1.1.0
+    │           ├── argparse v1.4.0
+    │           ├── six v1.16.0
+    │           └── traceback2 v1.4.0 (*)
+    └── testtools v2.3.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("traceback2").arg("--package").arg("six"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    six v1.16.0
+    traceback2 v1.4.0
+    └── linecache2 v1.0.0
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("traceback2").arg("--package").arg("six").arg("--invert"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    six v1.16.0
+    ├── fixtures v3.0.0
+    │   ├── project v0.1.0
+    │   └── testtools v2.3.0
+    │       ├── fixtures v3.0.0 (*)
+    │       └── project v0.1.0
+    ├── testtools v2.3.0 (*)
+    └── unittest2 v1.1.0
+        └── testtools v2.3.0 (*)
+    traceback2 v1.4.0
+    ├── testtools v2.3.0 (*)
+    └── unittest2 v1.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
