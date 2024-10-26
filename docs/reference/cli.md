@@ -489,7 +489,9 @@ uv init [OPTIONS] [PATH]
 
 <li><code>none</code>:  Do not infer the author information</li>
 </ul>
-</dd><dt><code>--build-backend</code> <i>build-backend</i></dt><dd><p>Initialize a build-backend of choice for the project</p>
+</dd><dt><code>--build-backend</code> <i>build-backend</i></dt><dd><p>Initialize a build-backend of choice for the project.</p>
+
+<p>Implicitly sets <code>--package</code>.</p>
 
 <p>Possible values:</p>
 
@@ -589,7 +591,7 @@ uv init [OPTIONS] [PATH]
 
 <p>Defines a <code>[build-system]</code> for the project.</p>
 
-<p>This is the default behavior when using <code>--lib</code>.</p>
+<p>This is the default behavior when using <code>--lib</code> or <code>--build-backend</code>.</p>
 
 <p>When using <code>--app</code>, this will include a <code>[project.scripts]</code> entrypoint and use a <code>src/</code> project structure.</p>
 

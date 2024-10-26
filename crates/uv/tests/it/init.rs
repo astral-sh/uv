@@ -2536,6 +2536,45 @@ fn init_library_flit() -> Result<()> {
     Ok(())
 }
 
+/// Run `uv init --build-backend flit` should be equivalent to `uv init --package --build-backend flit`.
+#[test]
+fn init_backend_implies_package() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("project").arg("--build-backend").arg("flit"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `project` at `[TEMP_DIR]/project`
+    "#);
+
+    let pyproject = context.read("project/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        project = "project:main"
+
+        [build-system]
+        requires = ["flit_core>=3.2,<4"]
+        build-backend = "flit_core.buildapi"
+        "#
+        );
+    });
+}
+
 /// Run `uv init --app --package --build-backend maturin` to create a packaged application project
 #[test]
 #[cfg(feature = "crates-io")]
