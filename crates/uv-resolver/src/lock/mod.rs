@@ -1242,6 +1242,7 @@ impl Lock {
                 let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
                     .dependency_groups
                     .into_iter()
+                    .filter(|(_, requirements)| !requirements.is_empty())
                     .map(|(group, requirements)| {
                         Ok::<_, LockError>((
                             group,
@@ -1256,6 +1257,7 @@ impl Lock {
                     .metadata
                     .dependency_groups
                     .iter()
+                    .filter(|(_, requirements)| !requirements.is_empty())
                     .map(|(group, requirements)| {
                         Ok::<_, LockError>((
                             group.clone(),
@@ -2126,9 +2128,7 @@ impl Package {
                         [requirement] => Array::from_iter([requirement]),
                         deps => each_element_on_its_line_array(deps.iter()),
                     };
-                    if !deps.is_empty() {
-                        dependency_groups.insert(extra.as_ref(), value(deps));
-                    }
+                    dependency_groups.insert(extra.as_ref(), value(deps));
                 }
                 if !dependency_groups.is_empty() {
                     metadata_table.insert("dependency-groups", Item::Table(dependency_groups));
