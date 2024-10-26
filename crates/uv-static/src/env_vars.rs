@@ -277,6 +277,9 @@ impl EnvVars {
     /// Disables colored output (takes precedence over `FORCE_COLOR`).
     pub const NO_COLOR: &'static str = "NO_COLOR";
 
+    /// Disables all progress output. For example, spinners and progress bars.
+    pub const UV_NO_PROGRESS: &'static str = "UV_NO_PROGRESS";
+
     /// Forces colored output regardless of terminal support.
     pub const FORCE_COLOR: &'static str = "FORCE_COLOR";
 
