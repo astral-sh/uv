@@ -1601,7 +1601,7 @@ fn init_virtual_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1609,14 +1609,7 @@ fn init_virtual_project() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        "#
         );
     });
 
@@ -1635,7 +1628,7 @@ fn init_virtual_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1644,16 +1637,9 @@ fn init_virtual_project() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
 
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
         [tool.uv.workspace]
         members = ["bar"]
-        "###
+        "#
         );
     });
 
@@ -1730,7 +1716,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1738,14 +1724,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        "#
         );
     });
 
