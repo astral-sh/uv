@@ -975,7 +975,7 @@ fn generate_package_scripts(
 
                     #[pyfunction]
                     fn hello_from_bin() -> String {{
-                        return "Hello from {package}!".to_string();
+                        "Hello from {package}!".to_string()
                     }}
 
                     /// A Python module implemented in Rust. The name of this function must match
