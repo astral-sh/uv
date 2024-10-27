@@ -473,6 +473,11 @@ impl TestContext {
             command.env(EnvVars::VIRTUAL_ENV, self.venv.as_os_str());
         }
 
+        if cfg!(unix) {
+            // Avoid locale issues in tests
+            command.env("LC_ALL", "C");
+        }
+
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
