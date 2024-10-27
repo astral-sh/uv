@@ -2665,7 +2665,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
 
         #[pyfunction]
         fn hello_from_bin() -> String {
-            return "Hello from foo!".to_string();
+            "Hello from foo!".to_string()
         }
 
         /// A Python module implemented in Rust. The name of this function must match
@@ -2918,7 +2918,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
 
         #[pyfunction]
         fn hello_from_bin() -> String {
-            return "Hello from foo!".to_string();
+            "Hello from foo!".to_string()
         }
 
         /// A Python module implemented in Rust. The name of this function must match
