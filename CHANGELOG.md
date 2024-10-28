@@ -21,6 +21,7 @@
 - Remove duplicate word in error message ([#8589](https://github.com/astral-sh/uv/pull/8589))
 - Support cyclic dependencies in `uv tree` ([#8564](https://github.com/astral-sh/uv/pull/8564))
 - Update `uv init` to imply `--package` when using `--build-backend` ([#8593](https://github.com/astral-sh/uv/pull/8593))
+- Restore use of `dev-dependencies` and `requires-dev` for lockfile compatibility ([#8599](https://github.com/astral-sh/uv/pull/8599))
 
 ### Documentation
 
