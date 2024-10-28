@@ -79,7 +79,7 @@ fn mixed_credentials() {
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/
-    error: When using trusted publishing, also using a username is not allowed
+    error: a username and a password are not allowed when using trusted publishing
     "###
     );
 }

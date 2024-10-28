@@ -54,8 +54,8 @@ pub enum PublishError {
     PublishSend(PathBuf, Url, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
-    #[error("When using trusted publishing, also using {0} is not allowed")]
-    MixedCredentials(&'static str),
+    #[error("{0} are not allowed when using trusted publishing")]
+    MixedCredentials(String),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -289,14 +289,18 @@ pub async fn check_trusted_publishing(
         TrustedPublishing::Always => {
             debug!("Using trusted publishing for GitHub Actions");
 
+            let mut conflicts = Vec::new();
             if username.is_some() {
-                return Err(PublishError::MixedCredentials("a username"));
+                conflicts.push("a username");
             }
             if password.is_some() {
-                return Err(PublishError::MixedCredentials("a password"));
+                conflicts.push("a password");
             }
             if keyring_provider != KeyringProviderType::Disabled {
-                return Err(PublishError::MixedCredentials("the keyring"));
+                conflicts.push("the keyring");
+            }
+            if !conflicts.is_empty() {
+                return Err(PublishError::MixedCredentials(conflicts.join(" and ")));
             }
 
             if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
