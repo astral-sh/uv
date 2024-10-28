@@ -7,6 +7,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    TrustedHost,
 };
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
@@ -44,6 +45,7 @@ pub(crate) async fn remove(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -189,6 +191,7 @@ pub(crate) async fn remove(
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -217,6 +220,7 @@ pub(crate) async fn remove(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -249,6 +253,7 @@ pub(crate) async fn remove(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )

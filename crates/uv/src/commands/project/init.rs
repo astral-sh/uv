@@ -9,7 +9,9 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{ProjectBuildBackend, VersionControlError, VersionControlSystem};
+use uv_configuration::{
+    ProjectBuildBackend, TrustedHost, VersionControlError, VersionControlSystem,
+};
 use uv_fs::{Simplified, CWD};
 use uv_git::GIT;
 use uv_pep440::Version;
@@ -48,6 +50,7 @@ pub(crate) async fn init(
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -71,6 +74,7 @@ pub(crate) async fn init(
                 no_pin_python,
                 package,
                 native_tls,
+                allow_insecure_host,
             )
             .await?;
 
@@ -126,6 +130,7 @@ pub(crate) async fn init(
                 python_downloads,
                 connectivity,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -177,6 +182,7 @@ async fn init_script(
     no_pin_python: bool,
     package: bool,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -192,7 +198,8 @@ async fn init_script(
     }
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -258,6 +265,7 @@ async fn init_project(
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<()> {
@@ -307,7 +315,8 @@ async fn init_project(
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Add a `requires-python` field to the `pyproject.toml` and return the corresponding interpreter.
     let (requires_python, python_request) = if let Some(request) = python.as_deref() {

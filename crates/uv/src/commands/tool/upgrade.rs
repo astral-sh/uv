@@ -6,7 +6,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, TrustedHost};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
@@ -39,6 +39,7 @@ pub(crate) async fn upgrade(
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -67,7 +68,8 @@ pub(crate) async fn upgrade(
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let python_request = python.as_deref().map(PythonRequest::parse);
 
@@ -111,6 +113,7 @@ pub(crate) async fn upgrade(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
         )
         .await;
 
@@ -189,6 +192,7 @@ async fn upgrade_tool(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
 ) -> Result<UpgradeOutcome> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
@@ -260,6 +264,7 @@ async fn upgrade_tool(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -276,6 +281,7 @@ async fn upgrade_tool(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -299,6 +305,7 @@ async fn upgrade_tool(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )

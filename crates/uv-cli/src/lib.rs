@@ -205,6 +205,26 @@ pub struct GlobalArgs {
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
 
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        global = true,
+        long,
+        alias = "trusted-host",
+        env = EnvVars::UV_INSECURE_HOST,
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
+
     /// Whether to enable experimental, preview features.
     ///
     /// Preview features may change without warning.
@@ -1771,25 +1791,6 @@ pub struct PipUninstallArgs {
     #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
-
     /// Use the system Python to uninstall packages.
     ///
     /// By default, uv uninstalls from the virtual environment in the current working directory or
@@ -2362,25 +2363,6 @@ pub struct VenvArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
     pub keyring_provider: Option<KeyringProviderType>,
-
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -4219,26 +4201,6 @@ pub struct InstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-        help_heading = "Index options"
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
-
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -4380,26 +4342,6 @@ pub struct ResolverArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-        help_heading = "Index options"
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -4572,26 +4514,6 @@ pub struct ResolverInstallerArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-        help_heading = "Index options"
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -4794,25 +4716,6 @@ pub struct PublishArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
     pub keyring_provider: Option<KeyringProviderType>,
-
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
