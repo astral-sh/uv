@@ -88,19 +88,20 @@ Basically, this looks up `python.exe` (for console programs) and invokes
 
 The intended use is:
 
-- take your Python script, name it `__main__.py`, and pack it into a `.zip` file. Then concatenate
-  that `.zip` file onto the end of one of our prebuilt `.exe`s.
-- After the zip file content, write the path to the Python executable that the script uses to run
+- First, place our prebuilt `.exe` content at the top of the file.
+- After the exe file content, write the path to the Python executable that the script uses to run
   the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit little-endian
   integer.
-- At the very end, write the magic number `UVUV` in bytes.
+- Write the magic number `UVUV` in bytes.
+- Finally, rename your Python script as `__main__.py`, compress it into a `.zip` file, and append
+  this `.zip` file to the end of one of our prebuilt `.exe` files.
 
 |       `launcher.exe`        |
 | :-------------------------: |
-|  `<zipped python script>`   |
 |   `<path to python.exe>`    |
 | `<len(path to python.exe)>` |
 | `<b'U', b'V', b'U', b'V'>`  |
+|  `<zipped python script>`   |
 
 Then when you run `python` on the `.exe`, it will see the `.zip` trailer at the end of the `.exe`,
 and automagically look inside to find and execute `__main__.py`. Easy-peasy.
