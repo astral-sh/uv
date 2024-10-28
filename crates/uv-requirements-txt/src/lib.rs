@@ -1412,7 +1412,7 @@ mod test {
         }, {
             insta::assert_snapshot!(errors, @r###"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
-            failed to read from file `<MISSING_TXT>`
+            failed to read from file `<MISSING_TXT>`: No such file or directory (os error 2)
             "###);
         });
 

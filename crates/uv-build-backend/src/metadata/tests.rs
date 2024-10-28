@@ -262,7 +262,7 @@ fn missing_readme() {
         .to_metadata(Path::new("/do/not/read"))
         .unwrap_err();
     // Simplified for windows compatibility.
-    assert_snapshot!(err.to_string().replace('\\', "/"), @"failed to open file `/do/not/read/Readme.md`");
+    assert_snapshot!(err.to_string().replace('\\', "/"), @"failed to open file `/do/not/read/Readme.md`: No such file or directory (os error 2)");
 }
 
 #[test]
