@@ -54,6 +54,7 @@ import os
 import re
 import time
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from pathlib import Path
 from shutil import rmtree
 from subprocess import PIPE, check_call, check_output, run
@@ -67,29 +68,53 @@ TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
 
 cwd = Path(__file__).parent
 
+
+@dataclass
+class TargetConfiguration:
+    project_name: str
+    publish_url: str
+    index_url: str
+
+
 # Map CLI target name to package name and index url.
 # Trusted publishing can only be tested on GitHub Actions, so we have separate local
 # and all targets.
-local_targets: dict[str, tuple[str, str]] = {
-    "pypi-token": ("astral-test-token", "https://test.pypi.org/simple/"),
-    "pypi-password-env": ("astral-test-password", "https://test.pypi.org/simple/"),
-    "pypi-keyring": ("astral-test-keyring", "https://test.pypi.org/simple/"),
-    "gitlab": (
+local_targets: dict[str, TargetConfiguration] = {
+    "pypi-token": TargetConfiguration(
         "astral-test-token",
+        TEST_PYPI_PUBLISH_URL,
+        "https://test.pypi.org/simple/",
+    ),
+    "pypi-password-env": TargetConfiguration(
+        "astral-test-password",
+        TEST_PYPI_PUBLISH_URL,
+        "https://test.pypi.org/simple/",
+    ),
+    "pypi-keyring": TargetConfiguration(
+        "astral-test-keyring",
+        "https://test.pypi.org/legacy/?astral-test-keyring",
+        "https://test.pypi.org/simple/",
+    ),
+    "gitlab": TargetConfiguration(
+        "astral-test-token",
+        "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/",
     ),
-    "codeberg": (
+    "codeberg": TargetConfiguration(
         "astral-test-token",
+        "https://codeberg.org/api/packages/astral-test-user/pypi",
         "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
     ),
-    "cloudsmith": (
+    "cloudsmith": TargetConfiguration(
         "astral-test-token",
+        "https://python.cloudsmith.io/astral-test/astral-test-1/",
         "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
     ),
 }
-all_targets: dict[str, tuple[str, str]] = local_targets | {
-    "pypi-trusted-publishing": (
+all_targets: dict[str, TargetConfiguration] = local_targets | {
+    "pypi-trusted-publishing": TargetConfiguration(
         "astral-test-trusted-publishing",
+        TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
     )
 }
@@ -100,10 +125,12 @@ def get_new_version(project_name: str, client: httpx.Client) -> Version:
     # To keep the number of packages small we reuse them across targets, so we have to
     # pick a version that doesn't exist on any target yet
     versions = set()
-    for project_name_, index_url in all_targets.values():
-        if project_name_ != project_name:
+    for target_config in all_targets.values():
+        if target_config.project_name != project_name:
             continue
-        for filename in get_filenames((index_url + project_name + "/"), client):
+        for filename in get_filenames(
+            target_config.index_url + project_name + "/", client
+        ):
             if filename.endswith(".whl"):
                 [_name, version, _build, _tags] = parse_wheel_filename(filename)
             else:
@@ -217,7 +244,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     2. If we're using PyPI, uploading the same files again succeeds.
     3. Check URL works and reports the files as skipped.
     """
-    project_name = all_targets[target][0]
+    project_name = all_targets[target].project_name
 
     print(f"\nPublish {project_name} for {target}")
 
@@ -226,8 +253,9 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     project_dir = build_project_at_version(project_name, version, uv)
 
     # Upload configuration
-    env, extra_args, publish_url = target_configuration(target, client)
-    index_url = all_targets[target][1]
+    publish_url = all_targets[target].publish_url
+    index_url = all_targets[target].index_url
+    env, extra_args = target_configuration(target)
     env = {**os.environ, **env}
     expected_filenames = [path.name for path in project_dir.joinpath("dist").iterdir()]
     # Ignore the gitignore file in dist
@@ -297,7 +325,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         "publish",
         "--publish-url",
         publish_url,
-        "--skip-existing",
+        "--check-url",
         index_url,
         *extra_args,
     ]
@@ -314,45 +342,36 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         )
 
 
-def target_configuration(
-    target: str, client: httpx.Client
-) -> tuple[dict[str, str], list[str], str]:
+def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
     if target == "pypi-token":
-        publish_url = TEST_PYPI_PUBLISH_URL
         extra_args = []
         env = {"UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_TOKEN"]}
     elif target == "pypi-password-env":
-        publish_url = TEST_PYPI_PUBLISH_URL
         extra_args = ["--username", "__token__"]
         env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_PASSWORD"]}
     elif target == "pypi-keyring":
-        publish_url = "https://test.pypi.org/legacy/?astral-test-keyring"
         extra_args = ["--username", "__token__", "--keyring-provider", "subprocess"]
         env = {}
     elif target == "pypi-trusted-publishing":
-        publish_url = TEST_PYPI_PUBLISH_URL
         extra_args = ["--trusted-publishing", "always"]
         env = {}
     elif target == "gitlab":
         env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]}
-        publish_url = "https://gitlab.com/api/v4/projects/61853105/packages/pypi"
         extra_args = ["--username", "astral-test-gitlab-pat"]
     elif target == "codeberg":
-        publish_url = "https://codeberg.org/api/packages/astral-test-user/pypi"
         extra_args = []
         env = {
             "UV_PUBLISH_USERNAME": "astral-test-user",
             "UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_CODEBERG_TOKEN"],
         }
     elif target == "cloudsmith":
-        publish_url = "https://python.cloudsmith.io/astral-test/astral-test-1/"
         extra_args = []
         env = {
             "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"],
         }
     else:
         raise ValueError(f"Unknown target: {target}")
-    return env, extra_args, publish_url
+    return env, extra_args
 
 
 def main():
