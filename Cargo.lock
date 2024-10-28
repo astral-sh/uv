@@ -1144,6 +1144,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88a41f105fe1d5b6b34b2055e3dc59bb79b46b48b2040b9e6c7b4b5de097aa41"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "fs-err"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bb60e7409f34ef959985bc9d9c5ee8f5db24ee46ed9775850548021710f807f"
+dependencies = [
+ "autocfg",
  "tokio",
 ]
 
@@ -3914,7 +3923,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "382e025ef8e0db646343dd2cf56af9d7fe6f5eabce5f388f8e5ec7234f555a0f"
 dependencies = [
  "anyhow",
- "fs-err",
+ "fs-err 2.11.0",
  "itertools 0.13.0",
  "once_cell",
  "rustc-hash",
@@ -4179,7 +4188,7 @@ dependencies = [
  "etcetera",
  "filetime",
  "flate2",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "http",
  "ignore",
@@ -4310,7 +4319,7 @@ name = "uv-build-backend"
 version = "0.1.0"
 dependencies = [
  "csv",
- "fs-err",
+ "fs-err 3.0.0",
  "glob",
  "indoc",
  "insta",
@@ -4339,7 +4348,7 @@ version = "0.0.1"
 dependencies = [
  "anstream",
  "anyhow",
- "fs-err",
+ "fs-err 3.0.0",
  "indoc",
  "insta",
  "itertools 0.13.0",
@@ -4371,7 +4380,7 @@ name = "uv-cache"
 version = "0.0.1"
 dependencies = [
  "clap",
- "fs-err",
+ "fs-err 3.0.0",
  "nanoid",
  "rmp-serde",
  "rustc-hash",
@@ -4394,7 +4403,7 @@ dependencies = [
 name = "uv-cache-info"
 version = "0.0.1"
 dependencies = [
- "fs-err",
+ "fs-err 3.0.0",
  "globwalk",
  "schemars",
  "serde",
@@ -4420,7 +4429,7 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete_command",
- "fs-err",
+ "fs-err 3.0.0",
  "insta",
  "serde",
  "url",
@@ -4448,7 +4457,7 @@ dependencies = [
  "async_http_range_reader",
  "async_zip",
  "bytecheck",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "html-escape",
  "http",
@@ -4498,7 +4507,7 @@ dependencies = [
  "anyhow",
  "clap",
  "either",
- "fs-err",
+ "fs-err 3.0.0",
  "rustc-hash",
  "schemars",
  "serde",
@@ -4534,7 +4543,7 @@ dependencies = [
  "anstream",
  "anyhow",
  "clap",
- "fs-err",
+ "fs-err 3.0.0",
  "itertools 0.13.0",
  "markdown",
  "owo-colors",
@@ -4608,7 +4617,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "either",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "indoc",
  "insta",
@@ -4668,7 +4677,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bitflags 2.6.0",
- "fs-err",
+ "fs-err 3.0.0",
  "itertools 0.13.0",
  "jiff",
  "rkyv",
@@ -4699,7 +4708,7 @@ version = "0.0.1"
 dependencies = [
  "async-compression",
  "async_zip",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "krata-tokio-tar",
  "md-5",
@@ -4726,7 +4735,7 @@ dependencies = [
  "dunce",
  "either",
  "encoding_rs_io",
- "fs-err",
+ "fs-err 3.0.0",
  "fs2",
  "junction",
  "path-slash",
@@ -4747,7 +4756,7 @@ dependencies = [
  "anyhow",
  "cargo-util",
  "dashmap",
- "fs-err",
+ "fs-err 3.0.0",
  "reqwest",
  "reqwest-middleware",
  "serde",
@@ -4772,7 +4781,7 @@ dependencies = [
  "configparser",
  "csv",
  "data-encoding",
- "fs-err",
+ "fs-err 3.0.0",
  "indoc",
  "mailparse",
  "pathdiff",
@@ -4806,7 +4815,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-channel",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "rayon",
  "rustc-hash",
@@ -4852,7 +4861,7 @@ name = "uv-metadata"
 version = "0.1.0"
 dependencies = [
  "async_zip",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "thiserror",
  "tokio",
@@ -4958,7 +4967,7 @@ version = "0.1.0"
 dependencies = [
  "async-compression",
  "base64 0.22.1",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "glob",
  "insta",
@@ -5020,7 +5029,7 @@ dependencies = [
  "assert_fs",
  "clap",
  "configparser",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "goblin",
  "indoc",
@@ -5072,7 +5081,7 @@ dependencies = [
  "anyhow",
  "configparser",
  "console",
- "fs-err",
+ "fs-err 3.0.0",
  "futures",
  "rustc-hash",
  "serde",
@@ -5105,7 +5114,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "assert_fs",
- "fs-err",
+ "fs-err 3.0.0",
  "indoc",
  "insta",
  "itertools 0.13.0",
@@ -5185,7 +5194,7 @@ dependencies = [
 name = "uv-scripts"
 version = "0.0.1"
 dependencies = [
- "fs-err",
+ "fs-err 3.0.0",
  "indoc",
  "memchr",
  "serde",
@@ -5206,7 +5215,7 @@ dependencies = [
  "assert_fs",
  "clap",
  "dirs-sys",
- "fs-err",
+ "fs-err 3.0.0",
  "indoc",
  "schemars",
  "serde",
@@ -5248,7 +5257,7 @@ dependencies = [
 name = "uv-state"
 version = "0.0.1"
 dependencies = [
- "fs-err",
+ "fs-err 3.0.0",
  "tempfile",
  "uv-dirs",
 ]
@@ -5261,7 +5270,7 @@ version = "0.0.1"
 name = "uv-tool"
 version = "0.0.1"
 dependencies = [
- "fs-err",
+ "fs-err 3.0.0",
  "pathdiff",
  "serde",
  "thiserror",
@@ -5325,7 +5334,7 @@ version = "0.4.28"
 name = "uv-virtualenv"
 version = "0.0.4"
 dependencies = [
- "fs-err",
+ "fs-err 3.0.0",
  "itertools 0.13.0",
  "pathdiff",
  "thiserror",
@@ -5353,7 +5362,7 @@ dependencies = [
  "anyhow",
  "assert_fs",
  "either",
- "fs-err",
+ "fs-err 3.0.0",
  "glob",
  "insta",
  "itertools 0.13.0",
