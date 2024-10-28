@@ -43,6 +43,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
     default_dependency_groups, validate_dependency_groups, validate_requires_python,
     EnvironmentSpecification, ProjectError, PythonRequestSource, WorkspacePython,
@@ -553,12 +554,18 @@ pub(crate) async fn run(
                 validate_dependency_groups(project.pyproject_toml(), &dev)?;
                 let defaults = default_dependency_groups(project.pyproject_toml())?;
 
+                // Determine the lock mode.
+                let mode = if frozen {
+                    LockMode::Frozen
+                } else if locked {
+                    LockMode::Locked(venv.interpreter())
+                } else {
+                    LockMode::Write(venv.interpreter())
+                };
+
                 let result = match project::lock::do_safe_lock(
-                    locked,
-                    frozen,
-                    false,
+                    mode,
                     project.workspace(),
-                    venv.interpreter(),
                     settings.as_ref().into(),
                     LowerBound::Allow,
                     &state,

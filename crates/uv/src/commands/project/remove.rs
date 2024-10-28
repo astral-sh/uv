@@ -21,6 +21,7 @@ use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::default_dependency_groups;
+use crate::commands::project::lock::LockMode;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -193,16 +194,22 @@ pub(crate) async fn remove(
     )
     .await?;
 
+    // Determine the lock mode.
+    let mode = if frozen {
+        LockMode::Frozen
+    } else if locked {
+        LockMode::Locked(venv.interpreter())
+    } else {
+        LockMode::Write(venv.interpreter())
+    };
+
     // Initialize any shared state.
     let state = SharedState::default();
 
     // Lock and sync the environment, if necessary.
     let lock = project::lock::do_safe_lock(
-        locked,
-        frozen,
-        false,
+        mode,
         project.workspace(),
-        venv.interpreter(),
         settings.as_ref().into(),
         LowerBound::Allow,
         &state,
