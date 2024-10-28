@@ -45,12 +45,6 @@ impl TrustedPublishingError {
 #[serde(transparent)]
 pub struct TrustedPublishingToken(String);
 
-impl From<TrustedPublishingToken> for String {
-    fn from(token: TrustedPublishingToken) -> Self {
-        token.0
-    }
-}
-
 impl Display for TrustedPublishingToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
