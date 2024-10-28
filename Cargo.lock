@@ -4770,6 +4770,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-trampoline-builder",
  "uv-warnings",
  "walkdir",
  "zip",
@@ -5266,6 +5267,15 @@ dependencies = [
  "uv-state",
  "uv-static",
  "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-trampoline-builder"
+version = "0.0.1"
+dependencies = [
+ "thiserror",
+ "uv-fs",
+ "zip",
 ]
 
 [[package]]

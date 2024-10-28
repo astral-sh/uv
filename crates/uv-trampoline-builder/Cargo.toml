@@ -1,0 +1,23 @@
+[package]
+name = "uv-trampoline-builder"
+version = "0.0.1"
+publish = false
+description = "Builds launchers for `uv-trampoline`"
+
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-fs = { workspace = true }
+thiserror = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
