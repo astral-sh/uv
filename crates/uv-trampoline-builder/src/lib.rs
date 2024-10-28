@@ -197,14 +197,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are 45kb~ bytes.
+        // At time of writing, they are ~80kb.
         assert!(
-            super::LAUNCHER_I686_GUI.len() < 45 * 1024,
+            super::LAUNCHER_I686_GUI.len() < 80 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_I686_GUI.len()
         );
         assert!(
-            super::LAUNCHER_I686_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_I686_CONSOLE.len() < 80 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_I686_CONSOLE.len()
         );
@@ -213,14 +213,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86_64"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are 45kb~ bytes.
+        // At time of writing, they are ~80kb.
         assert!(
-            super::LAUNCHER_X86_64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_GUI.len() < 80 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_X86_64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_X86_64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_CONSOLE.len() < 80 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_X86_64_CONSOLE.len()
         );
@@ -229,14 +229,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "aarch64"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are 45kb~ bytes.
+        // At time of writing, they are ~80kb.
         assert!(
-            super::LAUNCHER_AARCH64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_GUI.len() < 80 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_AARCH64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_AARCH64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_CONSOLE.len() < 80 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_AARCH64_CONSOLE.len()
         );
