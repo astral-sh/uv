@@ -21,7 +21,24 @@ use walkdir::WalkDir;
 use zip::write::FileOptions;
 use zip::ZipWriter;
 
-const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
+/// The kind of trampoline.
+///
+/// See [`uv-trampoline::bounce::TrampolineKind`].
+enum LauncherKind {
+    /// The trampoline should execute itself, it's a zipped Python script.
+    Script,
+    /// The trampoline should just execute Python, it's a proxy Python executable.
+    Python,
+}
+
+impl LauncherKind {
+    const fn magic_number(&self) -> &'static [u8; 4] {
+        match self {
+            Self::Script => &[b'U', b'V', b'S', b'C'],
+            Self::Python => &[b'U', b'V', b'P', b'Y'],
+        }
+    }
+}
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_GUI: &[u8] =
@@ -234,7 +251,7 @@ pub(crate) fn windows_script_launcher(
             .expect("File Path to be smaller than 4GB")
             .to_le_bytes(),
     );
-    launcher.extend_from_slice(&LAUNCHER_MAGIC_NUMBER);
+    launcher.extend_from_slice(&LauncherKind::Script.magic_number());
 
     Ok(launcher)
 }
