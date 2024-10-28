@@ -45,6 +45,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
+    sysconfig_prefix: Option<PathBuf>,
     tags: OnceLock<Tags>,
     target: Option<Target>,
     prefix: Option<Prefix>,
@@ -78,6 +79,7 @@ impl Interpreter {
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
             stdlib: info.stdlib,
+            sysconfig_prefix: info.sysconfig_prefix,
             tags: OnceLock::new(),
             target: None,
             prefix: None,
@@ -365,6 +367,11 @@ impl Interpreter {
         &self.stdlib
     }
 
+    /// Return the `prefix` path for this Python interpreter, as returned by `sysconfig.get_config_var("prefix")`.
+    pub fn sysconfig_prefix(&self) -> Option<&Path> {
+        self.sysconfig_prefix.as_deref()
+    }
+
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn purelib(&self) -> &Path {
         &self.scheme.purelib
@@ -422,6 +429,19 @@ impl Interpreter {
     /// Return the `--prefix` directory for this interpreter, if any.
     pub fn prefix(&self) -> Option<&Prefix> {
         self.prefix.as_ref()
+    }
+
+    /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
+    ///
+    /// This method may return false positives, but it should not return false negatives. In other
+    /// words, if this method returns `true`, the interpreter _may_ be from
+    /// `python-build-standalone`; if it returns `false`, the interpreter is definitely _not_ from
+    /// `python-build-standalone`.
+    ///
+    /// See: <https://github.com/indygreg/python-build-standalone/issues/382>
+    pub fn is_standalone(&self) -> bool {
+        self.sysconfig_prefix()
+            .is_some_and(|prefix| prefix == Path::new("/install"))
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -605,6 +625,7 @@ struct InterpreterInfo {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
+    sysconfig_prefix: Option<PathBuf>,
     pointer_size: PointerSize,
     gil_disabled: bool,
 }
