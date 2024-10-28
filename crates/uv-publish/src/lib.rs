@@ -54,6 +54,8 @@ pub enum PublishError {
     PublishSend(PathBuf, Url, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
+    #[error("When using trusted publishing, also using {0} is not allowed")]
+    MixedCredentials(&'static str),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -239,6 +241,15 @@ pub fn files_for_publishing(
     Ok(files)
 }
 
+pub enum TrustedPublishResult {
+    /// We didn't check for trusted publishing.
+    Skipped,
+    /// We checked for trusted publishing and found a token.
+    Configured(TrustedPublishingToken),
+    /// We checked for optional trusted publishing, but it didn't succeed.
+    Ignored(TrustedPublishingError),
+}
+
 /// If applicable, attempt obtaining a token for trusted publishing.
 pub async fn check_trusted_publishing(
     username: Option<&str>,
@@ -247,7 +258,7 @@ pub async fn check_trusted_publishing(
     trusted_publishing: TrustedPublishing,
     registry: &Url,
     client: &BaseClient,
-) -> Result<Option<TrustedPublishingToken>, PublishError> {
+) -> Result<TrustedPublishResult, PublishError> {
     match trusted_publishing {
         TrustedPublishing::Automatic => {
             // If the user provided credentials, use those.
@@ -255,28 +266,39 @@ pub async fn check_trusted_publishing(
                 || password.is_some()
                 || keyring_provider != KeyringProviderType::Disabled
             {
-                return Ok(None);
+                return Ok(TrustedPublishResult::Skipped);
             }
             // If we aren't in GitHub Actions, we can't use trusted publishing.
             if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
-                return Ok(None);
+                return Ok(TrustedPublishResult::Skipped);
             }
             // We could check for credentials from the keyring or netrc the auth middleware first, but
             // given that we are in GitHub Actions we check for trusted publishing first.
             debug!("Running on GitHub Actions without explicit credentials, checking for trusted publishing");
             match trusted_publishing::get_token(registry, client.for_host(registry)).await {
-                Ok(token) => Ok(Some(token)),
+                Ok(token) => Ok(TrustedPublishResult::Configured(token)),
                 Err(err) => {
                     // TODO(konsti): It would be useful if we could differentiate between actual errors
                     // such as connection errors and warn for them while ignoring errors from trusted
                     // publishing not being configured.
                     debug!("Could not obtain trusted publishing credentials, skipping: {err}");
-                    Ok(None)
+                    Ok(TrustedPublishResult::Ignored(err))
                 }
             }
         }
         TrustedPublishing::Always => {
             debug!("Using trusted publishing for GitHub Actions");
+
+            if username.is_some() {
+                return Err(PublishError::MixedCredentials("a username"));
+            }
+            if password.is_some() {
+                return Err(PublishError::MixedCredentials("a password"));
+            }
+            if keyring_provider != KeyringProviderType::Disabled {
+                return Err(PublishError::MixedCredentials("the keyring"));
+            }
+
             if env::var(EnvVars::GITHUB_ACTIONS) != Ok("true".to_string()) {
                 warn_user_once!(
                     "Trusted publishing was requested, but you're not in GitHub Actions."
@@ -284,9 +306,9 @@ pub async fn check_trusted_publishing(
             }
 
             let token = trusted_publishing::get_token(registry, client.for_host(registry)).await?;
-            Ok(Some(token))
+            Ok(TrustedPublishResult::Configured(token))
         }
-        TrustedPublishing::Never => Ok(None),
+        TrustedPublishing::Never => Ok(TrustedPublishResult::Skipped),
     }
 }
 
