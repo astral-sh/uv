@@ -47,8 +47,8 @@ enum TrampolineKind {
 impl TrampolineKind {
     const fn magic_number(&self) -> &'static [u8; 4] {
         match self {
-            Self::Script => &[b'U', b'V', b'S', b'C'],
-            Self::Python => &[b'U', b'V', b'P', b'Y'],
+            Self::Script => b"UVSC",
+            Self::Python => b"UVPY",
         }
     }
 

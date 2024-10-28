@@ -403,8 +403,10 @@ jobs:
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
       - name: "Test"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc --test *
+        working-directory: ${{ github.workspace }}
+        run: |
+          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+          cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
 
   typos:
     runs-on: ubuntu-latest
