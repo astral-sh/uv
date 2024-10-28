@@ -275,8 +275,10 @@ fn help_subcommand() {
           --cache-dir [CACHE_DIR]
               Path to the cache directory.
               
-              Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `%LOCALAPPDATA%/uv/cache` on Windows.
+              Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on macOS and Linux, and
+              `%LOCALAPPDATA%/uv/cache` on Windows.
+              
+              To view the location of the cache directory, run `uv cache dir`.
               
               [env: UV_CACHE_DIR=]
 
@@ -447,8 +449,10 @@ fn help_subsubcommand() {
           --cache-dir [CACHE_DIR]
               Path to the cache directory.
               
-              Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `%LOCALAPPDATA%/uv/cache` on Windows.
+              Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on macOS and Linux, and
+              `%LOCALAPPDATA%/uv/cache` on Windows.
+              
+              To view the location of the cache directory, run `uv cache dir`.
               
               [env: UV_CACHE_DIR=]
 
