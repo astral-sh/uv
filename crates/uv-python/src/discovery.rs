@@ -2074,10 +2074,29 @@ impl FromStr for VersionRequest {
         // Split the release component if it uses the wheel tag format (e.g., `38`)
         let version = split_wheel_tag_release_version(version);
 
-        // We dont allow post, dev, or local versions here
-        if version.post().is_some() || version.dev().is_some() || !version.local().is_empty() {
+        // We dont allow post or dev version here
+        if version.post().is_some() || version.dev().is_some() {
             return Err(Error::InvalidVersionRequest(s.to_string()));
         }
+
+        // Check if the local version includes a variant
+        let variant = if version.local().is_empty() {
+            variant
+        } else {
+            // If we already have a variant, do not allow another to be requested
+            if variant != PythonVariant::Default {
+                return Err(Error::InvalidVersionRequest(s.to_string()));
+            }
+
+            let [uv_pep440::LocalSegment::String(local)] = version.local() else {
+                return Err(Error::InvalidVersionRequest(s.to_string()));
+            };
+
+            match local.as_str() {
+                "freethreaded" => PythonVariant::Freethreaded,
+                _ => return Err(Error::InvalidVersionRequest(s.to_string())),
+            }
+        };
 
         // Cast the release components into u8s since that's what we use in `VersionRequest`
         let Ok(release) = try_into_u8_slice(version.release()) else {
