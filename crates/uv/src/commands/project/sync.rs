@@ -29,7 +29,7 @@ use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProj
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::do_safe_lock;
+use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, validate_dependency_groups, ProjectError, SharedState,
 };
@@ -115,12 +115,18 @@ pub(crate) async fn sync(
     // Initialize any shared state.
     let state = SharedState::default();
 
+    // Determine the lock mode.
+    let mode = if frozen {
+        LockMode::Frozen
+    } else if locked {
+        LockMode::Locked(venv.interpreter())
+    } else {
+        LockMode::Write(venv.interpreter())
+    };
+
     let lock = match do_safe_lock(
-        locked,
-        frozen,
-        false,
+        mode,
         target.workspace(),
-        venv.interpreter(),
         settings.as_ref().into(),
         LowerBound::Warn,
         &state,

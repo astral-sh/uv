@@ -5,13 +5,14 @@ use anyhow::{bail, Context, Result};
 use console::Term;
 use owo_colors::OwoColorize;
 use std::fmt::Write;
+use std::iter;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 use url::Url;
 use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity, DEFAULT_RETRIES};
 use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
-use uv_publish::{check_trusted_publishing, files_for_publishing, upload};
+use uv_publish::{check_trusted_publishing, files_for_publishing, upload, TrustedPublishResult};
 
 pub(crate) async fn publish(
     paths: Vec<String>,
@@ -71,15 +72,16 @@ pub(crate) async fn publish(
     )
     .await?;
 
-    let (username, password) = if let Some(password) = trusted_publishing_token {
-        (Some("__token__".to_string()), Some(password.into()))
-    } else {
-        if username.is_none() && password.is_none() {
-            prompt_username_and_password()?
+    let (username, password) =
+        if let TrustedPublishResult::Configured(password) = &trusted_publishing_token {
+            (Some("__token__".to_string()), Some(password.to_string()))
         } else {
-            (username, password)
-        }
-    };
+            if username.is_none() && password.is_none() {
+                prompt_username_and_password()?
+            } else {
+                (username, password)
+            }
+        };
 
     if password.is_some() && username.is_none() {
         bail!(
@@ -87,6 +89,35 @@ pub(crate) async fn publish(
             with `--user` (`UV_PUBLISH_USERNAME`), or use `--token` (`UV_PUBLISH_TOKEN`) instead \
             of a password."
         );
+    }
+
+    if username.is_none() && password.is_none() && keyring_provider == KeyringProviderType::Disabled
+    {
+        if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
+            // The user has configured something incorrectly:
+            // * The user forgot to configure credentials.
+            // * The user forgot to forward the secrets as env vars (or used the wrong ones).
+            // * The trusted publishing configuration is wrong.
+            writeln!(
+                printer.stderr(),
+                "Note: Neither credentials nor keyring are configured, and there was an error \
+                fetching the trusted publishing token. If you don't want to use trusted \
+                publishing, you can ignore this error, but you need to provide credentials."
+            )?;
+            writeln!(
+                printer.stderr(),
+                "{}: {err}",
+                "Trusted publishing error".red().bold()
+            )?;
+            for source in iter::successors(std::error::Error::source(&err), |&err| err.source()) {
+                writeln!(
+                    printer.stderr(),
+                    "  {}: {}",
+                    "Caused by".red().bold(),
+                    source.to_string().trim()
+                )?;
+            }
+        }
     }
 
     for (file, raw_filename, filename) in files {

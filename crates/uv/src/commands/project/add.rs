@@ -42,6 +42,7 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
+use crate::commands::project::lock::LockMode;
 use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
@@ -627,7 +628,6 @@ pub(crate) async fn add(
         &venv,
         state,
         locked,
-        frozen,
         no_sync,
         &dependency_type,
         raw_sources,
@@ -688,7 +688,6 @@ async fn lock_and_sync(
     venv: &PythonEnvironment,
     state: SharedState,
     locked: bool,
-    frozen: bool,
     no_sync: bool,
     dependency_type: &DependencyType,
     raw_sources: bool,
@@ -700,12 +699,15 @@ async fn lock_and_sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
+    let mode = if locked {
+        LockMode::Locked(venv.interpreter())
+    } else {
+        LockMode::Write(venv.interpreter())
+    };
+
     let mut lock = project::lock::do_safe_lock(
-        locked,
-        frozen,
-        false,
+        mode,
         project.workspace(),
-        venv.interpreter(),
         settings.into(),
         bounds,
         &state,
@@ -821,11 +823,8 @@ async fn lock_and_sync(
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::do_safe_lock(
-                locked,
-                frozen,
-                false,
+                mode,
                 project.workspace(),
-                venv.interpreter(),
                 settings.into(),
                 bounds,
                 &state,

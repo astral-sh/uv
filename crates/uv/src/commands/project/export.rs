@@ -17,7 +17,7 @@ use uv_resolver::RequirementsTxtExport;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::project::lock::do_safe_lock;
+use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, validate_dependency_groups, ProjectError, ProjectInterpreter,
 };
@@ -80,30 +80,39 @@ pub(crate) async fn export(
         return Err(anyhow::anyhow!("Legacy non-project roots are not supported in `uv export`; add a `[project]` table to your `pyproject.toml` to enable exports"));
     };
 
-    // Find an interpreter for the project
-    let interpreter = ProjectInterpreter::discover(
-        project.workspace(),
-        python.as_deref().map(PythonRequest::parse),
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
+    // Determine the lock mode.
+    let interpreter;
+    let mode = if frozen {
+        LockMode::Frozen
+    } else {
+        // Find an interpreter for the project
+        interpreter = ProjectInterpreter::discover(
+            project.workspace(),
+            python.as_deref().map(PythonRequest::parse),
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+        .into_interpreter();
+
+        if locked {
+            LockMode::Locked(&interpreter)
+        } else {
+            LockMode::Write(&interpreter)
+        }
+    };
 
     // Initialize any shared state.
     let state = SharedState::default();
 
     // Lock the project.
     let lock = match do_safe_lock(
-        locked,
-        frozen,
-        false,
+        mode,
         project.workspace(),
-        &interpreter,
         settings.as_ref(),
         LowerBound::Warn,
         &state,

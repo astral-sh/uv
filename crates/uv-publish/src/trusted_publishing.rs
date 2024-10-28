@@ -5,6 +5,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::env::VarError;
+use std::ffi::OsString;
 use std::fmt::Display;
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -13,8 +14,10 @@ use uv_static::EnvVars;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
-    #[error(transparent)]
-    Var(#[from] VarError),
+    #[error("Environment variable {0} not set, is the `id-token: write` permission missing?")]
+    MissingEnvVar(&'static str),
+    #[error("Environment variable {0} is not valid UTF-8: `{1:?}`")]
+    InvalidEnvVar(&'static str, OsString),
     #[error(transparent)]
     Url(#[from] url::ParseError),
     #[error("Failed to fetch: `{0}`")]
@@ -29,15 +32,18 @@ pub enum TrustedPublishingError {
     Pypi(StatusCode, String),
 }
 
+impl TrustedPublishingError {
+    fn from_var_err(env_var: &'static str, err: VarError) -> Self {
+        match err {
+            VarError::NotPresent => Self::MissingEnvVar(env_var),
+            VarError::NotUnicode(os_string) => Self::InvalidEnvVar(env_var, os_string),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(transparent)]
 pub struct TrustedPublishingToken(String);
-
-impl From<TrustedPublishingToken> for String {
-    fn from(token: TrustedPublishingToken) -> Self {
-        token.0
-    }
-}
 
 impl Display for TrustedPublishingToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -75,7 +81,10 @@ pub(crate) async fn get_token(
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // If this fails, we can skip the audience request.
-    let oidc_token_request_token = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN)?;
+    let oidc_token_request_token =
+        env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|err| {
+            TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN, err)
+        })?;
 
     // Request 1: Get the audience
     let audience = get_audience(registry, client).await?;
@@ -125,7 +134,10 @@ async fn get_oidc_token(
     oidc_token_request_token: &str,
     client: &ClientWithMiddleware,
 ) -> Result<String, TrustedPublishingError> {
-    let mut oidc_token_url = Url::parse(&env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL)?)?;
+    let oidc_token_url = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|err| {
+        TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL, err)
+    })?;
+    let mut oidc_token_url = Url::parse(&oidc_token_url)?;
     oidc_token_url
         .query_pairs_mut()
         .append_pair("audience", audience);

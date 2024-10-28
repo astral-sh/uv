@@ -473,6 +473,11 @@ impl TestContext {
             command.env(EnvVars::VIRTUAL_ENV, self.venv.as_os_str());
         }
 
+        if cfg!(unix) {
+            // Avoid locale issues in tests
+            command.env("LC_ALL", "C");
+        }
+
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
@@ -646,25 +651,32 @@ impl TestContext {
     pub fn python_install(&self) -> Command {
         let mut command = Command::new(get_bin());
         let managed = self.temp_dir.join("managed");
+        self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("install")
-            .env(EnvVars::UV_PREVIEW, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
             .current_dir(&self.temp_dir);
+        command
+    }
+
+    /// Create a `uv python uninstall` command with options shared across scenarios.
+    pub fn python_uninstall(&self) -> Command {
+        let mut command = Command::new(get_bin());
+        let managed = self.temp_dir.join("managed");
         self.add_shared_args(&mut command, true);
+        command
+            .arg("python")
+            .arg("uninstall")
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .current_dir(&self.temp_dir);
         command
     }
 
     /// Create a `uv python pin` command with options shared across scenarios.
     pub fn python_pin(&self) -> Command {
         let mut command = Command::new(get_bin());
-        command
-            .arg("python")
-            .arg("pin")
-            .env(EnvVars::UV_PREVIEW, "1")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-            .current_dir(&self.temp_dir);
+        command.arg("python").arg("pin");
         self.add_shared_args(&mut command, true);
         command
     }

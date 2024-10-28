@@ -232,7 +232,7 @@ pub struct GlobalArgs {
     /// Hide all progress outputs.
     ///
     /// For example, spinners or progress bars.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = EnvVars::UV_NO_PROGRESS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_progress: bool,
 
     /// Change to the given directory prior to running the command.

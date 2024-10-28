@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::VecDeque;
 use std::path::Path;
 
 use itertools::Itertools;
@@ -19,14 +19,12 @@ use crate::Lock;
 pub struct TreeDisplay<'env> {
     /// The constructed dependency graph.
     graph: petgraph::graph::Graph<&'env PackageId, Edge<'env>, petgraph::Directed>,
-    /// An inverse map from [`PackageId`] to the corresponding node index in the graph.
-    inverse: FxHashMap<&'env PackageId, petgraph::graph::NodeIndex>,
+    /// The packages considered as roots of the dependency tree.
+    roots: Vec<NodeIndex>,
     /// Maximum display depth of the dependency tree.
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
-    /// The packages considered as roots of the dependency tree.
-    roots: Vec<NodeIndex>,
 }
 
 impl<'env> TreeDisplay<'env> {
@@ -288,27 +286,18 @@ impl<'env> TreeDisplay<'env> {
             roots
         };
 
-        // Re-create the inverse map.
-        {
-            inverse.clear();
-            for node in graph.node_indices() {
-                inverse.insert(graph[node], node);
-            }
-        }
-
         Self {
             graph,
-            inverse,
+            roots,
             depth,
             no_dedupe,
-            roots,
         }
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.
     fn visit(
         &'env self,
-        node: Node<'env>,
+        cursor: Cursor,
         visited: &mut FxHashMap<&'env PackageId, Vec<&'env PackageId>>,
         path: &mut Vec<&'env PackageId>,
     ) -> Vec<String> {
@@ -317,59 +306,81 @@ impl<'env> TreeDisplay<'env> {
             return Vec::new();
         }
 
+        let package_id = self.graph[cursor.node()];
+        let edge = cursor.edge().map(|edge_id| &self.graph[edge_id]);
+
         let line = {
-            let mut line = format!("{}", node.package_id().name);
+            let mut line = format!("{}", package_id.name);
 
-            if let Some(extras) = node.extras().filter(|extras| !extras.is_empty()) {
-                line.push_str(&format!("[{}]", extras.iter().join(",")));
+            if let Some(edge) = edge {
+                let extras = &edge.dependency().extra;
+                if !extras.is_empty() {
+                    line.push('[');
+                    line.push_str(extras.iter().join(", ").as_str());
+                    line.push(']');
+                }
             }
 
-            line.push_str(&format!(" v{}", node.package_id().version));
+            line.push(' ');
+            line.push('v');
+            line.push_str(&format!("{}", package_id.version));
 
-            match node {
-                Node::Root(_) => line,
-                Node::Dependency(_, _) => line,
-                Node::OptionalDependency(extra, _, _) => format!("{line} (extra: {extra})"),
-                Node::DevDependency(group, _, _) => format!("{line} (group: {group})"),
+            if let Some(edge) = edge {
+                match edge {
+                    Edge::Prod(_) => {}
+                    Edge::Optional(extra, _) => {
+                        line.push_str(&format!(" (extra: {extra})"));
+                    }
+                    Edge::Dev(group, _) => {
+                        line.push_str(&format!(" (group: {group})"));
+                    }
+                }
             }
+
+            line
         };
 
         // Skip the traversal if:
         // 1. The package is in the current traversal path (i.e., a dependency cycle).
         // 2. The package has been visited and de-duplication is enabled (default).
-        if let Some(requirements) = visited.get(node.package_id()) {
-            if !self.no_dedupe || path.contains(&node.package_id()) {
+        if let Some(requirements) = visited.get(package_id) {
+            if !self.no_dedupe || path.contains(&package_id) {
                 return if requirements.is_empty() {
                     vec![line]
                 } else {
-                    vec![format!("{} (*)", line)]
+                    vec![format!("{line} (*)")]
                 };
             }
         }
 
         let mut dependencies = self
             .graph
-            .edges_directed(self.inverse[node.package_id()], Direction::Outgoing)
-            .map(|edge| match edge.weight() {
-                Edge::Prod(dependency) => Node::Dependency(self.graph[edge.target()], dependency),
-                Edge::Optional(extra, dependency) => {
-                    Node::OptionalDependency(extra, self.graph[edge.target()], dependency)
-                }
-                Edge::Dev(group, dependency) => {
-                    Node::DevDependency(group, self.graph[edge.target()], dependency)
-                }
+            .edges_directed(cursor.node(), Direction::Outgoing)
+            .map(|edge| {
+                let node = edge.target();
+                Cursor::new(node, edge.id())
             })
             .collect::<Vec<_>>();
-        dependencies.sort_unstable();
+        dependencies.sort_by_key(|node| {
+            let package_id = self.graph[node.node()];
+            let edge = node
+                .edge()
+                .map(|edge_id| &self.graph[edge_id])
+                .map(Edge::kind);
+            (edge, package_id)
+        });
 
         let mut lines = vec![line];
 
         // Keep track of the dependency path to avoid cycles.
         visited.insert(
-            node.package_id(),
-            dependencies.iter().map(Node::package_id).collect(),
+            package_id,
+            dependencies
+                .iter()
+                .map(|node| self.graph[node.node()])
+                .collect(),
         );
-        path.push(node.package_id());
+        path.push(package_id);
 
         for (index, dep) in dependencies.iter().enumerate() {
             // For sub-visited packages, add the prefix to make the tree display user-friendly.
@@ -414,13 +425,14 @@ impl<'env> TreeDisplay<'env> {
 
     /// Depth-first traverse the nodes to render the tree.
     fn render(&self) -> Vec<String> {
-        let mut visited = FxHashMap::default();
         let mut path = Vec::new();
-        let mut lines = Vec::new();
+        let mut lines = Vec::with_capacity(self.graph.node_count());
+        let mut visited =
+            FxHashMap::with_capacity_and_hasher(self.graph.node_count(), rustc_hash::FxBuildHasher);
 
         for node in &self.roots {
             path.clear();
-            lines.extend(self.visit(Node::Root(self.graph[*node]), &mut visited, &mut path));
+            lines.extend(self.visit(Cursor::root(*node), &mut visited, &mut path));
         }
 
         lines
@@ -442,33 +454,46 @@ impl<'env> Edge<'env> {
             Self::Dev(_, dependency) => dependency,
         }
     }
-}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
-enum Node<'env> {
-    Root(&'env PackageId),
-    Dependency(&'env PackageId, &'env Dependency),
-    OptionalDependency(&'env ExtraName, &'env PackageId, &'env Dependency),
-    DevDependency(&'env GroupName, &'env PackageId, &'env Dependency),
-}
-
-impl<'env> Node<'env> {
-    fn package_id(&self) -> &'env PackageId {
+    fn kind(&self) -> EdgeKind<'env> {
         match self {
-            Self::Root(id) => id,
-            Self::Dependency(id, _) => id,
-            Self::OptionalDependency(_, id, _) => id,
-            Self::DevDependency(_, id, _) => id,
+            Self::Prod(_) => EdgeKind::Prod,
+            Self::Optional(extra, _) => EdgeKind::Optional(extra),
+            Self::Dev(group, _) => EdgeKind::Dev(group),
         }
     }
+}
 
-    fn extras(&self) -> Option<&BTreeSet<ExtraName>> {
-        match self {
-            Self::Root(_) => None,
-            Self::Dependency(_, dep) => Some(&dep.extra),
-            Self::OptionalDependency(_, _, dep) => Some(&dep.extra),
-            Self::DevDependency(_, _, dep) => Some(&dep.extra),
-        }
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+enum EdgeKind<'env> {
+    Prod,
+    Optional(&'env ExtraName),
+    Dev(&'env GroupName),
+}
+
+/// A node in the dependency graph along with the edge that led to it, or `None` for root nodes.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
+struct Cursor(NodeIndex, Option<EdgeIndex>);
+
+impl Cursor {
+    /// Create a [`Cursor`] representing a node in the dependency tree.
+    fn new(node: NodeIndex, edge: EdgeIndex) -> Self {
+        Self(node, Some(edge))
+    }
+
+    /// Create a [`Cursor`] representing a root node in the dependency tree.
+    fn root(node: NodeIndex) -> Self {
+        Self(node, None)
+    }
+
+    /// Return the [`NodeIndex`] of the node.
+    fn node(&self) -> NodeIndex {
+        self.0
+    }
+
+    /// Return the [`EdgeIndex`] of the edge that led to the node, if any.
+    fn edge(&self) -> Option<EdgeIndex> {
+        self.1
     }
 }
 

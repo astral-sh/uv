@@ -151,5 +151,6 @@ In addition, uv respects the following environment variables:
   least-recent non-EOL macOS version at time of writing.
 - `NO_COLOR`: Disable colors. Takes precedence over `FORCE_COLOR`. See
   [no-color.org](https://no-color.org).
+- `UV_NO_PROGRESS`: Disable progress indicators like spinners and progress bars.
 - `FORCE_COLOR`: Enforce colors regardless of TTY support. See
   [force-color.org](https://force-color.org).

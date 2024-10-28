@@ -3754,6 +3754,102 @@ fn lock_requires_python_exact() -> Result<()> {
     Ok(())
 }
 
+/// Fork, even with a single dependency, if the minimum Python version is increased.
+#[test]
+fn lock_requires_python_fork() -> Result<()> {
+    let context = TestContext::new("3.11");
+
+    let lockfile = context.temp_dir.join("uv.lock");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "warehouse"
+        version = "1.0.0"
+        requires-python = ">=3.9"
+        dependencies = ["uv ; python_version>='3.8'"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(&lockfile).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.9"
+
+        [options]
+        exclude-newer = "2024-08-29T00:00:00Z"
+
+        [[package]]
+        name = "uv"
+        version = "0.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/0f/dc/94b6609d89693be22119f8ff7f586f6125de6d6ff096daa06b5250760563/uv-0.4.0.tar.gz", hash = "sha256:1658a17b7c4c0ad750fc44a7ef1196e058fb0c18873f54420c17f3ce807bfc24", size = 1807995 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c6/1f/eeddd9565b2627495ee9588c2852e3c267f893247726aa4ee967df70d388/uv-0.4.0-py3-none-linux_armv6l.whl", hash = "sha256:3870d045d878e3da6505f4ebae7ecf01761ec481ae5de5e30e57e8e58557d755", size = 10760426 },
+            { url = "https://files.pythonhosted.org/packages/76/be/0e5f3d36a5811315c5e97ac860ab80885865c79f64fcf8cf72a8e978f08f/uv-0.4.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:de7171d3e3ea994c754e750b79c788735eea0e50a60f878225f23645f047dd5b", size = 11152293 },
+            { url = "https://files.pythonhosted.org/packages/2e/86/9844e8ab08e25cbf2094e2fa1a7ad66563036bfed77b46986b6a2489c10c/uv-0.4.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:02e0295566454289348de502677e2240ad86f2cb5fa058504e1b2ca2a2ebf7e1", size = 10302231 },
+            { url = "https://files.pythonhosted.org/packages/9d/75/28c3386d0649a5becc95b6fe323d7891548932aa93c8ed29c32b6ad3f52d/uv-0.4.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:6e0d1b257d87d46c1047f62fc32cddb46df510e7382dec232b4ebc2475cf0957", size = 10611491 },
+            { url = "https://files.pythonhosted.org/packages/c9/50/8300c36a88cc1a62c261a84ebbdff0c69794825f26930d7a0ecee5d277b7/uv-0.4.0-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:787764145fb16f73eba04cce0855d18aeb0de3fc86e43aadd2ebe4992aa32c7f", size = 10579879 },
+            { url = "https://files.pythonhosted.org/packages/a3/0f/eeb272ff4e86a39644e152a28fafa43798c1498b0ac39b2e2ae2c410d7be/uv-0.4.0-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:c83f59c3326f7169f927603cc4b766e321fa941f1047f70ce388292e08d0966b", size = 11168249 },
+            { url = "https://files.pythonhosted.org/packages/b9/94/6655626f14585124fda2eb039781ff74a996da69437f197f74b7ac75f7a7/uv-0.4.0-py3-none-manylinux_2_17_ppc64.manylinux2014_ppc64.whl", hash = "sha256:0d6a1420b9ae8f391e733626ef583d1b328070e952ce83b65e4afb514ae03086", size = 11957706 },
+            { url = "https://files.pythonhosted.org/packages/c1/b5/821a343e33233b4efcd3ce725d648f89cce2ffbaaa232cda1ab094ef0d82/uv-0.4.0-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:7ef78d636b45e4b919d0bd3c17c2dc42600cdab2ad6e0dad971fb5a733398987", size = 11767024 },
+            { url = "https://files.pythonhosted.org/packages/ce/4e/286122669389f87fb9fa57c5ccbc977b843ee69f54bdfc781520e6fe8a38/uv-0.4.0-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:0671259b9a1ba67535382264ec8c000501d3bd9e3f9d28dbe6a57145a168fa31", size = 14705106 },
+            { url = "https://files.pythonhosted.org/packages/0c/71/f7a8b9a0f49f2fa5c979bf7d10e83791043e3eec3e43d80099acee4368fd/uv-0.4.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:85a94f21bebe4b3f452afe5fbc36ed326583c8b6cc7fe3091f5f571a727ed799", size = 11512897 },
+            { url = "https://files.pythonhosted.org/packages/bf/91/b0b4cb51b5ec31ec45fa52eae2aaa91ad20196a66e94a3d593379195ca80/uv-0.4.0-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:d9eb82b0198f10cb5f0354d5c4483f6b304ac6f0b74131b88fbf092a2030268f", size = 10704876 },
+            { url = "https://files.pythonhosted.org/packages/12/18/1055d2b5de7cc12fb83b2f3ba397869b8277d0a3c8524aa34fb96cc8f548/uv-0.4.0-py3-none-musllinux_1_1_armv7l.whl", hash = "sha256:90497e0413d76378000d8d62891d49e786065321ae9f68b933b0914f92cf3ea2", size = 10576751 },
+            { url = "https://files.pythonhosted.org/packages/3d/05/637f37dc173635688e14f4f358d75b58d136a8d78c2fe60365fd56f7d5ae/uv-0.4.0-py3-none-musllinux_1_1_i686.whl", hash = "sha256:1e10d262f55857b4e85dc3b550cd4fa09714fa639d53886065f19aa1f09720f7", size = 11000442 },
+            { url = "https://files.pythonhosted.org/packages/0a/21/bc467390c62493d6778c5c2c805375340b3d220073330011cd5e4562a161/uv-0.4.0-py3-none-musllinux_1_1_ppc64le.whl", hash = "sha256:80329b24feb52cf46187a50d6e163aad3afc52bc601218d876970d855bb71f9b", size = 12714226 },
+            { url = "https://files.pythonhosted.org/packages/eb/12/9801ebf36cdd72baf695adef704999d830e824e78db7bf66491fc7712ca7/uv-0.4.0-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:e911e8e0c59144c54468fae5e4bcbd76f8bafc5c6ca33d14f88e2ce8a633f7ab", size = 11651071 },
+            { url = "https://files.pythonhosted.org/packages/81/12/bd8bc40b3b88be4c75726b610302628edec6b2cbd4f58717403fb7cfc7c5/uv-0.4.0-py3-none-win32.whl", hash = "sha256:93861f0d0bf5c44ded97ee2b188f0c30e0521e7a51f3f63daf6e64766913f036", size = 10933271 },
+            { url = "https://files.pythonhosted.org/packages/d6/c2/7219ee34993c50b3fedd81a7d77f27232df0bcf5451920dd16717fcc9b1f/uv-0.4.0-py3-none-win_amd64.whl", hash = "sha256:6b9b8db49928b71f926cf48150a34c69458447e554e7b65c1337d3e907bd7fb5", size = 12145169 },
+        ]
+
+        [[package]]
+        name = "warehouse"
+        version = "1.0.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "uv" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv", marker = "python_full_version >= '3.8'" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env(EnvVars::UV_EXCLUDE_NEWER, "2024-08-29T00:00:00Z"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata
 #[test]
 fn lock_requires_python_wheels() -> Result<()> {

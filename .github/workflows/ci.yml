@@ -359,12 +359,10 @@ jobs:
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        if: matrix.target-arch == 'x86_64'
         run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
 
       - name: "Bloat Check"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        if: matrix.target-arch == 'x86_64'
         run: |
           $output = cargo bloat --release --target x86_64-pc-windows-msvc
           $filteredOutput = $output | Select-String -Pattern 'core::fmt::write|core::fmt::getcount' -NotMatch
@@ -386,6 +384,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Note, we exclude `aarch64` because it's not supported by the GitHub runner
         target-arch: ["x86_64", "i686"]
     steps:
       - uses: actions/checkout@v4
