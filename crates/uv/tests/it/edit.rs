@@ -1177,7 +1177,7 @@ fn add_remove_dev() -> Result<()> {
 
         [package.metadata]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = []
         "###
         );

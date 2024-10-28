@@ -12767,7 +12767,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "iniconfig" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = []
         "###
         );
@@ -12875,7 +12875,7 @@ fn lock_empty_dependency_group() -> Result<()> {
         [package.metadata]
         requires-dist = [{ name = "iniconfig" }]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         empty = []
         "###
         );
