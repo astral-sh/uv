@@ -137,24 +137,41 @@ def get_filenames(url: str, client: httpx.Client) -> list[str]:
     return [m.group(1) for m in re.finditer(href_text, data)]
 
 
-def build_new_version(project_name: str, uv: Path, client: httpx.Client) -> Version:
+def build_project_at_version(
+    project_name: str, version: Version, uv: Path, modified: bool = False
+) -> Path:
     """Build a source dist and a wheel with the project name and an unclaimed
     version."""
-    if cwd.joinpath(project_name).exists():
-        rmtree(cwd.joinpath(project_name))
-    check_call([uv, "init", "--lib", project_name], cwd=cwd)
-    pyproject_toml = cwd.joinpath(project_name).joinpath("pyproject.toml")
+    if modified:
+        dir_name = f"{project_name}-modified"
+    else:
+        dir_name = project_name
+    project_root = cwd.joinpath(dir_name)
+
+    if project_root.exists():
+        rmtree(project_root)
+    check_call([uv, "init", "--lib", "--name", project_name, dir_name], cwd=cwd)
+    pyproject_toml = project_root.joinpath("pyproject.toml")
 
     # Set to an unclaimed version
     toml = pyproject_toml.read_text()
-    new_version = get_new_version(project_name, client)
-    toml = re.sub('version = ".*"', f'version = "{new_version}"', toml)
+    toml = re.sub('version = ".*"', f'version = "{version}"', toml)
     pyproject_toml.write_text(toml)
 
-    # Build the project
-    check_call([uv, "build"], cwd=cwd.joinpath(project_name))
+    # Modify the code so we get a different source dist and wheel
+    if modified:
+        init_py = (
+            project_root.joinpath("src")
+            # dist info naming
+            .joinpath(project_name.replace("-", "_"))
+            .joinpath("__init__.py")
+        )
+        init_py.write_text("x = 1")
 
-    return new_version
+    # Build the project
+    check_call([uv, "build"], cwd=project_root)
+
+    return project_root
 
 
 def wait_for_index(index_url: str, project_name: str, version: Version, uv: Path):
@@ -205,14 +222,14 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     print(f"\nPublish {project_name} for {target}")
 
     # The distributions are build to the dist directory of the project.
-    version = build_new_version(project_name, uv, client)
+    version = get_new_version(project_name, client)
+    project_dir = build_project_at_version(project_name, version, uv)
 
     # Upload configuration
     env, extra_args, publish_url = target_configuration(target, client)
     index_url = all_targets[target][1]
     env = {**os.environ, **env}
-    uv_cwd = cwd.joinpath(project_name)
-    expected_filenames = [path.name for path in uv_cwd.joinpath("dist").iterdir()]
+    expected_filenames = [path.name for path in project_dir.joinpath("dist").iterdir()]
     # Ignore the gitignore file in dist
     expected_filenames.remove(".gitignore")
 
@@ -220,15 +237,15 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ==="
     )
     args = [uv, "publish", "--publish-url", publish_url, *extra_args]
-    check_call(args, cwd=uv_cwd, env=env)
+    check_call(args, cwd=project_dir, env=env)
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
         print(f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===")
         wait_for_index(index_url, project_name, version, uv)
-        args = [uv, "publish", "-v", "--publish-url", publish_url, *extra_args]
+        args = [uv, "publish", "--publish-url", publish_url, *extra_args]
         output = run(
-            args, cwd=uv_cwd, env=env, text=True, check=True, stderr=PIPE
+            args, cwd=project_dir, env=env, text=True, check=True, stderr=PIPE
         ).stderr
         if (
             output.count("Uploading") != len(expected_filenames)
@@ -245,14 +262,15 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     args = [
         uv,
         "publish",
-        "-v",
         "--publish-url",
         publish_url,
         "--check-url",
         index_url,
         *extra_args,
     ]
-    output = run(args, cwd=uv_cwd, env=env, text=True, check=True, stderr=PIPE).stderr
+    output = run(
+        args, cwd=project_dir, env=env, text=True, check=True, stderr=PIPE
+    ).stderr
 
     if output.count("Uploading") != 0 or output.count("already exists") != len(
         expected_filenames
@@ -261,6 +279,38 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
             f"Re-upload with check URL failed: "
             f"{output.count("Uploading")}, {output.count("already exists")}\n"
             f"---\n{output}\n---"
+        )
+
+    # Build a different source dist and wheel at the same version, so the upload fails
+    del project_dir
+    modified_project_dir = build_project_at_version(
+        project_name, version, uv, modified=True
+    )
+
+    print(
+        f"\n=== 4. Publishing modified {project_name} {version} "
+        f"again with skip existing (error test) ==="
+    )
+    wait_for_index(index_url, project_name, version, uv)
+    args = [
+        uv,
+        "publish",
+        "--publish-url",
+        publish_url,
+        "--skip-existing",
+        index_url,
+        *extra_args,
+    ]
+    result = run(args, cwd=modified_project_dir, env=env, text=True, stderr=PIPE)
+
+    if (
+        result.returncode == 0
+        or "Local file and index file do not match for" not in result.stderr
+    ):
+        raise RuntimeError(
+            f"Re-upload with mismatching files should not have been started: "
+            f"Exit code {result.returncode}\n"
+            f"---\n{result.stderr}\n---"
         )
 
 
