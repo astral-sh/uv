@@ -2817,15 +2817,29 @@ impl Forks {
             // two transitive non-sibling dependencies conflict. In
             // that case, we don't detect the fork ahead of time (at
             // present).
-            if deps.len() == 1 {
-                let dep = deps.pop().unwrap();
-                let markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
-                for fork in &mut forks {
-                    if !fork.markers.is_disjoint(&markers) {
-                        fork.dependencies.push(dep.clone());
+            if let [dep] = deps.as_slice() {
+                // There's one exception: if the requirement increases the minimum-supported Python
+                // version, we also fork in order to respect that minimum in the subsequent
+                // resolution.
+                //
+                // For example, given `requires-python = ">=3.7"` and `uv ; python_version >= "3.8"`,
+                // where uv itself only supports Python 3.8 and later, we need to fork to ensure
+                // that the resolution can find a solution.
+                if !dep
+                    .package
+                    .marker()
+                    .and_then(marker::requires_python)
+                    .is_some_and(|bound| python_requirement.raises(&bound))
+                {
+                    let dep = deps.pop().unwrap();
+                    let markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
+                    for fork in &mut forks {
+                        if !fork.markers.is_disjoint(&markers) {
+                            fork.dependencies.push(dep.clone());
+                        }
                     }
+                    continue;
                 }
-                continue;
             }
             for dep in deps {
                 let mut markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
