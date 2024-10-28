@@ -88,30 +88,41 @@ pub(crate) async fn lock(
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
-    // Find an interpreter for the project
-    let interpreter = ProjectInterpreter::discover(
-        &workspace,
-        python.as_deref().map(PythonRequest::parse),
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
+    // Determine the lock mode.
+    let interpreter;
+    let mode = if frozen {
+        LockMode::Frozen
+    } else {
+        // Find an interpreter for the project
+        interpreter = ProjectInterpreter::discover(
+            &workspace,
+            python.as_deref().map(PythonRequest::parse),
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+        .into_interpreter();
+
+        if locked {
+            LockMode::Locked(&interpreter)
+        } else if dry_run {
+            LockMode::DryRun(&interpreter)
+        } else {
+            LockMode::Write(&interpreter)
+        }
+    };
 
     // Initialize any shared state.
     let state = SharedState::default();
 
     // Perform the lock operation.
     match do_safe_lock(
-        locked,
-        frozen,
-        dry_run,
+        mode,
         &workspace,
-        &interpreter,
         settings.as_ref(),
         LowerBound::Warn,
         &state,
@@ -169,14 +180,23 @@ pub(crate) async fn lock(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) enum LockMode<'env> {
+    /// Write the lockfile to disk.
+    Write(&'env Interpreter),
+    /// Perform a resolution, but don't write the lockfile to disk.
+    DryRun(&'env Interpreter),
+    /// Error if the lockfile is not up-to-date with the project requirements.
+    Locked(&'env Interpreter),
+    /// Use the existing lockfile without performing a resolution.
+    Frozen,
+}
+
 /// Perform a lock operation, respecting the `--locked` and `--frozen` parameters.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_safe_lock(
-    locked: bool,
-    frozen: bool,
-    dry_run: bool,
+    mode: LockMode<'_>,
     workspace: &Workspace,
-    interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
     bounds: LowerBound,
     state: &SharedState,
@@ -187,78 +207,84 @@ pub(super) async fn do_safe_lock(
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
-    if frozen {
-        // Read the existing lockfile, but don't attempt to lock the project.
-        let existing = read(workspace)
-            .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)?;
-        Ok(LockResult::Unchanged(existing))
-    } else if locked {
-        // Read the existing lockfile.
-        let existing = read(workspace)
-            .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)?;
-
-        // Perform the lock operation, but don't write the lockfile to disk.
-        let result = do_lock(
-            workspace,
-            interpreter,
-            Some(existing),
-            settings,
-            bounds,
-            state,
-            logger,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
-
-        // If the lockfile changed, return an error.
-        if matches!(result, LockResult::Changed(_, _)) {
-            return Err(ProjectError::LockMismatch);
+    match mode {
+        LockMode::Frozen => {
+            // Read the existing lockfile, but don't attempt to lock the project.
+            let existing = read(workspace)
+                .await?
+                .ok_or_else(|| ProjectError::MissingLockfile)?;
+            Ok(LockResult::Unchanged(existing))
         }
+        LockMode::Locked(interpreter) => {
+            // Read the existing lockfile.
+            let existing = read(workspace)
+                .await?
+                .ok_or_else(|| ProjectError::MissingLockfile)?;
 
-        Ok(result)
-    } else {
-        // Read the existing lockfile.
-        let existing = match read(workspace).await {
-            Ok(Some(existing)) => Some(existing),
-            Ok(None) => None,
-            Err(ProjectError::Lock(err)) => {
-                warn_user!("Failed to read existing lockfile; ignoring locked requirements: {err}");
-                None
+            // Perform the lock operation, but don't write the lockfile to disk.
+            let result = do_lock(
+                workspace,
+                interpreter,
+                Some(existing),
+                settings,
+                bounds,
+                state,
+                logger,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            // If the lockfile changed, return an error.
+            if matches!(result, LockResult::Changed(_, _)) {
+                return Err(ProjectError::LockMismatch);
             }
-            Err(err) => return Err(err),
-        };
 
-        // Perform the lock operation.
-        let result = do_lock(
-            workspace,
-            interpreter,
-            existing,
-            settings,
-            bounds,
-            state,
-            logger,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
-
-        // If the lockfile changed, write it to disk.
-        if !dry_run {
-            if let LockResult::Changed(_, lock) = &result {
-                commit(lock, workspace).await?;
-            }
+            Ok(result)
         }
+        LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
+            // Read the existing lockfile.
+            let existing = match read(workspace).await {
+                Ok(Some(existing)) => Some(existing),
+                Ok(None) => None,
+                Err(ProjectError::Lock(err)) => {
+                    warn_user!(
+                        "Failed to read existing lockfile; ignoring locked requirements: {err}"
+                    );
+                    None
+                }
+                Err(err) => return Err(err),
+            };
 
-        Ok(result)
+            // Perform the lock operation.
+            let result = do_lock(
+                workspace,
+                interpreter,
+                existing,
+                settings,
+                bounds,
+                state,
+                logger,
+                connectivity,
+                concurrency,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?;
+
+            // If the lockfile changed, write it to disk.
+            if !matches!(mode, LockMode::DryRun(_)) {
+                if let LockResult::Changed(_, lock) = &result {
+                    commit(lock, workspace).await?;
+                }
+            }
+
+            Ok(result)
+        }
     }
 }
 

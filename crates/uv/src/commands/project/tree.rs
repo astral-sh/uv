@@ -13,6 +13,7 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
+use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
     default_dependency_groups, validate_dependency_groups, ProjectInterpreter,
 };
@@ -52,30 +53,42 @@ pub(crate) async fn tree(
     validate_dependency_groups(workspace.pyproject_toml(), &dev)?;
     let defaults = default_dependency_groups(workspace.pyproject_toml())?;
 
-    // Find an interpreter for the project
-    let interpreter = ProjectInterpreter::discover(
-        &workspace,
-        python.as_deref().map(PythonRequest::parse),
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
+    // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
+    let interpreter = if frozen && universal {
+        None
+    } else {
+        Some(
+            ProjectInterpreter::discover(
+                &workspace,
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter(),
+        )
+    };
+
+    // Determine the lock mode.
+    let mode = if frozen {
+        LockMode::Frozen
+    } else if locked {
+        LockMode::Locked(interpreter.as_ref().unwrap())
+    } else {
+        LockMode::Write(interpreter.as_ref().unwrap())
+    };
 
     // Initialize any shared state.
     let state = SharedState::default();
 
     // Update the lockfile, if necessary.
     let lock = project::lock::do_safe_lock(
-        locked,
-        frozen,
-        false,
+        mode,
         &workspace,
-        &interpreter,
         settings.as_ref(),
         LowerBound::Allow,
         &state,
@@ -90,16 +103,18 @@ pub(crate) async fn tree(
     .into_lock();
 
     // Determine the markers to use for resolution.
-    let markers = resolution_markers(
-        python_version.as_ref(),
-        python_platform.as_ref(),
-        &interpreter,
-    );
+    let markers = (!universal).then(|| {
+        resolution_markers(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            interpreter.as_ref().unwrap(),
+        )
+    });
 
     // Render the tree.
     let tree = TreeDisplay::new(
         &lock,
-        (!universal).then_some(&markers),
+        markers.as_ref(),
         depth.into(),
         &prune,
         &package,
