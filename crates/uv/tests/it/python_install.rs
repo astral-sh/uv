@@ -110,6 +110,9 @@ fn python_install() {
     Uninstalled Python 3.13.0 in [TIME]
      - cpython-3.13.0-[PLATFORM]
     "###);
+
+    // The executable should be removed
+    bin_python.assert(predicate::path::missing());
 }
 
 #[test]
