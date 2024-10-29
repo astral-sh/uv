@@ -198,7 +198,6 @@ async fn venv_impl(
     if interpreter_request.is_none() {
         if let Some(project) = project {
             interpreter_request = find_requires_python(project.workspace())
-                .into_diagnostic()?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {

@@ -4329,6 +4329,7 @@ dependencies = [
  "uv-pep508",
  "uv-pypi-types",
  "uv-warnings",
+ "version-ranges",
  "walkdir",
  "zip",
 ]

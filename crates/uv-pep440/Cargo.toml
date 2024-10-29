@@ -25,6 +25,7 @@ serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 unscanny = { workspace = true }
+# Adds conversions from [`VersionSpecifiers`] to [`version_ranges::Ranges`]
 version-ranges = { workspace = true, optional = true }
 
 [dev-dependencies]

@@ -9,10 +9,11 @@ use std::str::FromStr;
 use tracing::debug;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::{Version, VersionRangesSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 use uv_warnings::warn_user_once;
+use version_ranges::Ranges;
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -134,9 +135,9 @@ impl PyProjectToml {
                     );
                     passed = false;
                 }
-                VersionRangesSpecifier::from_pep440_specifiers(specifier)
-                    .ok()
-                    .and_then(|specifier| Some(specifier.bounding_range()?.1 != Bound::Unbounded))
+                Ranges::from(specifier.clone())
+                    .bounding_range()
+                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
                     .unwrap_or(false)
             }
         };

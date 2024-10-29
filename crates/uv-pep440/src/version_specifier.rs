@@ -117,6 +117,15 @@ impl FromIterator<VersionSpecifier> for VersionSpecifiers {
     }
 }
 
+impl IntoIterator for VersionSpecifiers {
+    type Item = VersionSpecifier;
+    type IntoIter = std::vec::IntoIter<VersionSpecifier>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 impl FromStr for VersionSpecifiers {
     type Err = VersionSpecifiersParseError;
 

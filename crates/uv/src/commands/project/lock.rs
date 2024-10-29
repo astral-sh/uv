@@ -390,7 +390,7 @@ async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    let requires_python = find_requires_python(workspace)?;
+    let requires_python = find_requires_python(workspace);
 
     let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {

@@ -19,7 +19,7 @@ use uv_distribution_types::{
     BuiltDist, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist, SourceDist,
 };
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionRangesSpecifierError};
+use uv_pep440::Version;
 use uv_pep508::MarkerTree;
 use uv_static::EnvVars;
 
@@ -36,9 +36,6 @@ pub enum ResolveError {
 
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
-
-    #[error(transparent)]
-    VersionRangesSpecifier(#[from] VersionRangesSpecifierError),
 
     #[error("Overrides contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
     ConflictingOverrideUrls(PackageName, String, String),
