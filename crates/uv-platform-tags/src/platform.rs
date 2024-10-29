@@ -86,6 +86,7 @@ pub enum Arch {
     #[serde(alias = "amd64")]
     X86_64,
     S390X,
+    Riscv64,
 }
 
 impl fmt::Display for Arch {
@@ -99,6 +100,7 @@ impl fmt::Display for Arch {
             Self::X86 => write!(f, "i686"),
             Self::X86_64 => write!(f, "x86_64"),
             Self::S390X => write!(f, "s390x"),
+            Self::Riscv64 => write!(f, "riscv64"),
         }
     }
 }
@@ -115,7 +117,7 @@ impl Arch {
             // manylinux 1
             Self::X86 | Self::X86_64 => Some(5),
             // unsupported
-            Self::Armv6L => None,
+            Self::Armv6L | Self::Riscv64 => None,
         }
     }
 }
