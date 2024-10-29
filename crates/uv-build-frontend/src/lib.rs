@@ -473,6 +473,7 @@ impl SourceBuild {
                                 };
                                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                                     requires_dist,
+                                    None,
                                     install_path,
                                     locations,
                                     source_strategy,
@@ -926,6 +927,7 @@ async fn create_pep517_build_environment(
                 };
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
+                    None,
                     install_path,
                     locations,
                     source_strategy,

@@ -1,3 +1,4 @@
+use crate::metadata::GitWorkspaceMember;
 use either::Either;
 use std::collections::BTreeMap;
 use std::io;
@@ -38,6 +39,7 @@ impl LoweredRequirement {
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         lower_bound: LowerBound,
+        git_member: Option<&'data GitWorkspaceMember<'data>>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), RequirementOrigin::Project)
@@ -216,7 +218,24 @@ impl LoweredRequirement {
                                 ))
                             })?;
 
-                            let source = if member.pyproject_toml().is_package() {
+                            let source = if let Some(git_member) = &git_member {
+                                // If the workspace comes from a git dependency, all workspace
+                                // members need to be git deps, too.
+                                let subdirectory =
+                                    uv_fs::relative_to(member.root(), git_member.fetch_root)
+                                        .expect("Workspace member must be relative");
+                                RequirementSource::Git {
+                                    repository: git_member.git_source.git.repository().clone(),
+                                    reference: git_member.git_source.git.reference().clone(),
+                                    precise: git_member.git_source.git.precise(),
+                                    subdirectory: if subdirectory == PathBuf::new() {
+                                        None
+                                    } else {
+                                        Some(subdirectory)
+                                    },
+                                    url,
+                                }
+                            } else if member.pyproject_toml().is_package() {
                                 RequirementSource::Directory {
                                     install_path,
                                     url,
