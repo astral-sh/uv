@@ -45,6 +45,7 @@ use crate::error::{NoSolutionError, ResolveError};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
+use crate::multi_version_mode::MultiVersionMode;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
@@ -373,26 +374,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     // Walk over the selected versions, and mark them as preferences. We have to
                     // add forks back as to not override the preferences from the lockfile for
-                    // the next fork
+                    // the next fork.
                     //
                     // If we're using a resolution mode that varies based on whether a dependency is
                     // direct or transitive, skip preferences, as we risk adding a preference from
                     // one fork (in which it's a transitive dependency) to another fork (in which
                     // it's direct).
-                    if matches!(
-                        self.options.resolution_mode,
-                        ResolutionMode::Lowest | ResolutionMode::Highest
-                    ) {
-                        for (package, version) in &resolution.nodes {
-                            preferences.insert(
-                                package.name.clone(),
-                                package.index.clone(),
-                                resolution
-                                    .env
-                                    .try_universal_markers()
-                                    .unwrap_or(UniversalMarker::TRUE),
-                                version.clone(),
-                            );
+                    if matches!(self.options.multi_version_mode, MultiVersionMode::Fewest) {
+                        if matches!(
+                            self.options.resolution_mode,
+                            ResolutionMode::Lowest | ResolutionMode::Highest
+                        ) {
+                            for (package, version) in &resolution.nodes {
+                                preferences.insert(
+                                    package.name.clone(),
+                                    package.index.clone(),
+                                    resolution
+                                        .env
+                                        .try_universal_markers()
+                                        .unwrap_or(UniversalMarker::TRUE),
+                                    version.clone(),
+                                );
+                            }
                         }
                     }
 

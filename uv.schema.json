@@ -240,6 +240,17 @@
         "null"
       ]
     },
+    "multi-version": {
+      "description": "The strategy to use when selecting multiple versions of a given package across Python versions and platforms.\n\nBy default, uv will minimize the number of versions selected for each package (`fewest`), to minimize differences between environments. Under `latest`, uv will select the latest compatible version for each environment and perform an independent solve for each Python minor version, ensuring that the latest-compatible version is used in each environment, even if it results in more versions being selected across the lockfile.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/MultiVersionMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "native-tls": {
       "description": "Whether to load TLS certificates from the platform's native certificate store.\n\nBy default, uv loads certificates from the bundled `webpki-roots` crate. The `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).\n\nHowever, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.",
       "type": [
@@ -791,6 +802,24 @@
       "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
       "type": "string"
     },
+    "MultiVersionMode": {
+      "oneOf": [
+        {
+          "description": "Resolve the highest compatible version of each package.",
+          "type": "string",
+          "enum": [
+            "fewest"
+          ]
+        },
+        {
+          "description": "Resolve the lowest compatible version of each package.",
+          "type": "string",
+          "enum": [
+            "latest"
+          ]
+        }
+      ]
+    },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
@@ -992,6 +1021,17 @@
           "anyOf": [
             {
               "$ref": "#/definitions/LinkMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "multi-version": {
+          "description": "The strategy to use when selecting multiple versions of a given package across Python versions and platforms.\n\nBy default, uv will minimize the number of versions selected for each package (`fewest`), to minimize differences between environments. Under `latest`, uv will select the latest compatible version for each environment and perform an independent solve for each Python minor version, ensuring that the latest-compatible version is used in each environment, even if it results in more versions being selected across the lockfile.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MultiVersionMode"
             },
             {
               "type": "null"
@@ -1352,7 +1392,7 @@
       ]
     },
     "PythonVersion": {
-      "description": "A Python version specifier, e.g. `3.7` or `3.8.0`.",
+      "description": "A Python version specifier, e.g. `3.11` or `3.12.4`.",
       "type": "string",
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
     },

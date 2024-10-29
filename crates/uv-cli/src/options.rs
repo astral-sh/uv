@@ -43,6 +43,7 @@ impl From<ResolverArgs> for PipOptions {
             resolution,
             prerelease,
             pre,
+            multi_version,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -58,6 +59,7 @@ impl From<ResolverArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             resolution,
+            multi_version,
             prerelease: if pre {
                 Some(PrereleaseMode::Allow)
             } else {
@@ -126,6 +128,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             resolution,
             prerelease,
             pre,
+            multi_version,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -150,6 +153,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             } else {
                 prerelease
             },
+            multi_version,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             no_build_isolation: flag(no_build_isolation, build_isolation),
@@ -235,6 +239,7 @@ pub fn resolver_options(
         resolution,
         prerelease,
         pre,
+        multi_version,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -291,6 +296,7 @@ pub fn resolver_options(
         } else {
             prerelease
         },
+        multi_version,
         dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
@@ -324,6 +330,7 @@ pub fn resolver_installer_options(
         resolution,
         prerelease,
         pre,
+        multi_version,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -392,6 +399,7 @@ pub fn resolver_installer_options(
         } else {
             prerelease
         },
+        multi_version,
         dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),

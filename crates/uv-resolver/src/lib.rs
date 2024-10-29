@@ -8,6 +8,7 @@ pub use lock::{
     ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
 };
 pub use manifest::Manifest;
+pub use multi_version_mode::MultiVersionMode;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
@@ -46,6 +47,7 @@ mod graph_ops;
 mod lock;
 mod manifest;
 mod marker;
+mod multi_version_mode;
 mod options;
 mod pins;
 mod preferences;

@@ -19,7 +19,9 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, ExcludeNewer, MultiVersionMode, PrereleaseMode, ResolutionMode,
+};
 use uv_static::EnvVars;
 
 pub mod comma;
@@ -4045,6 +4047,20 @@ pub struct ToolUpgradeArgs {
     #[arg(long, hide = true)]
     pub pre: bool,
 
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will minimize the number of versions selected for each package (`fewest`),
+    /// to minimize differences between environments. Under `latest`, uv will select the latest
+    /// compatible version for each environment, even if it results in more versions being selected.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_MULTI_VERSION,
+        help_heading = "Resolver options"
+    )]
+    pub multi_version: Option<MultiVersionMode>,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -4834,6 +4850,20 @@ pub struct ResolverArgs {
     #[arg(long, hide = true, help_heading = "Resolver options")]
     pub pre: bool,
 
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will minimize the number of versions selected for each package (`fewest`),
+    /// to minimize differences between environments. Under `latest`, uv will select the latest
+    /// compatible version for each environment, even if it results in more versions being selected.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_MULTI_VERSION,
+        help_heading = "Resolver options"
+    )]
+    pub multi_version: Option<MultiVersionMode>,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -5005,6 +5035,20 @@ pub struct ResolverInstallerArgs {
 
     #[arg(long, hide = true)]
     pub pre: bool,
+
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will minimize the number of versions selected for each package (`fewest`),
+    /// to minimize differences between environments. Under `latest`, uv will select the latest
+    /// compatible version for each environment, even if it results in more versions being selected.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_MULTI_VERSION,
+        help_heading = "Resolver options"
+    )]
+    pub multi_version: Option<MultiVersionMode>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(

@@ -147,6 +147,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -302,6 +303,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -458,6 +460,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -646,6 +649,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -773,6 +777,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -939,6 +944,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1148,6 +1154,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1365,6 +1372,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1545,6 +1553,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1694,6 +1703,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1895,6 +1905,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2079,6 +2090,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2228,6 +2240,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2360,6 +2373,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2492,6 +2506,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2626,6 +2641,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2759,6 +2775,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 LowestDirect,
             ),
             prerelease: None,
+            multi_version: None,
             dependency_metadata: None,
             config_settings: None,
             no_build_isolation: None,
@@ -2792,6 +2809,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             keyring_provider: Disabled,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2943,6 +2961,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3133,6 +3152,7 @@ fn resolve_both() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3411,6 +3431,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3637,6 +3658,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3772,6 +3794,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3926,6 +3949,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4133,6 +4157,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4319,6 +4344,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4511,6 +4537,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4698,6 +4725,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4892,6 +4920,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -5345,6 +5374,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            multi_version: Fewest,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
