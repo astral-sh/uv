@@ -46,6 +46,9 @@ impl EnvVars {
     /// `allow`, uv will allow pre-release versions for all dependencies.
     pub const UV_PRERELEASE: &'static str = "UV_PRERELEASE";
 
+    /// Equivalent to the `--multi-version` argument. Controls version selection across forks.
+    pub const UV_MULTI_VERSION: &'static str = "UV_MULTI_VERSION";
+
     /// Equivalent to the `--system` command-line argument. If set to `true`, uv will
     /// use the first Python interpreter found in the system `PATH`.
     /// WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI)

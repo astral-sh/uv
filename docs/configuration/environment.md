@@ -154,6 +154,10 @@ a link mode.
 Equivalent to the `--locked` command-line argument. If set, uv will assert that the
 `uv.lock` remains unchanged.
 
+### `UV_MULTI_VERSION`
+
+Equivalent to the `--multi-version` argument. Controls version selection across forks.
+
 ### `UV_NATIVE_TLS`
 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will

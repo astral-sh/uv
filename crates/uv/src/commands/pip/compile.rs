@@ -32,8 +32,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
-    InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
-    ResolutionMode, ResolverEnvironment,
+    InMemoryIndex, MultiVersionMode, OptionsBuilder, PrereleaseMode, PythonRequirement,
+    RequiresPython, ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
@@ -57,6 +57,7 @@ pub(crate) async fn pip_compile(
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
+    multi_version_mode: MultiVersionMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
@@ -361,6 +362,7 @@ pub(crate) async fn pip_compile(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
+        .multi_version_mode(multi_version_mode)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)

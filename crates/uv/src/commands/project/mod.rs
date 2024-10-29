@@ -921,6 +921,7 @@ pub(crate) async fn resolve_names(
         keyring_provider,
         resolution: _,
         prerelease: _,
+        multi_version: _,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -1057,6 +1058,7 @@ pub(crate) async fn resolve_environment<'a>(
         keyring_provider,
         resolution,
         prerelease,
+        multi_version,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -1117,6 +1119,7 @@ pub(crate) async fn resolve_environment<'a>(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
+        .multi_version_mode(multi_version)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
         .build();
@@ -1386,6 +1389,7 @@ pub(crate) async fn update_environment(
         keyring_provider,
         resolution,
         prerelease,
+        multi_version,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -1471,6 +1475,7 @@ pub(crate) async fn update_environment(
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
+        .multi_version_mode(*multi_version)
         .exclude_newer(*exclude_newer)
         .index_strategy(*index_strategy)
         .build();

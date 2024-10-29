@@ -33,6 +33,7 @@ Ok(
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
+            multi_version_mode: Fewest,
             exclude_newer: None,
         },
         packages: [

@@ -45,6 +45,7 @@ use crate::error::{NoSolutionError, ResolveError};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
+use crate::multi_version_mode::MultiVersionMode;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
@@ -1124,22 +1125,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if let Some((requires_python, incompatibility)) =
             Self::check_requires_python(dist, python_requirement)
         {
-            if env.marker_environment().is_none() {
-                let forks = fork_python_requirement(requires_python, python_requirement, env);
-                if !forks.is_empty() {
-                    debug!(
-                        "Forking Python requirement `{}` on `{}` for {}=={} ({})",
-                        python_requirement.target(),
-                        requires_python,
-                        name,
-                        candidate.version(),
-                        forks
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                    return Ok(Some(ResolverVersion::Forked(forks)));
+            if matches!(
+                self.options.multi_version_mode,
+                MultiVersionMode::RequiresPython
+            ) {
+                if env.marker_environment().is_none() {
+                    let forks = fork_python_requirement(requires_python, python_requirement, env);
+                    if !forks.is_empty() {
+                        debug!(
+                            "Forking Python requirement `{}` on `{}` for {}=={} ({})",
+                            python_requirement.target(),
+                            requires_python,
+                            name,
+                            candidate.version(),
+                            forks
+                                .iter()
+                                .map(ToString::to_string)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        );
+                        return Ok(Some(ResolverVersion::Forked(forks)));
+                    }
                 }
             }
 

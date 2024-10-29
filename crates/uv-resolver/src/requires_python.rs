@@ -298,23 +298,6 @@ impl RequiresPython {
         }
     }
 
-    /// Returns the [`RequiresPythonBound`] truncated to the major and minor version.
-    pub fn bound_major_minor(&self) -> LowerBound {
-        match self.range.lower().as_ref() {
-            // Ex) `>=3.10.1` -> `>=3.10`
-            Bound::Included(version) => LowerBound(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            // Ex) `>3.10.1` -> `>=3.10`
-            // This is unintuitive, but `>3.10.1` does indicate that _some_ version of Python 3.10
-            // is supported.
-            Bound::Excluded(version) => LowerBound(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            Bound::Unbounded => LowerBound(Bound::Unbounded),
-        }
-    }
-
     /// Returns the [`Range`] bounding the `Requires-Python` specifier.
     pub fn range(&self) -> &RequiresPythonRange {
         &self.range
