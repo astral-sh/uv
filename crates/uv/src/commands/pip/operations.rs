@@ -773,5 +773,5 @@ pub(crate) enum Error {
     Anyhow(#[from] anyhow::Error),
 
     #[error(transparent)]
-    PubGrubSpecifier(#[from] uv_resolver::PubGrubSpecifierError),
+    VersionRangesSpecifier(#[from] uv_pep440::VersionRangesSpecifierError),
 }

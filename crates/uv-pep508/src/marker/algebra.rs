@@ -53,9 +53,8 @@ use std::sync::MutexGuard;
 use itertools::Either;
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
-use uv_pep440::Operator;
+use uv_pep440::{Operator, VersionRangesSpecifier};
 use uv_pep440::{Version, VersionSpecifier};
-use uv_pubgrub::PubGrubSpecifier;
 use version_ranges::Ranges;
 
 use crate::marker::MarkerValueExtra;
@@ -746,7 +745,8 @@ impl Edges {
     /// Returns the [`Edges`] for a version specifier.
     fn from_specifier(specifier: VersionSpecifier) -> Edges {
         let specifier =
-            PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
+            VersionRangesSpecifier::from_release_specifier(&normalize_specifier(specifier))
+                .unwrap();
         Edges::Version {
             edges: Edges::from_range(&specifier.into()),
         }
@@ -764,7 +764,8 @@ impl Edges {
             let specifier = VersionSpecifier::equals_version(version.clone());
             let specifier = python_version_to_full_version(specifier)?;
             let pubgrub_specifier =
-                PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
+                VersionRangesSpecifier::from_release_specifier(&normalize_specifier(specifier))
+                    .unwrap();
             range = range.union(&pubgrub_specifier.into());
         }
 

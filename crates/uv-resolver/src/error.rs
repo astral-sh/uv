@@ -9,9 +9,7 @@ use rustc_hash::FxHashMap;
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::{
-    PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
-};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
@@ -21,7 +19,7 @@ use uv_distribution_types::{
     BuiltDist, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist, SourceDist,
 };
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionRangesSpecifierError};
 use uv_pep508::MarkerTree;
 use uv_static::EnvVars;
 
@@ -40,7 +38,7 @@ pub enum ResolveError {
     UnregisteredTask(String),
 
     #[error(transparent)]
-    PubGrubSpecifier(#[from] PubGrubSpecifierError),
+    VersionRangesSpecifier(#[from] VersionRangesSpecifierError),
 
     #[error("Overrides contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
     ConflictingOverrideUrls(PackageName, String, String),

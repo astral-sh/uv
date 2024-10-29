@@ -4303,7 +4303,6 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
- "uv-pubgrub",
  "uv-pypi-types",
  "uv-warnings",
  "walkdir",
@@ -4875,6 +4874,7 @@ dependencies = [
  "tracing",
  "unicode-width",
  "unscanny",
+ "version-ranges",
 ]
 
 [[package]]
@@ -4900,7 +4900,6 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
- "uv-pubgrub",
  "version-ranges",
 ]
 
@@ -4927,16 +4926,6 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror",
-]
-
-[[package]]
-name = "uv-pubgrub"
-version = "0.0.1"
-dependencies = [
- "itertools 0.13.0",
- "thiserror",
- "uv-pep440",
- "version-ranges",
 ]
 
 [[package]]
@@ -5158,7 +5147,6 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
- "uv-pubgrub",
  "uv-pypi-types",
  "uv-python",
  "uv-requirements-txt",
