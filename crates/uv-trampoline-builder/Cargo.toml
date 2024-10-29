@@ -12,6 +12,12 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[features]
+default = ["production"]
+
+# Expect tests to run against production builds of `uv-trampoline` binaries, rather than debug builds
+production = []
+
 [lints]
 workspace = true
 
