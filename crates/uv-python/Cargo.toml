@@ -57,6 +57,9 @@ tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+procfs = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
 windows-registry = { workspace = true }
