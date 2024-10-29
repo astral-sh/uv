@@ -2936,15 +2936,11 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Uninstalled 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     - idna==3.6
-     + idna==2.7
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-     - urllib3==2.2.1
-     + urllib3==1.23
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2979,7 +2975,7 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3026,10 +3022,10 @@ fn add_update_marker() -> Result<()> {
     Installed 1 package in [TIME]
      - certifi==2024.2.2
      - charset-normalizer==3.3.2
-     - idna==2.7
+     - idna==3.6
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
-     - urllib3==1.23
+     - urllib3==2.2.1
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
