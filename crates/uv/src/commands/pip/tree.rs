@@ -166,6 +166,7 @@ impl DisplayDependencyGraph {
                 }
             }
         }
+
         Self {
             packages,
             depth,
