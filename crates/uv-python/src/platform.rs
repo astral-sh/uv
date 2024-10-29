@@ -165,6 +165,9 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 target_lexicon::X86_32Architecture::I686,
             )),
             uv_platform_tags::Arch::X86_64 => Self(target_lexicon::Architecture::X86_64),
+            uv_platform_tags::Arch::Riscv64 => Self(target_lexicon::Architecture::Riscv64(
+                target_lexicon::Riscv64Architecture::Riscv64,
+            )),
         }
     }
 }
