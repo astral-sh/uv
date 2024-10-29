@@ -25,10 +25,16 @@ pub struct RequiresPython {
     /// The supported Python versions as provides by the user, usually through the `requires-python`
     /// field in `pyproject.toml`.
     ///
-    /// For a workspace, it's the intersection of all `requires-python` values in the workspace. If no
-    /// bound was provided by the user, it's greater equal the current Python version.
+    /// For a workspace, it's the intersection of all `requires-python` values in the workspace. If
+    /// no bound was provided by the user, it's greater equal the current Python version.
+    ///
+    /// The specifiers remain static over the lifetime of the workspace, such that they
+    /// represent the initial Python version constraints.
     specifiers: VersionSpecifiers,
     /// The lower and upper bounds of the given specifiers.
+    ///
+    /// The range may be narrowed over the course of dependency resolution as the resolver
+    /// investigates environments with stricter Python version constraints.
     range: RequiresPythonRange,
 }
 
@@ -114,6 +120,8 @@ impl RequiresPython {
         } else {
             None
         };
+        // TODO(charlie): Consider re-computing the specifiers (or removing them entirely in favor
+        // of tracking the range). After narrowing, the specifiers and range may be out of sync.
         match (lower, upper) {
             (Some(lower), Some(upper)) => Some(Self {
                 specifiers: self.specifiers.clone(),
