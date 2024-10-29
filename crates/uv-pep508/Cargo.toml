@@ -24,7 +24,6 @@ workspace = true
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
-uv-pubgrub = { workspace = true }
 
 boxcar = { workspace = true }
 indexmap = { workspace = true }

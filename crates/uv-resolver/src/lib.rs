@@ -11,7 +11,6 @@ pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
-pub use pubgrub::{PubGrubSpecifier, PubGrubSpecifierError};
 pub use python_requirement::PythonRequirement;
 pub use requires_python::{RequiresPython, RequiresPythonError, RequiresPythonRange};
 pub use resolution::{
