@@ -175,7 +175,6 @@ fn windows_script_launcher(
 
     let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
     launcher.extend_from_slice(launcher_bin);
-    launcher.extend_from_slice(&payload);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
         &u32::try_from(python_path.as_bytes().len())
@@ -183,6 +182,7 @@ fn windows_script_launcher(
             .to_le_bytes(),
     );
     launcher.extend_from_slice(&LAUNCHER_MAGIC_NUMBER);
+    launcher.extend_from_slice(&payload);
 
     Ok(launcher)
 }

@@ -3112,3 +3112,60 @@ fn tool_install_at_latest_upgrade() {
         "###);
     });
 }
+
+#[cfg(windows)]
+#[test]
+fn tool_install_windows_3_7() {
+    let context = TestContext::new("3.7")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==23.3.0
+     + click==8.1.7
+     + importlib-metadata==6.7.0
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.11.2
+     + platformdirs==4.0.0
+     + tomli==2.0.1
+     + typed-ast==1.5.5
+     + typing-extensions==4.7.1
+     + zipp==3.15.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    uv_snapshot!(context.filters(), Command::new("black").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 23.3.0 (compiled: yes)
+    Python (CPython) 3.7.[X]
+
+    ----- stderr -----
+    "###);
+}

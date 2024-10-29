@@ -87,11 +87,12 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
 }
 
 /// Reads the executable binary from the back to find the path to the Python executable that is written
-/// after the ZIP file content.
+/// before the ZIP file content.
 ///
 /// The executable is expected to have the following format:
-/// * The file must end with the magic number 'UVUV'.
-/// * The last 4 bytes (little endian) are the length of the path to the Python executable.
+/// * The last part of the file is ZIP file content.
+/// * The remain part must end with the magic number 'UVUV'.
+/// * The last 4 bytes (little endian) before 'UVUV' are the length of the path to the Python executable.
 /// * The path encoded as UTF-8 comes right before the length
 ///
 /// # Panics
@@ -112,6 +113,45 @@ fn find_python_exe(executable_name: &Path) -> PathBuf {
     });
     let file_size = metadata.len();
 
+    // Read the entire end of central directory (EOCD) of the ZIP file, which is 22 bytes long.
+    let mut eocd_buf: Vec<u8> = vec![0; 22];
+
+    file_handle
+        .seek(SeekFrom::Start(file_size - 22))
+        .unwrap_or_else(|_| {
+            print_last_error_and_exit("Failed to set the file pointer to the start of zip EOCD");
+        });
+
+    let read_bytes = file_handle.read(&mut eocd_buf).unwrap_or_else(|_| {
+        print_last_error_and_exit("Failed to read the zip EOCD");
+    });
+
+    if read_bytes != 22 {
+        eprintln!(
+            "Failed to read the EOCD. Expected 22 bytes but read {}",
+            read_bytes
+        );
+        exit_with_status(1);
+    }
+
+    // Size of the central directory (in bytes)
+    let cd_size = u32::from_le_bytes(eocd_buf[12..16].try_into().unwrap_or_else(|_| {
+        eprintln!("Slice length is not equal to 4 bytes");
+        exit_with_status(1);
+    }));
+
+    // Offset of central directory (unit is bytes).
+    // In other words, the number of bytes in the ZIP file at which the central directory starts.
+    let cd_offset = u32::from_le_bytes(eocd_buf[16..20].try_into().unwrap_or_else(|_| {
+        eprintln!("Slice length is not equal to 4 bytes");
+        exit_with_status(1);
+    }));
+
+    // Calculate the position in the entire executable where the content of the ZIP file begins.
+    let end_of_cd = file_size - 22;
+    let start_of_cd = end_of_cd - cd_size as u64;
+    let start_of_zip = start_of_cd - cd_offset as u64;
+
     // Start with a size of 1024 bytes which should be enough for most paths but avoids reading the
     // entire file.
     let mut buffer: Vec<u8> = Vec::new();
@@ -122,7 +162,7 @@ fn find_python_exe(executable_name: &Path) -> PathBuf {
         buffer.resize(bytes_to_read as usize, 0);
 
         file_handle
-            .seek(SeekFrom::Start(file_size - u64::from(bytes_to_read)))
+            .seek(SeekFrom::Start(start_of_zip - u64::from(bytes_to_read)))
             .unwrap_or_else(|_| {
                 print_last_error_and_exit("Failed to set the file pointer to the end of the file");
             });
