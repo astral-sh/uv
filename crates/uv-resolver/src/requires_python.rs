@@ -19,22 +19,16 @@ pub enum RequiresPythonError {
 
 /// The `Requires-Python` requirement specifier.
 ///
-/// We treat `Requires-Python` as a lower bound. For example, if the requirement expresses
-/// `>=3.8, <4`, we treat it as `>=3.8`. `Requires-Python` itself was intended to enable
-/// packages to drop support for older versions of Python without breaking installations on
-/// those versions, and packages cannot know whether they are compatible with future, unreleased
-/// versions of Python.
-///
 /// See: <https://packaging.python.org/en/latest/guides/dropping-older-python-versions/>
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RequiresPython {
     /// The supported Python versions as provides by the user, usually through the `requires-python`
     /// field in `pyproject.toml`.
     ///
-    /// For a workspace, it's the union of all `requires-python` values in the workspace. If no
+    /// For a workspace, it's the intersection of all `requires-python` values in the workspace. If no
     /// bound was provided by the user, it's greater equal the current Python version.
     specifiers: VersionSpecifiers,
-    /// The lower and upper bounds of `specifiers`.
+    /// The lower and upper bounds of the given specifiers.
     range: RequiresPythonRange,
 }
 
@@ -108,7 +102,7 @@ impl RequiresPython {
         }))
     }
 
-    /// Narrow the [`RequiresPython`] to the given version, if it's stricter than the current target.
+    /// Narrow the [`RequiresPython`] by computing the intersection with the given range.
     pub fn narrow(&self, range: &RequiresPythonRange) -> Option<Self> {
         let lower = if range.0 >= self.range.0 {
             Some(&range.0)
@@ -228,17 +222,35 @@ impl RequiresPython {
     }
 
     /// Returns `true` if the `Requires-Python` is compatible with the given version.
+    ///
+    /// N.B. This operation should primarily be used when evaluating compatibility of Python
+    /// versions against the user's own project. For example, if the user defines a
+    /// `requires-python` in a `pyproject.toml`, this operation could be used to determine whether
+    /// a given Python interpreter is compatible with the user's project.
     pub fn contains(&self, version: &Version) -> bool {
         let version = version.only_release();
         self.specifiers.contains(&version)
     }
 
-    /// Returns `true` if the `Requires-Python` is compatible with the given version specifiers.
+    /// Returns `true` if the `Requires-Python` is contained by the given version specifiers.
+    ///
+    /// In this context, we treat `Requires-Python` as a lower bound. For example, if the
+    /// requirement expresses `>=3.8, <4`, we treat it as `>=3.8`. `Requires-Python` itself was
+    /// intended to enable packages to drop support for older versions of Python without breaking
+    /// installations on those versions, and packages cannot know whether they are compatible with
+    /// future, unreleased versions of Python.
+    ///
+    /// The specifiers are considered to "contain" the `Requires-Python` if the specifiers are
+    /// compatible with all versions in the `Requires-Python` range (i.e., have a _lower_ lower
+    /// bound).
     ///
     /// For example, if the `Requires-Python` is `>=3.8`, then `>=3.7` would be considered
     /// compatible, since all versions in the `Requires-Python` range are also covered by the
     /// provided range. However, `>=3.9` would not be considered compatible, as the
     /// `Requires-Python` includes Python 3.8, but `>=3.9` does not.
+    ///
+    /// N.B. This operation should primarily be used when evaluating the compatibility of a
+    /// project's `Requires-Python` specifier against a dependency's `Requires-Python` specifier.
     pub fn is_contained_by(&self, target: &VersionSpecifiers) -> bool {
         let Ok(target) = VersionRangesSpecifier::from_release_specifiers(target) else {
             return false;
