@@ -103,7 +103,7 @@ All checks passed!
 See the [project documentation](https://docs.astral.sh/uv/guides/projects/) to get started.
 
 uv also supports building and publishing projects, even if they're not managed with uv. See the
-[publish guide](./docs/guides/publish.md) to learn more.
+[publish guide](https://docs.astral.sh/uv/guides/publish.md) to learn more.
 
 ### Tool management
 
