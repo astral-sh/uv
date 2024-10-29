@@ -6076,6 +6076,9 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
@@ -6105,6 +6108,9 @@ fn add_index() -> Result<()> {
             "iniconfig==2.0.0",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
         "###
@@ -6120,6 +6126,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6174,6 +6183,9 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://download.pytorch.org/whl/cu121"
@@ -6196,6 +6208,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6275,6 +6290,9 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6297,6 +6315,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6385,6 +6406,9 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6407,6 +6431,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6504,6 +6531,9 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6526,6 +6556,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
