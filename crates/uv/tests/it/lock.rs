@@ -13551,6 +13551,9 @@ fn lock_repeat_named_index_cli() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["jinja2==3.1.2"]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://download.pytorch.org/whl/cu121"
@@ -13576,6 +13579,9 @@ fn lock_repeat_named_index_cli() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
@@ -13635,6 +13641,9 @@ fn lock_repeat_named_index_cli() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
@@ -16082,6 +16091,9 @@ fn lock_multiple_sources_index() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["jinja2>=3"]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = [
             { index = "torch-cu118", marker = "sys_platform == 'win32'"},
@@ -16120,6 +16132,9 @@ fn lock_multiple_sources_index() -> Result<()> {
             "sys_platform == 'win32'",
             "sys_platform != 'win32'",
         ]
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
@@ -16206,6 +16221,9 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["jinja2>=3"]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = [
             { index = "torch-cu118", marker = "sys_platform == 'win32'"},
@@ -16240,6 +16258,9 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
             "sys_platform == 'win32'",
             "sys_platform != 'win32'",
         ]
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "jinja2"
