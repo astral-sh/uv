@@ -245,7 +245,10 @@ pub(crate) async fn install(
     }
 
     if !errors.is_empty() {
-        for (key, err) in errors {
+        for (key, err) in errors
+            .into_iter()
+            .sorted_unstable_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b))
+        {
             writeln!(
                 printer.stderr(),
                 "{}: Failed to install {}",
