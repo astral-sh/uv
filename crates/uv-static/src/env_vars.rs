@@ -316,6 +316,16 @@ impl EnvVars {
     /// Alternate locations for git objects. Ignored by `uv` when performing fetch.
     pub const GIT_ALTERNATE_OBJECT_DIRECTORIES: &'static str = "GIT_ALTERNATE_OBJECT_DIRECTORIES";
 
+    /// Used in tests for better git isolation.
+    ///
+    /// For example, we run some tests in ~/.local/share/uv/tests.
+    /// And if the user's `$HOME` directory is a git repository,
+    /// this will change the behavior of some tests. Setting
+    /// `GIT_CEILING_DIRECTORIES=/home/andrew/.local/share/uv/tests` will
+    /// prevent git from crawling up the directory tree past that point to find
+    /// parent git repositories.
+    pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
+
     /// Used for trusted publishing via `uv publish`.
     pub const GITHUB_ACTIONS: &'static str = "GITHUB_ACTIONS";
 
