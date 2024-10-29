@@ -5031,7 +5031,6 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rmp-serde",
- "rustix",
  "same-file",
  "schemars",
  "serde",
