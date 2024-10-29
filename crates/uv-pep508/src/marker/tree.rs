@@ -5,10 +5,10 @@ use std::ops::{Bound, Deref};
 use std::str::FromStr;
 
 use itertools::Itertools;
-use pubgrub::Range;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
+use version_ranges::Ranges;
 
 use crate::cursor::Cursor;
 use crate::marker::parse;
@@ -1396,7 +1396,7 @@ pub enum MarkerTreeKind<'a> {
 pub struct VersionMarkerTree<'a> {
     id: NodeId,
     key: MarkerValueVersion,
-    map: &'a [(Range<Version>, NodeId)],
+    map: &'a [(Ranges<Version>, NodeId)],
 }
 
 impl VersionMarkerTree<'_> {
@@ -1406,7 +1406,7 @@ impl VersionMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Range<Version>, MarkerTree)> + '_ {
+    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Ranges<Version>, MarkerTree)> + '_ {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
@@ -1432,7 +1432,7 @@ impl Ord for VersionMarkerTree<'_> {
 pub struct StringMarkerTree<'a> {
     id: NodeId,
     key: MarkerValueString,
-    map: &'a [(Range<String>, NodeId)],
+    map: &'a [(Ranges<String>, NodeId)],
 }
 
 impl StringMarkerTree<'_> {
@@ -1442,7 +1442,7 @@ impl StringMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Range<String>, MarkerTree)> {
+    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<String>, MarkerTree)> {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))

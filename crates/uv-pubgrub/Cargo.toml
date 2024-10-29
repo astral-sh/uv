@@ -15,4 +15,4 @@ uv-pep440 = { workspace = true }
 
 itertools = { workspace = true }
 thiserror = { workspace = true }
-pubgrub = { workspace = true }
+version-ranges = { workspace = true }

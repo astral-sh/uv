@@ -1,8 +1,8 @@
 use std::ops::Bound;
 
 use itertools::Itertools;
-use pubgrub::Range;
 use thiserror::Error;
+use version_ranges::Ranges;
 
 use uv_pep440::{Operator, Prerelease, Version, VersionSpecifier, VersionSpecifiers};
 
@@ -14,7 +14,7 @@ pub enum PubGrubSpecifierError {
 
 /// A range of versions that can be used to satisfy a requirement.
 #[derive(Debug)]
-pub struct PubGrubSpecifier(Range<Version>);
+pub struct PubGrubSpecifier(Ranges<Version>);
 
 impl PubGrubSpecifier {
     /// Returns an iterator over the bounds of the [`PubGrubSpecifier`].
@@ -22,19 +22,19 @@ impl PubGrubSpecifier {
         self.0.iter()
     }
 
-    /// Return the bounding [`Range`] of the [`PubGrubSpecifier`].
+    /// Return the bounding [`Ranges`] of the [`PubGrubSpecifier`].
     pub fn bounding_range(&self) -> Option<(Bound<&Version>, Bound<&Version>)> {
         self.0.bounding_range()
     }
 }
 
-impl From<Range<Version>> for PubGrubSpecifier {
-    fn from(range: Range<Version>) -> Self {
+impl From<Ranges<Version>> for PubGrubSpecifier {
+    fn from(range: Ranges<Version>) -> Self {
         PubGrubSpecifier(range)
     }
 }
 
-impl From<PubGrubSpecifier> for Range<Version> {
+impl From<PubGrubSpecifier> for Ranges<Version> {
     /// Convert a PubGrub specifier to a range of versions.
     fn from(specifier: PubGrubSpecifier) -> Self {
         specifier.0
@@ -50,7 +50,7 @@ impl PubGrubSpecifier {
         let range = specifiers
             .iter()
             .map(Self::from_pep440_specifier)
-            .fold_ok(Range::full(), |range, specifier| {
+            .fold_ok(Ranges::full(), |range, specifier| {
                 range.intersection(&specifier.into())
             })?;
         Ok(Self(range))
@@ -64,15 +64,15 @@ impl PubGrubSpecifier {
         let ranges = match specifier.operator() {
             Operator::Equal => {
                 let version = specifier.version().clone();
-                Range::singleton(version)
+                Ranges::singleton(version)
             }
             Operator::ExactEqual => {
                 let version = specifier.version().clone();
-                Range::singleton(version)
+                Ranges::singleton(version)
             }
             Operator::NotEqual => {
                 let version = specifier.version().clone();
-                Range::singleton(version).complement()
+                Ranges::singleton(version).complement()
             }
             Operator::TildeEqual => {
                 let [rest @ .., last, _] = specifier.version().release() else {
@@ -82,38 +82,38 @@ impl PubGrubSpecifier {
                     .with_epoch(specifier.version().epoch())
                     .with_dev(Some(0));
                 let version = specifier.version().clone();
-                Range::from_range_bounds(version..upper)
+                Ranges::from_range_bounds(version..upper)
             }
             Operator::LessThan => {
                 let version = specifier.version().clone();
                 if version.any_prerelease() {
-                    Range::strictly_lower_than(version)
+                    Ranges::strictly_lower_than(version)
                 } else {
                     // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
                     // pre-release of the specified version unless the specified version is itself a
                     // pre-release."
-                    Range::strictly_lower_than(version.with_min(Some(0)))
+                    Ranges::strictly_lower_than(version.with_min(Some(0)))
                 }
             }
             Operator::LessThanEqual => {
                 let version = specifier.version().clone();
-                Range::lower_than(version)
+                Ranges::lower_than(version)
             }
             Operator::GreaterThan => {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
                 // the given version unless V itself is a post release."
                 let version = specifier.version().clone();
                 if let Some(dev) = version.dev() {
-                    Range::higher_than(version.with_dev(Some(dev + 1)))
+                    Ranges::higher_than(version.with_dev(Some(dev + 1)))
                 } else if let Some(post) = version.post() {
-                    Range::higher_than(version.with_post(Some(post + 1)))
+                    Ranges::higher_than(version.with_post(Some(post + 1)))
                 } else {
-                    Range::strictly_higher_than(version.with_max(Some(0)))
+                    Ranges::strictly_higher_than(version.with_max(Some(0)))
                 }
             }
             Operator::GreaterThanEqual => {
                 let version = specifier.version().clone();
-                Range::higher_than(version)
+                Ranges::higher_than(version)
             }
             Operator::EqualStar => {
                 let low = specifier.version().clone().with_dev(Some(0));
@@ -130,7 +130,7 @@ impl PubGrubSpecifier {
                     *release.last_mut().unwrap() += 1;
                     high = high.with_release(release);
                 }
-                Range::from_range_bounds(low..high)
+                Ranges::from_range_bounds(low..high)
             }
             Operator::NotEqualStar => {
                 let low = specifier.version().clone().with_dev(Some(0));
@@ -147,7 +147,7 @@ impl PubGrubSpecifier {
                     *release.last_mut().unwrap() += 1;
                     high = high.with_release(release);
                 }
-                Range::from_range_bounds(low..high).complement()
+                Ranges::from_range_bounds(low..high).complement()
             }
         };
 
@@ -171,7 +171,7 @@ impl PubGrubSpecifier {
         let range = specifiers
             .iter()
             .map(Self::from_release_specifier)
-            .fold_ok(Range::full(), |range, specifier| {
+            .fold_ok(Ranges::full(), |range, specifier| {
                 range.intersection(&specifier.into())
             })?;
         Ok(Self(range))
@@ -194,15 +194,15 @@ impl PubGrubSpecifier {
         let ranges = match specifier.operator() {
             Operator::Equal => {
                 let version = specifier.version().only_release();
-                Range::singleton(version)
+                Ranges::singleton(version)
             }
             Operator::ExactEqual => {
                 let version = specifier.version().only_release();
-                Range::singleton(version)
+                Ranges::singleton(version)
             }
             Operator::NotEqual => {
                 let version = specifier.version().only_release();
-                Range::singleton(version).complement()
+                Ranges::singleton(version).complement()
             }
             Operator::TildeEqual => {
                 let [rest @ .., last, _] = specifier.version().release() else {
@@ -210,23 +210,23 @@ impl PubGrubSpecifier {
                 };
                 let upper = Version::new(rest.iter().chain([&(last + 1)]));
                 let version = specifier.version().only_release();
-                Range::from_range_bounds(version..upper)
+                Ranges::from_range_bounds(version..upper)
             }
             Operator::LessThan => {
                 let version = specifier.version().only_release();
-                Range::strictly_lower_than(version)
+                Ranges::strictly_lower_than(version)
             }
             Operator::LessThanEqual => {
                 let version = specifier.version().only_release();
-                Range::lower_than(version)
+                Ranges::lower_than(version)
             }
             Operator::GreaterThan => {
                 let version = specifier.version().only_release();
-                Range::strictly_higher_than(version)
+                Ranges::strictly_higher_than(version)
             }
             Operator::GreaterThanEqual => {
                 let version = specifier.version().only_release();
-                Range::higher_than(version)
+                Ranges::higher_than(version)
             }
             Operator::EqualStar => {
                 let low = specifier.version().only_release();
@@ -237,7 +237,7 @@ impl PubGrubSpecifier {
                     high = high.with_release(release);
                     high
                 };
-                Range::from_range_bounds(low..high)
+                Ranges::from_range_bounds(low..high)
             }
             Operator::NotEqualStar => {
                 let low = specifier.version().only_release();
@@ -248,7 +248,7 @@ impl PubGrubSpecifier {
                     high = high.with_release(release);
                     high
                 };
-                Range::from_range_bounds(low..high).complement()
+                Ranges::from_range_bounds(low..high).complement()
             }
         };
         Ok(Self(ranges))
