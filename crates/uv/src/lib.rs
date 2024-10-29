@@ -643,8 +643,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::pip_tree(
                 args.show_version_specifiers,
                 args.depth,
-                args.prune,
-                args.package,
+                &args.prune,
+                &args.package,
                 args.no_dedupe,
                 args.invert,
                 args.shared.strict,
