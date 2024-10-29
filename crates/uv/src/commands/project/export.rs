@@ -8,18 +8,20 @@ use std::path::{Path, PathBuf};
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevMode, DevSpecification, EditableMode, ExportFormat, ExtrasSpecification,
-    InstallOptions,
+    Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
+    InstallOptions, LowerBound,
 };
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{FoundInterpreter, ProjectError};
-use crate::commands::{pip, ExitStatus, OutputWriter};
+use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::{
+    default_dependency_groups, validate_dependency_groups, ProjectError, ProjectInterpreter,
+};
+use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -33,10 +35,11 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     editable: EditableMode,
     locked: bool,
     frozen: bool,
+    include_header: bool,
     python: Option<String>,
     settings: ResolverSettings,
     python_preference: PythonPreference,
@@ -69,31 +72,50 @@ pub(crate) async fn export(
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
+    // Determine the default groups to include.
+    validate_dependency_groups(project.pyproject_toml(), &dev)?;
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
+
     let VirtualProject::Project(project) = project else {
         return Err(anyhow::anyhow!("Legacy non-project roots are not supported in `uv export`; add a `[project]` table to your `pyproject.toml` to enable exports"));
     };
 
-    // Find an interpreter for the project
-    let interpreter = FoundInterpreter::discover(
-        project.workspace(),
-        python.as_deref().map(PythonRequest::parse),
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
+    // Determine the lock mode.
+    let interpreter;
+    let mode = if frozen {
+        LockMode::Frozen
+    } else {
+        // Find an interpreter for the project
+        interpreter = ProjectInterpreter::discover(
+            project.workspace(),
+            python.as_deref().map(PythonRequest::parse),
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            cache,
+            printer,
+        )
+        .await?
+        .into_interpreter();
+
+        if locked {
+            LockMode::Locked(&interpreter)
+        } else {
+            LockMode::Write(&interpreter)
+        }
+    };
+
+    // Initialize any shared state.
+    let state = SharedState::default();
 
     // Lock the project.
     let lock = match do_safe_lock(
-        locked,
-        frozen,
+        mode,
         project.workspace(),
-        &interpreter,
         settings.as_ref(),
+        LowerBound::Warn,
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -107,18 +129,22 @@ pub(crate) async fn export(
         Err(ProjectError::Operation(pip::operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            anstream::eprint!("{report:?}");
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::FetchAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+            uv_resolver::ResolveError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
-    };
-
-    // Include development dependencies, if requested.
-    let dev = match dev {
-        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
-        DevMode::Exclude => DevSpecification::Exclude,
-        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
     };
 
     // Write the resolved dependencies to the output channel.
@@ -131,17 +157,20 @@ pub(crate) async fn export(
                 &lock,
                 project.project_name(),
                 &extras,
-                dev,
+                &dev.with_defaults(defaults),
                 editable,
                 hashes,
                 &install_options,
             )?;
-            writeln!(
-                writer,
-                "{}",
-                "# This file was autogenerated by uv via the following command:".green()
-            )?;
-            writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
+
+            if include_header {
+                writeln!(
+                    writer,
+                    "{}",
+                    "# This file was autogenerated by uv via the following command:".green()
+                )?;
+                writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
+            }
             write!(writer, "{export}")?;
         }
     }

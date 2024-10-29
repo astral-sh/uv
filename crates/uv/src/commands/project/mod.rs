@@ -5,34 +5,39 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use distribution_types::{Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification};
-use pep440_rs::{Version, VersionSpecifiers};
-use pep508_rs::MarkerTreeContents;
-use pypi_types::Requirement;
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
-use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
+use uv_configuration::{
+    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, GroupsSpecification,
+    LowerBound, Reinstall, Upgrade,
+};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    Index, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use uv_fs::Simplified;
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::MarkerTreeContents;
+use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile, VersionRequest,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
+    VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
-use uv_requirements::{
-    NamedRequirementsError, NamedRequirementsResolver, RequirementsSpecification,
-};
+use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
     ResolverMarkers,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
+use uv_workspace::dependency_groups::DependencyGroupError;
+use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::Workspace;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -61,6 +66,12 @@ pub(crate) enum ProjectError {
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
     )]
     MissingLockfile,
+
+    #[error("The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
+    UnsupportedLockVersion(u32, u32),
+
+    #[error("Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
+    UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
 
     #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
     LockedPythonIncompatibility(Version, RequiresPython),
@@ -114,6 +125,12 @@ pub(crate) enum ProjectError {
         PathBuf,
     ),
 
+    #[error("Group `{0}` is not defined in the project's `dependency-group` table")]
+    MissingGroup(GroupName),
+
+    #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
+    MissingDefaultGroup(GroupName),
+
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
 
@@ -126,11 +143,17 @@ pub(crate) enum ProjectError {
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
 
+    #[error("Failed to parse `uv.lock`")]
+    UvLockParse(#[source] toml::de::Error),
+
     #[error("Failed to parse `pyproject.toml`")]
-    TomlParse(#[source] toml::de::Error),
+    PyprojectTomlParse(#[source] toml::de::Error),
 
     #[error("Failed to update `pyproject.toml`")]
-    TomlUpdate,
+    PyprojectTomlUpdate,
+
+    #[error(transparent)]
+    DependencyGroup(#[from] DependencyGroupError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -142,7 +165,7 @@ pub(crate) enum ProjectError {
     HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
-    Tags(#[from] platform_tags::TagsError),
+    Tags(#[from] uv_platform_tags::TagsError),
 
     #[error(transparent)]
     FlatIndex(#[from] uv_client::FlatIndexError),
@@ -166,7 +189,7 @@ pub(crate) enum ProjectError {
     Name(#[from] uv_normalize::InvalidNameError),
 
     #[error(transparent)]
-    NamedRequirements(#[from] uv_requirements::NamedRequirementsError),
+    Requirements(#[from] uv_requirements::Error),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -278,10 +301,13 @@ pub(crate) fn validate_requires_python(
     }
 }
 
+/// An interpreter suitable for the project.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum FoundInterpreter {
+pub(crate) enum ProjectInterpreter {
+    /// An interpreter from outside the project, to create a new project virtual environment.
     Interpreter(Interpreter),
+    /// An interpreter from an existing project virtual environment.
     Environment(PythonEnvironment),
 }
 
@@ -335,7 +361,10 @@ impl WorkspacePython {
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        specifiers.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)
@@ -349,7 +378,7 @@ impl WorkspacePython {
     }
 }
 
-impl FoundInterpreter {
+impl ProjectInterpreter {
     /// Discover the interpreter to use in the current [`Workspace`].
     pub(crate) async fn discover(
         workspace: &Workspace,
@@ -410,7 +439,7 @@ impl FoundInterpreter {
                         if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
                                 venv,
-                                "because it is not a valid Python environment (no Python executable was found)"
+                                "it is not a valid Python environment (no Python executable was found)"
                                     .to_string(),
                             ));
                         }
@@ -476,11 +505,11 @@ impl FoundInterpreter {
         Ok(Self::Interpreter(interpreter))
     }
 
-    /// Convert the [`FoundInterpreter`] into an [`Interpreter`].
+    /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            FoundInterpreter::Interpreter(interpreter) => interpreter,
-            FoundInterpreter::Environment(venv) => venv.into_interpreter(),
+            ProjectInterpreter::Interpreter(interpreter) => interpreter,
+            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
         }
     }
 }
@@ -496,7 +525,7 @@ pub(crate) async fn get_or_init_environment(
     cache: &Cache,
     printer: Printer,
 ) -> Result<PythonEnvironment, ProjectError> {
-    match FoundInterpreter::discover(
+    match ProjectInterpreter::discover(
         workspace,
         python,
         python_preference,
@@ -509,31 +538,47 @@ pub(crate) async fn get_or_init_environment(
     .await?
     {
         // If we found an existing, compatible environment, use it.
-        FoundInterpreter::Environment(environment) => Ok(environment),
+        ProjectInterpreter::Environment(environment) => Ok(environment),
 
         // Otherwise, create a virtual environment with the discovered interpreter.
-        FoundInterpreter::Interpreter(interpreter) => {
+        ProjectInterpreter::Interpreter(interpreter) => {
             let venv = workspace.venv();
 
             // Avoid removing things that are not virtual environments
-            if venv.exists() && !venv.join("pyvenv.cfg").exists() {
-                return Err(ProjectError::InvalidProjectEnvironmentDir(
-                    venv,
-                    "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
-                ));
-            }
+            let should_remove = match (venv.try_exists(), venv.join("pyvenv.cfg").try_exists()) {
+                // It's a virtual environment we can remove it
+                (_, Ok(true)) => true,
+                // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
+                (Ok(false), Ok(false)) => false,
+                // If it's not a virtual environment, bail
+                (Ok(true), Ok(false)) => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        venv,
+                        "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                    ));
+                }
+                // Similarly, if we can't _tell_ if it exists we should bail
+                (_, Err(err)) | (Err(err), _) => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        venv,
+                        format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
+                    ));
+                }
+            };
 
             // Remove the existing virtual environment if it doesn't meet the requirements.
-            match fs_err::remove_dir_all(&venv) {
-                Ok(()) => {
-                    writeln!(
-                        printer.stderr(),
-                        "Removed virtual environment at: {}",
-                        venv.user_display().cyan()
-                    )?;
+            if should_remove {
+                match fs_err::remove_dir_all(&venv) {
+                    Ok(()) => {
+                        writeln!(
+                            printer.stderr(),
+                            "Removed virtual environment at: {}",
+                            venv.user_display().cyan()
+                        )?;
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.into()),
             }
 
             writeln!(
@@ -585,7 +630,7 @@ pub(crate) async fn resolve_names(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
-) -> Result<Vec<Requirement>, NamedRequirementsError> {
+) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
         requirements
@@ -624,8 +669,10 @@ pub(crate) async fn resolve_names(
     } = settings;
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -679,6 +726,7 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         *exclude_newer,
+        LowerBound::Allow,
         *sources,
         concurrency,
     );
@@ -686,13 +734,12 @@ pub(crate) async fn resolve_names(
     // Resolve the unnamed requirements.
     requirements.extend(
         NamedRequirementsResolver::new(
-            unnamed,
             &hasher,
             &state.index,
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
         .with_reporter(ResolverReporter::from(printer))
-        .resolve()
+        .resolve(unnamed.into_iter())
         .await?,
     );
 
@@ -772,8 +819,10 @@ pub(crate) async fn resolve_environment<'a>(
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -835,7 +884,9 @@ pub(crate) async fn resolve_environment<'a>(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -859,6 +910,7 @@ pub(crate) async fn resolve_environment<'a>(
         build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Allow,
         sources,
         concurrency,
     );
@@ -928,11 +980,12 @@ pub(crate) async fn sync_environment(
     // Determine the markers tags to use for resolution.
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
-    let markers = interpreter.resolver_markers();
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -966,7 +1019,9 @@ pub(crate) async fn sync_environment(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -990,6 +1045,7 @@ pub(crate) async fn sync_environment(
         build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Allow,
         sources,
         concurrency,
     );
@@ -1006,7 +1062,6 @@ pub(crate) async fn sync_environment(
         index_locations,
         config_setting,
         &hasher,
-        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -1120,8 +1175,10 @@ pub(crate) async fn update_environment(
     }
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -1169,7 +1226,9 @@ pub(crate) async fn update_environment(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -1193,6 +1252,7 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         *exclude_newer,
+        LowerBound::Allow,
         *sources,
         concurrency,
     );
@@ -1242,7 +1302,6 @@ pub(crate) async fn update_environment(
         index_locations,
         config_setting,
         &hasher,
-        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -1309,6 +1368,53 @@ pub(crate) async fn script_python_requirement(
     ))
 }
 
+/// Validate the dependency groups requested by the [`DevGroupsSpecification`].
+#[allow(clippy::result_large_err)]
+pub(crate) fn validate_dependency_groups(
+    pyproject_toml: &PyProjectToml,
+    dev: &DevGroupsSpecification,
+) -> Result<(), ProjectError> {
+    for group in dev
+        .groups()
+        .into_iter()
+        .flat_map(GroupsSpecification::names)
+    {
+        if !pyproject_toml
+            .dependency_groups
+            .as_ref()
+            .is_some_and(|groups| groups.contains_key(group))
+        {
+            return Err(ProjectError::MissingGroup(group.clone()));
+        }
+    }
+    Ok(())
+}
+
+/// Returns the default dependency groups from the [`PyProjectToml`].
+#[allow(clippy::result_large_err)]
+pub(crate) fn default_dependency_groups(
+    pyproject_toml: &PyProjectToml,
+) -> Result<Vec<GroupName>, ProjectError> {
+    if let Some(defaults) = pyproject_toml
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
+    {
+        for group in defaults {
+            if !pyproject_toml
+                .dependency_groups
+                .as_ref()
+                .is_some_and(|groups| groups.contains_key(group))
+            {
+                return Err(ProjectError::MissingDefaultGroup(group.clone()));
+            }
+        }
+        Ok(defaults.clone())
+    } else {
+        Ok(vec![DEV_DEPENDENCIES.clone()])
+    }
+}
+
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.
 fn warn_on_requirements_txt_setting(
     spec: &RequirementsSpecification,
@@ -1330,7 +1436,7 @@ fn warn_on_requirements_txt_setting(
         warn_user_once!("Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file.");
     } else {
         if let Some(index_url) = index_url {
-            if settings.index_locations.index() != Some(index_url) {
+            if settings.index_locations.default_index().map(Index::url) != Some(index_url) {
                 warn_user_once!(
                     "Ignoring `--index-url` from requirements file: `{index_url}`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file."
                 );
@@ -1339,8 +1445,8 @@ fn warn_on_requirements_txt_setting(
         for extra_index_url in extra_index_urls {
             if !settings
                 .index_locations
-                .extra_index()
-                .contains(extra_index_url)
+                .implicit_indexes()
+                .any(|index| index.url() == extra_index_url)
             {
                 warn_user_once!(
                     "Ignoring `--extra-index-url` from requirements file: `{extra_index_url}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`"
@@ -1349,7 +1455,11 @@ fn warn_on_requirements_txt_setting(
             }
         }
         for find_link in find_links {
-            if !settings.index_locations.flat_index().contains(find_link) {
+            if !settings
+                .index_locations
+                .flat_indexes()
+                .any(|index| index.url() == find_link)
+            {
                 warn_user_once!(
                     "Ignoring `--find-links` from requirements file: `{find_link}`. Instead, use the `--find-links` command-line argument, or set `find-links` in a `uv.toml` or `pyproject.toml` file.`"
                 );

@@ -1,9 +1,9 @@
 use crate::{Error, ErrorKind};
 use async_http_range_reader::AsyncHttpRangeReader;
-use distribution_filename::WheelFilename;
 use futures::io::BufReader;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use url::Url;
+use uv_distribution_filename::WheelFilename;
 use uv_metadata::find_archive_dist_info;
 
 /// Read the `.dist-info/METADATA` file from a async remote zip reader, so we avoid downloading the

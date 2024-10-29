@@ -15,6 +15,7 @@ use tracing::{debug, instrument};
 use walkdir::WalkDir;
 
 use uv_fs::Simplified;
+use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
@@ -266,7 +267,7 @@ async fn launch_bytecode_compiler(
         .stderr(Stdio::piped())
         .current_dir(dir)
         // Otherwise stdout is buffered and we'll wait forever for a response
-        .env("PYTHONUNBUFFERED", "1")
+        .env(EnvVars::PYTHONUNBUFFERED, "1")
         .spawn()
         .map_err(CompileError::PythonSubcommand)?;
 

@@ -1,17 +1,14 @@
 use fs2::FileExt;
 use std::fmt::Display;
-use std::io;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use tempfile::NamedTempFile;
-use tokio::io::{AsyncRead, ReadBuf};
 use tracing::{debug, error, info, trace, warn};
 
 pub use crate::path::*;
 
 pub mod cachedir;
 mod path;
+pub mod which;
 
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
@@ -105,6 +102,26 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(unix)]
 pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
+}
+
+/// Create a symlink at `dst` pointing to `src` or, on Windows, copy `src` to `dst`.
+///
+/// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
+/// instead; it will use a junction on Windows, which is more performant.
+pub fn symlink_copy_fallback_file(
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        fs_err::copy(src.as_ref(), dst.as_ref())?;
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+    }
+
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -328,10 +345,10 @@ impl LockedFile {
                 Ok(Self(file))
             }
             Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures
-                // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
-                // the error when it is `WouldBlock`, which is expected and noisy otherwise.
-                trace!("Try lock error: {err:?}");
+                // Log error code and enum kind to help debugging more exotic failures.
+                if err.kind() != std::io::ErrorKind::WouldBlock {
+                    debug!("Try lock error: {err:?}");
+                }
                 info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
@@ -393,27 +410,32 @@ impl Drop for LockedFile {
 }
 
 /// An asynchronous reader that reports progress as bytes are read.
-pub struct ProgressReader<Reader: AsyncRead + Unpin, Callback: Fn(usize) + Unpin> {
+#[cfg(feature = "tokio")]
+pub struct ProgressReader<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin> {
     reader: Reader,
     callback: Callback,
 }
 
-impl<Reader: AsyncRead + Unpin, Callback: Fn(usize) + Unpin> ProgressReader<Reader, Callback> {
+#[cfg(feature = "tokio")]
+impl<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin>
+    ProgressReader<Reader, Callback>
+{
     /// Create a new [`ProgressReader`] that wraps another reader.
     pub fn new(reader: Reader, callback: Callback) -> Self {
         Self { reader, callback }
     }
 }
 
-impl<Reader: AsyncRead + Unpin, Callback: Fn(usize) + Unpin> AsyncRead
+#[cfg(feature = "tokio")]
+impl<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin> tokio::io::AsyncRead
     for ProgressReader<Reader, Callback>
 {
     fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.as_mut().reader)
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.as_mut().reader)
             .poll_read(cx, buf)
             .map_ok(|()| {
                 (self.callback)(buf.filled().len());

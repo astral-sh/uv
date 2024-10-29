@@ -1,15 +1,18 @@
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{human_readable_bytes, ExitStatus};
 use crate::printer::Printer;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
+use console::Term;
 use owo_colors::OwoColorize;
 use std::fmt::Write;
+use std::iter;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::info;
 use url::Url;
 use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity, DEFAULT_RETRIES};
 use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
-use uv_publish::{check_trusted_publishing, files_for_publishing, upload};
+use uv_publish::{check_trusted_publishing, files_for_publishing, upload, TrustedPublishResult};
 
 pub(crate) async fn publish(
     paths: Vec<String>,
@@ -50,6 +53,9 @@ pub(crate) async fn publish(
         .allow_insecure_host(allow_insecure_host)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
+        // Set a very high timeout for uploads, connections are often 10x slower on upload than
+        // download. 15 min is taken from the time a trusted publishing token is valid.
+        .default_timeout(Duration::from_secs(15 * 60))
         .build();
     let oidc_client = BaseClientBuilder::new()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
@@ -62,16 +68,59 @@ pub(crate) async fn publish(
         keyring_provider,
         trusted_publishing,
         &publish_url,
-        &oidc_client.client(),
+        &oidc_client,
     )
     .await?;
-    let (username, password) = if let Some(password) = trusted_publishing_token {
-        (Some("__token__".to_string()), Some(password.into()))
-    } else {
-        (username, password)
-    };
 
-    for (file, filename) in files {
+    let (username, password) =
+        if let TrustedPublishResult::Configured(password) = &trusted_publishing_token {
+            (Some("__token__".to_string()), Some(password.to_string()))
+        } else {
+            if username.is_none() && password.is_none() {
+                prompt_username_and_password()?
+            } else {
+                (username, password)
+            }
+        };
+
+    if password.is_some() && username.is_none() {
+        bail!(
+            "Attempted to publish with a password, but no username. Either provide a username \
+            with `--user` (`UV_PUBLISH_USERNAME`), or use `--token` (`UV_PUBLISH_TOKEN`) instead \
+            of a password."
+        );
+    }
+
+    if username.is_none() && password.is_none() && keyring_provider == KeyringProviderType::Disabled
+    {
+        if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
+            // The user has configured something incorrectly:
+            // * The user forgot to configure credentials.
+            // * The user forgot to forward the secrets as env vars (or used the wrong ones).
+            // * The trusted publishing configuration is wrong.
+            writeln!(
+                printer.stderr(),
+                "Note: Neither credentials nor keyring are configured, and there was an error \
+                fetching the trusted publishing token. If you don't want to use trusted \
+                publishing, you can ignore this error, but you need to provide credentials."
+            )?;
+            writeln!(
+                printer.stderr(),
+                "{}: {err}",
+                "Trusted publishing error".red().bold()
+            )?;
+            for source in iter::successors(std::error::Error::source(&err), |&err| err.source()) {
+                writeln!(
+                    printer.stderr(),
+                    "  {}: {}",
+                    "Caused by".red().bold(),
+                    source.to_string().trim()
+                )?;
+            }
+        }
+    }
+
+    for (file, raw_filename, filename) in files {
         let size = fs_err::metadata(&file)?.len();
         let (bytes, unit) = human_readable_bytes(size);
         writeln!(
@@ -83,9 +132,10 @@ pub(crate) async fn publish(
         let reporter = PublishReporter::single(printer);
         let uploaded = upload(
             &file,
+            &raw_filename,
             &filename,
             &publish_url,
-            &upload_client.client(),
+            &upload_client,
             DEFAULT_RETRIES,
             username.as_deref(),
             password.as_deref(),
@@ -104,4 +154,17 @@ pub(crate) async fn publish(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
+    let term = Term::stderr();
+    if !term.is_term() {
+        return Ok((None, None));
+    }
+    let username_prompt = "Enter username ('__token__' if using a token): ";
+    let password_prompt = "Enter password: ";
+    let username = uv_console::input(username_prompt, &term).context("Failed to read username")?;
+    let password =
+        uv_console::password(password_prompt, &term).context("Failed to read password")?;
+    Ok((Some(username), Some(password)))
 }

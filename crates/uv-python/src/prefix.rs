@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use pypi_types::Scheme;
+use uv_pypi_types::Scheme;
 
 /// A `--prefix` directory into which packages can be installed, separate from a virtual environment
 /// or system Python interpreter.

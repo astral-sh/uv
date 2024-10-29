@@ -4,41 +4,7 @@ use std::task::{Context, Poll};
 use sha2::Digest;
 use tokio::io::{AsyncReadExt, ReadBuf};
 
-use pypi_types::{HashAlgorithm, HashDigest};
-
-pub struct Sha256Reader<'a, R> {
-    reader: R,
-    hasher: &'a mut sha2::Sha256,
-}
-
-impl<'a, R> Sha256Reader<'a, R>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    pub fn new(reader: R, hasher: &'a mut sha2::Sha256) -> Self {
-        Sha256Reader { reader, hasher }
-    }
-}
-
-impl<'a, R> tokio::io::AsyncRead for Sha256Reader<'a, R>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        let reader = Pin::new(&mut self.reader);
-        match reader.poll_read(cx, buf) {
-            Poll::Ready(Ok(())) => {
-                self.hasher.update(buf.filled());
-                Poll::Ready(Ok(()))
-            }
-            other => other,
-        }
-    }
-}
+use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 #[derive(Debug)]
 pub enum Hasher {

@@ -2,10 +2,18 @@
 
 uv accepts the following command-line arguments as environment variables:
 
+- `UV_INDEX`: Equivalent to the `--index` command-line argument. If set, uv will use this
+  space-separated list of URLs as additional indexes when searching for packages.
+- `UV_DEFAULT_INDEX`: Equivalent to the `--default-index` command-line argument. If set, uv will use
+  this URL as the default index when searching for packages.
 - `UV_INDEX_URL`: Equivalent to the `--index-url` command-line argument. If set, uv will use this
-  URL as the base index for searching for packages.
+  URL as the default index when searching for packages. (Deprecated: use `UV_DEFAULT_INDEX`
+  instead.)
 - `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv will
   use this space-separated list of URLs as additional indexes when searching for packages.
+  (Deprecated: use `UV_INDEX` instead.)
+- `UV_FIND_LINKS`: Equivalent to the `--find-links` command-line argument. If set, uv will use this
+  comma-separated list of additional locations to search for packages.
 - `UV_CACHE_DIR`: Equivalent to the `--cache-dir` command-line argument. If set, uv will use this
   directory for caching instead of the default cache directory.
 - `UV_NO_CACHE`: Equivalent to the `--no-cache` command-line argument. If set, uv will not use the
@@ -71,6 +79,12 @@ uv accepts the following command-line arguments as environment variables:
   set, uv will use this username for publishing.
 - `UV_PUBLISH_PASSWORD`: Equivalent to the `--password` command-line argument in `uv publish`. If
   set, uv will use this password for publishing.
+- `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
+  the environment.
+- `UV_LOCKED`: Equivalent to the `--locked` command-line argument. If set, uv will assert that the
+  `uv.lock` remains unchanged.
+- `UV_FROZEN`: Equivalent to the `--frozen` command-line argument. If set, uv will run without
+  updating the `uv.lock` file.
 
 In each case, the corresponding command-line argument takes precedence over an environment variable.
 
@@ -120,6 +134,7 @@ In addition, uv respects the following environment variables:
 - `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: The proxy to use for all HTTP/HTTPS requests.
 - `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
   for HTTP reads (default: 30 s).
+- `NETRC`: If set, uv will read authentication information from this file instead of `~/.netrc`.
 - `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`. See:
   [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
@@ -136,5 +151,6 @@ In addition, uv respects the following environment variables:
   least-recent non-EOL macOS version at time of writing.
 - `NO_COLOR`: Disable colors. Takes precedence over `FORCE_COLOR`. See
   [no-color.org](https://no-color.org).
+- `UV_NO_PROGRESS`: Disable progress indicators like spinners and progress bars.
 - `FORCE_COLOR`: Enforce colors regardless of TTY support. See
   [force-color.org](https://force-color.org).

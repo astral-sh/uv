@@ -10,22 +10,23 @@ use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
 
-use distribution_types::{Name, UnresolvedRequirementSpecification};
-use pep440_rs::{VersionSpecifier, VersionSpecifiers};
-use pep508_rs::MarkerTree;
-use pypi_types::{Requirement, RequirementSource};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Concurrency;
+use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
+use uv_pep440::{VersionSpecifier, VersionSpecifiers};
+use uv_pep508::MarkerTree;
+use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
 
@@ -37,7 +38,7 @@ use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectE
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
 use crate::commands::{
-    project::environment::CachedEnvironment, tool::common::matching_packages, tool_list,
+    diagnostics, project::environment::CachedEnvironment, tool::common::matching_packages,
 };
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -79,9 +80,11 @@ pub(crate) async fn run(
     cache: Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
-    // treat empty command as `uv tool list`
     let Some(command) = command else {
-        return tool_list(false, false, &cache, printer).await;
+        // When a command isn't provided, we'll show a brief help including available tools
+        show_help(invocation_source, &cache, printer).await?;
+        // Exit as Clap would after displaying help
+        return Ok(ExitStatus::Error);
     };
 
     let (target, args) = command.split();
@@ -125,12 +128,10 @@ pub(crate) async fn run(
         Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report =
-                miette::Report::msg(format!("{err}")).context(err.header().with_context("tool"));
-            eprint!("{report:?}");
+            diagnostics::no_solution_context(&err, "tool");
             return Ok(ExitStatus::Failure);
         }
-        Err(ProjectError::NamedRequirements(err)) => {
+        Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}")).context("Invalid `--with` requirement");
             eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
@@ -148,13 +149,13 @@ pub(crate) async fn run(
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
         std::iter::once(environment.scripts().to_path_buf()).chain(
-            std::env::var_os("PATH")
+            std::env::var_os(EnvVars::PATH)
                 .as_ref()
                 .iter()
                 .flat_map(std::env::split_paths),
         ),
     )?;
-    process.env("PATH", new_path);
+    process.env(EnvVars::PATH, new_path);
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
@@ -206,6 +207,15 @@ pub(crate) async fn run(
                         for (name, _) in entrypoints {
                             writeln!(printer.stdout(), "- {}", name.cyan())?;
                         }
+                        let suggested_command = format!(
+                            "{} --from {} <EXECUTABLE_NAME>",
+                            invocation_source, from.name
+                        );
+                        writeln!(
+                            printer.stdout(),
+                            "Consider using `{}` instead.",
+                            suggested_command.green()
+                        )?;
                     }
                     return Ok(ExitStatus::Failure);
                 }
@@ -262,6 +272,71 @@ fn get_entrypoints(
     )?)
 }
 
+/// Display a list of tools that provide the executable.
+///
+/// If there is no package providing the executable, we will display a message to how to install a package.
+async fn show_help(
+    invocation_source: ToolRunCommand,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<()> {
+    let help = format!(
+        "See `{}` for more information.",
+        format!("{invocation_source} --help").bold()
+    );
+
+    writeln!(
+        printer.stdout(),
+        "Provide a command to run with `{}`.\n",
+        format!("{invocation_source} <command>").bold()
+    )?;
+
+    let installed_tools = InstalledTools::from_settings()?;
+    let _lock = match installed_tools.lock().await {
+        Ok(lock) => lock,
+        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            writeln!(printer.stdout(), "{help}")?;
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    let tools = installed_tools
+        .tools()?
+        .into_iter()
+        // Skip invalid tools
+        .filter_map(|(name, tool)| {
+            tool.ok().and_then(|_| {
+                installed_tools
+                    .version(&name, cache)
+                    .ok()
+                    .map(|version| (name, version))
+            })
+        })
+        .sorted_by(|(name1, ..), (name2, ..)| name1.cmp(name2))
+        .collect::<Vec<_>>();
+
+    // No tools installed or they're all malformed
+    if tools.is_empty() {
+        writeln!(printer.stdout(), "{help}")?;
+        return Ok(());
+    }
+
+    // Display the tools
+    writeln!(printer.stdout(), "The following tools are installed:\n")?;
+    for (name, version) in tools {
+        writeln!(
+            printer.stdout(),
+            "- {} v{version}",
+            format!("{name}").bold()
+        )?;
+    }
+
+    writeln!(printer.stdout(), "\n{help}")?;
+
+    Ok(())
+}
+
 /// Display a warning if an executable is not provided by package.
 ///
 /// If found in a dependency of the requested package instead of the requested package itself, we will hint to use that instead.
@@ -296,7 +371,7 @@ fn warn_executable_not_provided_by_package(
                 let suggested_command = format!("{invocation_source} --from PKG {executable}");
                 let provided_by = packages
                     .iter()
-                    .map(distribution_types::Name::name)
+                    .map(uv_distribution_types::Name::name)
                     .map(|name| format!("- {}", name.cyan()))
                     .join("\n");
                 warn_user!(

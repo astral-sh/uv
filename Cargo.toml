@@ -21,42 +21,46 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-cache-key = { path = "crates/cache-key" }
-distribution-filename = { path = "crates/distribution-filename" }
-distribution-types = { path = "crates/distribution-types" }
-install-wheel-rs = { path = "crates/install-wheel-rs", default-features = false }
-once-map = { path = "crates/once-map" }
-pep440_rs = { path = "crates/pep440-rs" }
-pep508_rs = { path = "crates/pep508-rs", features = ["non-pep508-extensions"] }
-platform-tags = { path = "crates/platform-tags" }
-pypi-types = { path = "crates/pypi-types" }
-requirements-txt = { path = "crates/requirements-txt" }
 uv-auth = { path = "crates/uv-auth" }
+uv-build-backend = { path = "crates/uv-build-backend" }
 uv-build-frontend = { path = "crates/uv-build-frontend" }
 uv-cache = { path = "crates/uv-cache" }
 uv-cache-info = { path = "crates/uv-cache-info" }
+uv-cache-key = { path = "crates/uv-cache-key" }
 uv-cli = { path = "crates/uv-cli" }
 uv-client = { path = "crates/uv-client" }
 uv-configuration = { path = "crates/uv-configuration" }
+uv-console = { path = "crates/uv-console" }
+uv-dirs = { path = "crates/uv-dirs" }
 uv-dispatch = { path = "crates/uv-dispatch" }
 uv-distribution = { path = "crates/uv-distribution" }
+uv-distribution-filename = { path = "crates/uv-distribution-filename" }
+uv-distribution-types = { path = "crates/uv-distribution-types" }
 uv-extract = { path = "crates/uv-extract" }
 uv-fs = { path = "crates/uv-fs" }
 uv-git = { path = "crates/uv-git" }
+uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }
 uv-macros = { path = "crates/uv-macros" }
 uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
+uv-once-map = { path = "crates/uv-once-map" }
 uv-options-metadata = { path = "crates/uv-options-metadata" }
-uv-pubgrub = { path = "crates/uv-pubgrub" }
+uv-pep440 = { path = "crates/uv-pep440", features = ["tracing", "rkyv", "version-ranges"] }
+uv-pep508 = { path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
+uv-platform-tags = { path = "crates/uv-platform-tags" }
 uv-publish = { path = "crates/uv-publish" }
+uv-pypi-types = { path = "crates/uv-pypi-types" }
 uv-python = { path = "crates/uv-python" }
 uv-requirements = { path = "crates/uv-requirements" }
+uv-requirements-txt = { path = "crates/uv-requirements-txt" }
 uv-resolver = { path = "crates/uv-resolver" }
 uv-scripts = { path = "crates/uv-scripts" }
 uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }
 uv-state = { path = "crates/uv-state" }
+uv-static = { path = "crates/uv-static" }
+uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-tool = { path = "crates/uv-tool" }
 uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
@@ -74,6 +78,7 @@ async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b
 axoupdater = { version = "0.7.2", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.1" }
+bitflags = { version = "2.6.0" }
 boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
 cachedir = { version = "0.3.1" }
@@ -98,7 +103,7 @@ fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
 globwalk = { version = "0.9.1" }
-goblin = { version = "0.8.2", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
+goblin = { version = "0.9.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
 hex = { version = "0.4.3" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
@@ -122,28 +127,29 @@ petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
 procfs = { version = "0.16.0" , default-features = false, features = ["flate2"] }
 proc-macro2 = { version = "1.0.86" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "388685a8711092971930986644cfed152d1a1f6c" }
-pyo3 = { version = "0.21.2" }
-pyo3-log = { version = "0.10.0" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
+version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
-reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart"] }
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913", features = ["multipart"] }
-reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
+reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2"] }
+reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121", features = ["multipart"] }
+reqwest-retry = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
-rust-netrc = { version = "0.1.1" }
+rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
 rustix = { version = "0.38.37", default-features = false, features = ["fs", "std"] }
 same-file = { version = "1.0.6" }
 schemars = { version = "0.8.21", features = ["url"] }
 seahash = { version = "4.1.0" }
 serde = { version = "1.0.210", features = ["derive"] }
+serde-untagged = { version = "0.1.6" }
 serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
+spdx = { version = "0.10.6" }
 syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
 target-lexicon = { version = "0.12.16" }
@@ -179,10 +185,7 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 ignored = ["flate2", "xz2"]
 
 [patch.crates-io]
-# For pyproject-toml
-pep440_rs = { path = "crates/pep440-rs" }
-pep508_rs = { path = "crates/pep508-rs" }
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
+reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"
@@ -280,7 +283,7 @@ inherits = "release"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.22.1"
+cargo-dist-version = "0.23.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app

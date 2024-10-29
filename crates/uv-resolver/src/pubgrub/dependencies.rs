@@ -4,15 +4,15 @@ use itertools::Itertools;
 use pubgrub::Range;
 use tracing::warn;
 
-use pep440_rs::{Version, VersionSpecifiers};
-use pypi_types::{
+use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::{Version, VersionRangesSpecifier, VersionSpecifiers};
+use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
     RequirementSource, VerbatimParsedUrl,
 };
-use uv_normalize::{ExtraName, PackageName};
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
-use crate::{PubGrubSpecifier, ResolveError};
+use crate::ResolveError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
@@ -179,7 +179,7 @@ impl PubGrubRequirement {
         extra: Option<ExtraName>,
         requirement: &Requirement,
     ) -> Result<PubGrubRequirement, ResolveError> {
-        let version = PubGrubSpecifier::from_pep440_specifiers(specifier)?.into();
+        let version = VersionRangesSpecifier::from_pep440_specifiers(specifier)?.into();
 
         let requirement = Self {
             package: PubGrubPackage::from_package(

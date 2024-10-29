@@ -61,7 +61,6 @@ markdown_extensions:
       alternate_style: true
 plugins:
   - search
-  - typeset
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -107,11 +106,14 @@ nav:
       - Configuration files: configuration/files.md
       - Environment variables: configuration/environment.md
       - Authentication: configuration/authentication.md
+      - Package indexes: configuration/indexes.md
+      - Installer: configuration/installer.md
   - Integration guides:
       - guides/integration/index.md
       - Docker: guides/integration/docker.md
       - Jupyter: guides/integration/jupyter.md
       - GitHub Actions: guides/integration/github.md
+      - GitLab CI/CD: guides/integration/gitlab.md
       - Pre-commit: guides/integration/pre-commit.md
       - FastAPI: guides/integration/fastapi.md
       - Alternative indexes: guides/integration/alternative-indexes.md
@@ -128,6 +130,7 @@ nav:
       - reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
+      - Build Failures: reference/build_failures.md
       - Resolver: reference/resolver-internals.md
       - Benchmarks: reference/benchmarks.md
       - Versioning: reference/versioning.md

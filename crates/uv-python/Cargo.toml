@@ -9,23 +9,27 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
-cache-key = { workspace = true }
-distribution-filename = { workspace = true }
-install-wheel-rs = { workspace = true }
-pep440_rs = { workspace = true }
-pep508_rs = { workspace = true }
-platform-tags = { workspace = true }
-pypi-types = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
+uv-install-wheel = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-pep508 = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-state = { workspace = true }
+uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
@@ -61,7 +65,6 @@ procfs = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
-winsafe = { workspace = true }
 windows-registry = { workspace = true }
 windows-result = { workspace = true }
 

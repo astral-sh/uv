@@ -1,0 +1,2 @@
+# Disallowed (missing whitespace before hash)
+-e ./editable# comment

@@ -14,20 +14,19 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{debug, info_span, instrument, warn, Instrument};
 use url::Url;
 
-use distribution_filename::WheelFilename;
-use distribution_types::{
-    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, IndexLocations, Name,
-    SourceDist,
-};
-use platform_tags::Tags;
-use pypi_types::HashDigest;
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_distribution_filename::WheelFilename;
+use uv_distribution_types::{
+    BuildableSource, BuiltDist, Dist, FileLocation, HashPolicy, Hashed, Name, SourceDist,
+};
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
+use uv_platform_tags::Tags;
+use uv_pypi_types::HashDigest;
 use uv_types::BuildContext;
 
 use crate::archive::Archive;
@@ -43,8 +42,8 @@ use crate::{Error, LocalWheel, Reporter, RequiresDist};
 /// building the source distribution. For wheel files, either the wheel is downloaded or a source
 /// distribution is downloaded, built and the new wheel gets returned.
 ///
-/// All kinds of wheel sources (index, url, path) and source distribution source (index, url, path,
-/// git) are supported.
+/// All kinds of wheel sources (index, URL, path) and source distribution source (index, URL, path,
+/// Git) are supported.
 ///
 /// This struct also has the task of acquiring locks around source dist builds in general and git
 /// operation especially, as well as respecting concurrency limits.
@@ -88,7 +87,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.client.unmanaged.timeout()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
+                    self.client.unmanaged.timeout().as_secs()
                 ),
             )
         } else {
@@ -149,7 +149,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let wheel = wheels.best_wheel();
                 let url = match &wheel.file.url {
                     FileLocation::RelativeUrl(base, url) => {
-                        pypi_types::base_url_join_relative(base, url)?
+                        uv_pypi_types::base_url_join_relative(base, url)?
                     }
                     FileLocation::AbsoluteUrl(url) => url.to_url(),
                 };
@@ -355,7 +355,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ///
     /// While hashes will be generated in some cases, hash-checking is _not_ enforced and should
     /// instead be enforced by the caller.
-    pub async fn get_wheel_metadata(
+    async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
@@ -364,7 +364,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if let Some(metadata) = self
             .build_context
             .dependency_metadata()
-            .get(dist.name(), dist.version())
+            .get(dist.name(), Some(dist.version()))
         {
             return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
@@ -426,14 +426,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
-            if let Some(version) = dist.version() {
-                if let Some(metadata) = self
-                    .build_context
-                    .dependency_metadata()
-                    .get(dist.name(), version)
-                {
-                    return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
-                }
+            if let Some(metadata) = self
+                .build_context
+                .dependency_metadata()
+                .get(dist.name(), dist.version())
+            {
+                // If we skipped the build, we should still resolve any Git dependencies to precise
+                // commits.
+                self.builder.resolve_revision(source, &self.client).await?;
+
+                return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
             }
         }
 
@@ -880,11 +882,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 reqwest::header::HeaderValue::from_static("identity"),
             )
             .build()
-    }
-
-    /// Return the [`IndexLocations`] used by this resolver.
-    pub fn index_locations(&self) -> &IndexLocations {
-        self.build_context.index_locations()
     }
 
     /// Return the [`ManagedClient`] used by this resolver.

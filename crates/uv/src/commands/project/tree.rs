@@ -1,19 +1,23 @@
-use anyhow::Result;
-use std::fmt::Write;
 use std::path::Path;
 
-use pep508_rs::PackageName;
+use anstream::print;
+use anyhow::Result;
+
 use uv_cache::Cache;
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, TargetTriple};
+use uv_configuration::{Concurrency, DevGroupsSpecification, LowerBound, TargetTriple};
+use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::FoundInterpreter;
-use crate::commands::{project, ExitStatus};
+use crate::commands::project::lock::LockMode;
+use crate::commands::project::{
+    default_dependency_groups, validate_dependency_groups, ProjectInterpreter,
+};
+use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -21,6 +25,7 @@ use crate::settings::ResolverSettings;
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
+    dev: DevGroupsSpecification,
     locked: bool,
     frozen: bool,
     universal: bool,
@@ -44,27 +49,49 @@ pub(crate) async fn tree(
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
-    // Find an interpreter for the project
-    let interpreter = FoundInterpreter::discover(
-        &workspace,
-        python.as_deref().map(PythonRequest::parse),
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
+    // Determine the default groups to include.
+    validate_dependency_groups(workspace.pyproject_toml(), &dev)?;
+    let defaults = default_dependency_groups(workspace.pyproject_toml())?;
+
+    // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
+    let interpreter = if frozen && universal {
+        None
+    } else {
+        Some(
+            ProjectInterpreter::discover(
+                &workspace,
+                python.as_deref().map(PythonRequest::parse),
+                python_preference,
+                python_downloads,
+                connectivity,
+                native_tls,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter(),
+        )
+    };
+
+    // Determine the lock mode.
+    let mode = if frozen {
+        LockMode::Frozen
+    } else if locked {
+        LockMode::Locked(interpreter.as_ref().unwrap())
+    } else {
+        LockMode::Write(interpreter.as_ref().unwrap())
+    };
+
+    // Initialize any shared state.
+    let state = SharedState::default();
 
     // Update the lockfile, if necessary.
     let lock = project::lock::do_safe_lock(
-        locked,
-        frozen,
+        mode,
         &workspace,
-        &interpreter,
         settings.as_ref(),
+        LowerBound::Allow,
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -76,24 +103,27 @@ pub(crate) async fn tree(
     .into_lock();
 
     // Determine the markers to use for resolution.
-    let markers = resolution_markers(
-        python_version.as_ref(),
-        python_platform.as_ref(),
-        &interpreter,
-    );
+    let markers = (!universal).then(|| {
+        resolution_markers(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            interpreter.as_ref().unwrap(),
+        )
+    });
 
     // Render the tree.
     let tree = TreeDisplay::new(
         &lock,
-        (!universal).then_some(&markers),
+        markers.as_ref(),
         depth.into(),
-        prune,
-        package,
+        &prune,
+        &package,
+        &dev.with_defaults(defaults),
         no_dedupe,
         invert,
     );
 
-    write!(printer.stdout(), "{tree}")?;
+    print!("{tree}");
 
     Ok(ExitStatus::Success)
 }

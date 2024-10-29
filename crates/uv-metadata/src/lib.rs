@@ -3,15 +3,15 @@
 //! This module reads all fields exhaustively. The fields are defined in the [Core metadata
 //! specification](https://packaging.python.org/en/latest/specifications/core-metadata/).
 
-use distribution_filename::WheelFilename;
-use pypi_types::ResolutionMetadata;
 use std::io;
 use std::io::{Read, Seek};
 use std::path::Path;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use uv_distribution_filename::WheelFilename;
 use uv_normalize::{DistInfoName, InvalidNameError};
+use uv_pypi_types::ResolutionMetadata;
 use zip::ZipArchive;
 
 /// The caller is responsible for attaching the path or url we failed to read.
@@ -32,7 +32,7 @@ pub enum Error {
     #[error("The .dist-info directory name contains invalid characters")]
     InvalidName(#[from] InvalidNameError),
     #[error("The metadata at {0} is invalid")]
-    InvalidMetadata(String, Box<pypi_types::MetadataError>),
+    InvalidMetadata(String, Box<uv_pypi_types::MetadataError>),
     #[error("Failed to read from zip file")]
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to read from zip file")]
@@ -277,8 +277,8 @@ pub fn read_flat_wheel_metadata(
 #[cfg(test)]
 mod test {
     use super::find_archive_dist_info;
-    use distribution_filename::WheelFilename;
     use std::str::FromStr;
+    use uv_distribution_filename::WheelFilename;
 
     #[test]
     fn test_dot_in_name() {

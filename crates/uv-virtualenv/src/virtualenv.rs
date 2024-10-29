@@ -10,8 +10,8 @@ use fs_err::File;
 use itertools::Itertools;
 use tracing::debug;
 
-use pypi_types::Scheme;
 use uv_fs::{cachedir, Simplified, CWD};
+use uv_pypi_types::Scheme;
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_version::version;
 
@@ -298,9 +298,7 @@ pub(crate) fn create(
 
         let virtual_env_dir = match (relocatable, name.to_owned()) {
             (true, "activate") => {
-                // Extremely verbose, but should cover all major POSIX shells,
-                // as well as platforms where `readlink` does not implement `-f`.
-                r#"'"$(dirname -- "$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" > /dev/null && echo "$PWD")")"'"#
+                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#
             }
             (true, "activate.bat") => r"%~dp0..",
             (true, "activate.fish") => {

@@ -1,22 +1,23 @@
-use std::error::Error;
-use std::fmt::Debug;
-use std::path::Path;
-use std::{env, iter};
-
 use itertools::Itertools;
-use pep508_rs::MarkerEnvironment;
-use platform_tags::Platform;
 use reqwest::{Client, ClientBuilder, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
 };
+use std::error::Error;
+use std::fmt::Debug;
+use std::path::Path;
+use std::time::Duration;
+use std::{env, iter};
 use tracing::debug;
 use url::Url;
 use uv_auth::AuthMiddleware;
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
+use uv_pep508::MarkerEnvironment;
+use uv_platform_tags::Platform;
+use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
@@ -52,6 +53,7 @@ pub struct BaseClientBuilder<'a> {
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
+    default_timeout: Duration,
 }
 
 impl Default for BaseClientBuilder<'_> {
@@ -72,6 +74,7 @@ impl BaseClientBuilder<'_> {
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
+            default_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -131,6 +134,12 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn default_timeout(mut self, default_timeout: Duration) -> Self {
+        self.default_timeout = default_timeout;
+        self
+    }
+
     pub fn is_offline(&self) -> bool {
         matches!(self.connectivity, Connectivity::Offline)
     }
@@ -148,7 +157,7 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Check for the presence of an `SSL_CERT_FILE`.
-        let ssl_cert_file_exists = env::var_os("SSL_CERT_FILE").is_some_and(|path| {
+        let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
             let path_exists = Path::new(&path).exists();
             if !path_exists {
                 warn_user_once!(
@@ -161,20 +170,20 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let default_timeout = 30;
-        let timeout = env::var("UV_HTTP_TIMEOUT")
-            .or_else(|_| env::var("UV_REQUEST_TIMEOUT"))
-            .or_else(|_| env::var("HTTP_TIMEOUT"))
+        let timeout = env::var(EnvVars::UV_HTTP_TIMEOUT)
+            .or_else(|_| env::var(EnvVars::UV_REQUEST_TIMEOUT))
+            .or_else(|_| env::var(EnvVars::HTTP_TIMEOUT))
             .and_then(|value| {
                 value.parse::<u64>()
+                    .map(Duration::from_secs)
                     .or_else(|_| {
                         // On parse error, warn and use the default timeout
                         warn_user_once!("Ignoring invalid value from environment for `UV_HTTP_TIMEOUT`. Expected an integer number of seconds, got \"{value}\".");
-                        Ok(default_timeout)
+                        Ok(self.default_timeout)
                     })
             })
-            .unwrap_or(default_timeout);
-        debug!("Using request timeout of {timeout}s");
+            .unwrap_or(self.default_timeout);
+        debug!("Using request timeout of {}s", timeout.as_secs());
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
@@ -227,7 +236,7 @@ impl<'a> BaseClientBuilder<'a> {
     fn create_client(
         &self,
         user_agent: &str,
-        timeout: u64,
+        timeout: Duration,
         ssl_cert_file_exists: bool,
         security: Security,
     ) -> Client {
@@ -236,7 +245,7 @@ impl<'a> BaseClientBuilder<'a> {
             .http1_title_case_headers()
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
-            .read_timeout(std::time::Duration::from_secs(timeout))
+            .read_timeout(timeout)
             .tls_built_in_root_certs(false);
 
         // If necessary, accept invalid certificates.
@@ -252,7 +261,7 @@ impl<'a> BaseClientBuilder<'a> {
         };
 
         // Configure mTLS.
-        let client_builder = if let Some(ssl_client_cert) = env::var_os("SSL_CLIENT_CERT") {
+        let client_builder = if let Some(ssl_client_cert) = env::var_os(EnvVars::SSL_CLIENT_CERT) {
             match read_identity(&ssl_client_cert) {
                 Ok(identity) => client_builder.identity(identity),
                 Err(err) => {
@@ -327,7 +336,7 @@ pub struct BaseClient {
     /// The connectivity mode to use.
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
-    timeout: u64,
+    timeout: Duration,
     /// Hosts that are trusted to use the insecure client.
     allow_insecure_host: Vec<TrustedHost>,
 }
@@ -341,16 +350,6 @@ enum Security {
 }
 
 impl BaseClient {
-    /// The underlying [`ClientWithMiddleware`] for secure requests.
-    pub fn client(&self) -> ClientWithMiddleware {
-        self.client.clone()
-    }
-
-    /// The underlying [`Client`] without middleware.
-    pub fn raw_client(&self) -> Client {
-        self.raw_client.clone()
-    }
-
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
         if self
@@ -365,7 +364,7 @@ impl BaseClient {
     }
 
     /// The configured client timeout, in seconds.
-    pub fn timeout(&self) -> u64 {
+    pub fn timeout(&self) -> Duration {
         self.timeout
     }
 

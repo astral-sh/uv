@@ -1,6 +1,6 @@
-use pep508_rs::{MarkerTree, PackageName};
-use pypi_types::Requirement;
 use rustc_hash::FxHashMap;
+use uv_pep508::{MarkerTree, PackageName};
+use uv_pypi_types::Requirement;
 
 use crate::ResolverMarkers;
 
@@ -44,6 +44,11 @@ impl<T> ForkMap<T> {
         !self.get(package_name, markers).is_empty()
     }
 
+    /// Returns `true` if the map contains any values for a package.
+    pub(crate) fn contains_key(&self, package_name: &PackageName) -> bool {
+        self.0.contains_key(package_name)
+    }
+
     /// Returns a list of values associated with a package that are compatible with the given fork.
     ///
     /// Compatibility implies that the markers on the requirement that contained this value
@@ -57,11 +62,11 @@ impl<T> ForkMap<T> {
         match markers {
             // If we are solving for a specific environment we already filtered
             // compatible requirements `from_manifest`.
-            ResolverMarkers::SpecificEnvironment(_) => values
-                .first()
-                .map(|entry| &entry.value)
-                .into_iter()
-                .collect(),
+            //
+            // Or, if we haven't forked yet, all values are potentially compatible.
+            ResolverMarkers::SpecificEnvironment(_) | ResolverMarkers::Universal { .. } => {
+                values.iter().map(|entry| &entry.value).collect()
+            }
 
             // Return all values that were requested with markers that are compatible
             // with the current fork, i.e. the markers are not disjoint.
@@ -70,9 +75,6 @@ impl<T> ForkMap<T> {
                 .filter(|entry| !fork.is_disjoint(&entry.marker))
                 .map(|entry| &entry.value)
                 .collect(),
-
-            // If we haven't forked yet, all values are potentially compatible.
-            ResolverMarkers::Universal { .. } => values.iter().map(|entry| &entry.value).collect(),
         }
     }
 }

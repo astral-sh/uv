@@ -2,14 +2,14 @@ use std::collections::hash_map::Entry;
 
 use rustc_hash::FxHashMap;
 
-use distribution_types::Verbatim;
-use pypi_types::VerbatimParsedUrl;
+use uv_distribution_types::Verbatim;
 use uv_normalize::PackageName;
+use uv_pypi_types::VerbatimParsedUrl;
 
 use crate::resolver::ResolverMarkers;
 use crate::ResolveError;
 
-/// See [`crate::resolver::SolveState`].
+/// See [`crate::resolver::ForkState`].
 #[derive(Default, Debug, Clone)]
 pub(crate) struct ForkUrls(FxHashMap<PackageName, VerbatimParsedUrl>);
 

@@ -10,20 +10,23 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
-cache-key = { workspace = true }
-distribution-types = { workspace = true }
-pypi-types = { workspace = true }
+uv-dirs = { workspace = true }
 uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
+uv-pypi-types = { workspace = true }
+uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
-directories = { workspace = true }
-etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 nanoid = { workspace = true }
 rmp-serde = { workspace = true }

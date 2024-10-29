@@ -4,12 +4,12 @@ use rustc_hash::FxHashMap;
 use same_file::is_same_file;
 use tracing::debug;
 
-use cache_key::CanonicalUrl;
-use distribution_types::Verbatim;
-use pep508_rs::VerbatimUrl;
-use pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
+use uv_cache_key::CanonicalUrl;
+use uv_distribution_types::Verbatim;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
+use uv_pep508::VerbatimUrl;
+use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 
 use crate::{DependencyMode, Manifest, ResolveError, ResolverMarkers};
 

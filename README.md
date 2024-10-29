@@ -23,7 +23,8 @@ An extremely fast Python package and project manager, written in Rust.
 
 ## Highlights
 
-- 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `virtualenv`, and more.
+- 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`,
+  and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
 - 🐍 [Installs and manages](#python-management) Python versions.
 - 🛠️ [Runs and installs](#tool-management) Python applications.
@@ -52,10 +53,16 @@ Install uv with our standalone installers, or from [PyPI](https://pypi.org/proje
 $ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # On Windows.
-$ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+$ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # With pip.
 $ pip install uv
+```
+
+If installed via the standalone installer, uv can update itself to the latest version:
+
+```console
+$ uv self update
 ```
 
 See the [installation documentation](https://docs.astral.sh/uv/getting-started/installation/) for
@@ -94,6 +101,9 @@ All checks passed!
 ```
 
 See the [project documentation](https://docs.astral.sh/uv/guides/projects/) to get started.
+
+uv also supports building and publishing projects, even if they're not managed with uv. See the
+[publish guide](./guides/publish.md) to learn more.
 
 ### Tool management
 

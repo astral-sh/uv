@@ -2,11 +2,11 @@ use std::path::Path;
 use std::pin::Pin;
 
 use crate::Error;
-use distribution_filename::SourceDistExtension;
 use futures::StreamExt;
 use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
+use uv_distribution_filename::SourceDistExtension;
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 

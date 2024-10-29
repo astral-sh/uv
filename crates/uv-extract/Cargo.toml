@@ -9,12 +9,15 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
-distribution-filename = { workspace = true }
-pypi-types = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-pypi-types = { workspace = true }
 
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
 async_zip = { workspace = true }

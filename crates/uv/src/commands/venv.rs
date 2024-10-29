@@ -9,21 +9,20 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use distribution_types::{DependencyMetadata, IndexLocations};
-use install_wheel_rs::linker::LinkMode;
-use pypi_types::Requirement;
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, SourceStrategy, TrustedHost,
+    LowerBound, NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
+use uv_install_wheel::linker::LinkMode;
+use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersionFile, VersionRequest,
+    PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_shell::Shell;
@@ -114,7 +113,7 @@ enum VenvError {
 
     #[error("Failed to extract interpreter tags")]
     #[diagnostic(code(uv::venv::tags))]
-    Tags(#[source] platform_tags::TagsError),
+    Tags(#[source] uv_platform_tags::TagsError),
 
     #[error("Failed to resolve `--find-links` entry")]
     #[diagnostic(code(uv::venv::flat_index))]
@@ -203,7 +202,10 @@ async fn venv_impl(
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(specifiers.clone(), false))
+                    PythonRequest::Version(VersionRequest::Range(
+                        specifiers.clone(),
+                        PythonVariant::Default,
+                    ))
                 });
         }
     }
@@ -226,8 +228,10 @@ async fn venv_impl(
     let interpreter = python.into_interpreter();
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     if managed {
@@ -275,8 +279,10 @@ async fn venv_impl(
         let interpreter = venv.interpreter();
 
         // Add all authenticated sources to the cache.
-        for url in index_locations.urls() {
-            store_credentials_from_url(url);
+        for index in index_locations.allowed_indexes() {
+            if let Some(credentials) = index.credentials() {
+                uv_auth::store_credentials(index.raw_url(), credentials);
+            }
         }
 
         // Instantiate a client.
@@ -296,7 +302,7 @@ async fn venv_impl(
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
             let client = FlatIndexClient::new(&client, cache);
             let entries = client
-                .fetch(index_locations.flat_index())
+                .fetch(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(
@@ -339,6 +345,7 @@ async fn venv_impl(
             &build_options,
             &build_hasher,
             exclude_newer,
+            LowerBound::Allow,
             sources,
             concurrency,
         );
@@ -347,13 +354,13 @@ async fn venv_impl(
         let requirements = if interpreter.python_tuple() < (3, 12) {
             // Only include `setuptools` and `wheel` on Python <3.12
             vec![
-                Requirement::from(pep508_rs::Requirement::from_str("pip").unwrap()),
-                Requirement::from(pep508_rs::Requirement::from_str("setuptools").unwrap()),
-                Requirement::from(pep508_rs::Requirement::from_str("wheel").unwrap()),
+                Requirement::from(uv_pep508::Requirement::from_str("pip").unwrap()),
+                Requirement::from(uv_pep508::Requirement::from_str("setuptools").unwrap()),
+                Requirement::from(uv_pep508::Requirement::from_str("wheel").unwrap()),
             ]
         } else {
             vec![Requirement::from(
-                pep508_rs::Requirement::from_str("pip").unwrap(),
+                uv_pep508::Requirement::from_str("pip").unwrap(),
             )]
         };
 

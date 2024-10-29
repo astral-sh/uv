@@ -4,18 +4,18 @@ use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
-use distribution_types::{
+use uv_client::FlatIndexEntries;
+use uv_configuration::BuildOptions;
+use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
+use uv_distribution_types::{
     File, HashComparison, HashPolicy, IncompatibleSource, IncompatibleWheel, IndexUrl,
     PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, SourceDistCompatibility,
     WheelCompatibility,
 };
-use pep440_rs::Version;
-use platform_tags::{TagCompatibility, Tags};
-use pypi_types::HashDigest;
-use uv_client::FlatIndexEntries;
-use uv_configuration::BuildOptions;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_platform_tags::{TagCompatibility, Tags};
+use uv_pypi_types::HashDigest;
 use uv_types::HashStrategy;
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]

@@ -10,45 +10,47 @@ use std::fmt::{Debug, Display};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
-
-use cache_key::RepositoryUrl;
-use distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
-use distribution_types::{
-    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, FlatIndexLocation, GitSourceDist, HashPolicy,
-    IndexLocations, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, StaticMetadata,
-    ToUrlError, UrlString,
-};
-use pep440_rs::Version;
-use pep508_rs::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
-use platform_tags::{TagCompatibility, TagPriority, Tags};
-use pypi_types::{
-    redact_git_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement,
-    RequirementSource, ResolverMarkerEnvironment,
-};
-use uv_configuration::{BuildOptions, DevSpecification, ExtrasSpecification, InstallOptions};
-use uv_distribution::DistributionDatabase;
-use uv_fs::{relative_to, PortablePath, PortablePathBuf};
-use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
-use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_types::BuildContext;
-use uv_workspace::{InstallTarget, Workspace};
 
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::{ExcludeNewer, PrereleaseMode, RequiresPython, ResolutionGraph, ResolutionMode};
+use crate::{
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
+    ResolutionMode,
+};
+use uv_cache_key::RepositoryUrl;
+use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
+use uv_distribution::DistributionDatabase;
+use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
+use uv_distribution_types::{
+    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
+    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    RemoteSource, Resolution, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
+};
+use uv_fs::{relative_to, PortablePath, PortablePathBuf};
+use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
+use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::Version;
+use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
+use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
+use uv_pypi_types::{
+    redact_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement, RequirementSource,
+    ResolverMarkerEnvironment,
+};
+use uv_types::{BuildContext, HashStrategy};
+use uv_workspace::dependency_groups::DependencyGroupError;
+use uv_workspace::{InstallTarget, Workspace};
 
 mod requirements_txt;
 mod tree;
 
 /// The current version of the lockfile format.
-const VERSION: u32 = 1;
+pub const VERSION: u32 = 1;
 
 static LINUX_MARKERS: LazyLock<MarkerTree> = LazyLock::new(|| {
     MarkerTree::from_str(
@@ -106,6 +108,21 @@ impl Lock {
         let mut packages = BTreeMap::new();
         let requires_python = graph.requires_python.clone();
 
+        // Determine the set of packages included at multiple versions.
+        let mut seen = FxHashSet::default();
+        let mut duplicates = FxHashSet::default();
+        for node_index in graph.petgraph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
+                continue;
+            };
+            if !dist.is_base() {
+                continue;
+            }
+            if !seen.insert(dist.name()) {
+                duplicates.insert(dist.name());
+            }
+        }
+
         // Lock all base packages.
         for node_index in graph.petgraph.node_indices() {
             let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
@@ -114,10 +131,20 @@ impl Lock {
             if !dist.is_base() {
                 continue;
             }
-            let fork_markers = graph
-                .fork_markers(dist.name(), &dist.version, dist.dist.version_or_url().url())
-                .cloned()
-                .unwrap_or_default();
+
+            // If there are multiple distributions for the same package, include the markers of all
+            // forks that included the current distribution.
+            let fork_markers = if duplicates.contains(dist.name()) {
+                graph
+                    .fork_markers
+                    .iter()
+                    .filter(|fork_markers| !fork_markers.is_disjoint(&dist.marker))
+                    .cloned()
+                    .collect()
+            } else {
+                vec![]
+            };
+
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
             Self::remove_unreachable_wheels(graph, &requires_python, node_index, &mut package);
 
@@ -184,7 +211,7 @@ impl Lock {
                         continue;
                     };
                     let marker = edge.weight().clone();
-                    package.add_dev_dependency(
+                    package.add_group_dependency(
                         &requires_python,
                         group.clone(),
                         dependency_dist,
@@ -317,7 +344,7 @@ impl Lock {
             }
 
             // Perform the same validation for dev dependencies.
-            for (group, dependencies) in &mut package.dev_dependencies {
+            for (group, dependencies) in &mut package.dependency_groups {
                 dependencies.sort();
                 for windows in dependencies.windows(2) {
                     let (dep1, dep2) = (&windows[0], &windows[1]);
@@ -363,7 +390,7 @@ impl Lock {
                 .dependencies
                 .iter_mut()
                 .chain(dist.optional_dependencies.values_mut().flatten())
-                .chain(dist.dev_dependencies.values_mut().flatten())
+                .chain(dist.dependency_groups.values_mut().flatten())
             {
                 dep.extra.retain(|extra| {
                     extras_by_id
@@ -401,7 +428,7 @@ impl Lock {
             }
 
             // Perform the same validation for dev dependencies.
-            for dependencies in dist.dev_dependencies.values() {
+            for dependencies in dist.dependency_groups.values() {
                 for dep in dependencies {
                     if !by_id.contains_key(&dep.package_id) {
                         return Err(LockErrorKind::UnrecognizedDependency {
@@ -467,6 +494,11 @@ impl Lock {
         self
     }
 
+    /// Returns the lockfile version.
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+
     /// Returns the number of packages in the lockfile.
     pub fn len(&self) -> usize {
         self.packages.len()
@@ -524,8 +556,15 @@ impl Lock {
     pub fn simplified_supported_environments(&self) -> Vec<MarkerTree> {
         self.supported_environments()
             .iter()
-            .map(|marker| self.requires_python.simplify_markers(marker.clone()))
+            .cloned()
+            .map(|marker| self.simplify_environment(marker))
             .collect()
+    }
+
+    /// Simplify the given marker environment with respect to the lockfile's
+    /// `requires-python` setting.
+    pub fn simplify_environment(&self, marker: MarkerTree) -> MarkerTree {
+        self.requires_python.simplify_markers(marker)
     }
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
@@ -541,7 +580,7 @@ impl Lock {
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
-        dev: DevSpecification<'_>,
+        dev: &DevGroupsManifest,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
@@ -581,7 +620,7 @@ impl Lock {
 
             // Add any dev dependencies.
             for group in dev.iter() {
-                for dep in root.dev_dependencies.get(group).into_iter().flatten() {
+                for dep in root.dependency_groups.get(group).into_iter().flatten() {
                     if dep.complexified_marker.evaluate(marker_env, &[]) {
                         let dep_dist = self.find_by_id(&dep.package_id);
                         if seen.insert((&dep.package_id, None)) {
@@ -599,8 +638,11 @@ impl Lock {
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in (legacy) non-project workspace roots).
+        let groups = project
+            .groups()
+            .map_err(|err| LockErrorKind::DependencyGroup { err })?;
         for group in dev.iter() {
-            for dependency in project.group(group) {
+            for dependency in groups.get(group).into_iter().flatten() {
                 if dependency.marker.evaluate(marker_env, &[]) {
                     let root_name = &dependency.name;
                     let root = self
@@ -920,6 +962,8 @@ impl Lock {
         indexes: Option<&IndexLocations>,
         build_options: &BuildOptions,
         tags: &Tags,
+        hasher: &HashStrategy,
+        index: &InMemoryIndex,
         database: &DistributionDatabase<'_, Context>,
     ) -> Result<SatisfiesResult<'_>, LockError> {
         let mut queue: VecDeque<&Package> = VecDeque::new();
@@ -1046,53 +1090,31 @@ impl Lock {
         // Collect the set of available indexes (both `--index-url` and `--find-links` entries).
         let remotes = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index_url.redacted()))
+                        Some(UrlString::from(index.url().redacted()))
                     }
                     IndexUrl::Path(_) => None,
                 })
-                .chain(
-                    locations
-                        .flat_index()
-                        .filter_map(|index_url| match index_url {
-                            FlatIndexLocation::Url(_) => {
-                                Some(UrlString::from(index_url.redacted()))
-                            }
-                            FlatIndexLocation::Path(_) => None,
-                        }),
-                )
                 .collect::<BTreeSet<_>>()
         });
 
         let locals = indexes.map(|locations| {
             locations
-                .indexes()
-                .filter_map(|index_url| match index_url {
+                .allowed_indexes()
+                .into_iter()
+                .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => None,
-                    IndexUrl::Path(index_url) => {
-                        let path = index_url.to_file_path().ok()?;
+                    IndexUrl::Path(url) => {
+                        let path = url.to_file_path().ok()?;
                         let path = relative_to(&path, workspace.install_path())
                             .or_else(|_| std::path::absolute(path))
                             .ok()?;
                         Some(path)
                     }
                 })
-                .chain(
-                    locations
-                        .flat_index()
-                        .filter_map(|index_url| match index_url {
-                            FlatIndexLocation::Url(_) => None,
-                            FlatIndexLocation::Path(index_url) => {
-                                let path = index_url.to_file_path().ok()?;
-                                let path = relative_to(&path, workspace.install_path())
-                                    .or_else(|_| std::path::absolute(path))
-                                    .ok()?;
-                                Some(path)
-                            }
-                        }),
-                )
                 .collect::<BTreeSet<_>>()
         });
 
@@ -1151,20 +1173,48 @@ impl Lock {
                 build_options,
             )?;
 
-            let Ok(archive) = database
-                .get_or_build_wheel_metadata(&dist, HashPolicy::None)
-                .await
-            else {
-                return Ok(SatisfiesResult::MissingMetadata(
-                    &package.id.name,
-                    &package.id.version,
-                ));
+            // Fetch the metadata for the distribution.
+            let metadata = {
+                let id = dist.version_id();
+                if let Some(archive) =
+                    index
+                        .distributions()
+                        .get(&id)
+                        .as_deref()
+                        .and_then(|response| {
+                            if let MetadataResponse::Found(archive, ..) = response {
+                                Some(archive)
+                            } else {
+                                None
+                            }
+                        })
+                {
+                    // If the metadata is already in the index, return it.
+                    archive.metadata.clone()
+                } else {
+                    // Run the PEP 517 build process to extract metadata from the source distribution.
+                    let archive = database
+                        .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
+                        .await
+                        .map_err(|err| LockErrorKind::Resolution {
+                            id: package.id.clone(),
+                            err,
+                        })?;
+
+                    let metadata = archive.metadata.clone();
+
+                    // Insert the metadata into the index.
+                    index
+                        .distributions()
+                        .done(id, Arc::new(MetadataResponse::Found(archive)));
+
+                    metadata
+                }
             };
 
             // Validate the `requires-dist` metadata.
             {
-                let expected: BTreeSet<_> = archive
-                    .metadata
+                let expected: BTreeSet<_> = metadata
                     .requires_dist
                     .into_iter()
                     .map(|requirement| normalize_requirement(requirement, workspace))
@@ -1187,12 +1237,12 @@ impl Lock {
                 }
             }
 
-            // Validate the `dev-dependencies` metadata.
+            // Validate the `dependency-groups` metadata.
             {
-                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = archive
-                    .metadata
-                    .dev_dependencies
+                let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = metadata
+                    .dependency_groups
                     .into_iter()
+                    .filter(|(_, requirements)| !requirements.is_empty())
                     .map(|(group, requirements)| {
                         Ok::<_, LockError>((
                             group,
@@ -1205,8 +1255,9 @@ impl Lock {
                     .collect::<Result<_, _>>()?;
                 let actual: BTreeMap<GroupName, BTreeSet<Requirement>> = package
                     .metadata
-                    .requires_dev
+                    .dependency_groups
                     .iter()
+                    .filter(|(_, requirements)| !requirements.is_empty())
                     .map(|(group, requirements)| {
                         Ok::<_, LockError>((
                             group.clone(),
@@ -1220,7 +1271,7 @@ impl Lock {
                     .collect::<Result<_, _>>()?;
 
                 if expected != actual {
-                    return Ok(SatisfiesResult::MismatchedDevDependencies(
+                    return Ok(SatisfiesResult::MismatchedDependencyGroups(
                         &package.id.name,
                         &package.id.version,
                         expected,
@@ -1248,7 +1299,7 @@ impl Lock {
                 }
             }
 
-            for dependencies in package.dev_dependencies.values() {
+            for dependencies in package.dependency_groups.values() {
                 for dep in dependencies {
                     if seen.insert(&dep.package_id) {
                         let dep_dist = self.find_by_id(&dep.package_id);
@@ -1305,8 +1356,6 @@ pub enum SatisfiesResult<'lock> {
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
     MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock PathBuf),
-    /// The resolver failed to generate metadata for a given package.
-    MissingMetadata(&'lock PackageName, &'lock Version),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedRequiresDist(
         &'lock PackageName,
@@ -1314,8 +1363,8 @@ pub enum SatisfiesResult<'lock> {
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
-    /// A package in the lockfile contains different `dev-dependencies` metadata than expected.
-    MismatchedDevDependencies(
+    /// A package in the lockfile contains different `dependency-group` metadata than expected.
+    MismatchedDependencyGroups(
         &'lock PackageName,
         &'lock Version,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
@@ -1470,6 +1519,21 @@ impl TryFrom<LockWire> for Lock {
     }
 }
 
+/// Like [`Lock`], but limited to the version field. Used for error reporting: by limiting parsing
+/// to the version field, we can verify compatibility for lockfiles that may otherwise be
+/// unparsable.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct LockVersion {
+    version: u32,
+}
+
+impl LockVersion {
+    /// Returns the lockfile version.
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package {
     pub(crate) id: PackageId,
@@ -1485,8 +1549,8 @@ pub struct Package {
     dependencies: Vec<Dependency>,
     /// The resolved optional dependencies of the package.
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
-    /// The resolved development dependencies of the package.
-    dev_dependencies: BTreeMap<GroupName, Vec<Dependency>>,
+    /// The resolved PEP 735 dependency groups of the package.
+    dependency_groups: BTreeMap<GroupName, Vec<Dependency>>,
     /// The exact requirements from the package metadata.
     metadata: PackageMetadata,
 }
@@ -1514,14 +1578,14 @@ impl Package {
                 .collect::<Result<_, _>>()
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
-        let requires_dev = if id.source.is_immutable() {
+        let dependency_groups = if id.source.is_immutable() {
             BTreeMap::default()
         } else {
             annotated_dist
                 .metadata
                 .as_ref()
                 .expect("metadata is present")
-                .dev_dependencies
+                .dependency_groups
                 .iter()
                 .map(|(group, requirements)| {
                     let requirements = requirements
@@ -1541,10 +1605,10 @@ impl Package {
             fork_markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
-            dev_dependencies: BTreeMap::default(),
+            dependency_groups: BTreeMap::default(),
             metadata: PackageMetadata {
                 requires_dist,
-                requires_dev,
+                dependency_groups,
             },
         })
     }
@@ -1620,18 +1684,18 @@ impl Package {
         Ok(())
     }
 
-    /// Add the [`AnnotatedDist`] as a development dependency of the [`Package`].
-    fn add_dev_dependency(
+    /// Add the [`AnnotatedDist`] to a dependency group of the [`Package`].
+    fn add_group_dependency(
         &mut self,
         requires_python: &RequiresPython,
-        dev: GroupName,
+        group: GroupName,
         annotated_dist: &AnnotatedDist,
         marker: MarkerTree,
         root: &Path,
     ) -> Result<(), LockError> {
         let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
-        let dev_deps = self.dev_dependencies.entry(dev).or_default();
-        for existing_dep in &mut *dev_deps {
+        let deps = self.dependency_groups.entry(group).or_default();
+        for existing_dep in &mut *deps {
             if existing_dep.package_id == dep.package_id
                 // See note in add_dependency for why we use
                 // simplified markers here.
@@ -1642,7 +1706,7 @@ impl Package {
             }
         }
 
-        dev_deps.push(dep);
+        deps.push(dep);
         Ok(())
     }
 
@@ -1766,7 +1830,7 @@ impl Package {
     fn to_source_dist(
         &self,
         workspace_root: &Path,
-    ) -> Result<Option<distribution_types::SourceDist>, LockError> {
+    ) -> Result<Option<uv_distribution_types::SourceDist>, LockError> {
         let sdist = match &self.id.source {
             Source::Path(path) => {
                 // A direct path source can also be a wheel, so validate the extension.
@@ -1779,7 +1843,7 @@ impl Package {
                     install_path: workspace_root.join(path),
                     ext,
                 };
-                distribution_types::SourceDist::Path(path_dist)
+                uv_distribution_types::SourceDist::Path(path_dist)
             }
             Source::Directory(path) => {
                 let dir_dist = DirectorySourceDist {
@@ -1789,7 +1853,7 @@ impl Package {
                     editable: false,
                     r#virtual: false,
                 };
-                distribution_types::SourceDist::Directory(dir_dist)
+                uv_distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Editable(path) => {
                 let dir_dist = DirectorySourceDist {
@@ -1799,7 +1863,7 @@ impl Package {
                     editable: true,
                     r#virtual: false,
                 };
-                distribution_types::SourceDist::Directory(dir_dist)
+                uv_distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Virtual(path) => {
                 let dir_dist = DirectorySourceDist {
@@ -1809,7 +1873,7 @@ impl Package {
                     editable: false,
                     r#virtual: true,
                 };
-                distribution_types::SourceDist::Directory(dir_dist)
+                uv_distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Git(url, git) => {
                 // Remove the fragment and query from the URL; they're already present in the
@@ -1837,7 +1901,7 @@ impl Package {
                     git: Box::new(git_url),
                     subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
                 };
-                distribution_types::SourceDist::Git(git_dist)
+                uv_distribution_types::SourceDist::Git(git_dist)
             }
             Source::Direct(url, direct) => {
                 // A direct URL source can also be a wheel, so validate the extension.
@@ -1857,7 +1921,7 @@ impl Package {
                     ext,
                     url: VerbatimUrl::from_url(url),
                 };
-                distribution_types::SourceDist::DirectUrl(direct_dist)
+                uv_distribution_types::SourceDist::DirectUrl(direct_dist)
             }
             Source::Registry(RegistrySource::Url(url)) => {
                 let Some(ref sdist) = self.sdist else {
@@ -1874,7 +1938,7 @@ impl Package {
                         id: self.id.clone(),
                     })?;
                 let ext = SourceDistExtension::from_path(filename.as_ref())?;
-                let file = Box::new(distribution_types::File {
+                let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
                     hashes: sdist
@@ -1897,7 +1961,7 @@ impl Package {
                     index,
                     wheels: vec![],
                 };
-                distribution_types::SourceDist::Registry(reg_dist)
+                uv_distribution_types::SourceDist::Registry(reg_dist)
             }
             Source::Registry(RegistrySource::Path(path)) => {
                 let Some(ref sdist) = self.sdist else {
@@ -1916,7 +1980,7 @@ impl Package {
                         id: self.id.clone(),
                     })?;
                 let ext = SourceDistExtension::from_path(filename.as_ref())?;
-                let file = Box::new(distribution_types::File {
+                let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
                     hashes: sdist
@@ -1942,7 +2006,7 @@ impl Package {
                     index,
                     wheels: vec![],
                 };
-                distribution_types::SourceDist::Registry(reg_dist)
+                uv_distribution_types::SourceDist::Registry(reg_dist)
             }
         };
 
@@ -1992,19 +2056,19 @@ impl Package {
             }
         }
 
-        if !self.dev_dependencies.is_empty() {
-            let mut dev_dependencies = Table::new();
-            for (extra, deps) in &self.dev_dependencies {
+        if !self.dependency_groups.is_empty() {
+            let mut dependency_groups = Table::new();
+            for (extra, deps) in &self.dependency_groups {
                 let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
                     dep.to_toml(requires_python, dist_count_by_name)
                         .into_inline_table()
                 }));
                 if !deps.is_empty() {
-                    dev_dependencies.insert(extra.as_ref(), value(deps));
+                    dependency_groups.insert(extra.as_ref(), value(deps));
                 }
             }
-            if !dev_dependencies.is_empty() {
-                table.insert("dev-dependencies", Item::Table(dev_dependencies));
+            if !dependency_groups.is_empty() {
+                table.insert("dev-dependencies", Item::Table(dependency_groups));
             }
         }
 
@@ -2047,9 +2111,9 @@ impl Package {
                 metadata_table.insert("requires-dist", value(requires_dist));
             }
 
-            if !self.metadata.requires_dev.is_empty() {
-                let mut requires_dev = Table::new();
-                for (extra, deps) in &self.metadata.requires_dev {
+            if !self.metadata.dependency_groups.is_empty() {
+                let mut dependency_groups = Table::new();
+                for (extra, deps) in &self.metadata.dependency_groups {
                     let deps = deps
                         .iter()
                         .map(|requirement| {
@@ -2064,12 +2128,10 @@ impl Package {
                         [requirement] => Array::from_iter([requirement]),
                         deps => each_element_on_its_line_array(deps.iter()),
                     };
-                    if !deps.is_empty() {
-                        requires_dev.insert(extra.as_ref(), value(deps));
-                    }
+                    dependency_groups.insert(extra.as_ref(), value(deps));
                 }
-                if !requires_dev.is_empty() {
-                    metadata_table.insert("requires-dev", Item::Table(requires_dev));
+                if !dependency_groups.is_empty() {
+                    metadata_table.insert("requires-dev", Item::Table(dependency_groups));
                 }
             }
 
@@ -2179,8 +2241,8 @@ struct PackageWire {
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
-    #[serde(default)]
-    dev_dependencies: BTreeMap<GroupName, Vec<DependencyWire>>,
+    #[serde(default, rename = "dev-dependencies", alias = "dependency-groups")]
+    dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
@@ -2188,8 +2250,8 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
-    #[serde(default)]
-    requires_dev: BTreeMap<GroupName, BTreeSet<Requirement>>,
+    #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
+    dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
 impl PackageWire {
@@ -2219,8 +2281,8 @@ impl PackageWire {
                 .into_iter()
                 .map(|(extra, deps)| Ok((extra, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
-            dev_dependencies: self
-                .dev_dependencies
+            dependency_groups: self
+                .dependency_groups
                 .into_iter()
                 .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
@@ -2376,23 +2438,23 @@ impl Source {
     }
 
     fn from_source_dist(
-        source_dist: &distribution_types::SourceDist,
+        source_dist: &uv_distribution_types::SourceDist,
         root: &Path,
     ) -> Result<Source, LockError> {
         match *source_dist {
-            distribution_types::SourceDist::Registry(ref reg_dist) => {
+            uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
                 Source::from_registry_source_dist(reg_dist, root)
             }
-            distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
+            uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 Ok(Source::from_direct_source_dist(direct_dist))
             }
-            distribution_types::SourceDist::Git(ref git_dist) => {
+            uv_distribution_types::SourceDist::Git(ref git_dist) => {
                 Ok(Source::from_git_dist(git_dist))
             }
-            distribution_types::SourceDist::Path(ref path_dist) => {
+            uv_distribution_types::SourceDist::Path(ref path_dist) => {
                 Source::from_path_source_dist(path_dist, root)
             }
-            distribution_types::SourceDist::Directory(ref directory) => {
+            uv_distribution_types::SourceDist::Directory(ref directory) => {
                 Source::from_directory_source_dist(directory, root)
             }
         }
@@ -2914,23 +2976,23 @@ impl SourceDist {
 
     fn from_source_dist(
         id: &PackageId,
-        source_dist: &distribution_types::SourceDist,
+        source_dist: &uv_distribution_types::SourceDist,
         hashes: &[HashDigest],
         index: Option<&IndexUrl>,
     ) -> Result<Option<SourceDist>, LockError> {
         match *source_dist {
-            distribution_types::SourceDist::Registry(ref reg_dist) => {
+            uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
                 SourceDist::from_registry_dist(reg_dist, index)
             }
-            distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
+            uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
                 SourceDist::from_direct_dist(id, direct_dist, hashes).map(Some)
             }
             // An actual sdist entry in the lockfile is only required when
             // it's from a registry or a direct URL. Otherwise, it's strictly
             // redundant with the information in all other kinds of `source`.
-            distribution_types::SourceDist::Git(_)
-            | distribution_types::SourceDist::Path(_)
-            | distribution_types::SourceDist::Directory(_) => Ok(None),
+            uv_distribution_types::SourceDist::Git(_)
+            | uv_distribution_types::SourceDist::Path(_)
+            | uv_distribution_types::SourceDist::Directory(_) => Ok(None),
         }
     }
 
@@ -3083,7 +3145,7 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     let mut url = git_dist.git.repository().clone();
 
     // Redact the credentials.
-    redact_git_credentials(&mut url);
+    redact_credentials(&mut url);
 
     // Clear out any existing state.
     url.set_fragment(None);
@@ -3175,16 +3237,18 @@ impl Wheel {
     ) -> Result<Vec<Wheel>, LockError> {
         match *dist {
             Dist::Built(ref built_dist) => Wheel::from_built_dist(built_dist, hashes, index),
-            Dist::Source(distribution_types::SourceDist::Registry(ref source_dist)) => source_dist
-                .wheels
-                .iter()
-                .filter(|wheel| {
-                    // Reject distributions from registries that don't match the index URL, as can occur with
-                    // `--find-links`.
-                    index.is_some_and(|index| *index == wheel.index)
-                })
-                .map(Wheel::from_registry_wheel)
-                .collect(),
+            Dist::Source(uv_distribution_types::SourceDist::Registry(ref source_dist)) => {
+                source_dist
+                    .wheels
+                    .iter()
+                    .filter(|wheel| {
+                        // Reject distributions from registries that don't match the index URL, as can occur with
+                        // `--find-links`.
+                        index.is_some_and(|index| *index == wheel.index)
+                    })
+                    .map(Wheel::from_registry_wheel)
+                    .collect()
+            }
             Dist::Source(_) => Ok(vec![]),
         }
     }
@@ -3298,7 +3362,7 @@ impl Wheel {
                         .into())
                     }
                 };
-                let file = Box::new(distribution_types::File {
+                let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
@@ -3328,7 +3392,7 @@ impl Wheel {
                 };
                 let file_url = Url::from_file_path(root.join(index_path).join(file_path))
                     .map_err(|()| LockErrorKind::PathToUrl)?;
-                let file = Box::new(distribution_types::File {
+                let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: filename.to_string(),
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
@@ -3670,11 +3734,11 @@ fn normalize_requirement(
             url,
         } => {
             // Redact the credentials.
-            redact_git_credentials(&mut repository);
+            redact_credentials(&mut repository);
 
             // Redact the PEP 508 URL.
             let mut url = url.to_url();
-            redact_git_credentials(&mut url);
+            redact_credentials(&mut url);
             let url = VerbatimUrl::from_url(url);
 
             Ok(Requirement {
@@ -3735,11 +3799,36 @@ fn normalize_requirement(
                 origin: None,
             })
         }
-        _ => Ok(Requirement {
+        RequirementSource::Registry {
+            specifier,
+            mut index,
+        } => {
+            if let Some(index) = index.as_mut() {
+                redact_credentials(index);
+            }
+            Ok(Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                marker: requirement.marker,
+                source: RequirementSource::Registry { specifier, index },
+                origin: None,
+            })
+        }
+        RequirementSource::Url {
+            location,
+            subdirectory,
+            ext,
+            url,
+        } => Ok(Requirement {
             name: requirement.name,
             extras: requirement.extras,
             marker: requirement.marker,
-            source: requirement.source,
+            source: RequirementSource::Url {
+                location,
+                subdirectory,
+                ext,
+                url,
+            },
             origin: None,
         }),
     }
@@ -3748,6 +3837,13 @@ fn normalize_requirement(
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct LockError(Box<LockErrorKind>);
+
+impl LockError {
+    /// Returns true if the [`LockError`] is a resolver error.
+    pub fn is_resolution(&self) -> bool {
+        matches!(&*self.0, LockErrorKind::Resolution { .. })
+    }
+}
 
 impl<E> From<E> for LockError
 where
@@ -3768,14 +3864,14 @@ where
 enum LockErrorKind {
     /// An error that occurs when multiple packages with the same
     /// ID were found.
-    #[error("found duplicate package `{id}`")]
+    #[error("Found duplicate package `{id}`")]
     DuplicatePackage {
         /// The ID of the conflicting package.
         id: PackageId,
     },
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers.
-    #[error("for package `{id}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}`, found duplicate dependency `{dependency}`")]
     DuplicateDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -3786,12 +3882,12 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's optional dependencies.
-    #[error("for package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}[{extra}]`, found duplicate dependency `{dependency}`")]
     DuplicateOptionalDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
         id: PackageId,
-        /// The name of the optional dependency group.
+        /// The name of the extra.
         extra: ExtraName,
         /// The ID of the conflicting dependency.
         dependency: Dependency,
@@ -3799,7 +3895,7 @@ enum LockErrorKind {
     /// An error that occurs when there are multiple dependencies for the
     /// same package that have identical identifiers, as part of the
     /// that package's development dependencies.
-    #[error("for package `{id}:{group}`, found duplicate dependency `{dependency}`")]
+    #[error("For package `{id}:{group}`, found duplicate dependency `{dependency}`")]
     DuplicateDevDependency {
         /// The ID of the package for which a duplicate dependency was
         /// found.
@@ -3811,7 +3907,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when the URL to a file for a wheel or
     /// source dist could not be converted to a structured `url::Url`.
-    #[error("failed to parse wheel or source distribution URL")]
+    #[error("Failed to parse wheel or source distribution URL")]
     InvalidFileUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in its error message.
@@ -3820,10 +3916,10 @@ enum LockErrorKind {
     ),
     /// An error that occurs when the extension can't be determined
     /// for a given wheel or source distribution.
-    #[error("failed to parse file extension; expected one of: {0}")]
+    #[error("Failed to parse file extension; expected one of: {0}")]
     MissingExtension(#[from] ExtensionError),
     /// Failed to parse a git source URL.
-    #[error("failed to parse source git URL")]
+    #[error("Failed to parse source git URL")]
     InvalidGitSourceUrl(
         /// The underlying error that occurred. This includes the
         /// errant URL in the message.
@@ -3833,7 +3929,7 @@ enum LockErrorKind {
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a package that isn't in the lockfile.
-    #[error("for package `{id}`, found dependency `{dependency}` with no locked package")]
+    #[error("For package `{id}`, found dependency `{dependency}` with no locked package")]
     UnrecognizedDependency {
         /// The ID of the package that has an unrecognized dependency.
         id: PackageId,
@@ -3843,7 +3939,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).
-    #[error("since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
+    #[error("Since the package `{id}` comes from a {source} dependency, a hash was {expected} but one was not found for {artifact_type}", source = id.source.name(), expected = if *expected { "expected" } else { "not expected" })]
     Hash {
         /// The ID of the package that has a missing hash.
         id: PackageId,
@@ -3855,7 +3951,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a package is included with an extra name,
     /// but no corresponding base package (i.e., without the extra) exists.
-    #[error("found package `{id}` with extra `{extra}` but no base package")]
+    #[error("Found package `{id}` with extra `{extra}` but no base package")]
     MissingExtraBase {
         /// The ID of the package that has a missing base.
         id: PackageId,
@@ -3876,7 +3972,7 @@ enum LockErrorKind {
     },
     /// An error that occurs from an invalid lockfile where a wheel comes from a non-wheel source
     /// such as a directory.
-    #[error("wheels cannot come from {source_type} sources")]
+    #[error("Wheels cannot come from {source_type} sources")]
     InvalidWheelSource {
         /// The ID of the distribution that has a missing base.
         id: PackageId,
@@ -3885,7 +3981,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a remote
     /// registry, but is missing a URL.
-    #[error("found registry distribution {name}=={version} without a valid URL")]
+    #[error("Found registry distribution `{name}=={version}` without a valid URL")]
     MissingUrl {
         /// The name of the distribution that is missing a URL.
         name: PackageName,
@@ -3894,7 +3990,7 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a local registry,
     /// but is missing a path.
-    #[error("found registry distribution {name}=={version} without a valid path")]
+    #[error("Found registry distribution `{name}=={version}` without a valid path")]
     MissingPath {
         /// The name of the distribution that is missing a path.
         name: PackageName,
@@ -3903,34 +3999,34 @@ enum LockErrorKind {
     },
     /// An error that occurs when a distribution indicates that it is sourced from a registry, but
     /// is missing a filename.
-    #[error("found registry distribution {id} without a valid filename")]
+    #[error("Found registry distribution `{id}` without a valid filename")]
     MissingFilename {
         /// The ID of the distribution that is missing a filename.
         id: PackageId,
     },
     /// An error that occurs when a distribution is included with neither wheels nor a source
     /// distribution.
-    #[error("distribution {id} can't be installed because it doesn't have a source distribution or wheel for the current platform")]
+    #[error("Distribution `{id}` can't be installed because it doesn't have a source distribution or wheel for the current platform")]
     NeitherSourceDistNorWheel {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as both `--no-binary` and `--no-build`.
-    #[error("distribution {id} can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    #[error("Distribution `{id}` can't be installed because it is marked as both `--no-binary` and `--no-build`")]
     NoBinaryNoBuild {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-binary`, but no source
     /// distribution is available.
-    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but has no source distribution")]
     NoBinary {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a distribution is marked as `--no-build`, but no binary
     /// distribution is available.
-    #[error("distribution {id} can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-build` but has no binary distribution")]
     NoBuild {
         /// The ID of the distribution.
         id: PackageId,
@@ -3938,20 +4034,20 @@ enum LockErrorKind {
     /// An error that occurs when a wheel-only distribution is incompatible with the current
     /// platform.
     #[error(
-        "distribution {id} can't be installed because the binary distribution is incompatible with the current platform"
+        "distribution `{id}` can't be installed because the binary distribution is incompatible with the current platform"
     )]
     IncompatibleWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when a wheel-only source is marked as `--no-binary`.
-    #[error("distribution {id} can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    #[error("Distribution `{id}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
     NoBinaryWheelOnly {
         /// The ID of the distribution.
         id: PackageId,
     },
     /// An error that occurs when converting between URLs and paths.
-    #[error("found dependency `{id}` with no locked distribution")]
+    #[error("Found dependency `{id}` with no locked distribution")]
     VerbatimUrl {
         /// The ID of the distribution that has a missing base.
         id: PackageId,
@@ -3960,14 +4056,14 @@ enum LockErrorKind {
         err: VerbatimUrlError,
     },
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not compute relative path between workspace and distribution")]
+    #[error("Could not compute relative path between workspace and distribution")]
     DistributionRelativePath(
         /// The inner error we forward.
         #[source]
         std::io::Error,
     ),
     /// An error that occurs when converting an index URL to a relative path
-    #[error("could not compute relative path between workspace and index")]
+    #[error("Could not compute relative path between workspace and index")]
     IndexRelativePath(
         /// The inner error we forward.
         #[source]
@@ -3976,7 +4072,7 @@ enum LockErrorKind {
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
     #[error(
-        "dependency {name} has missing `version` \
+        "Dependency `{name}` has missing `version` \
          field but has more than one matching package"
     )]
     MissingDependencyVersion {
@@ -3986,7 +4082,7 @@ enum LockErrorKind {
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `source` field.
     #[error(
-        "dependency {name} has missing `source` \
+        "Dependency `{name}` has missing `source` \
          field but has more than one matching package"
     )]
     MissingDependencySource {
@@ -3994,52 +4090,66 @@ enum LockErrorKind {
         name: PackageName,
     },
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not compute relative path between workspace and requirement")]
+    #[error("Could not compute relative path between workspace and requirement")]
     RequirementRelativePath(
         /// The inner error we forward.
         #[source]
         std::io::Error,
     ),
     /// An error that occurs when parsing an existing requirement.
-    #[error("could not convert between URL and path")]
+    #[error("Could not convert between URL and path")]
     RequirementVerbatimUrl(
         /// The inner error we forward.
         #[source]
         VerbatimUrlError,
     ),
     /// An error that occurs when parsing a registry's index URL.
-    #[error("could not convert between URL and path")]
+    #[error("Could not convert between URL and path")]
     RegistryVerbatimUrl(
         /// The inner error we forward.
         #[source]
         VerbatimUrlError,
     ),
     /// An error that occurs when converting a path to a URL.
-    #[error("failed to convert path to URL")]
+    #[error("Failed to convert path to URL")]
     PathToUrl,
     /// An error that occurs when converting a URL to a path
-    #[error("failed to convert URL to path")]
+    #[error("Failed to convert URL to path")]
     UrlToPath,
     /// An error that occurs when multiple packages with the same
     /// name were found when identifying the root packages.
-    #[error("found multiple packages matching `{name}`")]
+    #[error("Found multiple packages matching `{name}`")]
     MultipleRootPackages {
         /// The ID of the package.
         name: PackageName,
     },
     /// An error that occurs when a root package can't be found.
-    #[error("could not find root package `{name}`")]
+    #[error("Could not find root package `{name}`")]
     MissingRootPackage {
         /// The ID of the package.
         name: PackageName,
     },
+    /// An error that occurs when resolving metadata for a package.
+    #[error("Failed to generate package metadata for `{id}`")]
+    Resolution {
+        /// The ID of the distribution that failed to resolve.
+        id: PackageId,
+        /// The inner error we forward.
+        #[source]
+        err: uv_distribution::Error,
+    },
+    #[error("Failed to resolve `dependency-groups`")]
+    DependencyGroup {
+        #[source]
+        err: DependencyGroupError,
+    },
 }
 
 /// An error that occurs when a source string could not be parsed.
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 enum SourceParseError {
     /// An error that occurs when the URL in the source is invalid.
-    #[error("invalid URL in source `{given}`")]
+    #[error("Invalid URL in source `{given}`")]
     InvalidUrl {
         /// The source string given.
         given: String,
@@ -4048,13 +4158,13 @@ enum SourceParseError {
         err: url::ParseError,
     },
     /// An error that occurs when a Git URL is missing a precise commit SHA.
-    #[error("missing SHA in source `{given}`")]
+    #[error("Missing SHA in source `{given}`")]
     MissingSha {
         /// The source string given.
         given: String,
     },
     /// An error that occurs when a Git URL has an invalid SHA.
-    #[error("invalid SHA in source `{given}`")]
+    #[error("Invalid SHA in source `{given}`")]
     InvalidSha {
         /// The source string given.
         given: String,
@@ -4101,286 +4211,4 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_dependency_source_unambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-version = "0.1.0"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_version_unambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-source =  { registry = "https://pypi.org/simple" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_source_version_unambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_source_ambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "a"
-version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-version = "0.1.0"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_version_ambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "a"
-version = "0.1.1"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-source =  { registry = "https://pypi.org/simple" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn missing_dependency_source_version_ambiguous() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "a"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "a"
-version = "0.1.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package]]
-name = "b"
-version = "0.1.0"
-source =  { registry = "https://pypi.org/simple" }
-sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
-
-[[package.dependencies]]
-name = "a"
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn hash_optional_missing() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn hash_optional_present() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn hash_required_present() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { path = "file:///foo/bar" }
-wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn source_direct_no_subdir() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { url = "https://burntsushi.net" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn source_direct_has_subdir() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn source_directory() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { directory = "path/to/dir" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-
-    #[test]
-    fn source_editable() {
-        let data = r#"
-version = 1
-requires-python = ">=3.12"
-
-[[package]]
-name = "anyio"
-version = "4.3.0"
-source = { editable = "path/to/dir" }
-"#;
-        let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
-    }
-}
+mod tests;

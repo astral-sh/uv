@@ -2,15 +2,15 @@ pub use dependency_mode::DependencyMode;
 pub use error::{NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
-pub use flat_index::FlatIndex;
+pub use flat_index::{FlatDistributions, FlatIndex};
 pub use lock::{
-    Lock, LockError, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
+    Lock, LockError, LockVersion, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
+    TreeDisplay, VERSION,
 };
 pub use manifest::Manifest;
-pub use options::{Options, OptionsBuilder};
+pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
-pub use pubgrub::{PubGrubSpecifier, PubGrubSpecifierError};
 pub use python_requirement::PythonRequirement;
 pub use requires_python::{RequiresPython, RequiresPythonError, RequiresPythonRange};
 pub use resolution::{
@@ -34,6 +34,7 @@ mod error;
 mod exclude_newer;
 mod exclusions;
 mod flat_index;
+mod fork_indexes;
 mod fork_urls;
 mod graph_ops;
 mod lock;

@@ -13,13 +13,16 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
-platform-tags = { workspace = true }
-pypi-types = { workspace = true }
 uv-fs = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-version = { workspace = true }
 

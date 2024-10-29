@@ -7,17 +7,8 @@ use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use tracing::debug;
+use uv_tool::InstalledTools;
 
-use distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
-    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
-};
-use distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
-};
-use install_wheel_rs::linker::LinkMode;
-use platform_tags::Tags;
-use pypi_types::ResolverMarkerEnvironment;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
@@ -26,9 +17,19 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
+use uv_distribution_types::{
+    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification,
+    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
+use uv_distribution_types::{
+    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
+};
 use uv_fs::Simplified;
+use uv_install_wheel::linker::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
+use uv_platform_tags::Tags;
+use uv_pypi_types::ResolverMarkerEnvironment;
 use uv_python::PythonEnvironment;
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
@@ -133,13 +134,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !unnamed.is_empty() {
             requirements.extend(
                 NamedRequirementsResolver::new(
-                    unnamed,
                     hasher,
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
-                .resolve()
+                .resolve(unnamed.into_iter())
                 .await?,
             );
         }
@@ -147,14 +147,13 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
-                source_trees,
                 extras,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve()
+            .resolve(source_trees.iter().map(PathBuf::as_path))
             .await?;
 
             // If we resolved a single project, use it for the project name.
@@ -218,13 +217,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !unnamed.is_empty() {
             overrides.extend(
                 NamedRequirementsResolver::new(
-                    unnamed,
                     hasher,
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
-                .resolve()
+                .resolve(unnamed.into_iter())
                 .await?,
             );
         }
@@ -391,7 +389,6 @@ pub(crate) async fn install(
     index_urls: &IndexLocations,
     config_settings: &ConfigSettings,
     hasher: &HashStrategy,
-    markers: &ResolverMarkerEnvironment,
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
@@ -405,12 +402,9 @@ pub(crate) async fn install(
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
-    // Extract the requirements from the resolution.
-    let requirements = resolution.requirements().collect::<Vec<_>>();
-
     // Partition into those that should be linked from the cache (`local`), those that need to be
     // downloaded (`remote`), and those that should be removed (`extraneous`).
-    let plan = Planner::new(&requirements)
+    let plan = Planner::new(resolution)
         .build(
             site_packages,
             reinstall,
@@ -420,7 +414,6 @@ pub(crate) async fn install(
             config_settings,
             cache,
             venv,
-            markers,
             tags,
         )
         .context("Failed to determine installation plan")?;
@@ -448,17 +441,6 @@ pub(crate) async fn install(
         logger.on_audit(resolution.len(), start, printer)?;
         return Ok(Changelog::default());
     }
-
-    // Map any registry-based requirements back to those returned by the resolver.
-    let remote = remote
-        .iter()
-        .map(|dist| {
-            resolution
-                .get_remote(&dist.name)
-                .cloned()
-                .expect("Resolution should contain all packages")
-        })
-        .collect::<Vec<_>>();
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
@@ -503,7 +485,7 @@ pub(crate) async fn install(
                     );
                 }
                 Err(uv_installer::UninstallError::Uninstall(
-                    install_wheel_rs::Error::MissingRecord(_),
+                    uv_install_wheel::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
@@ -511,7 +493,7 @@ pub(crate) async fn install(
                     );
                 }
                 Err(uv_installer::UninstallError::Uninstall(
-                    install_wheel_rs::Error::MissingTopLevel(_),
+                    uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
@@ -554,6 +536,48 @@ pub(crate) async fn install(
     Ok(changelog)
 }
 
+/// Display a message about the target environment for the operation.
+pub(crate) fn report_target_environment(
+    env: &PythonEnvironment,
+    cache: &Cache,
+    printer: Printer,
+) -> Result<(), Error> {
+    let message = format!(
+        "Using Python {} environment at {}",
+        env.interpreter().python_version(),
+        env.root().user_display()
+    );
+
+    let Ok(target) = std::path::absolute(env.root()) else {
+        debug!("{}", message);
+        return Ok(());
+    };
+
+    // Do not report environments in the cache
+    if target.starts_with(cache.root()) {
+        debug!("{}", message);
+        return Ok(());
+    }
+
+    // Do not report tool environments
+    if let Ok(tools) = InstalledTools::from_settings() {
+        if target.starts_with(tools.root()) {
+            debug!("{}", message);
+            return Ok(());
+        }
+    }
+
+    // Do not report a default environment path
+    if let Ok(default) = std::path::absolute(PathBuf::from(".venv")) {
+        if target == default {
+            debug!("{}", message);
+            return Ok(());
+        }
+    }
+
+    Ok(writeln!(printer.stderr(), "{}", message.dimmed())?)
+}
+
 /// Report on the results of a dry-run installation.
 fn report_dry_run(
     resolution: &Resolution,
@@ -581,17 +605,6 @@ fn report_dry_run(
         writeln!(printer.stderr(), "Would make no changes")?;
         return Ok(());
     }
-
-    // Map any registry-based requirements back to those returned by the resolver.
-    let remote = remote
-        .iter()
-        .map(|dist| {
-            resolution
-                .get_remote(&dist.name)
-                .cloned()
-                .expect("Resolution should contain all packages")
-        })
-        .collect::<Vec<_>>();
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
@@ -754,14 +767,11 @@ pub(crate) enum Error {
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
-    Lookahead(#[from] uv_requirements::LookaheadError),
-
-    #[error(transparent)]
-    Named(#[from] uv_requirements::NamedRequirementsError),
+    Requirements(#[from] uv_requirements::Error),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 
     #[error(transparent)]
-    PubGrubSpecifier(#[from] uv_resolver::PubGrubSpecifierError),
+    VersionRangesSpecifier(#[from] uv_pep440::VersionRangesSpecifierError),
 }

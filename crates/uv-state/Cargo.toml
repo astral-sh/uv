@@ -9,11 +9,13 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
-directories = { workspace = true }
-etcetera = { workspace = true }
+uv-dirs = { workspace = true }
 tempfile = { workspace = true }
 fs-err = { workspace = true }

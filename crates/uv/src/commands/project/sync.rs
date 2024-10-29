@@ -1,35 +1,41 @@
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::project::lock::do_safe_lock;
-use crate::commands::project::{ProjectError, SharedState};
-use crate::commands::{pip, project, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
-use anyhow::{Context, Result};
-use distribution_types::{DirectorySourceDist, Dist, ResolvedDist, SourceDist};
-use itertools::Itertools;
-use pep508_rs::{MarkerTree, Requirement, VersionOrUrl};
-use pypi_types::{
-    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
-};
 use std::borrow::Cow;
 use std::path::Path;
 use std::str::FromStr;
+
+use anyhow::{Context, Result};
+use itertools::Itertools;
+use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, DevSpecification, EditableMode, ExtrasSpecification,
-    HashCheckingMode, InstallOptions,
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
+    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound,
 };
 use uv_dispatch::BuildDispatch;
+use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
+use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
+use uv_pypi_types::{
+    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, Lock};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{Source, ToolUvSources};
+use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
+
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
+use crate::commands::pip::operations;
+use crate::commands::pip::operations::Modifications;
+use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::{
+    default_dependency_groups, validate_dependency_groups, ProjectError, SharedState,
+};
+use crate::commands::{diagnostics, pip, project, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -39,7 +45,7 @@ pub(crate) async fn sync(
     frozen: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -89,6 +95,10 @@ pub(crate) async fn sync(
         warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
     }
 
+    // Determine the default groups to include.
+    validate_dependency_groups(project.pyproject_toml(), &dev)?;
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
+
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
         target.workspace(),
@@ -102,12 +112,24 @@ pub(crate) async fn sync(
     )
     .await?;
 
+    // Initialize any shared state.
+    let state = SharedState::default();
+
+    // Determine the lock mode.
+    let mode = if frozen {
+        LockMode::Frozen
+    } else if locked {
+        LockMode::Locked(venv.interpreter())
+    } else {
+        LockMode::Write(venv.interpreter())
+    };
+
     let lock = match do_safe_lock(
-        locked,
-        frozen,
+        mode,
         target.workspace(),
-        venv.interpreter(),
         settings.as_ref().into(),
+        LowerBound::Warn,
+        &state,
         Box::new(DefaultResolveLogger),
         connectivity,
         concurrency,
@@ -118,18 +140,26 @@ pub(crate) async fn sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
+        Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::NoSolution(err),
         ))) => {
-            let report = miette::Report::msg(format!("{err}")).context(err.header());
-            anstream::eprint!("{report:?}");
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::FetchAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
     };
-
-    // Initialize any shared state.
-    let state = SharedState::default();
 
     // Perform the sync operation.
     do_sync(
@@ -137,12 +167,11 @@ pub(crate) async fn sync(
         &venv,
         &lock,
         &extras,
-        dev,
+        &dev.with_defaults(defaults),
         editable,
         install_options,
         modifications,
         settings.as_ref().into(),
-        &state,
         Box::new(DefaultInstallLogger),
         connectivity,
         concurrency,
@@ -162,12 +191,11 @@ pub(super) async fn do_sync(
     venv: &PythonEnvironment,
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: DevMode,
+    dev: &DevGroupsManifest,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
     settings: InstallerSettingsRef<'_>,
-    state: &SharedState,
     logger: Box<dyn InstallLogger>,
     connectivity: Connectivity,
     concurrency: Concurrency,
@@ -175,6 +203,17 @@ pub(super) async fn do_sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
+    // Use isolated state for universal resolution. When resolving, we don't enforce that the
+    // prioritized distributions match the current platform. So if we lock here, then try to
+    // install from the same state, and we end up performing a resolution during the sync (i.e.,
+    // for the build dependencies of a source distribution), we may try to use incompatible
+    // distributions.
+    // TODO(charlie): In universal resolution, we should still track version compatibility! We
+    // just need to accept versions that are platform-incompatible. That would also make us more
+    // likely to (e.g.) download a wheel that we'll end up using when installing. This would
+    // make it safe to share the state.
+    let state = SharedState::default();
+
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -226,13 +265,6 @@ pub(super) async fn do_sync(
         }
     }
 
-    // Include development dependencies, if requested.
-    let dev = match dev {
-        DevMode::Include => DevSpecification::Include(std::slice::from_ref(&DEV_DEPENDENCIES)),
-        DevMode::Exclude => DevSpecification::Exclude,
-        DevMode::Only => DevSpecification::Only(std::slice::from_ref(&DEV_DEPENDENCIES)),
-    };
-
     // Determine the tags to use for resolution.
     let tags = venv.interpreter().tags()?;
 
@@ -254,8 +286,10 @@ pub(super) async fn do_sync(
     let resolution = apply_editable_mode(resolution, editable);
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        uv_auth::store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Populate credentials from the workspace.
@@ -284,6 +318,7 @@ pub(super) async fn do_sync(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
+    let bounds = LowerBound::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let dry_run = false;
@@ -294,7 +329,9 @@ pub(super) async fn do_sync(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
@@ -318,6 +355,7 @@ pub(super) async fn do_sync(
         build_options,
         &build_hasher,
         exclude_newer,
+        bounds,
         sources,
         concurrency,
     );
@@ -336,7 +374,6 @@ pub(super) async fn do_sync(
         index_locations,
         config_setting,
         &hasher,
-        &markers,
         tags,
         &client,
         &state.in_flight,
@@ -355,8 +392,8 @@ pub(super) async fn do_sync(
 
 /// Filter out any virtual workspace members.
 fn apply_no_virtual_project(
-    resolution: distribution_types::Resolution,
-) -> distribution_types::Resolution {
+    resolution: uv_distribution_types::Resolution,
+) -> uv_distribution_types::Resolution {
     resolution.filter(|dist| {
         let ResolvedDist::Installable(dist) = dist else {
             return true;
@@ -376,9 +413,9 @@ fn apply_no_virtual_project(
 
 /// If necessary, convert any editable requirements to non-editable.
 fn apply_editable_mode(
-    resolution: distribution_types::Resolution,
+    resolution: uv_distribution_types::Resolution,
     editable: EditableMode,
-) -> distribution_types::Resolution {
+) -> uv_distribution_types::Resolution {
     match editable {
         // No modifications are necessary for editable mode; retain any editable distributions.
         EditableMode::Editable => resolution,
@@ -426,7 +463,7 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
             .and_then(|uv| uv.sources.as_ref())
             .map(ToolUvSources::inner)
             .iter()
-            .flat_map(|sources| sources.values())
+            .flat_map(|sources| sources.values().flat_map(Sources::iter))
         {
             match source {
                 Source::Git { git, .. } => {
@@ -455,6 +492,21 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
             .into_iter()
             .flat_map(|optional| optional.values())
             .flatten();
+        let dependency_groups = member
+            .pyproject_toml()
+            .dependency_groups
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .flat_map(|(_, dependencies)| {
+                dependencies.iter().filter_map(|specifier| {
+                    if let DependencyGroupSpecifier::Requirement(requirement) = specifier {
+                        Some(requirement)
+                    } else {
+                        None
+                    }
+                })
+            });
         let dev_dependencies = member
             .pyproject_toml()
             .tool
@@ -466,6 +518,7 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
 
         for requirement in dependencies
             .chain(optional_dependencies)
+            .chain(dependency_groups)
             .filter_map(|requires_dist| {
                 LenientRequirement::<VerbatimParsedUrl>::from_str(requires_dist)
                     .map(Requirement::from)

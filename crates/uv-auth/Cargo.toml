@@ -3,16 +3,20 @@ name = "uv-auth"
 version = "0.0.1"
 edition = "2021"
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
 [dependencies]
+uv-once-map = { workspace = true }
+
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
-once-map = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rust-netrc = { workspace = true }
@@ -21,6 +25,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
+
+uv-static = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

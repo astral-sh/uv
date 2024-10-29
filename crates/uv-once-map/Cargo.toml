@@ -1,0 +1,21 @@
+[package]
+name = "uv-once-map"
+version = "0.0.1"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+dashmap = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }

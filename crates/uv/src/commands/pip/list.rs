@@ -1,22 +1,23 @@
 use std::cmp::max;
 use std::fmt::Write;
 
+use anstream::println;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use serde::Serialize;
-use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
-use distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_cache::Cache;
 use uv_cli::ListFormat;
+use uv_distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment};
 
+use crate::commands::pip::operations::report_target_environment;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -39,11 +40,7 @@ pub(crate) fn pip_list(
         cache,
     )?;
 
-    debug!(
-        "Using Python {} environment at {}",
-        environment.interpreter().python_version(),
-        environment.python_executable().user_display().cyan()
-    );
+    report_target_environment(&environment, cache, printer)?;
 
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;
@@ -60,7 +57,7 @@ pub(crate) fn pip_list(
         ListFormat::Json => {
             let rows = results.iter().copied().map(Entry::from).collect_vec();
             let output = serde_json::to_string(&rows)?;
-            writeln!(printer.stdout(), "{output}")?;
+            println!("{output}");
         }
         ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
@@ -101,18 +98,13 @@ pub(crate) fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                writeln!(printer.stdout(), "{}", elems.join(" ").trim_end())?;
+                println!("{}", elems.join(" ").trim_end());
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
-                writeln!(
-                    printer.stdout(),
-                    "{}=={}",
-                    dist.name().bold(),
-                    dist.version()
-                )?;
+                println!("{}=={}", dist.name().bold(), dist.version());
             }
         }
     }

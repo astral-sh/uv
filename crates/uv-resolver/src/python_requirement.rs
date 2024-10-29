@@ -1,5 +1,5 @@
-use pep440_rs::Version;
-use pep508_rs::MarkerTree;
+use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_python::{Interpreter, PythonVersion};
 
 use crate::{RequiresPython, RequiresPythonRange};
@@ -69,6 +69,12 @@ impl PythonRequirement {
             target: self.target.narrow(target)?,
             source: self.source,
         })
+    }
+
+    /// Returns `true` if the minimum version of Python required by the target is greater than the
+    /// installed version.
+    pub fn raises(&self, target: &RequiresPythonRange) -> bool {
+        target.lower() > self.target.range().lower()
     }
 
     /// Return the exact version of Python.

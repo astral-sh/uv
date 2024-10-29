@@ -5,7 +5,7 @@ use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use url::Url;
 
-use distribution_filename::{WheelFilename, WheelFilenameError};
+use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
 
 use crate::html;
@@ -56,6 +56,7 @@ impl Error {
         match &*self.kind {
             // The server doesn't support range requests (as reported by the `HEAD` check).
             ErrorKind::AsyncHttpRangeReader(
+                _,
                 AsyncHttpRangeReaderError::HttpRangeRequestUnsupported,
             ) => {
                 return true;
@@ -63,6 +64,7 @@ impl Error {
 
             // The server doesn't support range requests (it doesn't return the necessary headers).
             ErrorKind::AsyncHttpRangeReader(
+                _,
                 AsyncHttpRangeReaderError::ContentLengthMissing
                 | AsyncHttpRangeReaderError::ContentRangeMissing,
             ) => {
@@ -71,7 +73,7 @@ impl Error {
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            ErrorKind::WrappedReqwestError(err) => {
+            ErrorKind::WrappedReqwestError(_url, err) => {
                 if let Some(status) = err.status() {
                     // If the server doesn't support HEAD requests, we can't check for range
                     // requests.
@@ -140,7 +142,7 @@ pub enum ErrorKind {
     UrlParse(#[from] url::ParseError),
 
     #[error(transparent)]
-    JoinRelativeUrl(#[from] pypi_types::JoinRelativeError),
+    JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
 
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),
@@ -170,7 +172,7 @@ pub enum ErrorKind {
     MetadataParseError(
         WheelFilename,
         String,
-        #[source] Box<pypi_types::MetadataError>,
+        #[source] Box<uv_pypi_types::MetadataError>,
     ),
 
     /// The metadata file was not found in the wheel.
@@ -178,8 +180,8 @@ pub enum ErrorKind {
     MetadataNotFound(WheelFilename, String),
 
     /// An error that happened while making a request or in a reqwest middleware.
-    #[error(transparent)]
-    WrappedReqwestError(#[from] WrappedReqwestError),
+    #[error("Failed to fetch: `{0}`")]
+    WrappedReqwestError(Url, #[source] WrappedReqwestError),
 
     #[error("Received some unexpected JSON from {url}")]
     BadJson { source: serde_json::Error, url: Url },
@@ -187,8 +189,8 @@ pub enum ErrorKind {
     #[error("Received some unexpected HTML from {url}")]
     BadHtml { source: html::Error, url: Url },
 
-    #[error(transparent)]
-    AsyncHttpRangeReader(#[from] AsyncHttpRangeReaderError),
+    #[error("Failed to read zip with range requests: `{0}`")]
+    AsyncHttpRangeReader(Url, #[source] AsyncHttpRangeReaderError),
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),
@@ -206,7 +208,7 @@ pub enum ErrorKind {
     CacheWrite(#[source] std::io::Error),
 
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
 
     #[error("Cache deserialization failed")]
     Decode(#[source] rmp_serde::decode::Error),
@@ -233,21 +235,19 @@ pub enum ErrorKind {
     Offline(String),
 }
 
-impl From<reqwest::Error> for ErrorKind {
-    fn from(error: reqwest::Error) -> Self {
-        Self::WrappedReqwestError(WrappedReqwestError::from(error))
+impl ErrorKind {
+    pub(crate) fn from_reqwest(url: Url, error: reqwest::Error) -> Self {
+        Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
     }
-}
 
-impl From<reqwest_middleware::Error> for ErrorKind {
-    fn from(err: reqwest_middleware::Error) -> Self {
+    pub(crate) fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(err) = underlying.downcast_ref::<OfflineError>() {
                 return Self::Offline(err.url().to_string());
             }
         }
 
-        Self::WrappedReqwestError(WrappedReqwestError(err))
+        Self::WrappedReqwestError(url, WrappedReqwestError(err))
     }
 }
 
