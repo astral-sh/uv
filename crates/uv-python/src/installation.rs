@@ -131,6 +131,7 @@ impl PythonInstallation {
         let download = ManagedPythonDownload::from_request(&request)?;
         let client = client_builder.build();
         let python_install_mirror = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
+        let pypy_install_mirror = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
 
         info!("Fetching requested Python...");
         let result = download
@@ -140,6 +141,7 @@ impl PythonInstallation {
                 &cache_dir,
                 false,
                 python_install_mirror,
+                pypy_install_mirror,
                 reporter,
             )
             .await?;

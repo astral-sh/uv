@@ -1056,6 +1056,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.reinstall,
                 args.force,
                 args.python_install_mirror,
+                args.pypy_install_mirror,
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,

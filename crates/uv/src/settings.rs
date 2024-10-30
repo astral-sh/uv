@@ -631,17 +631,28 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
     pub(crate) python_install_mirror: Option<String>,
+    pub(crate) pypy_install_mirror: Option<String>,
 }
 
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let options = filesystem.map(|fs_options| fs_options.into_options());
         let python_install_mirror = if args.python_install_mirror.is_some() {
             args.python_install_mirror
         } else {
-            match filesystem {
-                Some(options) => options.into_options().globals.python_install_mirror,
+            match &options {
+                Some(options) => options.globals.python_install_mirror.clone(),
+                None => None,
+            }
+        };
+
+        let pypy_install_mirror = if args.pypy_install_mirror.is_some() {
+            args.pypy_install_mirror
+        } else {
+            match options {
+                Some(options) => options.globals.pypy_install_mirror,
                 None => None,
             }
         };
@@ -651,6 +662,7 @@ impl PythonInstallSettings {
             reinstall,
             force,
             python_install_mirror: _,
+            pypy_install_mirror: _,
         } = args;
 
         Self {
@@ -658,6 +670,7 @@ impl PythonInstallSettings {
             reinstall,
             force,
             python_install_mirror,
+            pypy_install_mirror,
         }
     }
 }
