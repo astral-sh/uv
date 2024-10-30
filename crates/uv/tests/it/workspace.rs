@@ -1766,7 +1766,6 @@ fn test_path_hopping() -> Result<()> {
 /// are correctly resolving `d` to a git dependency with a subdirectory and not relative to the
 /// checkout directory.
 #[test]
-#[cfg(not(windows))]
 fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1789,7 +1788,6 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
     let lock1: SourceLock =
         toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
 
-    // TODO(charlie): Fails on Windows due to non-portable subdirectory path in URL.
     assert_json_snapshot!(lock1.sources(), @r###"
     {
       "a": {

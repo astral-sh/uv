@@ -3152,9 +3152,15 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     url.set_query(None);
 
     // Put the subdirectory in the query.
-    if let Some(subdirectory) = git_dist.subdirectory.as_deref().and_then(Path::to_str) {
+    if let Some(subdirectory) = git_dist
+        .subdirectory
+        .as_deref()
+        .map(PortablePath::from)
+        .as_ref()
+        .map(PortablePath::to_string)
+    {
         url.query_pairs_mut()
-            .append_pair("subdirectory", subdirectory);
+            .append_pair("subdirectory", &subdirectory);
     }
 
     // Put the requested reference in the query.
