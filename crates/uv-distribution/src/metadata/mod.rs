@@ -4,7 +4,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use uv_configuration::{LowerBound, SourceStrategy};
-use uv_distribution_types::IndexLocations;
+use uv_distribution_types::{GitSourceUrl, IndexLocations};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigest, ResolutionMetadata};
@@ -65,23 +65,26 @@ impl Metadata {
     pub async fn from_workspace(
         metadata: ResolutionMetadata,
         install_path: &Path,
+        git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
         bounds: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
+        let requires_dist = uv_pypi_types::RequiresDist {
+            name: metadata.name,
+            requires_dist: metadata.requires_dist,
+            provides_extras: metadata.provides_extras,
+        };
         let RequiresDist {
             name,
             requires_dist,
             provides_extras,
             dependency_groups,
         } = RequiresDist::from_project_maybe_workspace(
-            uv_pypi_types::RequiresDist {
-                name: metadata.name,
-                requires_dist: metadata.requires_dist,
-                provides_extras: metadata.provides_extras,
-            },
+            requires_dist,
             install_path,
+            git_source,
             locations,
             sources,
             bounds,
@@ -132,4 +135,13 @@ impl From<Metadata> for ArchiveMetadata {
             hashes: vec![],
         }
     }
+}
+
+/// A workspace member from a checked-out Git repo.
+#[derive(Debug, Clone)]
+pub struct GitWorkspaceMember<'a> {
+    /// The root of the checkout, which may be the root of the workspace or may be above the
+    /// workspace root.
+    pub fetch_root: &'a Path,
+    pub git_source: &'a GitSourceUrl<'a>,
 }

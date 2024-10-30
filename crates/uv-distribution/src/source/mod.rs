@@ -33,7 +33,7 @@ use zip::ZipArchive;
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
-use crate::metadata::{ArchiveMetadata, Metadata};
+use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::reporter::Facade;
 use crate::source::built_wheel_metadata::BuiltWheelMetadata;
 use crate::source::revision::Revision;
@@ -389,6 +389,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             project_root,
+            None,
             self.build_context.locations(),
             self.build_context.sources(),
             self.build_context.bounds(),
@@ -1083,6 +1084,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1119,6 +1121,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1150,6 +1153,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     resource.install_path.as_ref(),
+                    None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1197,6 +1201,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 resource.install_path.as_ref(),
+                None,
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.bounds(),
@@ -1378,10 +1383,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) =
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
+            let git_member = GitWorkspaceMember {
+                fetch_root: fetch.path(),
+                git_source: resource,
+            };
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
                     &path,
+                    Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1410,6 +1420,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     Metadata::from_workspace(
                         metadata,
                         &path,
+                        None,
                         self.build_context.locations(),
                         self.build_context.sources(),
                         self.build_context.bounds(),
@@ -1442,6 +1453,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     &path,
+                    None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1489,6 +1501,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 fetch.path(),
+                None,
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.bounds(),
