@@ -38,8 +38,8 @@ impl RequiresDist {
     /// dependencies.
     pub async fn from_project_maybe_workspace(
         metadata: uv_pypi_types::RequiresDist,
-        git_member: Option<&GitWorkspaceMember<'_>>,
         install_path: &Path,
+        git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
         lower_bound: LowerBound,
@@ -67,20 +67,20 @@ impl RequiresDist {
         Self::from_project_workspace(
             metadata,
             &project_workspace,
+            git_member,
             locations,
             sources,
             lower_bound,
-            git_member,
         )
     }
 
     fn from_project_workspace(
         metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         lower_bound: LowerBound,
-        git_member: Option<&GitWorkspaceMember<'_>>,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -282,10 +282,10 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
+            None,
             &IndexLocations::default(),
             SourceStrategy::default(),
             LowerBound::default(),
-            None,
         )?)
     }
 

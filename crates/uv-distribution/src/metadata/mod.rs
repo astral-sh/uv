@@ -64,8 +64,8 @@ impl Metadata {
     /// dependencies.
     pub async fn from_workspace(
         metadata: ResolutionMetadata,
-        git_source: Option<&GitWorkspaceMember<'_>>,
         install_path: &Path,
+        git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
         bounds: LowerBound,
@@ -83,8 +83,8 @@ impl Metadata {
             dependency_groups,
         } = RequiresDist::from_project_maybe_workspace(
             requires_dist,
-            git_source,
             install_path,
+            git_source,
             locations,
             sources,
             bounds,
@@ -137,7 +137,7 @@ impl From<Metadata> for ArchiveMetadata {
     }
 }
 
-/// A workspace member from a checked out git repo.
+/// A workspace member from a checked-out Git repo.
 #[derive(Debug, Clone)]
 pub struct GitWorkspaceMember<'a> {
     /// The root of the checkout, which may be the root of the workspace or may be above the

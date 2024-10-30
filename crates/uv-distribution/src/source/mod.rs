@@ -388,8 +388,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let requires_dist = read_requires_dist(project_root).await?;
         let requires_dist = RequiresDist::from_project_maybe_workspace(
             requires_dist,
-            None,
             project_root,
+            None,
             self.build_context.locations(),
             self.build_context.sources(),
             self.build_context.bounds(),
@@ -1083,8 +1083,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    None,
                     resource.install_path.as_ref(),
+                    None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1120,8 +1120,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    None,
                     resource.install_path.as_ref(),
+                    None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1152,8 +1152,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    None,
                     resource.install_path.as_ref(),
+                    None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1200,8 +1200,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
                 metadata,
-                None,
                 resource.install_path.as_ref(),
+                None,
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.bounds(),
@@ -1390,8 +1390,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    Some(&git_member),
                     &path,
+                    Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1419,8 +1419,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
-                        None,
                         &path,
+                        None,
                         self.build_context.locations(),
                         self.build_context.sources(),
                         self.build_context.bounds(),
@@ -1452,8 +1452,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
-                    None,
                     &path,
+                    None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1500,8 +1500,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(ArchiveMetadata::from(
             Metadata::from_workspace(
                 metadata,
-                None,
                 fetch.path(),
+                None,
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.bounds(),

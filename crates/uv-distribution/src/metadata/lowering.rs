@@ -1,10 +1,11 @@
-use crate::metadata::GitWorkspaceMember;
-use either::Either;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use either::Either;
 use thiserror::Error;
 use url::Url;
+
 use uv_configuration::LowerBound;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
@@ -16,6 +17,8 @@ use uv_pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimPars
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
+
+use crate::metadata::GitWorkspaceMember;
 
 #[derive(Debug, Clone)]
 pub struct LoweredRequirement(Requirement);
