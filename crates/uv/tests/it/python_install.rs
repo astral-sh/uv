@@ -16,7 +16,6 @@ fn python_install() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python installations
     Installed Python 3.13.0 in [TIME]
      + cpython-3.13.0-[PLATFORM]
     "###);
@@ -36,9 +35,7 @@ fn python_install() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python installations
-    Found: cpython-3.13.0-[PLATFORM]
-    Python is already available. Use `uv python install <request>` to install a specific version.
+    Python is already installed. Use `uv python install <request>` to install another version.
     "###);
 
     // Similarly, when a requested version is already installed
@@ -48,8 +45,6 @@ fn python_install() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python versions matching: Python 3.13
-    Found existing installation for Python 3.13: cpython-3.13.0-[PLATFORM]
     "###);
 
     // You can opt-in to a reinstall
@@ -59,8 +54,6 @@ fn python_install() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python installations
-    Found: cpython-3.13.0-[PLATFORM]
     Installed Python 3.13.0 in [TIME]
      ~ cpython-3.13.0-[PLATFORM]
     "###);
@@ -102,7 +95,6 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python installations
     Installed Python 3.13.0 in [TIME]
      + cpython-3.13.0-[PLATFORM]
     warning: `[TEMP_DIR]/bin` is not on your PATH. To use the installed Python executable, run `export PATH="[TEMP_DIR]/bin:$PATH"`.
@@ -138,9 +130,7 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python installations
-    Found: cpython-3.13.0-[PLATFORM]
-    Python is already available. Use `uv python install <request>` to install a specific version.
+    Python is already installed. Use `uv python install <request>` to install another version.
     "###);
 
     // You can opt-in to a reinstall
@@ -150,8 +140,6 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python installations
-    Found: cpython-3.13.0-[PLATFORM]
     Installed Python 3.13.0 in [TIME]
      ~ cpython-3.13.0-[PLATFORM]
     warning: `[TEMP_DIR]/bin` is not on your PATH. To use the installed Python executable, run `export PATH="[TEMP_DIR]/bin:$PATH"`.
@@ -201,7 +189,6 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python versions matching: Python 3.13t
     Installed Python 3.13.0 in [TIME]
      + cpython-3.13.0+freethreaded-[PLATFORM]
     warning: `[TEMP_DIR]/bin` is not on your PATH. To use the installed Python executable, run `export PATH="[TEMP_DIR]/bin:$PATH"`.
@@ -237,7 +224,6 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python versions matching: Python 3.13
     Installed Python 3.13.0 in [TIME]
      + cpython-3.13.0-[PLATFORM]
     "###);
@@ -249,7 +235,6 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Searching for Python versions matching: Python 3.12t
     error: No download found for request: cpython-3.12t-[PLATFORM]
     "###);
 
