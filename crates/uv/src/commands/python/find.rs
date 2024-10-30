@@ -55,7 +55,7 @@ pub(crate) async fn find(
             };
 
         if let Some(project) = project {
-            request = find_requires_python(project.workspace())?
+            request = find_requires_python(project.workspace())
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {

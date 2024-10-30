@@ -32,6 +32,8 @@ pub enum Operator {
     /// `!= 1.2.*`
     NotEqualStar,
     /// `~=`
+    ///
+    /// Invariant: With `~=`, there are always at least 2 release segments.
     TildeEqual,
     /// `<`
     LessThan,

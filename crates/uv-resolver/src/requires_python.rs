@@ -1,21 +1,11 @@
-use itertools::Itertools;
 use pubgrub::Range;
 use std::cmp::Ordering;
 use std::collections::Bound;
 use std::ops::Deref;
 
 use uv_distribution_filename::WheelFilename;
-use uv_pep440::{
-    Version, VersionRangesSpecifier, VersionRangesSpecifierError, VersionSpecifier,
-    VersionSpecifiers,
-};
+use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
-
-#[derive(thiserror::Error, Debug)]
-pub enum RequiresPythonError {
-    #[error(transparent)]
-    VersionRangesSpecifier(#[from] VersionRangesSpecifierError),
-}
 
 /// The `Requires-Python` requirement specifier.
 ///
@@ -54,16 +44,15 @@ impl RequiresPython {
     }
 
     /// Returns a [`RequiresPython`] from a version specifier.
-    pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Result<Self, RequiresPythonError> {
-        let (lower_bound, upper_bound) =
-            VersionRangesSpecifier::from_release_specifiers(specifiers)?
-                .bounding_range()
-                .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
-                .unwrap_or((Bound::Unbounded, Bound::Unbounded));
-        Ok(Self {
+    pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Self {
+        let (lower_bound, upper_bound) = release_specifiers_to_ranges(specifiers.clone())
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        Self {
             specifiers: specifiers.clone(),
             range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),
-        })
+        }
     }
 
     /// Returns a [`RequiresPython`] to express the intersection of the given version specifiers.
@@ -71,22 +60,18 @@ impl RequiresPython {
     /// For example, given `>=3.8` and `>=3.9`, this would return `>=3.9`.
     pub fn intersection<'a>(
         specifiers: impl Iterator<Item = &'a VersionSpecifiers>,
-    ) -> Result<Option<Self>, RequiresPythonError> {
+    ) -> Option<Self> {
         // Convert to PubGrub range and perform an intersection.
         let range = specifiers
             .into_iter()
-            .map(VersionRangesSpecifier::from_release_specifiers)
-            .fold_ok(None, |range: Option<Range<Version>>, requires_python| {
+            .map(|specifier| release_specifiers_to_ranges(specifier.clone()))
+            .fold(None, |range: Option<Range<Version>>, requires_python| {
                 if let Some(range) = range {
-                    Some(range.intersection(&requires_python.into()))
+                    Some(range.intersection(&requires_python))
                 } else {
-                    Some(requires_python.into())
+                    Some(requires_python)
                 }
             })?;
-
-        let Some(range) = range else {
-            return Ok(None);
-        };
 
         // Extract the bounds.
         let (lower_bound, upper_bound) = range
@@ -102,10 +87,10 @@ impl RequiresPython {
         // Convert back to PEP 440 specifiers.
         let specifiers = VersionSpecifiers::from_release_only_bounds(range.iter());
 
-        Ok(Some(Self {
+        Some(Self {
             specifiers,
             range: RequiresPythonRange(lower_bound, upper_bound),
-        }))
+        })
     }
 
     /// Narrow the [`RequiresPython`] by computing the intersection with the given range.
@@ -260,14 +245,10 @@ impl RequiresPython {
     /// N.B. This operation should primarily be used when evaluating the compatibility of a
     /// project's `Requires-Python` specifier against a dependency's `Requires-Python` specifier.
     pub fn is_contained_by(&self, target: &VersionSpecifiers) -> bool {
-        let Ok(target) = VersionRangesSpecifier::from_release_specifiers(target) else {
-            return false;
-        };
-        let target = target
-            .iter()
-            .next()
-            .map(|(lower, _)| lower)
-            .unwrap_or(&Bound::Unbounded);
+        let target = release_specifiers_to_ranges(target.clone())
+            .bounding_range()
+            .map(|bounding_range| bounding_range.0.cloned())
+            .unwrap_or(Bound::Unbounded);
 
         // We want, e.g., `self.range.lower()` to be `>=3.8` and `target` to be `>=3.7`.
         //
@@ -508,12 +489,10 @@ impl serde::Serialize for RequiresPython {
 impl<'de> serde::Deserialize<'de> for RequiresPython {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let specifiers = VersionSpecifiers::deserialize(deserializer)?;
-        let (lower_bound, upper_bound) =
-            VersionRangesSpecifier::from_release_specifiers(&specifiers)
-                .map_err(serde::de::Error::custom)?
-                .bounding_range()
-                .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
-                .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        let (lower_bound, upper_bound) = release_specifiers_to_ranges(specifiers.clone())
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
         Ok(Self {
             specifiers,
             range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),

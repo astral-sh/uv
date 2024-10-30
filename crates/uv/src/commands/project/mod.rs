@@ -177,9 +177,6 @@ pub(crate) enum ProjectError {
     Operation(#[from] pip::operations::Error),
 
     #[error(transparent)]
-    RequiresPython(#[from] uv_resolver::RequiresPythonError),
-
-    #[error(transparent)]
     Interpreter(#[from] uv_python::InterpreterError),
 
     #[error(transparent)]
@@ -208,9 +205,7 @@ pub(crate) enum ProjectError {
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-pub(crate) fn find_requires_python(
-    workspace: &Workspace,
-) -> Result<Option<RequiresPython>, uv_resolver::RequiresPythonError> {
+pub(crate) fn find_requires_python(workspace: &Workspace) -> Option<RequiresPython> {
     RequiresPython::intersection(workspace.packages().values().filter_map(|member| {
         member
             .pyproject_toml()
@@ -341,7 +336,7 @@ impl WorkspacePython {
         python_request: Option<PythonRequest>,
         workspace: &Workspace,
     ) -> Result<Self, ProjectError> {
-        let requires_python = find_requires_python(workspace)?;
+        let requires_python = find_requires_python(workspace);
 
         let (source, python_request) = if let Some(request) = python_request {
             // (1) Explicit request from user

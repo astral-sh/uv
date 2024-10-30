@@ -1,23 +1,21 @@
 use std::iter;
 
-use itertools::Itertools;
-use pubgrub::Range;
+use pubgrub::Ranges;
 use tracing::warn;
 
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::{Version, VersionRangesSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
     RequirementSource, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
-use crate::ResolveError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
-    pub(crate) version: Range<Version>,
+    pub(crate) version: Ranges<Version>,
 
     /// The original version specifiers from the requirement.
     pub(crate) specifier: Option<VersionSpecifiers>,
@@ -32,12 +30,12 @@ impl PubGrubDependency {
     pub(crate) fn from_requirement<'a>(
         requirement: &'a Requirement,
         source_name: Option<&'a PackageName>,
-    ) -> impl Iterator<Item = Result<Self, ResolveError>> + 'a {
+    ) -> impl Iterator<Item = Self> + 'a {
         // Add the package, plus any extra variants.
         iter::once(None)
             .chain(requirement.extras.clone().into_iter().map(Some))
             .map(|extra| PubGrubRequirement::from_requirement(requirement, extra))
-            .filter_map_ok(move |requirement| {
+            .filter_map(move |requirement| {
                 let PubGrubRequirement {
                     package,
                     version,
@@ -87,7 +85,7 @@ impl PubGrubDependency {
 #[derive(Debug, Clone)]
 pub(crate) struct PubGrubRequirement {
     pub(crate) package: PubGrubPackage,
-    pub(crate) version: Range<Version>,
+    pub(crate) version: Ranges<Version>,
     pub(crate) specifier: Option<VersionSpecifiers>,
     pub(crate) url: Option<VerbatimParsedUrl>,
 }
@@ -95,10 +93,7 @@ pub(crate) struct PubGrubRequirement {
 impl PubGrubRequirement {
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
-    pub(crate) fn from_requirement(
-        requirement: &Requirement,
-        extra: Option<ExtraName>,
-    ) -> Result<Self, ResolveError> {
+    pub(crate) fn from_requirement(requirement: &Requirement, extra: Option<ExtraName>) -> Self {
         let (verbatim_url, parsed_url) = match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
                 return Self::from_registry_requirement(specifier, extra, requirement);
@@ -159,29 +154,27 @@ impl PubGrubRequirement {
             }
         };
 
-        Ok(Self {
+        Self {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),
                 extra,
                 requirement.marker.clone(),
             ),
-            version: Range::full(),
+            version: Ranges::full(),
             specifier: None,
             url: Some(VerbatimParsedUrl {
                 parsed_url,
                 verbatim: verbatim_url.clone(),
             }),
-        })
+        }
     }
 
     fn from_registry_requirement(
         specifier: &VersionSpecifiers,
         extra: Option<ExtraName>,
         requirement: &Requirement,
-    ) -> Result<PubGrubRequirement, ResolveError> {
-        let version = VersionRangesSpecifier::from_pep440_specifiers(specifier)?.into();
-
-        let requirement = Self {
+    ) -> PubGrubRequirement {
+        Self {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),
                 extra,
@@ -189,9 +182,7 @@ impl PubGrubRequirement {
             ),
             specifier: Some(specifier.clone()),
             url: None,
-            version,
-        };
-
-        Ok(requirement)
+            version: Ranges::from(specifier.clone()),
+        }
     }
 }
