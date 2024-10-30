@@ -224,6 +224,19 @@ pub struct GlobalOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
+    /// The URL to use as the source for downloading Python installations.
+    ///
+    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
+        "#
+    )]
+    pub python_install_mirror: Option<String>,
 }
 
 /// Settings relevant to all installer operations.
@@ -1512,6 +1525,7 @@ pub struct OptionsWire {
     concurrent_downloads: Option<NonZeroUsize>,
     concurrent_builds: Option<NonZeroUsize>,
     concurrent_installs: Option<NonZeroUsize>,
+    python_install_mirror: Option<String>,
 
     // #[serde(flatten)]
     // top_level: ResolverInstallerOptions
@@ -1582,6 +1596,7 @@ impl From<OptionsWire> for Options {
             preview,
             python_preference,
             python_downloads,
+            python_install_mirror,
             concurrent_downloads,
             concurrent_builds,
             concurrent_installs,
@@ -1635,6 +1650,7 @@ impl From<OptionsWire> for Options {
                 preview,
                 python_preference,
                 python_downloads,
+                python_install_mirror,
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,

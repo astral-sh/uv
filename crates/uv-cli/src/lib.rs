@@ -3942,6 +3942,14 @@ pub struct PythonInstallArgs {
     /// See `uv help python` to view supported request formats.
     pub targets: Vec<String>,
 
+    /// Set the URL to use as the source for downloading Python installations.
+    ///
+    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    pub python_install_mirror: Option<String>,
+
     /// Reinstall the requested Python version, if it's already installed.
     ///
     /// By default, uv will exit successfully if the version is already

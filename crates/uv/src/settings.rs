@@ -630,22 +630,34 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
+    pub(crate) python_install_mirror: Option<String>,
 }
 
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonInstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: PythonInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let python_install_mirror = if args.python_install_mirror.is_some() {
+            args.python_install_mirror
+        } else {
+            match filesystem {
+                Some(options) => options.into_options().globals.python_install_mirror,
+                None => None,
+            }
+        };
+
         let PythonInstallArgs {
             targets,
             reinstall,
             force,
+            python_install_mirror: _,
         } = args;
 
         Self {
             targets,
             reinstall,
             force,
+            python_install_mirror,
         }
     }
 }

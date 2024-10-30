@@ -6,6 +6,7 @@ use tracing::{debug, info};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_pep440::{Prerelease, Version};
+use uv_static::EnvVars;
 
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
@@ -129,10 +130,18 @@ impl PythonInstallation {
 
         let download = ManagedPythonDownload::from_request(&request)?;
         let client = client_builder.build();
+        let python_install_mirror = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(&client, installations_dir, &cache_dir, false, reporter)
+            .fetch(
+                &client,
+                installations_dir,
+                &cache_dir,
+                false,
+                python_install_mirror,
+                reporter,
+            )
             .await?;
 
         let path = match result {

@@ -368,6 +368,13 @@
         }
       ]
     },
+    "python-install-mirror": {
+      "description": "The URL to use as the source for downloading Python installations.\n\nThe provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "python-preference": {
       "description": "Whether to prefer using Python installations that are already present on the system, or those that are downloaded and installed by uv.",
       "anyOf": [
