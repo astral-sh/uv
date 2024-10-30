@@ -6,6 +6,7 @@ use crate::{
     version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "tracing")]
 use tracing::warn;
 
 /// Sorted version specifiers, such as `>=2.1,<3`.
@@ -23,19 +24,12 @@ use tracing::warn;
 /// // VersionSpecifiers derefs into a list of specifiers
 /// assert_eq!(version_specifiers.iter().position(|specifier| *specifier.operator() == Operator::LessThan), Some(1));
 /// ```
-#[derive(
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Debug,
-    Clone,
-    Hash,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-#[rkyv(derive(Debug))]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VersionSpecifiers(Vec<VersionSpecifier>);
 
 impl std::ops::Deref for VersionSpecifiers {
@@ -97,6 +91,7 @@ impl VersionSpecifiers {
                     specifiers.push(VersionSpecifier::not_equals_star_version(prev.clone()));
                 }
                 _ => {
+                    #[cfg(feature = "tracing")]
                     warn!("Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}");
                 }
             }
@@ -239,19 +234,12 @@ impl std::error::Error for VersionSpecifiersParseError {}
 /// let version_specifier = VersionSpecifier::from_str("== 1.*").unwrap();
 /// assert!(version_specifier.contains(&version));
 /// ```
-#[derive(
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Debug,
-    Clone,
-    Hash,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
+#[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-#[rkyv(derive(Debug))]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VersionSpecifier {
     /// ~=|==|!=|<=|>=|<|>|===, plus whether the version ended with a star
     pub(crate) operator: Operator,
