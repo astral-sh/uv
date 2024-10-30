@@ -33,27 +33,60 @@ use windows::Win32::{
 
 use crate::{eprintln, format};
 
-const MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 const PATH_LEN_SIZE: usize = size_of::<u32>();
 const MAX_PATH_LEN: u32 = 32 * 1024;
 
-/// Transform `<command> <arguments>` to `python <command> <arguments>`.
+/// The kind of trampoline.
+enum TrampolineKind {
+    /// The trampoline should execute itself, it's a zipped Python script.
+    Script,
+    /// The trampoline should just execute Python, it's a proxy Python executable.
+    Python,
+}
+
+impl TrampolineKind {
+    const fn magic_number(&self) -> &'static [u8; 4] {
+        match self {
+            Self::Script => b"UVSC",
+            Self::Python => b"UVPY",
+        }
+    }
+
+    fn from_buffer(buffer: &[u8]) -> Option<Self> {
+        if buffer.ends_with(Self::Script.magic_number()) {
+            Some(Self::Script)
+        } else if buffer.ends_with(Self::Python.magic_number()) {
+            Some(Self::Python)
+        } else {
+            None
+        }
+    }
+}
+
+/// Transform `<command> <arguments>` to `python <command> <arguments>` or `python <arguments>`
+/// depending on the [`TrampolineKind`].
 fn make_child_cmdline() -> CString {
     let executable_name = std::env::current_exe().unwrap_or_else(|_| {
         eprintln!("Failed to get executable name");
         exit_with_status(1);
     });
-    let python_exe = find_python_exe(executable_name.as_ref());
+    let (kind, python_exe) = read_trampoline_metadata(executable_name.as_ref());
     let mut child_cmdline = Vec::<u8>::new();
 
     push_quoted_path(python_exe.as_ref(), &mut child_cmdline);
     child_cmdline.push(b' ');
 
-    // Use the full executable name because CMD only passes the name of the executable (but not the path)
-    // when e.g. invoking `black` instead of `<PATH_TO_VENV>/Scripts/black` and Python then fails
-    // to find the file. Unfortunately, this complicates things because we now need to split the executable
-    // from the arguments string...
-    push_quoted_path(executable_name.as_ref(), &mut child_cmdline);
+    // Only execute the trampoline again if it's a script, otherwise, just invoke Python.
+    match kind {
+        TrampolineKind::Python => {}
+        TrampolineKind::Script => {
+            // Use the full executable name because CMD only passes the name of the executable (but not the path)
+            // when e.g. invoking `black` instead of `<PATH_TO_VENV>/Scripts/black` and Python then fails
+            // to find the file. Unfortunately, this complicates things because we now need to split the executable
+            // from the arguments string...
+            push_quoted_path(executable_name.as_ref(), &mut child_cmdline);
+        }
+    }
 
     push_arguments(&mut child_cmdline);
 
@@ -86,18 +119,21 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
     command.extend(br#"""#);
 }
 
-/// Reads the executable binary from the back to find the path to the Python executable that is written
-/// before the ZIP file content.
+/// Reads the executable binary from the back to find:
+///
+/// * The path to the Python executable
+/// * The kind of trampoline we are executing
 ///
 /// The executable is expected to have the following format:
-/// * The last part of the file is ZIP file content.
-/// * The remain part must end with the magic number 'UVUV'.
-/// * The last 4 bytes (little endian) before 'UVUV' are the length of the path to the Python executable.
+///
+/// * The file must end with the magic number 'UVPY' or 'UVSC' (identifying the trampoline kind)
+/// * The last 4 bytes (little endian) are the length of the path to the Python executable.
 /// * The path encoded as UTF-8 comes right before the length
 ///
 /// # Panics
+///
 /// If there's any IO error, or the file does not conform to the specified format.
-fn find_python_exe(executable_name: &Path) -> PathBuf {
+fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf) {
     let mut file_handle = File::open(executable_name).unwrap_or_else(|_| {
         print_last_error_and_exit(&format!(
             "Failed to open executable '{}'",
@@ -113,56 +149,18 @@ fn find_python_exe(executable_name: &Path) -> PathBuf {
     });
     let file_size = metadata.len();
 
-    // Read the entire end of central directory (EOCD) of the ZIP file, which is 22 bytes long.
-    let mut eocd_buf: Vec<u8> = vec![0; 22];
-
-    file_handle
-        .seek(SeekFrom::Start(file_size - 22))
-        .unwrap_or_else(|_| {
-            print_last_error_and_exit("Failed to set the file pointer to the start of zip EOCD");
-        });
-
-    let read_bytes = file_handle.read(&mut eocd_buf).unwrap_or_else(|_| {
-        print_last_error_and_exit("Failed to read the zip EOCD");
-    });
-
-    if read_bytes != 22 {
-        eprintln!(
-            "Failed to read the EOCD. Expected 22 bytes but read {}",
-            read_bytes
-        );
-        exit_with_status(1);
-    }
-
-    // Size of the central directory (in bytes)
-    let cd_size = u32::from_le_bytes(eocd_buf[12..16].try_into().unwrap_or_else(|_| {
-        eprintln!("Slice length is not equal to 4 bytes");
-        exit_with_status(1);
-    }));
-
-    // Offset of central directory (unit is bytes).
-    // In other words, the number of bytes in the ZIP file at which the central directory starts.
-    let cd_offset = u32::from_le_bytes(eocd_buf[16..20].try_into().unwrap_or_else(|_| {
-        eprintln!("Slice length is not equal to 4 bytes");
-        exit_with_status(1);
-    }));
-
-    // Calculate the position in the entire executable where the content of the ZIP file begins.
-    let end_of_cd = file_size - 22;
-    let start_of_cd = end_of_cd - cd_size as u64;
-    let start_of_zip = start_of_cd - cd_offset as u64;
-
     // Start with a size of 1024 bytes which should be enough for most paths but avoids reading the
     // entire file.
     let mut buffer: Vec<u8> = Vec::new();
     let mut bytes_to_read = 1024.min(u32::try_from(file_size).unwrap_or(u32::MAX));
 
+    let mut kind;
     let path: String = loop {
         // SAFETY: Casting to usize is safe because we only support 64bit systems where usize is guaranteed to be larger than u32.
         buffer.resize(bytes_to_read as usize, 0);
 
         file_handle
-            .seek(SeekFrom::Start(start_of_zip - u64::from(bytes_to_read)))
+            .seek(SeekFrom::Start(file_size - u64::from(bytes_to_read)))
             .unwrap_or_else(|_| {
                 print_last_error_and_exit("Failed to set the file pointer to the end of the file");
             });
@@ -175,13 +173,14 @@ fn find_python_exe(executable_name: &Path) -> PathBuf {
         // Truncate the buffer to the actual number of bytes read.
         buffer.truncate(read_bytes);
 
-        if !buffer.ends_with(&MAGIC_NUMBER) {
-            eprintln!("Magic number 'UVUV' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?");
+        let Some(inner_kind) = TrampolineKind::from_buffer(&buffer) else {
+            eprintln!("Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?");
             exit_with_status(1);
-        }
+        };
+        kind = inner_kind;
 
         // Remove the magic number
-        buffer.truncate(buffer.len() - MAGIC_NUMBER.len());
+        buffer.truncate(buffer.len() - kind.magic_number().len());
 
         let path_len = match buffer.get(buffer.len() - PATH_LEN_SIZE..) {
             Some(path_len) => {
@@ -217,7 +216,7 @@ fn find_python_exe(executable_name: &Path) -> PathBuf {
         } else {
             // SAFETY: Casting to u32 is safe because `path_len` is guaranteed to be less than 32KBs,
             // MAGIC_NUMBER is 4 bytes and PATH_LEN_SIZE is 4 bytes.
-            bytes_to_read = (path_len + MAGIC_NUMBER.len() + PATH_LEN_SIZE) as u32;
+            bytes_to_read = (path_len + kind.magic_number().len() + PATH_LEN_SIZE) as u32;
 
             if u64::from(bytes_to_read) > file_size {
                 eprintln!("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian");
@@ -241,10 +240,12 @@ fn find_python_exe(executable_name: &Path) -> PathBuf {
     };
 
     // NOTICE: dunce adds 5kb~
-    dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
+    let path = dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
         eprintln!("Failed to canonicalize script path");
         exit_with_status(1);
-    })
+    });
+
+    (kind, path)
 }
 
 fn push_arguments(output: &mut Vec<u8>) {

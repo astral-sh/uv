@@ -46,10 +46,9 @@ uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-once-map = { path = "crates/uv-once-map" }
 uv-options-metadata = { path = "crates/uv-options-metadata" }
-uv-pep440 = { path = "crates/uv-pep440", features = ["tracing", "rkyv"] }
+uv-pep440 = { path = "crates/uv-pep440", features = ["tracing", "rkyv", "version-ranges"] }
 uv-pep508 = { path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
 uv-platform-tags = { path = "crates/uv-platform-tags" }
-uv-pubgrub = { path = "crates/uv-pubgrub" }
 uv-publish = { path = "crates/uv-publish" }
 uv-pypi-types = { path = "crates/uv-pypi-types" }
 uv-python = { path = "crates/uv-python" }
@@ -61,6 +60,7 @@ uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }
 uv-state = { path = "crates/uv-state" }
 uv-static = { path = "crates/uv-static" }
+uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-tool = { path = "crates/uv-tool" }
 uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
@@ -125,8 +125,10 @@ path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
+procfs = { version = "0.16.0" , default-features = false, features = ["flate2"] }
 proc-macro2 = { version = "1.0.86" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "7243f4faf8e54837aa8a401a18406e7173de4ad5" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
+version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }

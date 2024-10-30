@@ -202,7 +202,7 @@ impl InitSettings {
             (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
         };
 
-        let package = flag(package || build_backend.is_some() || r#virtual, no_package)
+        let package = flag(package || build_backend.is_some(), no_package || r#virtual)
             .unwrap_or(kind.packaged_by_default());
 
         Self {

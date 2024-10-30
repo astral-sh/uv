@@ -34,7 +34,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{Version, MIN_VERSION};
+use uv_pep440::{Version, VersionRangesSpecifier, MIN_VERSION};
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Requirement, ResolutionMetadata, VerbatimParsedUrl};
@@ -51,7 +51,7 @@ use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
     PubGrubDependency, PubGrubDistribution, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
-    PubGrubPython, PubGrubSpecifier,
+    PubGrubPython,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolutionGraph;
@@ -2224,7 +2224,9 @@ impl ForkState {
                                 Locals::map(local, specifier)
                                     .map_err(ResolveError::InvalidVersion)
                                     .and_then(|specifier| {
-                                        Ok(PubGrubSpecifier::from_pep440_specifier(&specifier)?)
+                                        Ok(VersionRangesSpecifier::from_pep440_specifier(
+                                            &specifier,
+                                        )?)
                                     })
                             })
                             .fold_ok(Range::full(), |range, specifier| {
@@ -2300,7 +2302,7 @@ impl ForkState {
         ) = reason
         {
             let python_version: Range<Version> =
-                PubGrubSpecifier::from_release_specifiers(&requires_python)?.into();
+                VersionRangesSpecifier::from_release_specifiers(&requires_python)?.into();
 
             let package = &self.next;
             self.pubgrub

@@ -2476,6 +2476,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "procfs"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "731e0d9356b0c25f16f33b5be79b1c57b562f141ebfcdb0ad8ac2c13a24293b4"
+dependencies = [
+ "bitflags 2.6.0",
+ "flate2",
+ "hex",
+ "lazy_static",
+ "procfs-core",
+ "rustix",
+]
+
+[[package]]
+name = "procfs-core"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
+dependencies = [
+ "bitflags 2.6.0",
+ "hex",
+]
+
+[[package]]
 name = "ptr_meta"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2498,13 +2522,14 @@ dependencies = [
 [[package]]
 name = "pubgrub"
 version = "0.2.1"
-source = "git+https://github.com/astral-sh/pubgrub?rev=7243f4faf8e54837aa8a401a18406e7173de4ad5#7243f4faf8e54837aa8a401a18406e7173de4ad5"
+source = "git+https://github.com/astral-sh/pubgrub?rev=95e1390399cdddee986b658be19587eb1fdb2d79#95e1390399cdddee986b658be19587eb1fdb2d79"
 dependencies = [
  "indexmap",
  "log",
  "priority-queue",
  "rustc-hash",
  "thiserror",
+ "version-ranges",
 ]
 
 [[package]]
@@ -4139,7 +4164,7 @@ checksum = "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
 
 [[package]]
 name = "uv"
-version = "0.4.27"
+version = "0.4.28"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4158,7 +4183,6 @@ dependencies = [
  "futures",
  "http",
  "ignore",
- "indexmap",
  "indicatif",
  "indoc",
  "insta",
@@ -4166,6 +4190,7 @@ dependencies = [
  "jiff",
  "miette",
  "owo-colors",
+ "petgraph",
  "predicates",
  "rayon",
  "regex",
@@ -4302,7 +4327,6 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
- "uv-pubgrub",
  "uv-pypi-types",
  "uv-warnings",
  "walkdir",
@@ -4770,6 +4794,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-trampoline-builder",
  "uv-warnings",
  "walkdir",
  "zip",
@@ -4873,6 +4898,7 @@ dependencies = [
  "tracing",
  "unicode-width",
  "unscanny",
+ "version-ranges",
 ]
 
 [[package]]
@@ -4884,7 +4910,6 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "log",
- "pubgrub",
  "regex",
  "rustc-hash",
  "schemars",
@@ -4899,7 +4924,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
- "uv-pubgrub",
+ "version-ranges",
 ]
 
 [[package]]
@@ -4925,16 +4950,6 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror",
-]
-
-[[package]]
-name = "uv-pubgrub"
-version = "0.0.1"
-dependencies = [
- "itertools 0.13.0",
- "pubgrub",
- "thiserror",
- "uv-pep440",
 ]
 
 [[package]]
@@ -5011,6 +5026,7 @@ dependencies = [
  "indoc",
  "itertools 0.13.0",
  "owo-colors",
+ "procfs",
  "regex",
  "reqwest",
  "reqwest-middleware",
@@ -5156,7 +5172,6 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
- "uv-pubgrub",
  "uv-pypi-types",
  "uv-python",
  "uv-requirements-txt",
@@ -5269,6 +5284,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-trampoline-builder"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "assert_fs",
+ "fs-err",
+ "thiserror",
+ "uv-fs",
+ "which",
+ "zip",
+]
+
+[[package]]
 name = "uv-types"
 version = "0.0.1"
 dependencies = [
@@ -5290,7 +5319,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.4.27"
+version = "0.4.28"
 
 [[package]]
 name = "uv-virtualenv"
@@ -5360,6 +5389,14 @@ name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
+
+[[package]]
+name = "version-ranges"
+version = "0.1.0"
+source = "git+https://github.com/astral-sh/pubgrub?rev=95e1390399cdddee986b658be19587eb1fdb2d79#95e1390399cdddee986b658be19587eb1fdb2d79"
+dependencies = [
+ "smallvec",
+]
 
 [[package]]
 name = "version_check"

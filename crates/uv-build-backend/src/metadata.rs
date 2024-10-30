@@ -9,9 +9,8 @@ use std::str::FromStr;
 use tracing::debug;
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep440::{Version, VersionRangesSpecifier, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
-use uv_pubgrub::PubGrubSpecifier;
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 use uv_warnings::warn_user_once;
 
@@ -135,7 +134,7 @@ impl PyProjectToml {
                     );
                     passed = false;
                 }
-                PubGrubSpecifier::from_pep440_specifiers(specifier)
+                VersionRangesSpecifier::from_pep440_specifiers(specifier)
                     .ok()
                     .and_then(|specifier| Some(specifier.bounding_range()?.1 != Bound::Unbounded))
                     .unwrap_or(false)

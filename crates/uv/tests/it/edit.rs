@@ -1074,14 +1074,14 @@ fn add_remove_dev() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "anyio" },
         ]
 
         [package.metadata]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -1177,7 +1177,7 @@ fn add_remove_dev() -> Result<()> {
 
         [package.metadata]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = []
         "###
         );
@@ -2936,15 +2936,11 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Uninstalled 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     - idna==3.6
-     + idna==2.7
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-     - urllib3==2.2.1
-     + urllib3==1.23
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2979,7 +2975,7 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3026,10 +3022,10 @@ fn add_update_marker() -> Result<()> {
     Installed 1 package in [TIME]
      - certifi==2024.2.2
      - charset-normalizer==3.3.2
-     - idna==2.7
+     - idna==3.6
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
-     - urllib3==1.23
+     - urllib3==2.2.1
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -6076,6 +6072,9 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
@@ -6105,6 +6104,9 @@ fn add_index() -> Result<()> {
             "iniconfig==2.0.0",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
         "###
@@ -6120,6 +6122,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6174,6 +6179,9 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://download.pytorch.org/whl/cu121"
@@ -6196,6 +6204,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6275,6 +6286,9 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6297,6 +6311,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6385,6 +6402,9 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6407,6 +6427,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6504,6 +6527,9 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6526,6 +6552,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"

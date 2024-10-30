@@ -1674,7 +1674,7 @@ fn run_editable() -> Result<()> {
 
 #[test]
 fn run_from_directory() -> Result<()> {
-    // default 3.11 so that the .python-version is meaningful
+    // Default to 3.11 so that the `.python-version` is meaningful.
     let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
 
     let project_dir = context.temp_dir.child("project");
@@ -1745,6 +1745,7 @@ fn run_from_directory() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
     "###);
 
+    fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("./project/main.py"), @r###"
     success: true
     exit_code: 0
@@ -1752,11 +1753,15 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
     "###);
 
     // Use `--directory`, which switches to the provided directory entirely.
+    fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @r###"
     success: true
     exit_code: 0
@@ -1765,10 +1770,14 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
     "###);
 
+    fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./main.py"), @r###"
     success: true
     exit_code: 0
@@ -1776,10 +1785,14 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
     "###);
 
+    fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("./project/main.py"), @r###"
     success: false
     exit_code: 2
@@ -1787,8 +1800,11 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
     error: Failed to spawn: `./project/main.py`
       Caused by: No such file or directory (os error 2)
     "###);
@@ -1804,6 +1820,7 @@ fn run_from_directory() -> Result<()> {
         .child(PYTHON_VERSION_FILENAME)
         .write_str("3.10")?;
 
+    fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--project").arg("project").arg("main"), @r###"
     success: true
     exit_code: 0
@@ -1813,13 +1830,13 @@ fn run_from_directory() -> Result<()> {
     ----- stderr -----
     warning: `VIRTUAL_ENV=.venv` does not match the project environment path `[PROJECT_VENV]/` and will be ignored
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
-    Removed virtual environment at: [PROJECT_VENV]/
     Creating virtual environment at: [PROJECT_VENV]/
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
     "###);
 
+    fs_err::remove_dir_all(context.temp_dir.join("project").join(".venv"))?;
     uv_snapshot!(filters.clone(), context.run().arg("--directory").arg("project").arg("main"), @r###"
     success: true
     exit_code: 0
@@ -1828,8 +1845,11 @@ fn run_from_directory() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
     "###);
 
     Ok(())

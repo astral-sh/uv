@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.28
+
+### Enhancements
+
+- Add support for requesting free-threaded builds via `+freethreaded` ([#8645](https://github.com/astral-sh/uv/pull/8645))
+- Improve trusted publishing error messages ([#8633](https://github.com/astral-sh/uv/pull/8633))
+- Remove unneeded `return` from Maturin project template ([#8604](https://github.com/astral-sh/uv/pull/8604))
+- Skip Python interpreter discovery for `uv export` ([#8638](https://github.com/astral-sh/uv/pull/8638))
+- Hint about missing trusted publishing permission ([#8632](https://github.com/astral-sh/uv/pull/8632))
+
+### Configuration
+
+- Add environment variable to disable progress output ([#8600](https://github.com/astral-sh/uv/pull/8600))
+
+### Bug fixes
+
+- Fork when minimum Python version increases ([#8628](https://github.com/astral-sh/uv/pull/8628))
+- Ignore empty groups when validating lock ([#8598](https://github.com/astral-sh/uv/pull/8598))
+- Remove duplicate word in error message ([#8589](https://github.com/astral-sh/uv/pull/8589))
+- Support cyclic dependencies in `uv tree` ([#8564](https://github.com/astral-sh/uv/pull/8564))
+- Update `uv init` to imply `--package` when using `--build-backend` ([#8593](https://github.com/astral-sh/uv/pull/8593))
+- Restore use of `dev-dependencies` and `requires-dev` for lockfile compatibility ([#8599](https://github.com/astral-sh/uv/pull/8599))
+
+### Documentation
+
+- Clarify `requires-python` requirement for dependencies ([#8619](https://github.com/astral-sh/uv/pull/8619))
+- Update CLI documentation for `--cache-dir` ([#8627](https://github.com/astral-sh/uv/pull/8627))
+
 ## 0.4.27
 
 This release includes support for the `[dependency-groups]` table as recently standardized in [PEP 735](https://peps.python.org/pep-0735/). The table allows for declaration of optional dependency groups that are not published as part of the package metadata, unlike `[project.optional-dependencies]`. There are new `--group`, `--only-group`, and `--no-group` options throughout the uv interface.

@@ -51,12 +51,11 @@ use std::sync::Mutex;
 use std::sync::MutexGuard;
 
 use itertools::Either;
-use pubgrub::Range;
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
-use uv_pep440::Operator;
+use uv_pep440::{Operator, VersionRangesSpecifier};
 use uv_pep440::{Version, VersionSpecifier};
-use uv_pubgrub::PubGrubSpecifier;
+use version_ranges::Ranges;
 
 use crate::marker::MarkerValueExtra;
 use crate::ExtraOperator;
@@ -403,7 +402,7 @@ impl InternerGuard<'_> {
             });
             return self.create_node(node.var.clone(), children);
         };
-        let py_range = Range::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
+        let py_range = Ranges::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
         if py_range.is_empty() {
             // Oops, the bounds imply there is nothing that can match,
             // so we always evaluate to false.
@@ -428,12 +427,12 @@ impl InternerGuard<'_> {
         // are known to be satisfied.
         let &(ref first_range, first_node_id) = new.first().unwrap();
         let first_upper = first_range.bounding_range().unwrap().1;
-        let clipped = Range::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
+        let clipped = Ranges::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
         *new.first_mut().unwrap() = (clipped, first_node_id);
 
         let &(ref last_range, last_node_id) = new.last().unwrap();
         let last_lower = last_range.bounding_range().unwrap().0;
-        let clipped = Range::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
+        let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
         *new.last_mut().unwrap() = (clipped, last_node_id);
 
         self.create_node(node.var.clone(), Edges::Version { edges: new })
@@ -459,7 +458,7 @@ impl InternerGuard<'_> {
             return i;
         }
 
-        let py_range = Range::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
+        let py_range = Ranges::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
         if py_range.is_empty() {
             // Oops, the bounds imply there is nothing that can match,
             // so we always evaluate to false.
@@ -521,14 +520,14 @@ impl InternerGuard<'_> {
             // adjacent ranges map to the same node, which would not be
             // a canonical representation.
             if exclude_node_id == first_node_id {
-                let clipped = Range::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
                 *new.first_mut().unwrap() = (clipped, first_node_id);
             } else {
-                let clipped = Range::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
                 *new.first_mut().unwrap() = (clipped, first_node_id);
 
                 let py_range_lower =
-                    Range::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
+                    Ranges::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
                 new.insert(0, (py_range_lower.complement(), NodeId::FALSE.negate(i)));
             }
         }
@@ -539,14 +538,14 @@ impl InternerGuard<'_> {
             // same reasoning applies here: to maintain a canonical
             // representation.
             if exclude_node_id == last_node_id {
-                let clipped = Range::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
+                let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
                 *new.last_mut().unwrap() = (clipped, last_node_id);
             } else {
-                let clipped = Range::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
                 *new.last_mut().unwrap() = (clipped, last_node_id);
 
                 let py_range_upper =
-                    Range::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
+                    Ranges::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
                 new.push((py_range_upper.complement(), exclude_node_id));
             }
         }
@@ -688,7 +687,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     Version {
-        edges: SmallVec<(Range<Version>, NodeId)>,
+        edges: SmallVec<(Ranges<Version>, NodeId)>,
     },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
@@ -696,7 +695,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     String {
-        edges: SmallVec<(Range<String>, NodeId)>,
+        edges: SmallVec<(Ranges<String>, NodeId)>,
     },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
@@ -727,13 +726,13 @@ impl Edges {
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
     fn from_string(operator: MarkerOperator, value: String) -> Edges {
-        let range: Range<String> = match operator {
-            MarkerOperator::Equal => Range::singleton(value),
-            MarkerOperator::NotEqual => Range::singleton(value).complement(),
-            MarkerOperator::GreaterThan => Range::strictly_higher_than(value),
-            MarkerOperator::GreaterEqual => Range::higher_than(value),
-            MarkerOperator::LessThan => Range::strictly_lower_than(value),
-            MarkerOperator::LessEqual => Range::lower_than(value),
+        let range: Ranges<String> = match operator {
+            MarkerOperator::Equal => Ranges::singleton(value),
+            MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
+            MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
+            MarkerOperator::GreaterEqual => Ranges::higher_than(value),
+            MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
+            MarkerOperator::LessEqual => Ranges::lower_than(value),
             MarkerOperator::TildeEqual => unreachable!("string comparisons with ~= are ignored"),
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
@@ -746,7 +745,8 @@ impl Edges {
     /// Returns the [`Edges`] for a version specifier.
     fn from_specifier(specifier: VersionSpecifier) -> Edges {
         let specifier =
-            PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
+            VersionRangesSpecifier::from_release_specifier(&normalize_specifier(specifier))
+                .unwrap();
         Edges::Version {
             edges: Edges::from_range(&specifier.into()),
         }
@@ -756,7 +756,7 @@ impl Edges {
     ///
     /// Only for use when the `key` is a `PythonVersion`. Normalizes to `PythonFullVersion`.
     fn from_python_versions(versions: Vec<Version>, negated: bool) -> Result<Edges, NodeId> {
-        let mut range = Range::empty();
+        let mut range = Ranges::empty();
 
         // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
         // seem efficient.
@@ -764,7 +764,8 @@ impl Edges {
             let specifier = VersionSpecifier::equals_version(version.clone());
             let specifier = python_version_to_full_version(specifier)?;
             let pubgrub_specifier =
-                PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
+                VersionRangesSpecifier::from_release_specifier(&normalize_specifier(specifier))
+                    .unwrap();
             range = range.union(&pubgrub_specifier.into());
         }
 
@@ -779,12 +780,12 @@ impl Edges {
 
     /// Returns an [`Edges`] where values in the given range are `true`.
     fn from_versions(versions: &Vec<Version>, negated: bool) -> Edges {
-        let mut range = Range::empty();
+        let mut range = Ranges::empty();
 
         // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
         // seem efficient.
         for version in versions {
-            range = range.union(&Range::singleton(version.clone()));
+            range = range.union(&Ranges::singleton(version.clone()));
         }
 
         if negated {
@@ -797,7 +798,7 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_range<T>(range: &Range<T>) -> SmallVec<(Range<T>, NodeId)>
+    fn from_range<T>(range: &Ranges<T>) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Ord + Clone,
     {
@@ -805,13 +806,13 @@ impl Edges {
 
         // Add the `true` edges.
         for (start, end) in range.iter() {
-            let range = Range::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::TRUE));
         }
 
         // Add the `false` edges.
         for (start, end) in range.complement().iter() {
-            let range = Range::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::FALSE));
         }
 
@@ -891,12 +892,12 @@ impl Edges {
     /// In that case, we drop any ranges that do not exist in the domain of both edges. Note that
     /// this should not occur in practice because `requires-python` bounds are global.
     fn apply_ranges<T>(
-        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
         left_parent: NodeId,
-        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> SmallVec<(Range<T>, NodeId)>
+    ) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Clone + Ord,
     {
@@ -968,9 +969,9 @@ impl Edges {
 
     // Returns `true` if all intersecting ranges in two range maps are disjoint.
     fn is_disjoint_ranges<T>(
-        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
         left_parent: NodeId,
-        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
     ) -> bool
@@ -1179,7 +1180,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
 }
 
 /// Compares the start of two ranges that are known to be disjoint.
-fn compare_disjoint_range_start<T>(range1: &Range<T>, range2: &Range<T>) -> Ordering
+fn compare_disjoint_range_start<T>(range1: &Ranges<T>, range2: &Ranges<T>) -> Ordering
 where
     T: Ord,
 {
@@ -1199,7 +1200,7 @@ where
 }
 
 /// Returns `true` if two disjoint ranges can be conjoined seamlessly without introducing a gap.
-fn can_conjoin<T>(range1: &Range<T>, range2: &Range<T>) -> bool
+fn can_conjoin<T>(range1: &Ranges<T>, range2: &Ranges<T>) -> bool
 where
     T: Ord + Clone,
 {

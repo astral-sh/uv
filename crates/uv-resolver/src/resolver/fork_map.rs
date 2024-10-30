@@ -62,11 +62,11 @@ impl<T> ForkMap<T> {
         match markers {
             // If we are solving for a specific environment we already filtered
             // compatible requirements `from_manifest`.
-            ResolverMarkers::SpecificEnvironment(_) => values
-                .first()
-                .map(|entry| &entry.value)
-                .into_iter()
-                .collect(),
+            //
+            // Or, if we haven't forked yet, all values are potentially compatible.
+            ResolverMarkers::SpecificEnvironment(_) | ResolverMarkers::Universal { .. } => {
+                values.iter().map(|entry| &entry.value).collect()
+            }
 
             // Return all values that were requested with markers that are compatible
             // with the current fork, i.e. the markers are not disjoint.
@@ -75,9 +75,6 @@ impl<T> ForkMap<T> {
                 .filter(|entry| !fork.is_disjoint(&entry.marker))
                 .map(|entry| &entry.value)
                 .collect(),
-
-            // If we haven't forked yet, all values are potentially compatible.
-            ResolverMarkers::Universal { .. } => values.iter().map(|entry| &entry.value).collect(),
         }
     }
 }
