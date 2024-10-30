@@ -4693,6 +4693,8 @@ By default, Python installations are stored in the uv data directory at `$XDG_DA
 
 The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
 
+To instead view the directory uv installs Python executables into, use the `--bin` flag.
+
 <h3 class="cli-reference">Usage</h3>
 
 ```
@@ -4701,7 +4703,23 @@ uv python dir [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<dl class="cli-reference"><dt><code>--bin</code></dt><dd><p>Show the directory into which <code>uv python</code> will install Python executables.</p>
+
+<p>By default, <code>uv python dir</code> shows the directory into which the Python distributions themselves are installed, rather than the directory containing the linked executables.</p>
+
+<p>The Python executable directory is determined according to the XDG standard and is derived from the following environment variables, in order of preference:</p>
+
+<ul>
+<li><code>$UV_PYTHON_BIN_DIR</code></li>
+
+<li><code>$XDG_BIN_HOME</code></li>
+
+<li><code>$XDG_DATA_HOME/../bin</code></li>
+
+<li><code>$HOME/.local/bin</code></li>
+</ul>
+
+</dd><dt><code>--cache-dir</code> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 
