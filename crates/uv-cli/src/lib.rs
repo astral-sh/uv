@@ -3840,7 +3840,8 @@ pub enum PythonCommand {
     ///
     /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
     ///
-    /// To instead view the directory uv installs Python executables into, use the `--bin` flag.
+    /// To view the directory where uv installs Python executables instead, use the `--bin` flag.
+    /// Note that Python executables are only installed when preview mode is enabled.
     Dir(PythonDirArgs),
 
     /// Uninstall Python versions.
@@ -3874,10 +3875,7 @@ pub struct PythonListArgs {
 pub struct PythonDirArgs {
     /// Show the directory into which `uv python` will install Python executables.
     ///
-    /// Note this directory is only used when installing with preview mode enabled.
-    ///
-    /// By default, `uv python dir` shows the directory into which the Python distributions
-    /// themselves are installed, rather than the directory containing the linked executables.
+    /// Note that this directory is only used when installing Python with preview mode enabled.
     ///
     /// The Python executable directory is determined according to the XDG standard and is derived
     /// from the following environment variables, in order of preference:

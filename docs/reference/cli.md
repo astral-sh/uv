@@ -4693,7 +4693,7 @@ By default, Python installations are stored in the uv data directory at `$XDG_DA
 
 The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
 
-To instead view the directory uv installs Python executables into, use the `--bin` flag.
+To view the directory where uv installs Python executables instead, use the `--bin` flag. Note that Python executables are only installed when preview mode is enabled.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -4705,9 +4705,7 @@ uv python dir [OPTIONS]
 
 <dl class="cli-reference"><dt><code>--bin</code></dt><dd><p>Show the directory into which <code>uv python</code> will install Python executables.</p>
 
-<p>Note this directory is only used when installing with preview mode enabled.</p>
-
-<p>By default, <code>uv python dir</code> shows the directory into which the Python distributions themselves are installed, rather than the directory containing the linked executables.</p>
+<p>Note that this directory is only used when installing Python with preview mode enabled.</p>
 
 <p>The Python executable directory is determined according to the XDG standard and is derived from the following environment variables, in order of preference:</p>
 
