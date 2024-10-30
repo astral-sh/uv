@@ -26,13 +26,12 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use crate::marker::MarkerValueExtra;
 use cursor::Cursor;
 pub use marker::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
-    StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
+    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
