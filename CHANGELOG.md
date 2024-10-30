@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.29
+
+### Enhancements
+
+- Sort errors during display in `uv python install` ([#8684](https://github.com/astral-sh/uv/pull/8684))
+- Update resolver to use disjointness checks instead of marker equality ([#8661](https://github.com/astral-sh/uv/pull/8661))
+- Add `riscv64` to supported Python platform tags ([#8660](https://github.com/astral-sh/uv/pull/8660))
+
+### Bug fixes
+
+- Fix hard and soft float libc detection for managed Python distributions on ARM ([#8498](https://github.com/astral-sh/uv/pull/8498))
+- Handle cycles in `uv pip tree` ([#8689](https://github.com/astral-sh/uv/pull/8689))
+- Respect dependency group markers in `uv export` ([#8659](https://github.com/astral-sh/uv/pull/8659))
+- Support transitive dependencies in Git workspaces ([#8665](https://github.com/astral-sh/uv/pull/8665))
+- Use portable paths for subdirectories in lock URLs ([#8707](https://github.com/astral-sh/uv/pull/8707))
+- Update `uv init --virtual` to imply `--no-package` ([#8595](https://github.com/astral-sh/uv/pull/8595))
+
+### Preview
+
+- Install versioned Python executables into the bin directory during `uv python install` (Unix only) ([#8458](https://github.com/astral-sh/uv/pull/8458))
+
+### Documentation
+
+- Clarify relationship between specifiers and `requires-python` range ([#8688](https://github.com/astral-sh/uv/pull/8688))
+- Fix broken link in docs ([#8552](https://github.com/astral-sh/uv/pull/8552))
+- Fix outdated documentation on `Requires-Python` ([#8679](https://github.com/astral-sh/uv/pull/8679))
+- Add Google Artifact Registry index authentication guide ([#8579](https://github.com/astral-sh/uv/pull/8579))
+
 ## 0.4.28
 
 ### Enhancements
