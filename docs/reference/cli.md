@@ -4302,11 +4302,11 @@ Download and install Python versions.
 
 Multiple Python versions may be requested.
 
-Supports CPython and PyPy.
+Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
 
-CPython distributions are downloaded from the `python-build-standalone` project.
+Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`.
 
-Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`. A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments.
+A `python` executable is not made globally available, managed Python versions are only used in uv commands or in active virtual environments. There is experimental support for adding Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
 
 See `uv help python` to view supported request formats.
 
@@ -4704,6 +4704,8 @@ uv python dir [OPTIONS]
 <h3 class="cli-reference">Options</h3>
 
 <dl class="cli-reference"><dt><code>--bin</code></dt><dd><p>Show the directory into which <code>uv python</code> will install Python executables.</p>
+
+<p>Note this directory is only used when installing with preview mode enabled.</p>
 
 <p>By default, <code>uv python dir</code> shows the directory into which the Python distributions themselves are installed, rather than the directory containing the linked executables.</p>
 

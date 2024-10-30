@@ -1057,6 +1057,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 globals.connectivity,
                 cli.top_level.no_config,
+                globals.preview,
                 printer,
             )
             .await

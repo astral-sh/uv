@@ -411,13 +411,15 @@ fn help_subsubcommand() {
 
     Multiple Python versions may be requested.
 
-    Supports CPython and PyPy.
-
-    CPython distributions are downloaded from the `python-build-standalone` project.
+    Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone`
+    project. PyPy distributions are downloaded from `python.org`.
 
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
-    dir`. A `python` executable is not made globally available, managed Python versions are only used in
-    uv commands or in active virtual environments.
+    dir`.
+
+    A `python` executable is not made globally available, managed Python versions are only used in uv
+    commands or in active virtual environments. There is experimental support for adding Python
+    executables to the `PATH` — use the `--preview` flag to enable this behavior.
 
     See `uv help python` to view supported request formats.
 

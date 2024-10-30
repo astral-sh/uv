@@ -13,6 +13,7 @@ use same_file::is_same_file;
 use tracing::debug;
 
 use uv_client::Connectivity;
+use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
@@ -36,6 +37,7 @@ pub(crate) async fn install(
     native_tls: bool,
     connectivity: Connectivity,
     no_config: bool,
+    preview: PreviewMode,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -164,7 +166,11 @@ pub(crate) async fn install(
         });
     }
 
-    let bin = python_executable_dir()?;
+    let bin = if preview.is_enabled() {
+        Some(python_executable_dir()?)
+    } else {
+        None
+    };
 
     let mut installed = FxHashSet::default();
     let mut errors = vec![];
@@ -183,35 +189,42 @@ pub(crate) async fn install(
                 let managed = ManagedPythonInstallation::new(path.clone())?;
                 managed.ensure_externally_managed()?;
                 managed.ensure_canonical_executables()?;
-                match managed.create_bin_link(&bin) {
-                    Ok(executable) => {
-                        debug!("Installed {} executable to {}", key, executable.display());
-                    }
-                    Err(uv_python::managed::Error::LinkExecutable { from, to, err })
-                        if err.kind() == ErrorKind::AlreadyExists =>
-                    {
-                        // TODO(zanieb): Add `--force`
-                        if reinstall {
-                            fs_err::remove_file(&to)?;
-                            let executable = managed.create_bin_link(&bin)?;
-                            debug!(
-                                "Replaced {} executable at {}",
-                                key,
-                                executable.user_display()
-                            );
-                        } else {
-                            if !is_same_file(&to, &from).unwrap_or_default() {
-                                errors.push((
+
+                if preview.is_enabled() && cfg!(unix) {
+                    let bin = bin
+                        .as_ref()
+                        .expect("We should have a bin directory with preview enabled")
+                        .as_path();
+                    match managed.create_bin_link(bin) {
+                        Ok(executable) => {
+                            debug!("Installed {} executable to {}", key, executable.display());
+                        }
+                        Err(uv_python::managed::Error::LinkExecutable { from, to, err })
+                            if err.kind() == ErrorKind::AlreadyExists =>
+                        {
+                            // TODO(zanieb): Add `--force`
+                            if reinstall {
+                                fs_err::remove_file(&to)?;
+                                let executable = managed.create_bin_link(bin)?;
+                                debug!(
+                                    "Replaced {} executable at {}",
                                     key,
-                                    anyhow::anyhow!(
-                                        "Executable already exists at `{}`. Use `--reinstall` to force replacement.",
-                                        to.user_display()
-                                    ),
-                                ));
+                                    executable.user_display()
+                                );
+                            } else {
+                                if !is_same_file(&to, &from).unwrap_or_default() {
+                                    errors.push((
+                                        key,
+                                        anyhow::anyhow!(
+                                            "Executable already exists at `{}`. Use `--reinstall` to force replacement.",
+                                            to.user_display()
+                                        ),
+                                    ));
+                                }
                             }
                         }
+                        Err(err) => return Err(err.into()),
                     }
-                    Err(err) => return Err(err.into()),
                 }
             }
             Err(err) => {
@@ -301,7 +314,13 @@ pub(crate) async fn install(
             }
         }
 
-        warn_if_not_on_path(&bin);
+        if preview.is_enabled() && cfg!(unix) {
+            let bin = bin
+                .as_ref()
+                .expect("We should have a bin directory with preview enabled")
+                .as_path();
+            warn_if_not_on_path(bin);
+        }
     }
 
     if !errors.is_empty() {
