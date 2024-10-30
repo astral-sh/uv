@@ -250,3 +250,38 @@ fn python_install_freethreaded() {
      - cpython-3.13.0+freethreaded-[PLATFORM]
     "###);
 }
+
+#[test]
+fn python_install_invalid_request() {
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
+
+    // Request something that is not a Python version
+    uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot download managed Python for request: executable name `foobar`
+    "###);
+
+    // Request a version we don't have a download for
+    uv_snapshot!(context.filters(), context.python_install().arg("3.8.0"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: cpython-3.8.0-[PLATFORM]
+    "###);
+
+    // Request a version we don't have a download for mixed with one we do
+    uv_snapshot!(context.filters(), context.python_install().arg("3.8.0").arg("3.12"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: cpython-3.8.0-[PLATFORM]
+    "###);
+}
