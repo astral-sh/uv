@@ -261,8 +261,19 @@ fn missing_readme() {
         .unwrap()
         .to_metadata(Path::new("/do/not/read"))
         .unwrap_err();
+    // Windows translates error messages, for example i get:
+    // "Caused by: Das System kann den angegebenen Pfad nicht finden. (os error 3)"
+    let filters = [(
+        r": .* \(os error 3\)",
+        ": The system cannot find the path specified. (os error 3)",
+    )];
+
     // Simplified for windows compatibility.
-    assert_snapshot!(err.to_string().replace('\\', "/"), @"failed to open file `/do/not/read/Readme.md`: No such file or directory (os error 2)");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(err.to_string().replace('\\', "/"), @"failed to open file `/do/not/read/Readme.md`: The system cannot find the path specified. (os error 3)");
+    });
 }
 
 #[test]
