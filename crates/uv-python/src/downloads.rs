@@ -423,7 +423,7 @@ pub enum DownloadResult {
 }
 
 impl ManagedPythonDownload {
-    /// Return the first [`PythonDownload`] matching a request, if any.
+    /// Return the first [`ManagedPythonDownload`] matching a request, if any.
     pub fn from_request(
         request: &PythonDownloadRequest,
     ) -> Result<&'static ManagedPythonDownload, Error> {
@@ -433,7 +433,7 @@ impl ManagedPythonDownload {
             .ok_or(Error::NoDownloadFound(request.clone()))
     }
 
-    /// Iterate over all [`PythonDownload`]'s.
+    /// Iterate over all [`ManagedPythonDownload`]s.
     pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
         PYTHON_DOWNLOADS
             .iter()
