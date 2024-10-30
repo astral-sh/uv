@@ -653,11 +653,13 @@ impl TestContext {
     pub fn python_install(&self) -> Command {
         let mut command = self.new_command();
         let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
         self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("install")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin)
             .current_dir(&self.temp_dir);
         command
     }
@@ -666,11 +668,13 @@ impl TestContext {
     pub fn python_uninstall(&self) -> Command {
         let mut command = self.new_command();
         let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
         self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("uninstall")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin)
             .current_dir(&self.temp_dir);
         command
     }

@@ -1057,6 +1057,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 globals.connectivity,
                 cli.top_level.no_config,
+                globals.preview,
                 printer,
             )
             .await
@@ -1111,9 +1112,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Python(PythonNamespace {
-            command: PythonCommand::Dir,
+            command: PythonCommand::Dir(args),
         }) => {
-            commands::python_dir()?;
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::python_dir(args.bin)?;
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {
