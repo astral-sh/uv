@@ -265,7 +265,7 @@ fn missing_readme() {
     let err = err
         .to_string()
         .replace('\\', "/")
-        .split_once(":")
+        .split_once(':')
         .unwrap()
         .0
         .to_string();
