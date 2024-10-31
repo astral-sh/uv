@@ -1,4 +1,4 @@
-#![cfg(windows)]
+#![cfg(not(windows))]
 
 use std::process::Command;
 
