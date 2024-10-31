@@ -569,11 +569,9 @@ fn sync_legacy_non_project_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    Uninstalled 1 package in [TIME]
     Installed 2 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
      + iniconfig==2.0.0
-     - typing-extensions==4.10.0
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bop"), @r###"

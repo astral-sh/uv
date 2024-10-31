@@ -2,12 +2,13 @@
 
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use crate::pyproject::{
-    Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources, ToolUvWorkspace,
+    DependencyGroups, Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources,
+    ToolUvWorkspace,
 };
 use either::Either;
 use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use tracing::{debug, trace, warn};
 use uv_distribution_types::Index;
@@ -410,6 +411,44 @@ impl Workspace {
                         .with_origin(RequirementOrigin::Workspace),
                 )
             })
+            .collect()
+    }
+
+    /// Returns the set of all dependency group names defined in the workspace.
+    pub fn groups(&self) -> BTreeSet<&GroupName> {
+        self.pyproject_toml
+            .dependency_groups
+            .iter()
+            .flat_map(DependencyGroups::keys)
+            .chain(
+                self.packages
+                    .values()
+                    .filter_map(|member| member.pyproject_toml.dependency_groups.as_ref())
+                    .flat_map(DependencyGroups::keys),
+            )
+            .chain(
+                if self
+                    .pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.dev_dependencies.as_ref())
+                    .is_some()
+                    || self.packages.values().any(|member| {
+                        member
+                            .pyproject_toml
+                            .tool
+                            .as_ref()
+                            .and_then(|tool| tool.uv.as_ref())
+                            .and_then(|uv| uv.dev_dependencies.as_ref())
+                            .is_some()
+                    })
+                {
+                    Some(&*DEV_DEPENDENCIES)
+                } else {
+                    None
+                },
+            )
             .collect()
     }
 

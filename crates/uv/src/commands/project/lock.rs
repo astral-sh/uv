@@ -20,7 +20,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -328,13 +328,7 @@ async fn do_lock(
     let requirements = workspace.non_project_requirements()?;
     let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
-    let dev: Vec<_> = workspace
-        .pyproject_toml()
-        .dependency_groups
-        .iter()
-        .flat_map(|groups| groups.keys().cloned())
-        .chain(std::iter::once(DEV_DEPENDENCIES.clone()))
-        .collect();
+    let dev = workspace.groups().into_iter().cloned().collect::<Vec<_>>();
     let source_trees = vec![];
 
     // Collect the list of members.
