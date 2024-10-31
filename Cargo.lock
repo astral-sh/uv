@@ -5074,6 +5074,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-state",
  "uv-static",
+ "uv-trampoline-builder",
  "uv-warnings",
  "which",
  "windows-registry 0.3.0",

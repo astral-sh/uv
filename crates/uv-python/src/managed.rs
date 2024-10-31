@@ -1,15 +1,20 @@
 use core::fmt;
-use fs_err as fs;
-use itertools::Itertools;
 use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+use fs_err as fs;
+use itertools::Itertools;
+use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
 
+use uv_fs::{symlink_or_copy_file, LockedFile, Simplified};
 use uv_state::{StateBucket, StateStore};
+use uv_static::EnvVars;
+use uv_trampoline_builder::{windows_python_launcher, Launcher};
 
 use crate::downloads::Error as DownloadError;
 use crate::implementation::{
@@ -21,9 +26,6 @@ use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::{PythonRequest, PythonVariant};
-use uv_fs::{LockedFile, Simplified};
-use uv_static::EnvVars;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -74,6 +76,8 @@ pub enum Error {
     },
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
+    #[error(transparent)]
+    LauncherError(#[from] uv_trampoline_builder::Error),
     #[error("Failed to read managed Python directory name: {0}")]
     NameError(String),
     #[error("Failed to construct absolute path to managed Python directory: {}", _0.user_display())]
@@ -425,7 +429,7 @@ impl ManagedPythonInstallation {
                 continue;
             }
 
-            match uv_fs::symlink_copy_fallback_file(&python, &executable) {
+            match uv_fs::symlink_or_copy_file(&python, &executable) {
                 Ok(()) => {
                     debug!(
                         "Created link {} -> {}",
@@ -475,28 +479,67 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
-    /// Create a link to the Python executable in the given `bin` directory.
-    pub fn create_bin_link(&self, bin: &Path) -> Result<PathBuf, Error> {
+    /// Create a link to the managed Python executable.
+    ///
+    /// If the file already exists at the target path, an error will be returned.
+    pub fn create_bin_link(&self, target: &Path) -> Result<(), Error> {
         let python = self.executable();
 
+        let bin = target.parent().ok_or(Error::NoExecutableDirectory)?;
         fs_err::create_dir_all(bin).map_err(|err| Error::ExecutableDirectory {
             to: bin.to_path_buf(),
             err,
         })?;
 
-        // TODO(zanieb): Add support for a "default" which
-        let python_in_bin = bin.join(self.key.versioned_executable_name());
-
-        match uv_fs::symlink_copy_fallback_file(&python, &python_in_bin) {
-            Ok(()) => Ok(python_in_bin),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                Err(Error::MissingExecutable(python.clone()))
+        if cfg!(unix) {
+            // Note this will never copy on Unix — we use it here to allow compilation on Windows
+            match symlink_or_copy_file(&python, target) {
+                Ok(()) => Ok(()),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    Err(Error::MissingExecutable(python.clone()))
+                }
+                Err(err) => Err(Error::LinkExecutable {
+                    from: python,
+                    to: target.to_path_buf(),
+                    err,
+                }),
             }
-            Err(err) => Err(Error::LinkExecutable {
-                from: python,
-                to: python_in_bin,
-                err,
-            }),
+        } else if cfg!(windows) {
+            // TODO(zanieb): Install GUI launchers as well
+            let launcher = windows_python_launcher(&python, false)?;
+
+            // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
+            // error context anyway
+            #[allow(clippy::disallowed_types)]
+            {
+                std::fs::File::create_new(target)
+                    .and_then(|mut file| file.write_all(launcher.as_ref()))
+                    .map_err(|err| Error::LinkExecutable {
+                        from: python,
+                        to: target.to_path_buf(),
+                        err,
+                    })
+            }
+        } else {
+            unimplemented!("Only Windows and Unix systems are supported.")
+        }
+    }
+
+    /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
+    /// [`ManagedPythonInstallation::create_bin_link`].
+    pub fn is_bin_link(&self, path: &Path) -> bool {
+        if cfg!(unix) {
+            is_same_file(path, self.executable()).unwrap_or_default()
+        } else if cfg!(windows) {
+            let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
+                return false;
+            };
+            if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
+                return false;
+            }
+            launcher.python_path == self.executable()
+        } else {
+            unreachable!("Only Windows and Unix are supported")
         }
     }
 }
