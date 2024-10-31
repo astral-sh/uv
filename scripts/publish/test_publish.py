@@ -54,6 +54,7 @@ import os
 import re
 import time
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from pathlib import Path
 from shutil import rmtree
 from subprocess import PIPE, check_call, check_output, run
@@ -67,29 +68,53 @@ TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
 
 cwd = Path(__file__).parent
 
+
+@dataclass
+class TargetConfiguration:
+    project_name: str
+    publish_url: str
+    index_url: str
+
+
 # Map CLI target name to package name and index url.
 # Trusted publishing can only be tested on GitHub Actions, so we have separate local
 # and all targets.
-local_targets: dict[str, tuple[str, str]] = {
-    "pypi-token": ("astral-test-token", "https://test.pypi.org/simple/"),
-    "pypi-password-env": ("astral-test-password", "https://test.pypi.org/simple/"),
-    "pypi-keyring": ("astral-test-keyring", "https://test.pypi.org/simple/"),
-    "gitlab": (
+local_targets: dict[str, TargetConfiguration] = {
+    "pypi-token": TargetConfiguration(
         "astral-test-token",
+        TEST_PYPI_PUBLISH_URL,
+        "https://test.pypi.org/simple/",
+    ),
+    "pypi-password-env": TargetConfiguration(
+        "astral-test-password",
+        TEST_PYPI_PUBLISH_URL,
+        "https://test.pypi.org/simple/",
+    ),
+    "pypi-keyring": TargetConfiguration(
+        "astral-test-keyring",
+        "https://test.pypi.org/legacy/?astral-test-keyring",
+        "https://test.pypi.org/simple/",
+    ),
+    "gitlab": TargetConfiguration(
+        "astral-test-token",
+        "https://gitlab.com/api/v4/projects/61853105/packages/pypi",
         "https://gitlab.com/api/v4/projects/61853105/packages/pypi/simple/",
     ),
-    "codeberg": (
+    "codeberg": TargetConfiguration(
         "astral-test-token",
+        "https://codeberg.org/api/packages/astral-test-user/pypi",
         "https://codeberg.org/api/packages/astral-test-user/pypi/simple/",
     ),
-    "cloudsmith": (
+    "cloudsmith": TargetConfiguration(
         "astral-test-token",
+        "https://python.cloudsmith.io/astral-test/astral-test-1/",
         "https://dl.cloudsmith.io/public/astral-test/astral-test-1/python/simple/",
     ),
 }
-all_targets: dict[str, tuple[str, str]] = local_targets | {
-    "pypi-trusted-publishing": (
+all_targets: dict[str, TargetConfiguration] = local_targets | {
+    "pypi-trusted-publishing": TargetConfiguration(
         "astral-test-trusted-publishing",
+        TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
     )
 }
@@ -100,10 +125,12 @@ def get_new_version(project_name: str, client: httpx.Client) -> Version:
     # To keep the number of packages small we reuse them across targets, so we have to
     # pick a version that doesn't exist on any target yet
     versions = set()
-    for project_name_, index_url in all_targets.values():
-        if project_name_ != project_name:
+    for target_config in all_targets.values():
+        if target_config.project_name != project_name:
             continue
-        for filename in get_filenames((index_url + project_name + "/"), client):
+        for filename in get_filenames(
+            target_config.index_url + project_name + "/", client
+        ):
             if filename.endswith(".whl"):
                 [_name, version, _build, _tags] = parse_wheel_filename(filename)
             else:
@@ -137,24 +164,41 @@ def get_filenames(url: str, client: httpx.Client) -> list[str]:
     return [m.group(1) for m in re.finditer(href_text, data)]
 
 
-def build_new_version(project_name: str, uv: Path, client: httpx.Client) -> Version:
+def build_project_at_version(
+    project_name: str, version: Version, uv: Path, modified: bool = False
+) -> Path:
     """Build a source dist and a wheel with the project name and an unclaimed
     version."""
-    if cwd.joinpath(project_name).exists():
-        rmtree(cwd.joinpath(project_name))
-    check_call([uv, "init", "--lib", project_name], cwd=cwd)
-    pyproject_toml = cwd.joinpath(project_name).joinpath("pyproject.toml")
+    if modified:
+        dir_name = f"{project_name}-modified"
+    else:
+        dir_name = project_name
+    project_root = cwd.joinpath(dir_name)
+
+    if project_root.exists():
+        rmtree(project_root)
+    check_call([uv, "init", "--lib", "--name", project_name, dir_name], cwd=cwd)
+    pyproject_toml = project_root.joinpath("pyproject.toml")
 
     # Set to an unclaimed version
     toml = pyproject_toml.read_text()
-    new_version = get_new_version(project_name, client)
-    toml = re.sub('version = ".*"', f'version = "{new_version}"', toml)
+    toml = re.sub('version = ".*"', f'version = "{version}"', toml)
     pyproject_toml.write_text(toml)
 
-    # Build the project
-    check_call([uv, "build"], cwd=cwd.joinpath(project_name))
+    # Modify the code so we get a different source dist and wheel
+    if modified:
+        init_py = (
+            project_root.joinpath("src")
+            # dist info naming
+            .joinpath(project_name.replace("-", "_"))
+            .joinpath("__init__.py")
+        )
+        init_py.write_text("x = 1")
 
-    return new_version
+    # Build the project
+    check_call([uv, "build"], cwd=project_root)
+
+    return project_root
 
 
 def wait_for_index(index_url: str, project_name: str, version: Version, uv: Path):
@@ -200,19 +244,20 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     2. If we're using PyPI, uploading the same files again succeeds.
     3. Check URL works and reports the files as skipped.
     """
-    project_name = all_targets[target][0]
+    project_name = all_targets[target].project_name
 
     print(f"\nPublish {project_name} for {target}")
 
     # The distributions are build to the dist directory of the project.
-    version = build_new_version(project_name, uv, client)
+    version = get_new_version(project_name, client)
+    project_dir = build_project_at_version(project_name, version, uv)
 
     # Upload configuration
-    env, extra_args, publish_url = target_configuration(target, client)
-    index_url = all_targets[target][1]
+    publish_url = all_targets[target].publish_url
+    index_url = all_targets[target].index_url
+    env, extra_args = target_configuration(target)
     env = {**os.environ, **env}
-    uv_cwd = cwd.joinpath(project_name)
-    expected_filenames = [path.name for path in uv_cwd.joinpath("dist").iterdir()]
+    expected_filenames = [path.name for path in project_dir.joinpath("dist").iterdir()]
     # Ignore the gitignore file in dist
     expected_filenames.remove(".gitignore")
 
@@ -220,15 +265,15 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ==="
     )
     args = [uv, "publish", "--publish-url", publish_url, *extra_args]
-    check_call(args, cwd=uv_cwd, env=env)
+    check_call(args, cwd=project_dir, env=env)
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
         print(f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===")
         wait_for_index(index_url, project_name, version, uv)
-        args = [uv, "publish", "-v", "--publish-url", publish_url, *extra_args]
+        args = [uv, "publish", "--publish-url", publish_url, *extra_args]
         output = run(
-            args, cwd=uv_cwd, env=env, text=True, check=True, stderr=PIPE
+            args, cwd=project_dir, env=env, text=True, check=True, stderr=PIPE
         ).stderr
         if (
             output.count("Uploading") != len(expected_filenames)
@@ -245,14 +290,15 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     args = [
         uv,
         "publish",
-        "-v",
         "--publish-url",
         publish_url,
         "--check-url",
         index_url,
         *extra_args,
     ]
-    output = run(args, cwd=uv_cwd, env=env, text=True, check=True, stderr=PIPE).stderr
+    output = run(
+        args, cwd=project_dir, env=env, text=True, check=True, stderr=PIPE
+    ).stderr
 
     if output.count("Uploading") != 0 or output.count("already exists") != len(
         expected_filenames
@@ -263,46 +309,69 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
             f"---\n{output}\n---"
         )
 
+    # Build a different source dist and wheel at the same version, so the upload fails
+    del project_dir
+    modified_project_dir = build_project_at_version(
+        project_name, version, uv, modified=True
+    )
 
-def target_configuration(
-    target: str, client: httpx.Client
-) -> tuple[dict[str, str], list[str], str]:
+    print(
+        f"\n=== 4. Publishing modified {project_name} {version} "
+        f"again with skip existing (error test) ==="
+    )
+    wait_for_index(index_url, project_name, version, uv)
+    args = [
+        uv,
+        "publish",
+        "--publish-url",
+        publish_url,
+        "--check-url",
+        index_url,
+        *extra_args,
+    ]
+    result = run(args, cwd=modified_project_dir, env=env, text=True, stderr=PIPE)
+
+    if (
+        result.returncode == 0
+        or "Local file and index file do not match for" not in result.stderr
+    ):
+        raise RuntimeError(
+            f"Re-upload with mismatching files should not have been started: "
+            f"Exit code {result.returncode}\n"
+            f"---\n{result.stderr}\n---"
+        )
+
+
+def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
     if target == "pypi-token":
-        publish_url = TEST_PYPI_PUBLISH_URL
         extra_args = []
         env = {"UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_TOKEN"]}
     elif target == "pypi-password-env":
-        publish_url = TEST_PYPI_PUBLISH_URL
         extra_args = ["--username", "__token__"]
         env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_PASSWORD"]}
     elif target == "pypi-keyring":
-        publish_url = "https://test.pypi.org/legacy/?astral-test-keyring"
         extra_args = ["--username", "__token__", "--keyring-provider", "subprocess"]
         env = {}
     elif target == "pypi-trusted-publishing":
-        publish_url = TEST_PYPI_PUBLISH_URL
         extra_args = ["--trusted-publishing", "always"]
         env = {}
     elif target == "gitlab":
         env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]}
-        publish_url = "https://gitlab.com/api/v4/projects/61853105/packages/pypi"
         extra_args = ["--username", "astral-test-gitlab-pat"]
     elif target == "codeberg":
-        publish_url = "https://codeberg.org/api/packages/astral-test-user/pypi"
         extra_args = []
         env = {
             "UV_PUBLISH_USERNAME": "astral-test-user",
             "UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_CODEBERG_TOKEN"],
         }
     elif target == "cloudsmith":
-        publish_url = "https://python.cloudsmith.io/astral-test/astral-test-1/"
         extra_args = []
         env = {
             "UV_PUBLISH_TOKEN": os.environ["UV_TEST_PUBLISH_CLOUDSMITH_TOKEN"],
         }
     else:
         raise ValueError(f"Unknown target: {target}")
-    return env, extra_args, publish_url
+    return env, extra_args
 
 
 def main():

@@ -59,7 +59,10 @@ pub enum PublishError {
     MixedCredentials(String),
     #[error("Failed to query check URL")]
     CheckUrlIndex(#[source] uv_client::Error),
-    #[error("Local file and index file for {filename} do not match. Local: {hash_algorithm}={local}, Remote: {hash_algorithm}={remote}")]
+    #[error(
+        "Local file and index file do not match for {filename}. \
+        Local: {hash_algorithm}={local}, Remote: {hash_algorithm}={remote}"
+    )]
     HashMismatch {
         filename: Box<DistFilename>,
         hash_algorithm: HashAlgorithm,
