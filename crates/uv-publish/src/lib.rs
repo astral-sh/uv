@@ -722,7 +722,7 @@ async fn build_request(
     Ok((request, idx))
 }
 
-/// Error handling.
+/// Log response information and map response to an error variant if not successful.
 async fn handle_response(registry: &Url, response: Response) -> Result<(), PublishSendError> {
     let status_code = response.status();
     debug!("Response code for {registry}: {status_code}");
