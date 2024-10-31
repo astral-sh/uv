@@ -7600,7 +7600,7 @@ uv publish [OPTIONS] [FILES]...
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt><code>--check-url</code> <i>check-url</i></dt><dd><p>Don&#8217;t upload files that already exists on the index. The value is the index URL.</p>
+</dd><dt><code>--check-url</code> <i>check-url</i></dt><dd><p>Check an index URL for existing files to skip duplicate uploads.</p>
 
 <p>This option allows retrying publishing that failed after only some, but not all files have been uploaded, and handles error due to parallel uploads of the same file.</p>
 

@@ -22,7 +22,7 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio_util::io::ReaderStream;
 use tracing::{debug, enabled, trace, Level};
 use url::Url;
-use uv_client::{BaseClient, OwnedArchive, RegistryClient, UvRetryableStrategy};
+use uv_client::{BaseClient, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_fs::{ProgressReader, Simplified};
@@ -32,7 +32,7 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
 pub use trusted_publishing::TrustedPublishingToken;
-use uv_cache::Refresh;
+use uv_cache::{Cache, Refresh};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::{HashReader, Hasher};
 
@@ -115,6 +115,15 @@ pub trait Reporter: Send + Sync + 'static {
     fn on_download_start(&self, name: &str, size: Option<u64>) -> usize;
     fn on_download_progress(&self, id: usize, inc: u64);
     fn on_download_complete(&self, id: usize);
+}
+
+/// Context for using a fresh registry client for check URL requests.
+pub struct CheckUrlClient<'a> {
+    pub index_url: IndexUrl,
+    pub registry_client_builder: RegistryClientBuilder<'a>,
+    pub client: &'a BaseClient,
+    pub index_capabilities: IndexCapabilities,
+    pub cache: &'a Cache,
 }
 
 impl PublishSendError {
@@ -342,8 +351,7 @@ pub async fn upload(
     retries: u32,
     username: Option<&str>,
     password: Option<&str>,
-    index_client: &mut Option<(IndexUrl, RegistryClient)>,
-    index_capabilities: &IndexCapabilities,
+    check_url_client: Option<&CheckUrlClient<'_>>,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
     let form_metadata = form_metadata(file, filename)
@@ -393,7 +401,7 @@ pub async fn upload(
                 if matches!(
                     err,
                     PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
-                ) && check_url(index_client, index_capabilities, file, filename).await?
+                ) && check_url(check_url_client, file, filename).await?
                 {
                     // There was a raced upload of the same file, so even though our upload failed,
                     // the right file now exists in the registry.
@@ -411,17 +419,30 @@ pub async fn upload(
 
 /// Check whether we should skip the upload of a file because it already exists on the index.
 pub async fn check_url(
-    index_client: &mut Option<(IndexUrl, RegistryClient)>,
-    index_capabilities: &IndexCapabilities,
+    check_url_client: Option<&CheckUrlClient<'_>>,
     file: &Path,
     filename: &DistFilename,
 ) -> Result<bool, PublishError> {
-    let Some((index_url, registry_client)) = index_client.as_mut() else {
+    let Some(context) = check_url_client else {
         return Ok(false);
     };
 
+    let CheckUrlClient {
+        index_url,
+        registry_client_builder,
+        client,
+        index_capabilities,
+        cache,
+    } = context;
+
     // Avoid using the PyPI 10min default cache.
-    registry_client.refresh(Refresh::from_args(None, vec![filename.name().clone()]));
+    let cache_refresh = (*cache)
+        .clone()
+        .with_refresh(Refresh::from_args(None, vec![filename.name().clone()]));
+    let registry_client = (*registry_client_builder)
+        .clone()
+        .cache(cache_refresh)
+        .wrap_existing(client);
 
     debug!("Checking for {filename} in the registry");
     let response = registry_client

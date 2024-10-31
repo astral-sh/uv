@@ -16,7 +16,9 @@ use uv_client::{
 };
 use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
-use uv_publish::{check_trusted_publishing, files_for_publishing, upload, TrustedPublishResult};
+use uv_publish::{
+    check_trusted_publishing, files_for_publishing, upload, CheckUrlClient, TrustedPublishResult,
+};
 
 pub(crate) async fn publish(
     paths: Vec<String>,
@@ -68,25 +70,29 @@ pub(crate) async fn publish(
         .wrap_existing(&upload_client);
 
     // Initialize the registry client.
-    let mut index_client = if let Some(index_url) = check_url {
+    let check_url_client = if let Some(index_url) = check_url {
         let index_urls = IndexLocations::new(
             vec![Index::from_index_url(index_url.clone())],
             Vec::new(),
             false,
         )
         .index_urls();
-        let registry_client = RegistryClientBuilder::new(cache.clone())
+        let registry_client_builder = RegistryClientBuilder::new(cache.clone())
             .native_tls(native_tls)
             .connectivity(connectivity)
             .index_urls(index_urls)
             .keyring(keyring_provider)
-            .allow_insecure_host(allow_insecure_host.clone())
-            .wrap_existing(&upload_client);
-        Some((index_url, registry_client))
+            .allow_insecure_host(allow_insecure_host.clone());
+        Some(CheckUrlClient {
+            index_url,
+            registry_client_builder,
+            client: &upload_client,
+            index_capabilities: IndexCapabilities::default(),
+            cache,
+        })
     } else {
         None
     };
-    let index_capabilities = IndexCapabilities::default();
 
     // If applicable, attempt obtaining a token for trusted publishing.
     let trusted_publishing_token = check_trusted_publishing(
@@ -148,7 +154,7 @@ pub(crate) async fn publish(
     }
 
     for (file, raw_filename, filename) in files {
-        if uv_publish::check_url(&mut index_client, &index_capabilities, &file, &filename).await? {
+        if uv_publish::check_url(check_url_client.as_ref(), &file, &filename).await? {
             writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
             continue;
         }
@@ -171,8 +177,7 @@ pub(crate) async fn publish(
             DEFAULT_RETRIES,
             username.as_deref(),
             password.as_deref(),
-            &mut index_client,
-            &index_capabilities,
+            check_url_client.as_ref(),
             // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
             Arc::new(reporter),
         )
