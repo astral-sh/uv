@@ -126,7 +126,9 @@ async fn do_uninstall(
 
     // Collect files in a directory
     let executables = python_executable_dir()?
-        .read_dir()?
+        .read_dir()
+        .into_iter()
+        .flatten()
         .filter_map(|entry| match entry {
             Ok(entry) => Some(entry),
             Err(err) => {

@@ -74,13 +74,14 @@ fn python_install() {
     "###);
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.13
-    error: No such file or directory (os error 2)
+    Uninstalled Python 3.13.0 in [TIME]
+     - cpython-3.13.0-[PLATFORM]
     "###);
 }
 
