@@ -502,6 +502,9 @@ fn sync_legacy_non_project_group() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["iniconfig>1"]
 
+        [dependency-groups]
+        baz = ["typing-extensions"]
+
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
@@ -557,6 +560,29 @@ fn sync_legacy_non_project_group() -> Result<()> {
      - iniconfig==2.0.0
      - sniffio==1.3.1
      + typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("baz"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + iniconfig==2.0.0
+     - typing-extensions==4.10.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("bop"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Group `bop` is not defined in any project's `dependency-group` table
     "###);
 
     Ok(())
