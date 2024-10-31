@@ -265,7 +265,8 @@ pub(crate) async fn install(
         installation.ensure_externally_managed()?;
         installation.ensure_canonical_executables()?;
 
-        if preview.is_disabled() || !cfg!(unix) {
+        if preview.is_disabled() {
+            debug!("Skipping installation of Python executables, use `--preview` to enable.");
             continue;
         }
 
@@ -274,8 +275,10 @@ pub(crate) async fn install(
             .expect("We should have a bin directory with preview enabled")
             .as_path();
 
-        match installation.create_bin_link(bin) {
-            Ok(target) => {
+        let target = bin.join(installation.key().versioned_executable_name());
+
+        match installation.create_bin_link(&target) {
+            Ok(()) => {
                 debug!(
                     "Installed executable at {} for {}",
                     target.user_display(),
@@ -294,7 +297,7 @@ pub(crate) async fn install(
                 // TODO(zanieb): Add `--force`
                 if reinstall {
                     fs_err::remove_file(&to)?;
-                    let target = installation.create_bin_link(bin)?;
+                    installation.create_bin_link(&target)?;
                     debug!(
                         "Updated executable at {} to {}",
                         target.user_display(),
@@ -395,7 +398,7 @@ pub(crate) async fn install(
             }
         }
 
-        if preview.is_enabled() && cfg!(unix) {
+        if preview.is_enabled() {
             let bin = bin
                 .as_ref()
                 .expect("We should have a bin directory with preview enabled")

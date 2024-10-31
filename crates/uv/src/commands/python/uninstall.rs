@@ -7,7 +7,6 @@ use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
-use same_file::is_same_file;
 use tracing::{debug, warn};
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
@@ -149,9 +148,9 @@ async fn do_uninstall(
         })
         // Only include Python executables that match the installations
         .filter(|path| {
-            matching_installations.iter().any(|installation| {
-                is_same_file(path, installation.executable()).unwrap_or_default()
-            })
+            matching_installations
+                .iter()
+                .any(|installation| installation.is_bin_link(path.as_path()))
         })
         .collect::<BTreeSet<_>>();
 
@@ -218,6 +217,7 @@ async fn do_uninstall(
             .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
         {
             match event.kind {
+                // TODO(zanieb): Track removed executables and report them all here
                 ChangeEventKind::Removed => {
                     writeln!(
                         printer.stderr(),

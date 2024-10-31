@@ -98,7 +98,6 @@ fn python_install_preview() {
     ----- stderr -----
     Installed Python 3.13.0 in [TIME]
      + cpython-3.13.0-[PLATFORM]
-    warning: `[TEMP_DIR]/bin` is not on your PATH. To use the installed Python executable, run `export PATH="[TEMP_DIR]/bin:$PATH"`.
     "###);
 
     let bin_python = context
@@ -143,7 +142,6 @@ fn python_install_preview() {
     ----- stderr -----
     Installed Python 3.13.0 in [TIME]
      ~ cpython-3.13.0-[PLATFORM]
-    warning: `[TEMP_DIR]/bin` is not on your PATH. To use the installed Python executable, run `export PATH="[TEMP_DIR]/bin:$PATH"`.
     "###);
 
     // The executable should still be present in the bin directory
@@ -192,7 +190,6 @@ fn python_install_freethreaded() {
     ----- stderr -----
     Installed Python 3.13.0 in [TIME]
      + cpython-3.13.0+freethreaded-[PLATFORM]
-    warning: `[TEMP_DIR]/bin` is not on your PATH. To use the installed Python executable, run `export PATH="[TEMP_DIR]/bin:$PATH"`.
     "###);
 
     let bin_python = context

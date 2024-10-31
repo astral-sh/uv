@@ -660,7 +660,15 @@ impl TestContext {
             .arg("python")
             .arg("install")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
-            .env(EnvVars::UV_PYTHON_BIN_DIR, bin)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin.as_os_str())
+            .env(
+                EnvVars::PATH,
+                std::env::join_paths(
+                    std::iter::once(bin)
+                        .chain(std::env::split_paths(&env::var("PATH").unwrap_or_default())),
+                )
+                .unwrap(),
+            )
             .current_dir(&self.temp_dir);
         command
     }
