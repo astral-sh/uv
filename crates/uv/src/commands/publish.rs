@@ -154,9 +154,11 @@ pub(crate) async fn publish(
     }
 
     for (file, raw_filename, filename) in files {
-        if uv_publish::check_url(check_url_client.as_ref(), &file, &filename).await? {
-            writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
-            continue;
+        if let Some(check_url_client) = &check_url_client {
+            if uv_publish::check_url(check_url_client, &file, &filename).await? {
+                writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
+                continue;
+            }
         }
 
         let size = fs_err::metadata(&file)?.len();

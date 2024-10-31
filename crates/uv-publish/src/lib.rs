@@ -401,11 +401,14 @@ pub async fn upload(
                 if matches!(
                     err,
                     PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
-                ) && check_url(check_url_client, file, filename).await?
-                {
-                    // There was a raced upload of the same file, so even though our upload failed,
-                    // the right file now exists in the registry.
-                    return Ok(false);
+                ) {
+                    if let Some(check_url_client) = &check_url_client {
+                        if check_url(check_url_client, file, filename).await? {
+                            // There was a raced upload of the same file, so even though our upload failed,
+                            // the right file now exists in the registry.
+                            return Ok(false);
+                        }
+                    }
                 }
                 Err(PublishError::PublishSend(
                     file.to_path_buf(),
@@ -419,27 +422,23 @@ pub async fn upload(
 
 /// Check whether we should skip the upload of a file because it already exists on the index.
 pub async fn check_url(
-    check_url_client: Option<&CheckUrlClient<'_>>,
+    check_url_client: &CheckUrlClient<'_>,
     file: &Path,
     filename: &DistFilename,
 ) -> Result<bool, PublishError> {
-    let Some(context) = check_url_client else {
-        return Ok(false);
-    };
-
     let CheckUrlClient {
         index_url,
         registry_client_builder,
         client,
         index_capabilities,
         cache,
-    } = context;
+    } = check_url_client;
 
     // Avoid using the PyPI 10min default cache.
     let cache_refresh = (*cache)
         .clone()
         .with_refresh(Refresh::from_args(None, vec![filename.name().clone()]));
-    let registry_client = (*registry_client_builder)
+    let registry_client = registry_client_builder
         .clone()
         .cache(cache_refresh)
         .wrap_existing(client);
