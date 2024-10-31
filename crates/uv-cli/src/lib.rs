@@ -4820,7 +4820,7 @@ pub struct PublishArgs {
     )]
     pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
-    /// Don't upload files that already exists on the index. The value is the index URL.
+    /// Check an index URL for existing files to skip duplicate uploads.
     ///
     /// This option allows retrying publishing that failed after only some, but not all files have
     /// been uploaded, and handles error due to parallel uploads of the same file.
