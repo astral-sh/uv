@@ -551,7 +551,7 @@ pub(crate) async fn run(
                 }
             } else {
                 // Determine the default groups to include.
-                validate_dependency_groups(project.pyproject_toml(), &dev)?;
+                validate_dependency_groups(&project, &dev)?;
                 let defaults = default_dependency_groups(project.pyproject_toml())?;
 
                 // Determine the lock mode.

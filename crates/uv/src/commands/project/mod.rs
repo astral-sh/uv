@@ -38,7 +38,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
-use uv_workspace::Workspace;
+use uv_workspace::{VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -126,7 +126,10 @@ pub(crate) enum ProjectError {
     ),
 
     #[error("Group `{0}` is not defined in the project's `dependency-group` table")]
-    MissingGroup(GroupName),
+    MissingGroupProject(GroupName),
+
+    #[error("Group `{0}` is not defined in any project's `dependency-group` table")]
+    MissingGroupWorkspace(GroupName),
 
     #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
     MissingDefaultGroup(GroupName),
@@ -1366,7 +1369,7 @@ pub(crate) async fn script_python_requirement(
 /// Validate the dependency groups requested by the [`DevGroupsSpecification`].
 #[allow(clippy::result_large_err)]
 pub(crate) fn validate_dependency_groups(
-    pyproject_toml: &PyProjectToml,
+    project: &VirtualProject,
     dev: &DevGroupsSpecification,
 ) -> Result<(), ProjectError> {
     for group in dev
@@ -1374,12 +1377,38 @@ pub(crate) fn validate_dependency_groups(
         .into_iter()
         .flat_map(GroupsSpecification::names)
     {
-        if !pyproject_toml
-            .dependency_groups
-            .as_ref()
-            .is_some_and(|groups| groups.contains_key(group))
-        {
-            return Err(ProjectError::MissingGroup(group.clone()));
+        match project {
+            VirtualProject::Project(project) => {
+                // The group must be defined in the target project.
+                if !project
+                    .current_project()
+                    .pyproject_toml()
+                    .dependency_groups
+                    .as_ref()
+                    .is_some_and(|groups| groups.contains_key(group))
+                {
+                    return Err(ProjectError::MissingGroupProject(group.clone()));
+                }
+            }
+            VirtualProject::NonProject(workspace) => {
+                // The group must be defined in at least one workspace package.
+                if !workspace
+                    .pyproject_toml()
+                    .dependency_groups
+                    .as_ref()
+                    .is_some_and(|groups| groups.contains_key(group))
+                {
+                    if workspace.packages().values().all(|package| {
+                        !package
+                            .pyproject_toml()
+                            .dependency_groups
+                            .as_ref()
+                            .is_some_and(|groups| groups.contains_key(group))
+                    }) {
+                        return Err(ProjectError::MissingGroupWorkspace(group.clone()));
+                    }
+                }
+            }
         }
     }
     Ok(())
