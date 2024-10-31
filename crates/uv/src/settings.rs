@@ -720,6 +720,7 @@ pub(crate) struct SyncSettings {
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
+    pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
@@ -751,6 +752,7 @@ impl SyncSettings {
             installer,
             build,
             refresh,
+            all_packages,
             package,
             python,
         } = args;
@@ -781,6 +783,7 @@ impl SyncSettings {
             } else {
                 Modifications::Sufficient
             },
+            all_packages,
             package,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -1797,7 +1800,7 @@ impl PipCheckSettings {
 pub(crate) struct BuildSettings {
     pub(crate) src: Option<PathBuf>,
     pub(crate) package: Option<PackageName>,
-    pub(crate) all: bool,
+    pub(crate) all_packages: bool,
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
@@ -1816,7 +1819,7 @@ impl BuildSettings {
             src,
             out_dir,
             package,
-            all,
+            all_packages,
             sdist,
             wheel,
             build_constraint,
@@ -1835,7 +1838,7 @@ impl BuildSettings {
         Self {
             src,
             package,
-            all,
+            all_packages,
             out_dir,
             sdist,
             wheel,

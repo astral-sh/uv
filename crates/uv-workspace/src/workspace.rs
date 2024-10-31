@@ -1496,35 +1496,39 @@ impl VirtualProject {
 /// A target that can be installed.
 #[derive(Debug, Copy, Clone)]
 pub enum InstallTarget<'env> {
+    /// An entire workspace.
+    Workspace(&'env Workspace),
+    /// A (legacy) non-project workspace root.
+    NonProjectWorkspace(&'env Workspace),
     /// A project (which could be a workspace root or member).
     Project(&'env ProjectWorkspace),
-    /// A (legacy) non-project workspace root.
-    NonProject(&'env Workspace),
     /// A frozen member within a [`Workspace`].
-    FrozenMember(&'env Workspace, &'env PackageName),
+    FrozenProject(&'env Workspace, &'env PackageName),
 }
 
 impl<'env> InstallTarget<'env> {
     /// Create an [`InstallTarget`] for a frozen member within a workspace.
-    pub fn frozen_member(project: &'env VirtualProject, package_name: &'env PackageName) -> Self {
-        Self::FrozenMember(project.workspace(), package_name)
+    pub fn frozen(project: &'env VirtualProject, package_name: &'env PackageName) -> Self {
+        Self::FrozenProject(project.workspace(), package_name)
     }
 
     /// Return the [`Workspace`] of the target.
     pub fn workspace(&self) -> &Workspace {
         match self {
+            Self::Workspace(workspace) => workspace,
             Self::Project(project) => project.workspace(),
-            Self::NonProject(workspace) => workspace,
-            Self::FrozenMember(workspace, _) => workspace,
+            Self::NonProjectWorkspace(workspace) => workspace,
+            Self::FrozenProject(workspace, _) => workspace,
         }
     }
 
     /// Return the [`PackageName`] of the target.
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
         match self {
+            Self::Workspace(workspace) => Either::Right(workspace.packages().keys()),
             Self::Project(project) => Either::Left(std::iter::once(project.project_name())),
-            Self::NonProject(workspace) => Either::Right(workspace.packages().keys()),
-            Self::FrozenMember(_, package_name) => Either::Left(std::iter::once(*package_name)),
+            Self::NonProjectWorkspace(workspace) => Either::Right(workspace.packages().keys()),
+            Self::FrozenProject(_, package_name) => Either::Left(std::iter::once(*package_name)),
         }
     }
 
@@ -1540,8 +1544,8 @@ impl<'env> InstallTarget<'env> {
         DependencyGroupError,
     > {
         match self {
-            Self::Project(_) | Self::FrozenMember(..) => Ok(BTreeMap::new()),
-            Self::NonProject(workspace) => {
+            Self::Workspace(_) | Self::Project(_) | Self::FrozenProject(..) => Ok(BTreeMap::new()),
+            Self::NonProjectWorkspace(workspace) => {
                 // For non-projects, we might have `dependency-groups` or `tool.uv.dev-dependencies`
                 // that are attached to the workspace root (which isn't a member).
 
@@ -1591,18 +1595,24 @@ impl<'env> InstallTarget<'env> {
     /// Return the [`PackageName`] of the target, if available.
     pub fn project_name(&self) -> Option<&PackageName> {
         match self {
+            Self::Workspace(_) => None,
             Self::Project(project) => Some(project.project_name()),
-            Self::NonProject(_) => None,
-            Self::FrozenMember(_, package_name) => Some(package_name),
+            Self::NonProjectWorkspace(_) => None,
+            Self::FrozenProject(_, package_name) => Some(package_name),
         }
     }
-}
 
-impl<'env> From<&'env VirtualProject> for InstallTarget<'env> {
-    fn from(project: &'env VirtualProject) -> Self {
+    pub fn from_workspace(workspace: &'env VirtualProject) -> Self {
+        match workspace {
+            VirtualProject::Project(project) => Self::Workspace(project.workspace()),
+            VirtualProject::NonProject(workspace) => Self::NonProjectWorkspace(workspace),
+        }
+    }
+
+    pub fn from_project(project: &'env VirtualProject) -> Self {
         match project {
             VirtualProject::Project(project) => Self::Project(project),
-            VirtualProject::NonProject(workspace) => Self::NonProject(workspace),
+            VirtualProject::NonProject(workspace) => Self::NonProjectWorkspace(workspace),
         }
     }
 }

@@ -33,7 +33,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, validate_dependency_groups, ProjectError, SharedState,
 };
-use crate::commands::{diagnostics, pip, project, ExitStatus};
+use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
@@ -43,6 +43,7 @@ pub(crate) async fn sync(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: DevGroupsSpecification,
@@ -60,7 +61,7 @@ pub(crate) async fn sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Identify the project.
-    let project = if frozen {
+    let project = if frozen && !all_packages {
         VirtualProject::discover(
             project_dir,
             &DiscoveryOptions {
@@ -82,9 +83,11 @@ pub(crate) async fn sync(
 
     // Identify the target.
     let target = if let Some(package) = package.as_ref().filter(|_| frozen) {
-        InstallTarget::frozen_member(&project, package)
+        InstallTarget::frozen(&project, package)
+    } else if all_packages {
+        InstallTarget::from_workspace(&project)
     } else {
-        InstallTarget::from(&project)
+        InstallTarget::from_project(&project)
     };
 
     // TODO(lucab): improve warning content
@@ -96,7 +99,7 @@ pub(crate) async fn sync(
     }
 
     // Determine the default groups to include.
-    validate_dependency_groups(&project, &dev)?;
+    validate_dependency_groups(target, &dev)?;
     let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     // Discover or create the virtual environment.
@@ -363,7 +366,7 @@ pub(super) async fn do_sync(
     let site_packages = SitePackages::from_environment(venv)?;
 
     // Sync the environment.
-    pip::operations::install(
+    operations::install(
         &resolution,
         site_packages,
         modifications,

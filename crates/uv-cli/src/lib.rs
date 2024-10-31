@@ -2119,7 +2119,7 @@ pub struct BuildArgs {
     /// directory if no source directory is provided.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with("all"))]
+    #[arg(long, conflicts_with("all_packages"))]
     pub package: Option<PackageName>,
 
     /// Builds all packages in the workspace.
@@ -2128,8 +2128,8 @@ pub struct BuildArgs {
     /// directory if no source directory is provided.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with("package"))]
-    pub all: bool,
+    #[arg(long, alias = "all", conflicts_with("package"))]
+    pub all_packages: bool,
 
     /// The output directory to which distributions should be written.
     ///
@@ -2912,13 +2912,23 @@ pub struct SyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Sync all packages in the workspace.
+    ///
+    /// The workspace's environment (`.venv`) is updated to include all workspace
+    /// members.
+    ///
+    /// Any extras or groups specified via `--extra`, `--group`, or related options
+    /// will be applied to all workspace members.
+    #[arg(long, conflicts_with = "package")]
+    pub all_packages: bool,
+
     /// Sync for a specific package in the workspace.
     ///
     /// The workspace's environment (`.venv`) is updated to reflect the subset
     /// of dependencies declared by the specified workspace member package.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// The Python interpreter to use for the project environment.

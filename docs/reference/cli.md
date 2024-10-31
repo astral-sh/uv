@@ -1369,6 +1369,12 @@ uv sync [OPTIONS]
 
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
 
+</dd><dt><code>--all-packages</code></dt><dd><p>Sync all packages in the workspace.</p>
+
+<p>The workspace&#8217;s environment (<code>.venv</code>) is updated to include all workspace members.</p>
+
+<p>Any extras or groups specified via <code>--extra</code>, <code>--group</code>, or related options will be applied to all workspace members.</p>
+
 </dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
@@ -7260,7 +7266,7 @@ uv build [OPTIONS] [SRC]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all</code></dt><dd><p>Builds all packages in the workspace.</p>
+<dl class="cli-reference"><dt><code>--all-packages</code></dt><dd><p>Builds all packages in the workspace.</p>
 
 <p>The workspace will be discovered from the provided source directory, or the current directory if no source directory is provided.</p>
 

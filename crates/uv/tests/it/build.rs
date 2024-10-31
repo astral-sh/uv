@@ -1206,7 +1206,7 @@ fn workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `--all` was provided, but no workspace was found
+    error: `--all-packages` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
     "###);
 

@@ -263,7 +263,7 @@ fn package() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>1"]
+        dependencies = ["iniconfig>=1"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -415,7 +415,7 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>1"]
+        dependencies = ["iniconfig>=1"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -500,7 +500,7 @@ fn sync_legacy_non_project_group() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>1"]
+        dependencies = ["iniconfig>=1"]
 
         [dependency-groups]
         baz = ["typing-extensions"]
@@ -1805,7 +1805,7 @@ fn no_install_workspace() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>1"]
+        dependencies = ["iniconfig>=1"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -3073,7 +3073,7 @@ fn transitive_dev() -> Result<()> {
         build-backend = "setuptools.build_meta"
 
         [tool.uv]
-        dev-dependencies = ["iniconfig>1"]
+        dev-dependencies = ["iniconfig>=1"]
         "#,
     )?;
 
@@ -3425,7 +3425,7 @@ fn build_system_requires_workspace() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>1"]
+        dependencies = ["iniconfig>=1"]
 
         [build-system]
         requires = ["setuptools>=42", "backend==0.1.0"]
@@ -3508,7 +3508,7 @@ fn build_system_requires_path() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig>1"]
+        dependencies = ["iniconfig>=1"]
 
         [build-system]
         requires = ["setuptools>=42", "backend==0.1.0"]
@@ -3794,6 +3794,309 @@ fn sync_explicit() -> Result<()> {
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
      + idna==2.7
+    "###);
+
+    Ok(())
+}
+
+/// Sync all members in a workspace.
+#[test]
+fn sync_all() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>3", "child"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add a workspace member.
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Sync all workspace members.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==4.3.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Sync all members in a workspace with extras attached.
+#[test]
+fn sync_all_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.optional-dependencies]
+        types = ["sniffio>1"]
+        async = ["anyio>3"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add a workspace member.
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+        testing = ["packaging>=24"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Sync an extra that exists in both the parent and child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("types"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    // Sync an extra that only exists in the child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--extra").arg("testing"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + packaging==24.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
+    "###);
+
+    // Sync all extras.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
+/// Sync all members in a workspace with dependency groups attached.
+#[test]
+fn sync_all_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [dependency-groups]
+        types = ["sniffio>=1"]
+        async = ["anyio>=3"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add a workspace member.
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+
+        [dependency-groups]
+        types = ["typing-extensions>=4"]
+        testing = ["packaging>=24"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Sync a group that exists in both the parent and child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--group").arg("types"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    // Sync a group that only exists in the child.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--group").arg("testing"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + packaging==24.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
+    "###);
+
+    // Sync a group that doesn't exist.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--group").arg("foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Group `foo` is not defined in any project's `dependency-group` table
     "###);
 
     Ok(())

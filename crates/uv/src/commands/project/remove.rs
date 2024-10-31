@@ -236,7 +236,7 @@ pub(crate) async fn remove(
     let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     project::sync::do_sync(
-        InstallTarget::from(&project),
+        InstallTarget::from_project(&project),
         &venv,
         &lock,
         &extras,
