@@ -25,6 +25,7 @@ use uv_python::{
     PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_settings::InstallMirrorOptions;
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
@@ -43,6 +44,7 @@ pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
+    install_mirrors: InstallMirrorOptions,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     link_mode: LinkMode,
@@ -69,6 +71,7 @@ pub(crate) async fn venv(
         project_dir,
         path,
         python_request,
+        install_mirrors,
         link_mode,
         index_locations,
         index_strategy,
@@ -126,6 +129,7 @@ async fn venv_impl(
     project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
+    install_mirrors: InstallMirrorOptions,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
@@ -218,6 +222,8 @@ async fn venv_impl(
         &client_builder,
         cache,
         Some(&reporter),
+        install_mirrors.python_install_mirror,
+        install_mirrors.pypy_install_mirror,
     )
     .await
     .into_diagnostic()?;

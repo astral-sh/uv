@@ -3948,7 +3948,7 @@ pub struct PythonInstallArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
-    pub python_install_mirror: Option<String>,
+    pub mirror: Option<String>,
 
     /// Set the URL to use as the source for downloading PyPy installations.
     ///
@@ -3956,7 +3956,7 @@ pub struct PythonInstallArgs {
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
-    pub pypy_install_mirror: Option<String>,
+    pub pypy_mirror: Option<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
     ///

@@ -30,6 +30,7 @@ use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, LockVersion, Options, OptionsBuilder, PythonRequirement,
     RequiresPython, ResolverEnvironment, ResolverManifest, SatisfiesResult, VERSION,
 };
+use uv_settings::InstallMirrorOptions;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -76,6 +77,7 @@ pub(crate) async fn lock(
     frozen: bool,
     dry_run: bool,
     python: Option<String>,
+    install_mirrors: InstallMirrorOptions,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -103,6 +105,7 @@ pub(crate) async fn lock(
             native_tls,
             cache,
             printer,
+            install_mirrors,
         )
         .await?
         .into_interpreter();

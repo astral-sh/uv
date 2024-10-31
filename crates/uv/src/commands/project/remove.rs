@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use std::fmt::Write;
 use std::path::Path;
+use uv_settings::InstallMirrorOptions;
 
 use owo_colors::OwoColorize;
 use uv_cache::Cache;
@@ -38,6 +39,7 @@ pub(crate) async fn remove(
     dependency_type: DependencyType,
     package: Option<PackageName>,
     python: Option<String>,
+    install_mirrors: InstallMirrorOptions,
     settings: ResolverInstallerSettings,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
@@ -186,6 +188,7 @@ pub(crate) async fn remove(
     let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
+        install_mirrors,
         python_preference,
         python_downloads,
         connectivity,

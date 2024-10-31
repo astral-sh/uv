@@ -27,6 +27,7 @@ use uv_python::{
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_settings::InstallMirrorOptions;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
@@ -51,6 +52,7 @@ pub(crate) async fn build_frontend(
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
+    install_mirrors: InstallMirrorOptions,
     settings: ResolverSettings,
     no_config: bool,
     python_preference: PythonPreference,
@@ -73,6 +75,7 @@ pub(crate) async fn build_frontend(
         &build_constraints,
         hash_checking,
         python.as_deref(),
+        install_mirrors,
         settings.as_ref(),
         no_config,
         python_preference,
@@ -113,6 +116,7 @@ async fn build_impl(
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
+    install_mirrors: InstallMirrorOptions,
     settings: ResolverSettingsRef<'_>,
     no_config: bool,
     python_preference: PythonPreference,
@@ -247,6 +251,7 @@ async fn build_impl(
             source.clone(),
             output_dir,
             python_request,
+            install_mirrors.clone(),
             no_config,
             workspace.as_ref(),
             python_preference,
@@ -342,6 +347,7 @@ async fn build_package(
     source: AnnotatedSource<'_>,
     output_dir: Option<&Path>,
     python_request: Option<&str>,
+    install_mirrors: InstallMirrorOptions,
     no_config: bool,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,
@@ -417,6 +423,8 @@ async fn build_package(
         client_builder,
         cache,
         Some(&PythonDownloadReporter::single(printer)),
+        install_mirrors.python_install_mirror,
+        install_mirrors.pypy_install_mirror,
     )
     .await?
     .into_interpreter();

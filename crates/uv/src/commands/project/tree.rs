@@ -9,6 +9,7 @@ use uv_configuration::{Concurrency, DevGroupsSpecification, LowerBound, TargetTr
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
+use uv_settings::InstallMirrorOptions;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -37,6 +38,7 @@ pub(crate) async fn tree(
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     python: Option<String>,
+    install_mirrors: InstallMirrorOptions,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -72,6 +74,7 @@ pub(crate) async fn tree(
                 native_tls,
                 cache,
                 printer,
+                install_mirrors,
             )
             .await?
             .into_interpreter(),

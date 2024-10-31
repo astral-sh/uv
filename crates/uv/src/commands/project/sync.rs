@@ -22,6 +22,7 @@ use uv_pypi_types::{
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, InstallTarget};
+use uv_settings::InstallMirrorOptions;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
@@ -52,6 +53,7 @@ pub(crate) async fn sync(
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
+    install_mirrors: InstallMirrorOptions,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
@@ -112,6 +114,7 @@ pub(crate) async fn sync(
     let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
+        install_mirrors,
         python_preference,
         python_downloads,
         connectivity,

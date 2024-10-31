@@ -17,7 +17,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::{ResolverInstallerOptions, ToolOptions};
+use uv_settings::{InstallMirrorOptions, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
@@ -41,6 +41,7 @@ pub(crate) async fn install(
     from: Option<String>,
     with: &[RequirementsSource],
     python: Option<String>,
+    install_mirrors: InstallMirrorOptions,
     force: bool,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
@@ -70,6 +71,8 @@ pub(crate) async fn install(
         &client_builder,
         &cache,
         Some(&reporter),
+        install_mirrors.python_install_mirror,
+        install_mirrors.pypy_install_mirror,
     )
     .await?
     .into_interpreter();

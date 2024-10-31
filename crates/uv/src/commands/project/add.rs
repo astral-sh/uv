@@ -31,6 +31,7 @@ use uv_python::{
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InstallTarget};
 use uv_scripts::Pep723Script;
+use uv_settings::InstallMirrorOptions;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
@@ -67,6 +68,7 @@ pub(crate) async fn add(
     extras: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
+    install_mirrors: InstallMirrorOptions,
     settings: ResolverInstallerSettings,
     script: Option<PathBuf>,
     python_preference: PythonPreference,
@@ -133,6 +135,7 @@ pub(crate) async fn add(
         } else {
             let requires_python = script_python_requirement(
                 python.as_deref(),
+                install_mirrors.clone(),
                 project_dir,
                 false,
                 python_preference,
@@ -176,6 +179,8 @@ pub(crate) async fn add(
             &client_builder,
             cache,
             Some(&reporter),
+            install_mirrors.python_install_mirror,
+            install_mirrors.pypy_install_mirror,
         )
         .await?
         .into_interpreter();
@@ -213,6 +218,7 @@ pub(crate) async fn add(
         let venv = project::get_or_init_environment(
             project.workspace(),
             python.as_deref().map(PythonRequest::parse),
+            install_mirrors.clone(),
             python_preference,
             python_downloads,
             connectivity,

@@ -32,8 +32,8 @@ use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
-    Combine, FilesystemOptions, Options, PipOptions, PublishOptions, ResolverInstallerOptions,
-    ResolverOptions,
+    Combine, FilesystemOptions, InstallMirrorOptions, Options, PipOptions, PublishOptions,
+    ResolverInstallerOptions, ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -170,12 +170,13 @@ pub(crate) struct InitSettings {
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
 }
 
 impl InitSettings {
     /// Resolve the [`InitSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: InitArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: InitArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let InitArgs {
             path,
             name,
@@ -205,6 +206,10 @@ impl InitSettings {
         let package = flag(package || build_backend.is_some(), no_package || r#virtual)
             .unwrap_or(kind.packaged_by_default());
 
+        let install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
         Self {
             path,
             name,
@@ -217,6 +222,7 @@ impl InitSettings {
             no_pin_python,
             no_workspace,
             python: python.and_then(Maybe::into_option),
+            install_mirrors,
         }
     }
 }
@@ -240,6 +246,7 @@ pub(crate) struct RunSettings {
     pub(crate) no_project: bool,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: Vec<PathBuf>,
@@ -283,6 +290,11 @@ impl RunSettings {
             no_env_file,
         } = args;
 
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
         Self {
             locked,
             frozen,
@@ -314,6 +326,7 @@ impl RunSettings {
             ),
             env_file,
             no_env_file,
+            install_mirrors,
         }
     }
 }
@@ -330,6 +343,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
@@ -375,6 +389,11 @@ impl ToolRunSettings {
             }
         }
 
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
         Self {
             command,
             from,
@@ -392,6 +411,7 @@ impl ToolRunSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            install_mirrors,
         }
     }
 }
@@ -411,6 +431,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) force: bool,
     pub(crate) editable: bool,
+    pub(crate) install_mirrors: InstallMirrorOptions,
 }
 
 impl ToolInstallSettings {
@@ -433,10 +454,16 @@ impl ToolInstallSettings {
 
         let options = resolver_installer_options(installer, build).combine(
             filesystem
+                .clone()
                 .map(FilesystemOptions::into_options)
                 .map(|options| options.top_level)
                 .unwrap_or_default(),
         );
+
+        let install_mirrors = filesystem
+            .map(FilesystemOptions::into_options)
+            .map(|options| options.install_mirrors)
+            .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::from(options.clone());
 
@@ -455,6 +482,7 @@ impl ToolInstallSettings {
             refresh: Refresh::from(refresh),
             options,
             settings,
+            install_mirrors,
         }
     }
 }
@@ -465,10 +493,10 @@ impl ToolInstallSettings {
 pub(crate) struct ToolUpgradeSettings {
     pub(crate) name: Vec<PackageName>,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
 }
-
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
@@ -490,8 +518,12 @@ impl ToolUpgradeSettings {
         }
 
         let args = resolver_installer_options(installer, build);
-        let filesystem = filesystem
-            .map(FilesystemOptions::into_options)
+        let filesystem = filesystem.map(FilesystemOptions::into_options);
+        let install_mirrors = filesystem
+            .clone()
+            .map(|options| options.install_mirrors)
+            .unwrap_or_default();
+        let top_level = filesystem
             .map(|options| options.top_level)
             .unwrap_or_default();
 
@@ -499,7 +531,8 @@ impl ToolUpgradeSettings {
             name: if all { vec![] } else { name },
             python: python.and_then(Maybe::into_option),
             args,
-            filesystem,
+            filesystem: top_level,
+            install_mirrors,
         }
     }
 }
@@ -638,39 +671,31 @@ impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
-        let options = filesystem.map(|fs_options| fs_options.into_options());
-        let python_install_mirror = if args.python_install_mirror.is_some() {
-            args.python_install_mirror
-        } else {
-            match &options {
-                Some(options) => options.globals.python_install_mirror.clone(),
-                None => None,
-            }
+        let options = filesystem.map(uv_settings::FilesystemOptions::into_options);
+        let (python_mirror, pypy_mirror) = match options {
+            Some(options) => (
+                options.install_mirrors.python_install_mirror,
+                options.install_mirrors.pypy_install_mirror,
+            ),
+            None => (None, None),
         };
-
-        let pypy_install_mirror = if args.pypy_install_mirror.is_some() {
-            args.pypy_install_mirror
-        } else {
-            match options {
-                Some(options) => options.globals.pypy_install_mirror,
-                None => None,
-            }
-        };
+        let python_mirror = args.mirror.or(python_mirror);
+        let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
 
         let PythonInstallArgs {
             targets,
             reinstall,
             force,
-            python_install_mirror: _,
-            pypy_install_mirror: _,
+            mirror: _,
+            pypy_mirror: _,
         } = args;
 
         Self {
             targets,
             reinstall,
             force,
-            python_install_mirror,
-            pypy_install_mirror,
+            python_install_mirror: python_mirror,
+            pypy_install_mirror: pypy_mirror,
         }
     }
 }
@@ -766,6 +791,7 @@ pub(crate) struct SyncSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
@@ -799,6 +825,10 @@ impl SyncSettings {
             package,
             python,
         } = args;
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::combine(
             resolver_installer_options(installer, build),
@@ -831,6 +861,7 @@ impl SyncSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings,
+            install_mirrors,
         }
     }
 }
@@ -843,6 +874,7 @@ pub(crate) struct LockSettings {
     pub(crate) frozen: bool,
     pub(crate) dry_run: bool,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
 }
@@ -861,6 +893,11 @@ impl LockSettings {
             python,
         } = args;
 
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
         Self {
             locked,
             frozen,
@@ -868,6 +905,7 @@ impl LockSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            install_mirrors,
         }
     }
 }
@@ -891,6 +929,7 @@ pub(crate) struct AddSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
     pub(crate) settings: ResolverInstallerSettings,
@@ -979,6 +1018,11 @@ impl AddSettings {
             }
         }
 
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
         Self {
             locked,
             frozen,
@@ -1001,6 +1045,7 @@ impl AddSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            install_mirrors,
         }
     }
 }
@@ -1017,6 +1062,7 @@ pub(crate) struct RemoveSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
@@ -1051,6 +1097,11 @@ impl RemoveSettings {
             DependencyType::Production
         };
 
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
         Self {
             locked,
             frozen,
@@ -1065,6 +1116,7 @@ impl RemoveSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            install_mirrors,
         }
     }
 }
@@ -1085,6 +1137,7 @@ pub(crate) struct TreeSettings {
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) resolver: ResolverSettings,
 }
 
@@ -1108,6 +1161,10 @@ impl TreeSettings {
             python_platform,
             python,
         } = args;
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
 
         Self {
             dev: DevGroupsSpecification::from_args(
@@ -1125,6 +1182,7 @@ impl TreeSettings {
             python_platform,
             python: python.and_then(Maybe::into_option),
             resolver: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            install_mirrors,
         }
     }
 }
@@ -1146,6 +1204,7 @@ pub(crate) struct ExportSettings {
     pub(crate) frozen: bool,
     pub(crate) include_header: bool,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
 }
@@ -1183,6 +1242,10 @@ impl ExportSettings {
             refresh,
             python,
         } = args;
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
 
         Self {
             format,
@@ -1209,6 +1272,7 @@ impl ExportSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            install_mirrors,
         }
     }
 }
@@ -1854,6 +1918,7 @@ pub(crate) struct BuildSettings {
     pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
 }
@@ -1881,6 +1946,11 @@ impl BuildSettings {
             resolver,
         } = args;
 
+        let install_mirrors = match &filesystem {
+            Some(fs) => fs.install_mirrors.clone(),
+            None => InstallMirrorOptions::default(),
+        };
+
         Self {
             src,
             package,
@@ -1900,6 +1970,7 @@ impl BuildSettings {
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
+            install_mirrors,
         }
     }
 }
@@ -2271,6 +2342,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
 pub(crate) struct PipSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: InstallMirrorOptions,
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) break_system_packages: bool,
@@ -2318,7 +2390,12 @@ pub(crate) struct PipSettings {
 impl PipSettings {
     /// Resolve the [`PipSettings`] from the CLI and filesystem configuration.
     pub(crate) fn combine(args: PipOptions, filesystem: Option<FilesystemOptions>) -> Self {
-        let Options { top_level, pip, .. } = filesystem
+        let Options {
+            top_level,
+            pip,
+            install_mirrors,
+            ..
+        } = filesystem
             .map(FilesystemOptions::into_options)
             .unwrap_or_default();
 
@@ -2602,6 +2679,7 @@ impl PipSettings {
                     top_level_no_build_package.unwrap_or_default(),
                 )),
             ),
+            install_mirrors,
         }
     }
 }

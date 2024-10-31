@@ -34,6 +34,7 @@ use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
     ResolverEnvironment,
 };
+use uv_settings::InstallMirrorOptions;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -387,6 +388,7 @@ impl ProjectInterpreter {
         native_tls: bool,
         cache: &Cache,
         printer: Printer,
+        install_mirrors: InstallMirrorOptions,
     ) -> Result<Self, ProjectError> {
         // Resolve the Python request and requirement for the workspace.
         let WorkspacePython {
@@ -472,6 +474,8 @@ impl ProjectInterpreter {
             &client_builder,
             cache,
             Some(&reporter),
+            install_mirrors.python_install_mirror,
+            install_mirrors.pypy_install_mirror,
         )
         .await?;
 
@@ -516,6 +520,7 @@ impl ProjectInterpreter {
 pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
     python: Option<PythonRequest>,
+    install_mirrors: InstallMirrorOptions,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -532,6 +537,7 @@ pub(crate) async fn get_or_init_environment(
         native_tls,
         cache,
         printer,
+        install_mirrors,
     )
     .await?
     {
@@ -1325,6 +1331,7 @@ pub(crate) async fn update_environment(
 /// Determine the [`RequiresPython`] requirement for a PEP 723 script.
 pub(crate) async fn script_python_requirement(
     python: Option<&str>,
+    install_mirrors: InstallMirrorOptions,
     directory: &Path,
     no_pin_python: bool,
     python_preference: PythonPreference,
@@ -1357,6 +1364,8 @@ pub(crate) async fn script_python_requirement(
         client_builder,
         cache,
         Some(reporter),
+        install_mirrors.python_install_mirror,
+        install_mirrors.pypy_install_mirror,
     )
     .await?
     .into_interpreter();

@@ -6,7 +6,6 @@ use tracing::{debug, info};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_pep440::{Prerelease, Version};
-use uv_static::EnvVars;
 
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
@@ -87,6 +86,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<String>,
+        pypy_install_mirror: Option<String>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or_else(|| &PythonRequest::Default);
 
@@ -101,7 +102,16 @@ impl PythonInstallation {
             {
                 if let Some(request) = PythonDownloadRequest::from_request(request) {
                     debug!("Requested Python not found, checking for available download...");
-                    match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
+                    match Self::fetch(
+                        request.fill()?,
+                        client_builder,
+                        cache,
+                        reporter,
+                        python_install_mirror,
+                        pypy_install_mirror,
+                    )
+                    .await
+                    {
                         Ok(installation) => Ok(installation),
                         Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
                             Err(Error::MissingPython(err))
@@ -122,6 +132,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<String>,
+        pypy_install_mirror: Option<String>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
@@ -130,8 +142,6 @@ impl PythonInstallation {
 
         let download = ManagedPythonDownload::from_request(&request)?;
         let client = client_builder.build();
-        let python_install_mirror = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
-        let pypy_install_mirror = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
 
         info!("Fetching requested Python...");
         let result = download

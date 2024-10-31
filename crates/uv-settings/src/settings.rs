@@ -14,6 +14,7 @@ use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_static::EnvVars;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -40,6 +41,9 @@ pub struct Options {
 
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+
+    #[serde(flatten)]
+    pub install_mirrors: InstallMirrorOptions,
 
     #[serde(flatten)]
     pub publish: PublishOptions,
@@ -224,37 +228,6 @@ pub struct GlobalOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
-    /// Mirror URL for downloading managed Python installations.
-    ///
-    /// By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
-    /// This variable can be set to a mirror URL to use a different source for Python installations.
-    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
-    ///
-    /// Distributions can be read from a local directory by using the `file://` URL scheme.
-    #[option(
-        default = "None",
-        value_type = "str",
-        example = r#"
-            python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
-        "#
-    )]
-    pub python_install_mirror: Option<String>,
-    /// Mirror URL to use for downloading managed PyPy installations.
-    ///
-    /// By default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).
-    /// This variable can be set to a mirror URL to use a different source for PyPy installations.
-    /// The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
-    ///
-    /// Distributions can be read from a
-    /// local directory by using the `file://` URL scheme.
-    #[option(
-        default = "None",
-        value_type = "str",
-        example = r#"
-            pypy-install-mirror = "https://downloads.python.org/pypy"
-        "#
-    )]
-    pub pypy_install_mirror: Option<String>,
 }
 
 /// Settings relevant to all installer operations.
@@ -682,6 +655,61 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub no_binary_package: Option<Vec<PackageName>>,
+}
+
+/// Shared settings, relevant to all operations that might create managed python installations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct InstallMirrorOptions {
+    /// Mirror URL for downloading managed Python installations.
+    ///
+    /// By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
+    /// This variable can be set to a mirror URL to use a different source for Python installations.
+    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
+        "#
+    )]
+    pub python_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed PyPy installations.
+    ///
+    /// By default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).
+    /// This variable can be set to a mirror URL to use a different source for PyPy installations.
+    /// The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+    ///
+    /// Distributions can be read from a
+    /// local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            pypy-install-mirror = "https://downloads.python.org/pypy"
+        "#
+    )]
+    pub pypy_install_mirror: Option<String>,
+}
+
+impl Default for InstallMirrorOptions {
+    fn default() -> Self {
+        InstallMirrorOptions::resolve(None, None)
+    }
+}
+
+impl InstallMirrorOptions {
+    pub fn resolve(python_mirror: Option<String>, pypy_mirror: Option<String>) -> Self {
+        let python_mirror_env = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
+        let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
+        InstallMirrorOptions {
+            python_install_mirror: python_mirror_env.or(python_mirror),
+            pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
+        }
+    }
 }
 
 /// Settings that are specific to the `uv pip` command-line interface.
@@ -1540,8 +1568,6 @@ pub struct OptionsWire {
     preview: Option<bool>,
     python_preference: Option<PythonPreference>,
     python_downloads: Option<PythonDownloads>,
-    python_install_mirror: Option<String>,
-    pypy_install_mirror: Option<String>,
     concurrent_downloads: Option<NonZeroUsize>,
     concurrent_builds: Option<NonZeroUsize>,
     concurrent_installs: Option<NonZeroUsize>,
@@ -1574,6 +1600,11 @@ pub struct OptionsWire {
     no_build_package: Option<Vec<PackageName>>,
     no_binary: Option<bool>,
     no_binary_package: Option<Vec<PackageName>>,
+
+    // #[serde(flatten)]
+    // install_mirror: InstallMirrorOptions,
+    python_install_mirror: Option<String>,
+    pypy_install_mirror: Option<String>,
 
     // #[serde(flatten)]
     // publish: PublishOptions
@@ -1670,8 +1701,6 @@ impl From<OptionsWire> for Options {
                 preview,
                 python_preference,
                 python_downloads,
-                python_install_mirror,
-                pypy_install_mirror,
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,
@@ -1713,6 +1742,10 @@ impl From<OptionsWire> for Options {
             override_dependencies,
             constraint_dependencies,
             environments,
+            install_mirrors: InstallMirrorOptions::resolve(
+                python_install_mirror,
+                pypy_install_mirror,
+            ),
         }
     }
 }

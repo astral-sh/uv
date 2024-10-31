@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::path::{Path, PathBuf};
+use uv_settings::InstallMirrorOptions;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -42,6 +43,7 @@ pub(crate) async fn export(
     frozen: bool,
     include_header: bool,
     python: Option<String>,
+    install_mirrors: InstallMirrorOptions,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -105,6 +107,7 @@ pub(crate) async fn export(
             native_tls,
             cache,
             printer,
+            install_mirrors,
         )
         .await?
         .into_interpreter();
