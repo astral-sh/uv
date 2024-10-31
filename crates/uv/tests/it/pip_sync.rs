@@ -5631,8 +5631,10 @@ fn sanitize() -> Result<()> {
     "###
     );
 
-    // There should be a `payload` file in `site-packages` (but _not_ outside of it).
-    assert!(context.site_packages().join("payload").exists());
+    // There should be no `payload` file in the root.
+    if let Some(parent) = context.temp_dir.parent() {
+        assert!(!parent.join("payload").exists());
+    }
 
     Ok(())
 }

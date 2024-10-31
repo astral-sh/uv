@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 
 use futures::StreamExt;
@@ -21,22 +21,24 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    /// Sanitize a filename for use on Windows.
-    fn sanitize(filename: &str) -> PathBuf {
-        filename
-            .replace('\\', "/")
-            .split('/')
-            .map(|segment| {
-                sanitize_filename::sanitize_with_options(
-                    segment,
-                    sanitize_filename::Options {
-                        windows: cfg!(windows),
-                        truncate: false,
-                        replacement: "",
-                    },
-                )
-            })
-            .collect()
+    /// Ensure the file path is safe to use as a [`Path`].
+    ///
+    /// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
+    pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
+        if file_name.contains('\0') {
+            return None;
+        }
+        let path = PathBuf::from(file_name);
+        let mut depth = 0usize;
+        for component in path.components() {
+            match component {
+                Component::Prefix(_) | Component::RootDir => return None,
+                Component::ParentDir => depth = depth.checked_sub(1)?,
+                Component::Normal(_) => depth += 1,
+                Component::CurDir => (),
+            }
+        }
+        Some(path)
     }
 
     let target = target.as_ref();
@@ -48,7 +50,17 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     while let Some(mut entry) = zip.next_with_entry().await? {
         // Construct the (expected) path to the file on-disk.
         let path = entry.reader().entry().filename().as_str()?;
-        let path = target.join(sanitize(path));
+
+        // Sanitize the file name to prevent directory traversal attacks.
+        let Some(path) = enclosed_name(path) else {
+            warn!("Skipping unsafe file name: {path}");
+
+            // Close current file prior to proceeding, as per:
+            // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
+            zip = entry.skip().await?;
+            continue;
+        };
+        let path = target.join(path);
         let is_dir = entry.reader().entry().dir()?;
 
         // Either create the directory or write the file to disk.
@@ -75,7 +87,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             tokio::io::copy(&mut reader, &mut writer).await?;
         }
 
-        // Close current file to get access to the next one. See docs:
+        // Close current file prior to proceeding, as per:
         // https://docs.rs/async_zip/0.0.16/async_zip/base/read/stream/
         zip = entry.skip().await?;
     }
@@ -104,7 +116,10 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             if has_any_executable_bit != 0 {
                 // Construct the (expected) path to the file on-disk.
                 let path = entry.filename().as_str()?;
-                let path = target.join(sanitize(path));
+                let Some(path) = enclosed_name(path) else {
+                    continue;
+                };
+                let path = target.join(path);
 
                 let permissions = fs_err::tokio::metadata(&path).await?.permissions();
                 if permissions.mode() & 0o111 != 0o111 {
