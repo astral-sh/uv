@@ -1,9 +1,10 @@
-use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::formatdoc;
 use url::Url;
+
+use crate::common::{uv_snapshot, TestContext};
 
 #[test]
 fn nested_dependencies() -> Result<()> {
@@ -912,6 +913,83 @@ fn cycle() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
+    "###
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn workspace_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+    "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── anyio v4.3.0
+    │   ├── idna v3.6
+    │   └── sniffio v1.3.1
+    └── child v0.1.0 (group: dev)
+        └── iniconfig v2.0.0
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###
+    );
+
+    // Under `--no-dev`, the member should still be included, since we show the entire workspace.
+    // But it shouldn't be considered a dependency of the root.
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child v0.1.0
+    └── iniconfig v2.0.0
+    project v0.1.0
+    └── anyio v4.3.0
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
     "###
     );
 
