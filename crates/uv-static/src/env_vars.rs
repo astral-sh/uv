@@ -1,9 +1,9 @@
-use uv_macros::collect_constants;
+use uv_macros::{attr_hidden, attribute_env_vars_metadata};
 
 /// Declares all environment variable used throughout `uv` and its crates.
 pub struct EnvVars;
 
-#[collect_constants]
+#[attribute_env_vars_metadata]
 impl EnvVars {
     /// Equivalent to the `--default-index` argument. Base index URL for searching packages.
     pub const UV_DEFAULT_INDEX: &'static str = "UV_DEFAULT_INDEX";
@@ -154,6 +154,7 @@ impl EnvVars {
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
 
     /// Used to override `PATH` to limit Python executable availability in the test suite.
+    #[attr_hidden]
     pub const UV_TEST_PYTHON_PATH: &'static str = "UV_TEST_PYTHON_PATH";
 
     /// Include resolver and installer output related to environment modifications.
@@ -179,27 +180,35 @@ impl EnvVars {
     }
 
     /// Used to set the uv commit hash at build time via `build.rs`.
+    #[attr_hidden]
     pub const UV_COMMIT_HASH: &'static str = "UV_COMMIT_HASH";
 
     /// Used to set the uv commit short hash at build time via `build.rs`.
+    #[attr_hidden]
     pub const UV_COMMIT_SHORT_HASH: &'static str = "UV_COMMIT_SHORT_HASH";
 
     /// Used to set the uv commit date at build time via `build.rs`.
+    #[attr_hidden]
     pub const UV_COMMIT_DATE: &'static str = "UV_COMMIT_DATE";
 
     /// Used to set the uv tag at build time via `build.rs`.
+    #[attr_hidden]
     pub const UV_LAST_TAG: &'static str = "UV_LAST_TAG";
 
     /// Used to set the uv tag distance from head at build time via `build.rs`.
+    #[attr_hidden]
     pub const UV_LAST_TAG_DISTANCE: &'static str = "UV_LAST_TAG_DISTANCE";
 
     /// Used to set the spawning/parent interpreter when using --system in the test suite.
+    #[attr_hidden]
     pub const UV_INTERNAL__PARENT_INTERPRETER: &'static str = "UV_INTERNAL__PARENT_INTERPRETER";
 
     /// Used to force showing the derivation tree during resolver error reporting.
+    #[attr_hidden]
     pub const UV_INTERNAL__SHOW_DERIVATION_TREE: &'static str = "UV_INTERNAL__SHOW_DERIVATION_TREE";
 
     /// Used to set a temporary directory for some tests.
+    #[attr_hidden]
     pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
 
     /// Path to system-level configuration directory on Unix systems.
@@ -356,32 +365,40 @@ impl EnvVars {
     pub const TRACING_DURATIONS_FILE: &'static str = "TRACING_DURATIONS_FILE";
 
     /// Used to set `RUST_HOST_TARGET` at build time via `build.rs`.
+    #[attr_hidden]
     pub const TARGET: &'static str = "TARGET";
 
     /// Custom log level for verbose output, compatible with `tracing_subscriber`.
     pub const RUST_LOG: &'static str = "RUST_LOG";
 
     /// The directory containing the `Cargo.toml` manifest for a package.
+    #[attr_hidden]
     pub const CARGO_MANIFEST_DIR: &'static str = "CARGO_MANIFEST_DIR";
 
     /// Specifies the directory where Cargo stores build artifacts (target directory).
+    #[attr_hidden]
     pub const CARGO_TARGET_DIR: &'static str = "CARGO_TARGET_DIR";
 
     /// Used in tests for environment substitution testing in `requirements.in`.
+    #[attr_hidden]
     pub const URL: &'static str = "URL";
 
     /// Used in tests for environment substitution testing in `requirements.in`.
+    #[attr_hidden]
     pub const FILE_PATH: &'static str = "FILE_PATH";
 
     /// Used in tests for environment substitution testing in `requirements.in`.
+    #[attr_hidden]
     pub const HATCH_PATH: &'static str = "HATCH_PATH";
 
     /// Used in tests for environment substitution testing in `requirements.in`.
+    #[attr_hidden]
     pub const BLACK_PATH: &'static str = "BLACK_PATH";
 
     /// Used in testing Hatch's root.uri feature
     ///
     /// See: <https://hatch.pypa.io/dev/config/dependency/#local>.
+    #[attr_hidden]
     pub const ROOT_PATH: &'static str = "ROOT_PATH";
 
     /// Used to set test credentials for keyring tests.

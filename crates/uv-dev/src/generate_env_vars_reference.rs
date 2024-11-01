@@ -12,7 +12,7 @@ use crate::ROOT_DIR;
 #[derive(clap::Args)]
 pub(crate) struct Args {
     #[arg(long, default_value_t, value_enum)]
-    mode: Mode,
+    pub(crate) mode: Mode,
 }
 
 pub(crate) fn main(args: &Args) -> anyhow::Result<()> {

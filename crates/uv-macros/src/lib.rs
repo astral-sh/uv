@@ -64,21 +64,28 @@ fn get_doc_comment(attr: &Attribute) -> Option<String> {
 }
 
 #[proc_macro_attribute]
-pub fn collect_constants(_attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as ItemImpl);
 
     let constants: Vec<_> = ast
         .items
         .iter()
-        .filter_map(|item| {
-            match item {
-                ImplItem::Const(item) => {
-                    let name = item.ident.to_string();
-                    let doc = item.attrs.iter().find_map(get_doc_comment).expect("Missing doc comment");
-                    Some((name, doc))
-                }
-                _ => None,
+        .filter_map(|item| match item {
+            ImplItem::Const(item)
+                if !item
+                    .attrs
+                    .iter()
+                    .any(|attr| attr.path().is_ident("attr_hidden")) =>
+            {
+                let name = item.ident.to_string();
+                let doc = item
+                    .attrs
+                    .iter()
+                    .find_map(get_doc_comment)
+                    .expect("Missing doc comment");
+                Some((name, doc))
             }
+            _ => None,
         })
         .collect();
 
@@ -101,4 +108,9 @@ pub fn collect_constants(_attr: TokenStream, input: TokenStream) -> TokenStream 
     };
 
     expanded.into()
+}
+
+#[proc_macro_attribute]
+pub fn attr_hidden(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
 }
