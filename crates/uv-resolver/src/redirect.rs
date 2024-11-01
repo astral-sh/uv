@@ -1,5 +1,4 @@
 use url::Url;
-
 use uv_git::{GitReference, GitResolver};
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
@@ -17,9 +16,8 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
     let Some(new_git_url) = git.precise(git_url.clone()) else {
         debug_assert!(
             matches!(git_url.reference(), GitReference::FullCommit(_)),
-            "Unseen Git URL: {}, {:?}",
+            "Unseen Git URL: {}, {git_url:?}",
             url.verbatim,
-            git_url
         );
         return url;
     };

@@ -3,8 +3,7 @@ use serde::Deserialize;
 use std::io::BufRead;
 use std::str::FromStr;
 use uv_normalize::ExtraName;
-use uv_pep508::marker::MarkerValueExtra;
-use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, Requirement};
+use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement};
 
 /// `requires.txt` metadata as defined in <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>.
 ///

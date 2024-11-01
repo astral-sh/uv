@@ -79,6 +79,7 @@ uv respects the following environment variables:
   set, uv will use this username for publishing.
 - `UV_PUBLISH_PASSWORD`: Equivalent to the `--password` command-line argument in `uv publish`. If
   set, uv will use this password for publishing.
+- `UV_PUBLISH_CHECK_URL`: Don't upload a file if it already exists on the index. The value is the URL of the index.
 - `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
   the environment.
 - `UV_LOCKED`: Equivalent to the `--locked` command-line argument. If set, uv will assert that the
@@ -100,6 +101,7 @@ uv respects the following environment variables:
 - `UV_PROJECT_ENVIRONMENT`: Specifies the path to the directory to use for a project virtual environment.
   See the [project documentation](../concepts/projects.md#configuring-the-project-environment-path)
   for more details.
+- `UV_PYTHON_BIN_DIR`: Specifies the directory to place links to installed, managed Python executables.
 - `UV_PYTHON_INSTALL_DIR`: Specifies the directory for storing managed Python installations.
 - `UV_PYTHON_INSTALL_MIRROR`: Managed Python installations are downloaded from
   [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
@@ -130,10 +132,10 @@ uv respects the following environment variables:
 - `HTTPS_PROXY`: Proxy for HTTPS requests.
 - `ALL_PROXY`: General proxy for all network requests.
 - `UV_HTTP_TIMEOUT`: Timeout (in seconds) for HTTP requests. (default: 30 s)
+- `UV_REQUEST_TIMEOUT`: Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
 - `HTTP_TIMEOUT`: Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
 - `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`.
   See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
-- `UV_REQUEST_TIMEOUT`: Timeout (in seconds) for HTTP requests.
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
 - `CONDA_PREFIX`: Used to detect an activated Conda environment.
 - `VIRTUAL_ENV_DISABLE_PROMPT`: If set to `1` before a virtual environment is activated, then the
@@ -150,6 +152,7 @@ uv respects the following environment variables:
   Defaults to `12.0`, the least-recent non-EOL macOS version at time of writing.
 - `NO_COLOR`: Disables colored output (takes precedence over `FORCE_COLOR`).
   See [no-color.org](https://no-color.org).
+- `UV_NO_PROGRESS`: Disables all progress output. For example, spinners and progress bars.
 - `FORCE_COLOR`: Forces colored output regardless of terminal support.
   See [force-color.org](https://force-color.org).
 - `CLICOLOR_FORCE`: Use to control color via `anstyle`.
@@ -163,6 +166,13 @@ uv respects the following environment variables:
 - `GIT_INDEX_FILE`: Path to the index file for staged changes. Ignored by `uv` when performing fetch.
 - `GIT_OBJECT_DIRECTORY`: Path to where git object files are located. Ignored by `uv` when performing fetch.
 - `GIT_ALTERNATE_OBJECT_DIRECTORIES`: Alternate locations for git objects. Ignored by `uv` when performing fetch.
+- `GIT_CEILING_DIRECTORIES`: Used in tests for better git isolation.
+  For example, we run some tests in ~/.local/share/uv/tests.
+  And if the user's `$HOME` directory is a git repository,
+  this will change the behavior of some tests. Setting
+  `GIT_CEILING_DIRECTORIES=/home/andrew/.local/share/uv/tests` will
+  prevent git from crawling up the directory tree past that point to find
+  parent git repositories.
 - `GITHUB_ACTIONS`: Used for trusted publishing via `uv publish`.
 - `ACTIONS_ID_TOKEN_REQUEST_URL`: Used for trusted publishing via `uv publish`. Contains the oidc token url.
 - `ACTIONS_ID_TOKEN_REQUEST_TOKEN`: Used for trusted publishing via `uv publish`. Contains the oidc request token.
@@ -176,4 +186,8 @@ uv respects the following environment variables:
 - `JPY_SESSION_NAME`: Used to detect when running inside a Jupyter notebook.
 - `TRACING_DURATIONS_TEST_ROOT`: Use to create the tracing root directory via the `tracing-durations-export` feature.
 - `TRACING_DURATIONS_FILE`: Use to create the tracing durations file via the `tracing-durations-export` feature.
-- `RUST_LOG`: Custom log level for verbose output, compatible with `tracing_subscriber`.
+- `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
+  any filter compatible with the `tracing_subscriber` crate.
+  For example, `RUST_LOG=trace` will enable trace-level logging.
+  See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
+  for more.

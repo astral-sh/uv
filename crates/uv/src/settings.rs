@@ -8,7 +8,7 @@ use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
-    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ToolUpgradeArgs,
 };
 use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
@@ -19,12 +19,12 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, DevMode, EditableMode, ExportFormat,
+    BuildOptions, Concurrency, ConfigSettings, DevGroupsSpecification, EditableMode, ExportFormat,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions, KeyringProviderType,
     NoBinary, NoBuild, PreviewMode, ProjectBuildBackend, Reinstall, SourceStrategy, TargetTriple,
     TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
@@ -202,7 +202,8 @@ impl InitSettings {
             (_, _, _) => unreachable!("`app`, `lib`, and `script` are mutually exclusive"),
         };
 
-        let package = flag(package || r#virtual, no_package).unwrap_or(kind.packaged_by_default());
+        let package = flag(package || build_backend.is_some(), no_package || r#virtual)
+            .unwrap_or(kind.packaged_by_default());
 
         Self {
             path,
@@ -227,7 +228,7 @@ pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) with: Vec<String>,
     pub(crate) with_editable: Vec<String>,
@@ -252,6 +253,9 @@ impl RunSettings {
             no_all_extras,
             dev,
             no_dev,
+            group,
+            no_group,
+            only_group,
             module: _,
             only_dev,
             no_editable,
@@ -280,7 +284,9 @@ impl RunSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            dev: DevGroupsSpecification::from_args(
+                dev, no_dev, only_dev, group, no_group, only_group,
+            ),
             editable: EditableMode::from_args(no_editable),
             with,
             with_editable,
@@ -389,6 +395,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) from: Option<String>,
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
+    pub(crate) with_editable: Vec<String>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -406,6 +413,7 @@ impl ToolInstallSettings {
             editable,
             from,
             with,
+            with_editable,
             with_requirements,
             installer,
             force,
@@ -427,6 +435,7 @@ impl ToolInstallSettings {
             package,
             from,
             with,
+            with_editable,
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -588,6 +597,23 @@ impl PythonListSettings {
     }
 }
 
+/// The resolved settings to use for a `python dir` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PythonDirSettings {
+    pub(crate) bin: bool,
+}
+
+impl PythonDirSettings {
+    /// Resolve the [`PythonDirSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: PythonDirArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+        let PythonDirArgs { bin } = args;
+
+        Self { bin }
+    }
+}
+
 /// The resolved settings to use for a `python install` invocation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
@@ -690,7 +716,7 @@ pub(crate) struct SyncSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
@@ -711,6 +737,9 @@ impl SyncSettings {
             dev,
             no_dev,
             only_dev,
+            group,
+            only_group,
+            no_group,
             no_editable,
             inexact,
             exact,
@@ -738,7 +767,9 @@ impl SyncSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            dev: DevGroupsSpecification::from_args(
+                dev, no_dev, only_dev, group, no_group, only_group,
+            ),
             editable: EditableMode::from_args(no_editable),
             install_options: InstallOptions::new(
                 no_install_project,
@@ -764,6 +795,7 @@ impl SyncSettings {
 pub(crate) struct LockSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) dry_run: bool,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
@@ -776,6 +808,7 @@ impl LockSettings {
         let LockArgs {
             locked,
             frozen,
+            dry_run,
             resolver,
             build,
             refresh,
@@ -785,6 +818,7 @@ impl LockSettings {
         Self {
             locked,
             frozen,
+            dry_run,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
@@ -825,6 +859,7 @@ impl AddSettings {
             requirements,
             dev,
             optional,
+            group,
             editable,
             no_editable,
             extra,
@@ -843,8 +878,10 @@ impl AddSettings {
             python,
         } = args;
 
-        let dependency_type = if let Some(group) = optional {
-            DependencyType::Optional(group)
+        let dependency_type = if let Some(extra) = optional {
+            DependencyType::Optional(extra)
+        } else if let Some(group) = group {
+            DependencyType::Group(group)
         } else if dev {
             DependencyType::Dev
         } else {
@@ -946,6 +983,7 @@ impl RemoveSettings {
             dev,
             optional,
             packages,
+            group,
             no_sync,
             locked,
             frozen,
@@ -957,8 +995,10 @@ impl RemoveSettings {
             python,
         } = args;
 
-        let dependency_type = if let Some(group) = optional {
-            DependencyType::Optional(group)
+        let dependency_type = if let Some(extra) = optional {
+            DependencyType::Optional(extra)
+        } else if let Some(group) = group {
+            DependencyType::Group(group)
         } else if dev {
             DependencyType::Dev
         } else {
@@ -987,7 +1027,7 @@ impl RemoveSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
@@ -1009,7 +1049,11 @@ impl TreeSettings {
             tree,
             universal,
             dev,
+            only_dev,
             no_dev,
+            group,
+            no_group,
+            only_group,
             locked,
             frozen,
             build,
@@ -1020,7 +1064,9 @@ impl TreeSettings {
         } = args;
 
         Self {
-            dev: DevMode::from_args(dev, no_dev, false),
+            dev: DevGroupsSpecification::from_args(
+                dev, no_dev, only_dev, group, no_group, only_group,
+            ),
             locked,
             frozen,
             universal,
@@ -1044,7 +1090,7 @@ pub(crate) struct ExportSettings {
     pub(crate) format: ExportFormat,
     pub(crate) package: Option<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DevMode,
+    pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
@@ -1070,6 +1116,9 @@ impl ExportSettings {
             dev,
             no_dev,
             only_dev,
+            group,
+            no_group,
+            only_group,
             header,
             no_header,
             no_editable,
@@ -1094,7 +1143,9 @@ impl ExportSettings {
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
             ),
-            dev: DevMode::from_args(dev, no_dev, only_dev),
+            dev: DevGroupsSpecification::from_args(
+                dev, no_dev, only_dev, group, no_group, only_group,
+            ),
             editable: EditableMode::from_args(no_editable),
             hashes: flag(hashes, no_hashes).unwrap_or(true),
             install_options: InstallOptions::new(
@@ -2563,6 +2614,7 @@ pub(crate) struct PublishSettings {
     pub(crate) trusted_publishing: TrustedPublishing,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
+    pub(crate) check_url: Option<IndexUrl>,
 }
 
 impl PublishSettings {
@@ -2616,6 +2668,7 @@ impl PublishSettings {
                 })
                 .combine(allow_insecure_host)
                 .unwrap_or_default(),
+            check_url: args.check_url,
         }
     }
 }

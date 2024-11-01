@@ -9,9 +9,7 @@ use rustc_hash::FxHashMap;
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::{
-    PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, PubGrubSpecifierError,
-};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
@@ -38,9 +36,6 @@ pub enum ResolveError {
 
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
-
-    #[error(transparent)]
-    PubGrubSpecifier(#[from] PubGrubSpecifierError),
 
     #[error("Overrides contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
     ConflictingOverrideUrls(PackageName, String, String),

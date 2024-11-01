@@ -26,18 +26,20 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use crate::marker::MarkerValueExtra;
 use cursor::Cursor;
 pub use marker::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
-    StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
+    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
 pub use unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
+/// Version and version specifiers used in requirements (reexport).
+// https://github.com/konstin/pep508_rs/issues/19
+pub use uv_pep440;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 pub use verbatim_url::{
     expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,

@@ -712,6 +712,7 @@ fn error_invalid_extra_unnamed_url() {
 
 /// Check that the relative path support feature toggle works.
 #[test]
+#[cfg(feature = "non-pep508-extensions")]
 fn non_pep508_paths() {
     let requirements = &[
         "foo @ file://./foo",
@@ -748,6 +749,7 @@ fn no_space_after_operator() {
 }
 
 #[test]
+#[cfg(feature = "non-pep508-extensions")]
 fn path_with_fragment() {
     let requirements = if cfg!(windows) {
         &[

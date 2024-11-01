@@ -146,6 +146,9 @@ impl EnvVars {
     /// set, uv will use this password for publishing.
     pub const UV_PUBLISH_PASSWORD: &'static str = "UV_PUBLISH_PASSWORD";
 
+    /// Don't upload a file if it already exists on the index. The value is the URL of the index.
+    pub const UV_PUBLISH_CHECK_URL: &'static str = "UV_PUBLISH_CHECK_URL";
+
     /// Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
     /// the environment.
     pub const UV_NO_SYNC: &'static str = "UV_NO_SYNC";
@@ -192,6 +195,9 @@ impl EnvVars {
     /// See the [project documentation](../concepts/projects.md#configuring-the-project-environment-path)
     /// for more details.
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
+
+    /// Specifies the directory to place links to installed, managed Python executables.
+    pub const UV_PYTHON_BIN_DIR: &'static str = "UV_PYTHON_BIN_DIR";
 
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
@@ -312,15 +318,15 @@ impl EnvVars {
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
 
     /// Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
+    pub const UV_REQUEST_TIMEOUT: &'static str = "UV_REQUEST_TIMEOUT";
+
+    /// Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
     pub const HTTP_TIMEOUT: &'static str = "HTTP_TIMEOUT";
 
     /// The validation modes to use when run with `--compile`.
     ///
     /// See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
     pub const PYC_INVALIDATION_MODE: &'static str = "PYC_INVALIDATION_MODE";
-
-    /// Timeout (in seconds) for HTTP requests.
-    pub const UV_REQUEST_TIMEOUT: &'static str = "UV_REQUEST_TIMEOUT";
 
     /// Used to detect an activated virtual environment.
     pub const VIRTUAL_ENV: &'static str = "VIRTUAL_ENV";
@@ -364,6 +370,9 @@ impl EnvVars {
     /// See [no-color.org](https://no-color.org).
     pub const NO_COLOR: &'static str = "NO_COLOR";
 
+    /// Disables all progress output. For example, spinners and progress bars.
+    pub const UV_NO_PROGRESS: &'static str = "UV_NO_PROGRESS";
+
     /// Forces colored output regardless of terminal support.
     ///
     /// See [force-color.org](https://force-color.org).
@@ -401,6 +410,16 @@ impl EnvVars {
 
     /// Alternate locations for git objects. Ignored by `uv` when performing fetch.
     pub const GIT_ALTERNATE_OBJECT_DIRECTORIES: &'static str = "GIT_ALTERNATE_OBJECT_DIRECTORIES";
+
+    /// Used in tests for better git isolation.
+    ///
+    /// For example, we run some tests in ~/.local/share/uv/tests.
+    /// And if the user's `$HOME` directory is a git repository,
+    /// this will change the behavior of some tests. Setting
+    /// `GIT_CEILING_DIRECTORIES=/home/andrew/.local/share/uv/tests` will
+    /// prevent git from crawling up the directory tree past that point to find
+    /// parent git repositories.
+    pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
 
     /// Used for trusted publishing via `uv publish`.
     pub const GITHUB_ACTIONS: &'static str = "GITHUB_ACTIONS";
@@ -445,7 +464,11 @@ impl EnvVars {
     #[attr_hidden]
     pub const TARGET: &'static str = "TARGET";
 
-    /// Custom log level for verbose output, compatible with `tracing_subscriber`.
+    /// If set, uv will use this value as the log level for its `--verbose` output. Accepts
+    /// any filter compatible with the `tracing_subscriber` crate.
+    /// For example, `RUST_LOG=trace` will enable trace-level logging.
+    /// See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
+    /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
 
     /// The directory containing the `Cargo.toml` manifest for a package.

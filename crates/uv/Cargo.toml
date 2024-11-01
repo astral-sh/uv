@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.4.25"
+version = "0.4.29"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -67,17 +67,18 @@ flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
-indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
+petgraph = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
@@ -119,7 +120,7 @@ ignored = [
 ]
 
 [features]
-default = ["python", "pypi", "git", "performance", "crates-io"]
+default = ["python", "python-managed", "pypi", "git", "performance", "crates-io"]
 # Use better memory allocators, etc. — also turns-on self-update.
 performance = [
     "performance-memory-allocator",
@@ -133,6 +134,8 @@ performance-flate2-backend = ["dep:uv-performance-flate2-backend"]
 python = []
 # Introduces a dependency on a local Python installation with specific patch versions.
 python-patch = []
+# Introduces a dependency on managed Python installations.
+python-managed = []
 # Introduces a dependency on PyPI.
 pypi = []
 # Introduces a dependency on Git.

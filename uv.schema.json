@@ -86,6 +86,16 @@
         "type": "string"
       }
     },
+    "default-groups": {
+      "description": "The list of `dependency-groups` to install by default.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/GroupName"
+      }
+    },
     "dependency-metadata": {
       "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When provided, enables the resolver to use the specified metadata instead of querying the registry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name`: The name of the package. - (Optional) `version`: The version of the package. If omitted, the metadata will be applied to all versions of the package. - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`). - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`). - (Optional) `provides-extras`: The extras provided by the package.",
       "type": [
@@ -398,7 +408,7 @@
       ]
     },
     "sources": {
-      "description": "The sources to use (e.g., workspace members, Git repositories, local paths) when resolving dependencies.",
+      "description": "The sources to use when resolving dependencies.\n\n`tool.uv.sources` enriches the dependency metadata with additional sources, incorporated during development. A dependency source can be a Git repository, a URL, a local path, or an alternative registry.\n\nSee [Dependencies](https://docs.astral.sh/uv/concepts/dependencies/) for more.",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvSources"
@@ -579,6 +589,10 @@
       },
       "additionalProperties": false
     },
+    "GroupName": {
+      "description": "The normalized name of a dependency group.\n\nSee: - <https://peps.python.org/pep-0735/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "type": "string"
+    },
     "Index": {
       "type": "object",
       "required": [
@@ -597,9 +611,13 @@
         },
         "name": {
           "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexName"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "url": {
@@ -611,6 +629,10 @@
           ]
         }
       }
+    },
+    "IndexName": {
+      "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
+      "type": "string"
     },
     "IndexStrategy": {
       "oneOf": [
@@ -833,7 +855,7 @@
           ]
         },
         "extra": {
-          "description": "Include optional dependencies from the extra group name; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Include optional dependencies from the specified extra; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
           "type": [
             "array",
             "null"
@@ -1399,7 +1421,7 @@
           ],
           "properties": {
             "index": {
-              "type": "string"
+              "$ref": "#/definitions/IndexName"
             },
             "marker": {
               "$ref": "#/definitions/MarkerTree"

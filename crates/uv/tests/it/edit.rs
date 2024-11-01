@@ -1025,8 +1025,8 @@ fn add_remove_dev() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [tool.uv]
-        dev-dependencies = [
+        [dependency-groups]
+        dev = [
             "anyio==3.7.0",
         ]
         "###
@@ -1113,7 +1113,7 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `anyio` is a development dependency; try calling `uv remove --dev`
+    warning: `anyio` is in the `dev` group; try calling `uv remove --group dev`
     error: The dependency `anyio` could not be found in `dependencies`
     "###);
 
@@ -1151,8 +1151,8 @@ fn add_remove_dev() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [tool.uv]
-        dev-dependencies = []
+        [dependency-groups]
+        dev = []
         "###
         );
     });
@@ -1174,6 +1174,11 @@ fn add_remove_dev() -> Result<()> {
         name = "project"
         version = "0.1.0"
         source = { editable = "." }
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = []
         "###
         );
     });
@@ -1733,6 +1738,404 @@ fn add_remove_workspace() -> Result<()> {
     ----- stderr -----
     Audited 1 package in [TIME]
     "###);
+
+    Ok(())
+}
+
+/// `uv add --dev` should update `dev-dependencies` (rather than `dependency-group.dev`) if a
+/// dependency already exists in `dev-dependencies`.
+#[test]
+fn update_existing_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = [
+            "anyio==3.7.0",
+        ]
+
+        [dependency-groups]
+        dev = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// `uv add --dev` should add to `dev-dependencies` (rather than `dependency-group.dev`) if it
+/// exists.
+#[test]
+fn add_existing_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = [
+            "anyio==3.7.0",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// `uv add --group dev` should update `dev-dependencies` (rather than `dependency-group.dev`) if a
+/// dependency already exists.
+#[test]
+fn update_existing_dev_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = [
+            "anyio==3.7.0",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// `uv add --group dev` should add to `dependency-group` even if `dev-dependencies` exists.
+#[test]
+fn add_existing_dev_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [dependency-groups]
+        dev = [
+            "anyio==3.7.0",
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// `uv remove --dev` should remove from both `dev-dependencies` and `dependency-group.dev`.
+#[test]
+fn remove_both_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["anyio>=3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+
+        [dependency-groups]
+        dev = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-group.dev`.
+#[test]
+fn remove_both_dev_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [dependency-groups]
+        dev = ["anyio>=3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = []
+
+        [dependency-groups]
+        dev = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -2533,15 +2936,11 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Uninstalled 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     - idna==3.6
-     + idna==2.7
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-     - urllib3==2.2.1
-     + urllib3==1.23
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2576,7 +2975,7 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2623,10 +3022,10 @@ fn add_update_marker() -> Result<()> {
     Installed 1 package in [TIME]
      - certifi==2024.2.2
      - charset-normalizer==3.3.2
-     - idna==2.7
+     - idna==3.6
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
-     - urllib3==1.23
+     - urllib3==2.2.1
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3718,8 +4117,8 @@ fn add_lower_bound_dev() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [tool.uv]
-        dev-dependencies = [
+        [dependency-groups]
+        dev = [
             "anyio>=4.3.0",
         ]
         "###
@@ -3998,12 +4397,13 @@ fn add_non_project() -> Result<()> {
     }, {
         assert_snapshot!(
             pyproject_toml, @r###"
-        [tool.uv]
-        dev-dependencies = [
-            "iniconfig>=2.0.0",
-        ]
         [tool.uv.workspace]
         members = []
+
+        [dependency-groups]
+        dev = [
+            "iniconfig>=2.0.0",
+        ]
         "###
         );
     });
@@ -4222,6 +4622,239 @@ fn add_requirements_file() -> Result<()> {
     Usage: uv add --cache-dir [CACHE_DIR] --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
+    "###);
+
+    Ok(())
+}
+
+/// Add a requirement to a dependency group.
+#[test]
+fn add_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("test"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        test = [
+            "anyio==3.7.0",
+        ]
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.add().arg("requests").arg("--group").arg("test"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0").arg("--group").arg("second"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        test = [
+            "anyio==3.7.0",
+            "requests>=2.31.0",
+        ]
+        second = [
+            "anyio==3.7.0",
+        ]
+        "###
+        );
+    });
+
+    assert!(context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Remomve a requirement from a dependency group.
+#[test]
+fn remove_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        test = [
+            "anyio==3.7.0",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        test = []
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency `anyio` could not be found in `dependency-groups`
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        test = []
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency `anyio` could not be found in `dependency-groups`
+    "###);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--group").arg("test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `anyio` is a production dependency
+    error: The dependency `anyio` could not be found in `dependency-groups`
     "###);
 
     Ok(())
@@ -5439,6 +6072,9 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
@@ -5468,6 +6104,9 @@ fn add_index() -> Result<()> {
             "iniconfig==2.0.0",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
         "###
@@ -5483,6 +6122,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -5507,7 +6149,7 @@ fn add_index() -> Result<()> {
         );
     });
 
-    // Adding a subsequent index should put it _below_ the existing index.
+    // Adding a subsequent index should put it _above_ the existing index.
     uv_snapshot!(context.filters(), context.add().arg("jinja2").arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
@@ -5537,15 +6179,18 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://download.pytorch.org/whl/cu121"
 
-        [[tool.uv.index]]
-        url = "https://pypi.org/simple"
-
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
+
+        [[tool.uv.index]]
+        url = "https://pypi.org/simple"
         "###
         );
     });
@@ -5559,6 +6204,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -5638,15 +6286,18 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://test.pypi.org/simple"
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-
-        [tool.uv.sources]
-        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5660,6 +6311,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -5748,15 +6402,18 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
 
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://test.pypi.org/simple"
-
-        [tool.uv.sources]
-        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5770,6 +6427,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -5867,15 +6527,18 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://test.pypi.org/simple"
 
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
-
-        [tool.uv.sources]
-        jinja2 = { index = "pytorch" }
         "###
         );
     });
@@ -5889,6 +6552,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6133,6 +6799,194 @@ fn add_default_index_url() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_index_credentials() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        # Set an internal index as the default, without credentials.
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+    "#})?;
+
+    // Provide credentials for the index via the environment variable.
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env("UV_DEFAULT_INDEX", "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",
+        ]
+
+        # Set an internal index as the default, without credentials.
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
+        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_index_comments() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://test.pypi.org/simple"  # This is a test index.
+        default = true
+    "#})?;
+
+    // Preserve the comment on the index URL, despite replacing it.
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env("UV_DEFAULT_INDEX", "https://pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://pypi.org/simple"  # This is a test index.
+        default = true
+        "###
+        );
+    });
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = "==2.0.0" }]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 /// Accidentally add a dependency on the project itself.
 #[test]
 fn add_self() -> Result<()> {
@@ -6256,13 +7110,13 @@ fn add_self() -> Result<()> {
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
 
-        [tool.uv]
-        dev-dependencies = [
-            "anyio[types]",
-        ]
-
         [tool.uv.sources]
         anyio = { workspace = true }
+
+        [dependency-groups]
+        dev = [
+            "anyio[types]",
+        ]
         "###
         );
     });
@@ -6401,5 +7255,242 @@ fn add_preserves_open_bracket_comment() -> Result<()> {
         "###
         );
     });
+    Ok(())
+}
+
+#[test]
+fn add_preserves_empty_comment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # First line.
+            # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # First line.
+            # Second line.
+            "anyio==3.7.0",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_preserves_trailing_comment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "idna",
+            "iniconfig",  # Use iniconfig.
+            # First line.
+            # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio==3.7.0",
+            "idna",
+            "iniconfig", # Use iniconfig.
+            # First line.
+            # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+     + typing-extensions==4.10.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio==3.7.0",
+            "idna",
+            "iniconfig", # Use iniconfig.
+            # First line.
+            # Second line.
+            "typing-extensions>=4.10.0",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn add_preserves_trailing_depth() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+          "idna",
+          "iniconfig",# Use iniconfig.
+            # First line.
+            # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==3.7.0"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+          "anyio==3.7.0",
+          "idna",
+          "iniconfig", # Use iniconfig.
+          # First line.
+          # Second line.
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+        );
+    });
+
     Ok(())
 }

@@ -15,7 +15,7 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -232,7 +232,7 @@ pub struct GlobalArgs {
     /// Hide all progress outputs.
     ///
     /// For example, spinners or progress bars.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = EnvVars::UV_NO_PROGRESS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_progress: bool,
 
     /// Change to the given directory prior to running the command.
@@ -945,7 +945,7 @@ pub struct PipCompileArgs {
     #[arg(long, short, env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraint: Vec<Maybe<PathBuf>>,
 
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -1423,7 +1423,7 @@ pub struct PipSyncArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
-    /// Validate the Python environment after completing the installation, to detect and with
+    /// Validate the Python environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
     #[arg(long, overrides_with("no_strict"))]
     pub strict: bool,
@@ -1494,7 +1494,7 @@ pub struct PipInstallArgs {
     #[arg(long, short, env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraint: Vec<Maybe<PathBuf>>,
 
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -1711,7 +1711,7 @@ pub struct PipInstallArgs {
     #[arg(long, overrides_with("inexact"))]
     pub exact: bool,
 
-    /// Validate the Python environment after completing the installation, to detect and with
+    /// Validate the Python environment after completing the installation, to detect packages with
     /// missing dependencies or other issues.
     #[arg(long, overrides_with("no_strict"))]
     pub strict: bool,
@@ -2473,7 +2473,7 @@ pub struct InitArgs {
     ///
     /// Defines a `[build-system]` for the project.
     ///
-    /// This is the default behavior when using `--lib`.
+    /// This is the default behavior when using `--lib` or `--build-backend`.
     ///
     /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
     /// project structure.
@@ -2485,7 +2485,7 @@ pub struct InitArgs {
     /// Does not include a `[build-system]` for the project.
     ///
     /// This is the default behavior when using `--app`.
-    #[arg(long, overrides_with = "package", conflicts_with = "lib")]
+    #[arg(long, overrides_with = "package", conflicts_with_all = ["lib", "build_backend"])]
     pub r#no_package: bool,
 
     /// Create a project for an application.
@@ -2515,7 +2515,7 @@ pub struct InitArgs {
     ///
     /// By default, adds a requirement on the system Python version; use `--python` to specify an
     /// alternative Python version requirement.
-    #[arg(long, alias="script", conflicts_with_all=["app", "lib", "package"])]
+    #[arg(long, alias="script", conflicts_with_all=["app", "lib", "package", "build_backend"])]
     pub r#script: bool,
 
     /// Initialize a version control system for the project.
@@ -2526,6 +2526,8 @@ pub struct InitArgs {
     pub vcs: Option<VersionControlSystem>,
 
     /// Initialize a build-backend of choice for the project.
+    ///
+    /// Implicitly sets `--package`.
     #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
     pub build_backend: Option<ProjectBuildBackend>,
 
@@ -2573,7 +2575,7 @@ pub struct InitArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct RunArgs {
-    /// Include optional dependencies from the extra group name.
+    /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
     ///
@@ -2596,20 +2598,44 @@ pub struct RunArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include development dependencies.
+    /// Include the development dependency group.
     ///
-    /// Development dependencies are defined via `tool.uv.dev-dependencies` in a
-    /// `pyproject.toml`.
+    /// Development dependencies are defined via `dependency-groups.dev` or
+    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
+    ///
+    /// This option is an alias for `--group dev`.
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit development dependencies.
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias of `--no-group dev`.
     ///
     /// This option is only available when running in a project.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
 
     /// Run a Python module.
     ///
@@ -2617,9 +2643,11 @@ pub struct RunArgs {
     #[arg(short, long, conflicts_with = "script")]
     pub module: bool,
 
-    /// Omit non-development dependencies.
+    /// Only include the development dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
 
@@ -2755,7 +2783,7 @@ pub struct RunArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SyncArgs {
-    /// Include optional dependencies from the extra group name.
+    /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
     ///
@@ -2774,19 +2802,45 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include development dependencies.
+    /// Include the development dependency group.
+    ///
+    /// This option is an alias for `--group dev`.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit development dependencies.
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias for `--no-group dev`.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Omit non-development dependencies.
+    /// Only include the development dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
 
     /// Install any editable dependencies, including the project and any workspace members, as
     /// non-editable.
@@ -2903,6 +2957,13 @@ pub struct LockArgs {
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "locked")]
     pub frozen: bool,
 
+    /// Perform a dry run, without writing the lockfile.
+    ///
+    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
+    /// changes, but will not write the lockfile to disk.
+    #[arg(long, conflicts_with = "frozen", conflicts_with = "locked")]
+    pub dry_run: bool,
+
     #[command(flatten)]
     pub resolver: ResolverArgs,
 
@@ -2945,19 +3006,26 @@ pub struct AddArgs {
     #[arg(long, short, group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
-    /// Add the requirements as development dependencies.
-    #[arg(long, conflicts_with("optional"))]
+    /// Add the requirements to the development dependency group.
+    ///
+    /// This option is an alias for `--group dev`.
+    #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
     pub dev: bool,
 
-    /// Add the requirements to the specified optional dependency group.
+    /// Add the requirements to the package's optional dependencies for the specified extra.
     ///
     /// The group may then be activated when installing the project with the
     /// `--extra` flag.
     ///
-    /// To enable an optional dependency group for this requirement instead, see
-    /// `--extra`.
-    #[arg(long, conflicts_with("dev"))]
+    /// To enable an optional extra for this requirement instead, see `--extra`.
+    #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
     pub optional: Option<ExtraName>,
+
+    /// Add the requirements to the specified dependency group.
+    ///
+    /// These requirements will not be included in the published metadata for the project.
+    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    pub group: Option<GroupName>,
 
     /// Add the requirements as editable.
     #[arg(long, overrides_with = "no_editable")]
@@ -2996,8 +3064,7 @@ pub struct AddArgs {
     ///
     /// May be provided more than once.
     ///
-    /// To add this dependency to an optional group in the current project
-    /// instead, see `--optional`.
+    /// To add this dependency to an optional extra instead, see `--optional`.
     #[arg(long)]
     pub extra: Option<Vec<ExtraName>>,
 
@@ -3063,13 +3130,19 @@ pub struct RemoveArgs {
     #[arg(required = true)]
     pub packages: Vec<PackageName>,
 
-    /// Remove the packages from the development dependencies.
-    #[arg(long, conflicts_with("optional"))]
+    /// Remove the packages from the development dependency group.
+    ///
+    /// This option is an alias for `--group dev`.
+    #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
     pub dev: bool,
 
-    /// Remove the packages from the specified optional dependency group.
-    #[arg(long, conflicts_with("dev"))]
+    /// Remove the packages from the project's optional dependencies for the specified extra.
+    #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
     pub optional: Option<ExtraName>,
+
+    /// Remove the packages from the specified dependency group.
+    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    pub group: Option<GroupName>,
 
     /// Avoid syncing the virtual environment after re-locking the project.
     #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
@@ -3139,16 +3212,48 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
-    /// Include development dependencies.
+    /// Include the development dependency group.
     ///
-    /// Development dependencies are defined via `tool.uv.dev-dependencies` in a
-    /// `pyproject.toml`.
+    /// Development dependencies are defined via `dependency-groups.dev` or
+    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
+    ///
+    /// This option is an alias for `--group dev`.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit development dependencies.
+    /// Only include the development dependency group.
+    ///
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
+    #[arg(long, conflicts_with("no_dev"))]
+    pub only_dev: bool,
+
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias for `--no-group dev`.
     #[arg(long, overrides_with("dev"), conflicts_with = "invert")]
     pub no_dev: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
@@ -3224,7 +3329,7 @@ pub struct ExportArgs {
     #[arg(long)]
     pub package: Option<PackageName>,
 
-    /// Include optional dependencies from the extra group name.
+    /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
@@ -3237,19 +3342,45 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include development dependencies.
+    /// Include the development dependency group.
+    ///
+    /// This option is an alias for `--group dev`.
     #[arg(long, overrides_with("no_dev"), hide = true)]
     pub dev: bool,
 
-    /// Omit development dependencies.
+    /// Omit the development dependency group.
+    ///
+    /// This option is an alias for `--no-group dev`.
     #[arg(long, overrides_with("dev"))]
     pub no_dev: bool,
 
-    /// Omit non-development dependencies.
+    /// Only include the development dependency group.
     ///
-    /// The project itself will also be omitted.
+    /// Omit other dependencies. The project itself will also be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`.
     #[arg(long, conflicts_with("no_dev"))]
     pub only_dev: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with("only_group"))]
+    pub group: Vec<GroupName>,
+
+    /// Exclude dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_group: Vec<GroupName>,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    ///
+    /// The project itself will also be omitted.
+    #[arg(long, conflicts_with("group"))]
+    pub only_group: Vec<GroupName>,
 
     /// Exclude the comment header at the top of the generated output file.
     #[arg(long, overrides_with("header"))]
@@ -3514,6 +3645,10 @@ pub struct ToolInstallArgs {
     #[arg(short, long)]
     pub editable: bool,
 
+    /// Include the given packages as editables.
+    #[arg(long, value_delimiter = ',')]
+    pub with_editable: Vec<String>,
+
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
@@ -3668,14 +3803,15 @@ pub enum PythonCommand {
     ///
     /// Multiple Python versions may be requested.
     ///
-    /// Supports CPython and PyPy.
+    /// Supports CPython and PyPy. CPython distributions are downloaded from the
+    /// `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
     ///
-    /// CPython distributions are downloaded from the `python-build-standalone` project.
+    /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
+    /// python dir`.
     ///
-    /// Python versions are installed into the uv Python directory, which can be
-    /// retrieved with `uv python dir`. A `python` executable is not made
-    /// globally available, managed Python versions are only used in uv
-    /// commands or in active virtual environments.
+    /// A `python` executable is not made globally available, managed Python versions are only used
+    /// in uv commands or in active virtual environments. There is experimental support for
+    /// adding Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
     ///
     /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
@@ -3703,7 +3839,10 @@ pub enum PythonCommand {
     /// `%APPDATA%\uv\data\python` on Windows.
     ///
     /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
-    Dir,
+    ///
+    /// To view the directory where uv installs Python executables instead, use the `--bin` flag.
+    /// Note that Python executables are only installed when preview mode is enabled.
+    Dir(PythonDirArgs),
 
     /// Uninstall Python versions.
     Uninstall(PythonUninstallArgs),
@@ -3729,6 +3868,24 @@ pub struct PythonListArgs {
     /// By default, available downloads for the current platform are shown.
     #[arg(long)]
     pub only_installed: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PythonDirArgs {
+    /// Show the directory into which `uv python` will install Python executables.
+    ///
+    /// Note that this directory is only used when installing Python with preview mode enabled.
+    ///
+    /// The Python executable directory is determined according to the XDG standard and is derived
+    /// from the following environment variables, in order of preference:
+    ///
+    /// - `$UV_PYTHON_BIN_DIR`
+    /// - `$XDG_BIN_HOME`
+    /// - `$XDG_DATA_HOME/../bin`
+    /// - `$HOME/.local/bin`
+    #[arg(long, verbatim_doc_comment)]
+    pub bin: bool,
 }
 
 #[derive(Args)]
@@ -4603,8 +4760,6 @@ pub struct PublishArgs {
     /// and index upload.
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
-    ///
-    /// The default value is publish URL for PyPI (<https://upload.pypi.org/legacy/>).
     #[arg(long, env = EnvVars::UV_PUBLISH_URL)]
     pub publish_url: Option<Url>,
 
@@ -4664,6 +4819,22 @@ pub struct PublishArgs {
         value_parser = parse_insecure_host,
     )]
     pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
+
+    /// Check an index URL for existing files to skip duplicate uploads.
+    ///
+    /// This option allows retrying publishing that failed after only some, but not all files have
+    /// been uploaded, and handles error due to parallel uploads of the same file.
+    ///
+    /// Before uploading, the index is checked. If the exact same file already exists in the index,
+    /// the file will not be uploaded. If an error occurred during the upload, the index is checked
+    /// again, to handle cases where the identical file was uploaded twice in parallel.
+    ///
+    /// The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
+    /// file succeeds even without `--check-url`, while most other indexes error.
+    ///
+    /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
+    #[arg(long,env = EnvVars::UV_PUBLISH_CHECK_URL)]
+    pub check_url: Option<IndexUrl>,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

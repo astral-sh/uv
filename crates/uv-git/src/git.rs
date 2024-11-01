@@ -590,7 +590,7 @@ pub(crate) fn fetch(
     }
 }
 
-/// Attempts to use `git` CLI installed on the system to fetch a repository,.
+/// Attempts to use `git` CLI installed on the system to fetch a repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
     url: &str,

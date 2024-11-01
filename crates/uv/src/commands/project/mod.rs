@@ -8,7 +8,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
+    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, GroupsSpecification,
+    LowerBound, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -18,7 +19,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::Requirement;
@@ -35,7 +36,9 @@ use uv_resolver::{
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::Workspace;
+use uv_workspace::dependency_groups::DependencyGroupError;
+use uv_workspace::pyproject::PyProjectToml;
+use uv_workspace::{VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -63,6 +66,12 @@ pub(crate) enum ProjectError {
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
     )]
     MissingLockfile,
+
+    #[error("The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
+    UnsupportedLockVersion(u32, u32),
+
+    #[error("Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
+    UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
 
     #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
     LockedPythonIncompatibility(Version, RequiresPython),
@@ -116,6 +125,15 @@ pub(crate) enum ProjectError {
         PathBuf,
     ),
 
+    #[error("Group `{0}` is not defined in the project's `dependency-group` table")]
+    MissingGroupProject(GroupName),
+
+    #[error("Group `{0}` is not defined in any project's `dependency-group` table")]
+    MissingGroupWorkspace(GroupName),
+
+    #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-group` table")]
+    MissingDefaultGroup(GroupName),
+
     #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
 
@@ -128,11 +146,17 @@ pub(crate) enum ProjectError {
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
 
+    #[error("Failed to parse `uv.lock`")]
+    UvLockParse(#[source] toml::de::Error),
+
     #[error("Failed to parse `pyproject.toml`")]
-    TomlParse(#[source] toml::de::Error),
+    PyprojectTomlParse(#[source] toml::de::Error),
 
     #[error("Failed to update `pyproject.toml`")]
-    TomlUpdate,
+    PyprojectTomlUpdate,
+
+    #[error(transparent)]
+    DependencyGroup(#[from] DependencyGroupError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -154,9 +178,6 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Operation(#[from] pip::operations::Error),
-
-    #[error(transparent)]
-    RequiresPython(#[from] uv_resolver::RequiresPythonError),
 
     #[error(transparent)]
     Interpreter(#[from] uv_python::InterpreterError),
@@ -187,9 +208,7 @@ pub(crate) enum ProjectError {
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-pub(crate) fn find_requires_python(
-    workspace: &Workspace,
-) -> Result<Option<RequiresPython>, uv_resolver::RequiresPythonError> {
+pub(crate) fn find_requires_python(workspace: &Workspace) -> Option<RequiresPython> {
     RequiresPython::intersection(workspace.packages().values().filter_map(|member| {
         member
             .pyproject_toml()
@@ -320,7 +339,7 @@ impl WorkspacePython {
         python_request: Option<PythonRequest>,
         workspace: &Workspace,
     ) -> Result<Self, ProjectError> {
-        let requires_python = find_requires_python(workspace)?;
+        let requires_python = find_requires_python(workspace);
 
         let (source, python_request) = if let Some(request) = python_request {
             // (1) Explicit request from user
@@ -418,7 +437,7 @@ impl ProjectInterpreter {
                         if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
                                 venv,
-                                "because it is not a valid Python environment (no Python executable was found)"
+                                "it is not a valid Python environment (no Python executable was found)"
                                     .to_string(),
                             ));
                         }
@@ -1345,6 +1364,79 @@ pub(crate) async fn script_python_requirement(
     Ok(RequiresPython::greater_than_equal_version(
         &interpreter.python_minor_version(),
     ))
+}
+
+/// Validate the dependency groups requested by the [`DevGroupsSpecification`].
+#[allow(clippy::result_large_err)]
+pub(crate) fn validate_dependency_groups(
+    project: &VirtualProject,
+    dev: &DevGroupsSpecification,
+) -> Result<(), ProjectError> {
+    for group in dev
+        .groups()
+        .into_iter()
+        .flat_map(GroupsSpecification::names)
+    {
+        match project {
+            VirtualProject::Project(project) => {
+                // The group must be defined in the target project.
+                if !project
+                    .current_project()
+                    .pyproject_toml()
+                    .dependency_groups
+                    .as_ref()
+                    .is_some_and(|groups| groups.contains_key(group))
+                {
+                    return Err(ProjectError::MissingGroupProject(group.clone()));
+                }
+            }
+            VirtualProject::NonProject(workspace) => {
+                // The group must be defined in at least one workspace package.
+                if !workspace
+                    .pyproject_toml()
+                    .dependency_groups
+                    .as_ref()
+                    .is_some_and(|groups| groups.contains_key(group))
+                {
+                    if workspace.packages().values().all(|package| {
+                        !package
+                            .pyproject_toml()
+                            .dependency_groups
+                            .as_ref()
+                            .is_some_and(|groups| groups.contains_key(group))
+                    }) {
+                        return Err(ProjectError::MissingGroupWorkspace(group.clone()));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Returns the default dependency groups from the [`PyProjectToml`].
+#[allow(clippy::result_large_err)]
+pub(crate) fn default_dependency_groups(
+    pyproject_toml: &PyProjectToml,
+) -> Result<Vec<GroupName>, ProjectError> {
+    if let Some(defaults) = pyproject_toml
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
+    {
+        for group in defaults {
+            if !pyproject_toml
+                .dependency_groups
+                .as_ref()
+                .is_some_and(|groups| groups.contains_key(group))
+            {
+                return Err(ProjectError::MissingDefaultGroup(group.clone()));
+            }
+        }
+        Ok(defaults.clone())
+    } else {
+        Ok(vec![DEV_DEPENDENCIES.clone()])
+    }
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.

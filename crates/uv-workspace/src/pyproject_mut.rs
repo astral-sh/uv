@@ -1,11 +1,18 @@
-use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
+
+use itertools::Itertools;
 use thiserror::Error;
-use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, RawString, Table, TomlError, Value};
+use toml_edit::{
+    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
+};
+use url::Url;
+
+use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
+use uv_normalize::GroupName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 
@@ -117,9 +124,11 @@ impl PyProjectTomlMut {
         Ok(())
     }
 
-    /// Retrieves a mutable reference to the root [`Table`] of the TOML document, creating the
-    /// `project` table if necessary.
-    fn doc(&mut self) -> Result<&mut Table, Error> {
+    /// Retrieves a mutable reference to the `project` [`Table`] of the TOML document, creating the
+    /// table if necessary.
+    ///
+    /// For a script, this returns the root table.
+    fn project(&mut self) -> Result<&mut Table, Error> {
         let doc = match self.target {
             DependencyTarget::Script => self.doc.as_table_mut(),
             DependencyTarget::PyProjectToml => self
@@ -134,7 +143,9 @@ impl PyProjectTomlMut {
 
     /// Retrieves an optional mutable reference to the `project` [`Table`], returning `None` if it
     /// doesn't exist.
-    fn doc_mut(&mut self) -> Result<Option<&mut Table>, Error> {
+    ///
+    /// For a script, this returns the root table.
+    fn project_mut(&mut self) -> Result<Option<&mut Table>, Error> {
         let doc = match self.target {
             DependencyTarget::Script => Some(self.doc.as_table_mut()),
             DependencyTarget::PyProjectToml => self
@@ -156,7 +167,7 @@ impl PyProjectTomlMut {
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
-            .doc()?
+            .project()?
             .entry("dependencies")
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
@@ -220,70 +231,158 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedSources)?
             .entry("index")
             .or_insert(Item::ArrayOfTables(ArrayOfTables::new()))
-            .as_array_of_tables()
+            .as_array_of_tables_mut()
             .ok_or(Error::MalformedSources)?;
 
-        let mut table = Table::new();
-        if let Some(name) = index.name.as_ref() {
-            table.insert("name", toml_edit::value(name.to_string()));
-        } else if let Some(name) = existing
+        // If there's already an index with the same name or URL, update it (and move it to the top).
+        let mut table = existing
             .iter()
             .find(|table| {
-                table
+                // If the index has the same name, reuse it.
+                if let Some(index) = index.name.as_deref() {
+                    if table
+                        .get("name")
+                        .and_then(|name| name.as_str())
+                        .is_some_and(|name| name == index)
+                    {
+                        return true;
+                    }
+                }
+
+                // If the index is the default, and there's another default index, reuse it.
+                if index.default
+                    && table
+                        .get("default")
+                        .is_some_and(|default| default.as_bool() == Some(true))
+                {
+                    return true;
+                }
+
+                // If there's another index with the same URL, reuse it.
+                if table
                     .get("url")
-                    .is_some_and(|url| url.as_str() == Some(index.url.url().as_str()))
+                    .and_then(|item| item.as_str())
+                    .and_then(|url| Url::parse(url).ok())
+                    .is_some_and(|url| {
+                        CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url())
+                    })
+                {
+                    return true;
+                }
+
+                false
             })
-            .and_then(|existing| existing.get("name"))
-        {
-            // If there's an existing index with the same URL, and a name, preserve the name.
-            table.insert("name", name.clone());
-        }
-        table.insert("url", toml_edit::value(index.url.to_string()));
-        if index.default {
-            table.insert("default", toml_edit::value(true));
+            .cloned()
+            .unwrap_or_default();
+
+        // If necessary, update the name.
+        if let Some(index) = index.name.as_deref() {
+            if !table
+                .get("name")
+                .and_then(|name| name.as_str())
+                .is_some_and(|name| name == index)
+            {
+                let mut formatted = Formatted::new(index.to_string());
+                if let Some(value) = table.get("name").and_then(Item::as_value) {
+                    if let Some(prefix) = value.decor().prefix() {
+                        formatted.decor_mut().set_prefix(prefix.clone());
+                    }
+                    if let Some(suffix) = value.decor().suffix() {
+                        formatted.decor_mut().set_suffix(suffix.clone());
+                    }
+                }
+                table.insert("name", Value::String(formatted).into());
+            }
         }
 
-        // Push the item to the table.
-        let mut updated = ArrayOfTables::new();
-        updated.push(table);
-        for table in existing {
-            // If there's another index with the same name, replace it.
-            if table
-                .get("name")
-                .is_some_and(|name| name.as_str() == index.name.as_deref())
+        // If necessary, update the URL.
+        if !table
+            .get("url")
+            .and_then(|item| item.as_str())
+            .and_then(|url| Url::parse(url).ok())
+            .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
+        {
+            let mut formatted = Formatted::new(index.url.to_string());
+            if let Some(value) = table.get("url").and_then(Item::as_value) {
+                if let Some(prefix) = value.decor().prefix() {
+                    formatted.decor_mut().set_prefix(prefix.clone());
+                }
+                if let Some(suffix) = value.decor().suffix() {
+                    formatted.decor_mut().set_suffix(suffix.clone());
+                }
+            }
+            table.insert("url", Value::String(formatted).into());
+        }
+
+        // If necessary, update the default.
+        if index.default {
+            if !table
+                .get("default")
+                .and_then(toml_edit::Item::as_bool)
+                .is_some_and(|default| default)
             {
-                continue;
+                let mut formatted = Formatted::new(true);
+                if let Some(value) = table.get("default").and_then(Item::as_value) {
+                    if let Some(prefix) = value.decor().prefix() {
+                        formatted.decor_mut().set_prefix(prefix.clone());
+                    }
+                    if let Some(suffix) = value.decor().suffix() {
+                        formatted.decor_mut().set_suffix(suffix.clone());
+                    }
+                }
+                table.insert("default", Value::Boolean(formatted).into());
+            }
+        }
+
+        // Remove any replaced tables.
+        existing.retain(|table| {
+            // If the index has the same name, skip it.
+            if let Some(index) = index.name.as_deref() {
+                if table
+                    .get("name")
+                    .and_then(|name| name.as_str())
+                    .is_some_and(|name| name == index)
+                {
+                    return false;
+                }
             }
 
-            // If there's another default index, remove it.
+            // If there's another default index, skip it.
             if index.default
                 && table
                     .get("default")
                     .is_some_and(|default| default.as_bool() == Some(true))
             {
-                continue;
+                return false;
             }
 
-            // If there's another index with the same URL, replace it.
+            // If there's another index with the same URL, skip it.
             if table
                 .get("url")
-                .is_some_and(|url| url.as_str() == Some(index.url.url().as_str()))
+                .and_then(|item| item.as_str())
+                .and_then(|url| Url::parse(url).ok())
+                .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
             {
-                continue;
+                return false;
             }
 
-            updated.push(table.clone());
+            true
+        });
+
+        // Set the position to the minimum, if it's not already the first element.
+        if let Some(min) = existing.iter().filter_map(toml_edit::Table::position).min() {
+            table.set_position(min);
+
+            // Increment the position of all existing elements.
+            for table in existing.iter_mut() {
+                if let Some(position) = table.position() {
+                    table.set_position(position + 1);
+                }
+            }
         }
-        self.doc
-            .entry("tool")
-            .or_insert(implicit())
-            .as_table_mut()
-            .ok_or(Error::MalformedSources)?
-            .entry("uv")
-            .or_insert(implicit())
-            .as_table_mut()
-            .ok_or(Error::MalformedSources)?
-            .insert("index", Item::ArrayOfTables(updated));
+
+        // Push the item to the table.
+        existing.push(table);
 
         Ok(())
     }
@@ -299,7 +398,7 @@ impl PyProjectTomlMut {
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
-            .doc()?
+            .project()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
             .as_table_like_mut()
@@ -323,6 +422,41 @@ impl PyProjectTomlMut {
         Ok(added)
     }
 
+    /// Adds a dependency to `dependency-groups`.
+    ///
+    /// Returns `true` if the dependency was added, `false` if it was updated.
+    pub fn add_dependency_group_requirement(
+        &mut self,
+        group: &GroupName,
+        req: &Requirement,
+        source: Option<&Source>,
+    ) -> Result<ArrayEdit, Error> {
+        // Get or create `dependency-groups`.
+        let dependency_groups = self
+            .doc
+            .entry("dependency-groups")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let group = dependency_groups
+            .entry(group.as_ref())
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let name = req.name.clone();
+        let added = add_dependency(req, group, source.is_some())?;
+
+        dependency_groups.fmt();
+
+        if let Some(source) = source {
+            self.add_source(&name, source)?;
+        }
+
+        Ok(added)
+    }
+
     /// Set the minimum version for an existing dependency in `project.dependencies`.
     pub fn set_dependency_minimum_version(
         &mut self,
@@ -331,7 +465,7 @@ impl PyProjectTomlMut {
     ) -> Result<(), Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
-            .doc()?
+            .project()?
             .entry("dependencies")
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
@@ -400,13 +534,50 @@ impl PyProjectTomlMut {
     ) -> Result<(), Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
-            .doc()?
+            .project()?
             .entry("optional-dependencies")
             .or_insert(Item::Table(Table::new()))
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
         let group = optional_dependencies
+            .entry(group.as_ref())
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let Some(req) = group.get(index) else {
+            return Err(Error::MissingDependency(index));
+        };
+
+        let mut req = req
+            .as_str()
+            .and_then(try_parse_requirement)
+            .ok_or(Error::MalformedDependencies)?;
+        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
+            VersionSpecifier::greater_than_equal_version(version),
+        )));
+        group.replace(index, req.to_string());
+
+        Ok(())
+    }
+
+    /// Set the minimum version for an existing dependency in `dependency-groups`.
+    pub fn set_dependency_group_requirement_minimum_version(
+        &mut self,
+        group: &GroupName,
+        index: usize,
+        version: Version,
+    ) -> Result<(), Error> {
+        // Get or create `dependency-groups`.
+        let dependency_groups = self
+            .doc
+            .entry("dependency-groups")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let group = dependency_groups
             .entry(group.as_ref())
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
@@ -458,7 +629,7 @@ impl PyProjectTomlMut {
     pub fn remove_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.dependencies`.
         let Some(dependencies) = self
-            .doc_mut()?
+            .project_mut()?
             .and_then(|project| project.get_mut("dependencies"))
             .map(|dependencies| {
                 dependencies
@@ -512,7 +683,7 @@ impl PyProjectTomlMut {
     ) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.optional-dependencies.<group>`.
         let Some(optional_dependencies) = self
-            .doc_mut()?
+            .project_mut()?
             .and_then(|project| project.get_mut("optional-dependencies"))
             .map(|extras| {
                 extras
@@ -532,6 +703,39 @@ impl PyProjectTomlMut {
         };
 
         let requirements = remove_dependency(name, optional_dependencies);
+        self.remove_source(name)?;
+
+        Ok(requirements)
+    }
+
+    /// Removes all occurrences of the dependency in the group with the given name.
+    pub fn remove_dependency_group_requirement(
+        &mut self,
+        name: &PackageName,
+        group: &GroupName,
+    ) -> Result<Vec<Requirement>, Error> {
+        // Try to get `project.optional-dependencies.<group>`.
+        let Some(group_dependencies) = self
+            .doc
+            .get_mut("dependency-groups")
+            .map(|groups| {
+                groups
+                    .as_table_like_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
+            .transpose()?
+            .and_then(|groups| groups.get_mut(group.as_ref()))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
+            .transpose()?
+        else {
+            return Ok(Vec::new());
+        };
+
+        let requirements = remove_dependency(name, group_dependencies);
         self.remove_source(name)?;
 
         Ok(requirements)
@@ -578,6 +782,26 @@ impl PyProjectTomlMut {
         Ok(())
     }
 
+    /// Returns `true` if the `tool.uv.dev-dependencies` table is present.
+    pub fn has_dev_dependencies(&self) -> bool {
+        self.doc
+            .get("tool")
+            .and_then(Item::as_table)
+            .and_then(|tool| tool.get("uv"))
+            .and_then(Item::as_table)
+            .and_then(|uv| uv.get("dev-dependencies"))
+            .is_some()
+    }
+
+    /// Returns `true` if the `dependency-groups` table is present and contains the given group.
+    pub fn has_dependency_group(&self, group: &GroupName) -> bool {
+        self.doc
+            .get("dependency-groups")
+            .and_then(Item::as_table)
+            .and_then(|groups| groups.get(group.as_ref()))
+            .is_some()
+    }
+
     /// Returns all the places in this `pyproject.toml` that contain a dependency with the given
     /// name.
     ///
@@ -618,6 +842,22 @@ impl PyProjectTomlMut {
             }
         }
 
+        // Check `dependency-groups`.
+        if let Some(groups) = self.doc.get("dependency-groups").and_then(Item::as_table) {
+            for (group, dependencies) in groups {
+                let Some(dependencies) = dependencies.as_array() else {
+                    continue;
+                };
+                let Ok(group) = GroupName::new(group.to_string()) else {
+                    continue;
+                };
+
+                if !find_dependencies(name, marker, dependencies).is_empty() {
+                    types.push(DependencyType::Group(group));
+                }
+            }
+        }
+
         // Check `tool.uv.dev-dependencies`.
         if let Some(dev_dependencies) = self
             .doc
@@ -625,7 +865,7 @@ impl PyProjectTomlMut {
             .and_then(Item::as_table)
             .and_then(|tool| tool.get("uv"))
             .and_then(Item::as_table)
-            .and_then(|tool| tool.get("dev-dependencies"))
+            .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
         {
             if !find_dependencies(name, marker, dev_dependencies).is_empty() {
@@ -709,11 +949,16 @@ pub fn add_dependency(
             let index = index.unwrap_or(deps.len());
 
             let mut value = Value::from(req_string.as_str());
+
             let decor = value.decor_mut();
-            decor.set_prefix(deps.trailing().clone());
-            deps.set_trailing("");
+
+            if index == deps.len() {
+                decor.set_prefix(deps.trailing().clone());
+                deps.set_trailing("");
+            }
 
             deps.insert_formatted(index, value);
+
             // `reformat_array_multiline` uses the indentation of the first dependency entry.
             // Therefore, we retrieve the indentation of the first dependency entry and apply it to
             // the new entry. Note that it is only necessary if the newly added dependency is going
@@ -896,6 +1141,11 @@ fn reformat_array_multiline(deps: &mut Array) {
                 .and_then(|s| s.lines().last())
                 .unwrap_or_default();
 
+            let decor_prefix = decor_prefix
+                .split_once('#')
+                .map(|(s, _)| s)
+                .unwrap_or(decor_prefix);
+
             // If there is no indentation, use four-space.
             indentation_prefix = Some(if decor_prefix.is_empty() {
                 "    ".to_string()
@@ -927,7 +1177,16 @@ fn reformat_array_multiline(deps: &mut Array) {
         let mut rv = String::new();
         if comments.peek().is_some() {
             for comment in comments {
-                rv.push_str("\n    ");
+                match comment.comment_type {
+                    CommentType::OwnLine => {
+                        let indentation_prefix_str =
+                            format!("\n{}", indentation_prefix.as_ref().unwrap());
+                        rv.push_str(&indentation_prefix_str);
+                    }
+                    CommentType::EndOfLine => {
+                        rv.push(' ');
+                    }
+                }
                 rv.push_str(&comment.text);
             }
         }

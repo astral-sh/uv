@@ -1,11 +1,12 @@
-use crate::metadata::{LoweredRequirement, MetadataError};
-use crate::Metadata;
-
 use std::collections::BTreeMap;
 use std::path::Path;
+
+use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
+use crate::Metadata;
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::ToolUvSources;
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
@@ -14,7 +15,7 @@ pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Vec<uv_pypi_types::Requirement>,
     pub provides_extras: Vec<ExtraName>,
-    pub dev_dependencies: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
 }
 
 impl RequiresDist {
@@ -29,7 +30,7 @@ impl RequiresDist {
                 .map(uv_pypi_types::Requirement::from)
                 .collect(),
             provides_extras: metadata.provides_extras,
-            dev_dependencies: BTreeMap::default(),
+            dependency_groups: BTreeMap::default(),
         }
     }
 
@@ -38,15 +39,27 @@ impl RequiresDist {
     pub async fn from_project_maybe_workspace(
         metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
+        git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
         lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
-        // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
+        let discovery_options = if let Some(git_member) = &git_member {
+            DiscoveryOptions {
+                stop_discovery_at: Some(
+                    git_member
+                        .fetch_root
+                        .parent()
+                        .expect("git checkout has a parent"),
+                ),
+                ..Default::default()
+            }
+        } else {
+            DiscoveryOptions::default()
+        };
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &DiscoveryOptions::default())
-                .await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery_options).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -54,6 +67,7 @@ impl RequiresDist {
         Self::from_project_workspace(
             metadata,
             &project_workspace,
+            git_member,
             locations,
             sources,
             lower_bound,
@@ -63,6 +77,7 @@ impl RequiresDist {
     fn from_project_workspace(
         metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         lower_bound: LowerBound,
@@ -96,49 +111,90 @@ impl RequiresDist {
             SourceStrategy::Disabled => &empty,
         };
 
-        let dev_dependencies = {
+        let dependency_groups = {
+            // First, collect `tool.uv.dev_dependencies`
             let dev_dependencies = project_workspace
                 .current_project()
                 .pyproject_toml()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dev_dependencies.as_ref())
-                .into_iter()
+                .and_then(|uv| uv.dev_dependencies.as_ref());
+
+            // Then, collect `dependency-groups`
+            let dependency_groups = project_workspace
+                .current_project()
+                .pyproject_toml()
+                .dependency_groups
+                .iter()
                 .flatten()
-                .cloned();
-            let dev_dependencies = match source_strategy {
-                SourceStrategy::Enabled => dev_dependencies
-                    .flat_map(|requirement| {
-                        let requirement_name = requirement.name.clone();
-                        LoweredRequirement::from_requirement(
-                            requirement,
-                            &metadata.name,
-                            project_workspace.project_root(),
-                            project_sources,
-                            project_indexes,
-                            locations,
-                            project_workspace.workspace(),
-                            lower_bound,
-                        )
-                        .map(move |requirement| match requirement {
-                            Ok(requirement) => Ok(requirement.into_inner()),
-                            Err(err) => {
-                                Err(MetadataError::LoweringError(requirement_name.clone(), err))
-                            }
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-                SourceStrategy::Disabled => dev_dependencies
+                .collect::<BTreeMap<_, _>>();
+
+            // Resolve any `include-group` entries in `dependency-groups`.
+            let dependency_groups =
+                FlatDependencyGroups::from_dependency_groups(&dependency_groups)?
                     .into_iter()
-                    .map(uv_pypi_types::Requirement::from)
-                    .collect(),
-            };
-            if dev_dependencies.is_empty() {
-                BTreeMap::default()
-            } else {
-                BTreeMap::from([(DEV_DEPENDENCIES.clone(), dev_dependencies)])
+                    .chain(
+                        // Only add the `dev` group if `dev-dependencies` is defined.
+                        dev_dependencies
+                            .into_iter()
+                            .map(|requirements| (DEV_DEPENDENCIES.clone(), requirements.clone())),
+                    )
+                    .map(|(name, requirements)| {
+                        let requirements = match source_strategy {
+                            SourceStrategy::Enabled => requirements
+                                .into_iter()
+                                .flat_map(|requirement| {
+                                    let group_name = name.clone();
+                                    let requirement_name = requirement.name.clone();
+                                    LoweredRequirement::from_requirement(
+                                        requirement,
+                                        &metadata.name,
+                                        project_workspace.project_root(),
+                                        project_sources,
+                                        project_indexes,
+                                        locations,
+                                        project_workspace.workspace(),
+                                        lower_bound,
+                                        git_member,
+                                    )
+                                    .map(move |requirement| {
+                                        match requirement {
+                                            Ok(requirement) => Ok(requirement.into_inner()),
+                                            Err(err) => Err(MetadataError::GroupLoweringError(
+                                                group_name.clone(),
+                                                requirement_name.clone(),
+                                                Box::new(err),
+                                            )),
+                                        }
+                                    })
+                                })
+                                .collect::<Result<Vec<_>, _>>(),
+                            SourceStrategy::Disabled => Ok(requirements
+                                .into_iter()
+                                .map(uv_pypi_types::Requirement::from)
+                                .collect()),
+                        }?;
+                        Ok::<(GroupName, Vec<uv_pypi_types::Requirement>), MetadataError>((
+                            name,
+                            requirements,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+            // Merge any overlapping groups.
+            let mut map = BTreeMap::new();
+            for (name, dependencies) in dependency_groups {
+                match map.entry(name) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(dependencies);
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        entry.get_mut().extend(dependencies);
+                    }
+                }
             }
+            map
         };
 
         let requires_dist = metadata.requires_dist.into_iter();
@@ -155,12 +211,14 @@ impl RequiresDist {
                         locations,
                         project_workspace.workspace(),
                         lower_bound,
+                        git_member,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
-                        Err(err) => {
-                            Err(MetadataError::LoweringError(requirement_name.clone(), err))
-                        }
+                        Err(err) => Err(MetadataError::LoweringError(
+                            requirement_name.clone(),
+                            Box::new(err),
+                        )),
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
@@ -173,7 +231,7 @@ impl RequiresDist {
         Ok(Self {
             name: metadata.name,
             requires_dist,
-            dev_dependencies,
+            dependency_groups,
             provides_extras: metadata.provides_extras,
         })
     }
@@ -185,7 +243,7 @@ impl From<Metadata> for RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
-            dev_dependencies: metadata.dev_dependencies,
+            dependency_groups: metadata.dependency_groups,
         }
     }
 }
@@ -224,6 +282,7 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
+            None,
             &IndexLocations::default(),
             SourceStrategy::default(),
             LowerBound::default(),
@@ -255,7 +314,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry for: `tqdm`
+        error: Failed to parse entry: `tqdm`
           Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
         "###);
     }
@@ -422,7 +481,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry for: `tqdm`
+        error: Failed to parse entry: `tqdm`
           Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
         "###);
     }
@@ -441,7 +500,7 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry for: `tqdm`
+        error: Failed to parse entry: `tqdm`
           Caused by: Package is not included as workspace package in `tool.uv.workspace`
         "###);
     }

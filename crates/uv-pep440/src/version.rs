@@ -32,6 +32,8 @@ pub enum Operator {
     /// `!= 1.2.*`
     NotEqualStar,
     /// `~=`
+    ///
+    /// Invariant: With `~=`, there are always at least 2 release segments.
     TildeEqual,
     /// `<`
     LessThan,
@@ -1247,6 +1249,9 @@ struct VersionFull {
     /// > label”, separated from the public version identifier by a plus.
     /// > Local version labels have no specific semantics assigned, but
     /// > some syntactic restrictions are imposed.
+    ///
+    /// Local versions allow multiple segments separated by periods, such as `deadbeef.1.2.3`, see
+    /// [`LocalSegment`] for details on the semantics.
     local: Vec<LocalSegment>,
     /// An internal-only segment that does not exist in PEP 440, used to
     /// represent the smallest possible version of a release, preceding any

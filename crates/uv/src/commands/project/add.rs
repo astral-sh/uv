@@ -13,15 +13,15 @@ use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevMode, EditableMode, ExtrasSpecification, InstallOptions,
-    LowerBound, SourceStrategy,
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DevMode, EditableMode,
+    ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
 use uv_git::{GitReference, GIT_STORE};
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{
@@ -42,6 +42,7 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::resolution_environment;
+use crate::commands::project::lock::LockMode;
 use crate::commands::project::{script_python_requirement, ProjectError};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
@@ -203,6 +204,7 @@ pub(crate) async fn add(
                 DependencyType::Optional(_) => {
                     bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
                 }
+                DependencyType::Group(_) => {}
                 DependencyType::Dev => (),
             }
         }
@@ -462,19 +464,60 @@ pub(crate) async fn add(
             _ => source,
         };
 
+        // Determine the dependency type.
+        let dependency_type = match &dependency_type {
+            DependencyType::Dev => {
+                let existing = toml.find_dependency(&requirement.name, None);
+                if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Group(group) if group == &*DEV_DEPENDENCIES)) {
+                    // If the dependency already exists in `dependency-groups.dev`, use that.
+                    DependencyType::Group(DEV_DEPENDENCIES.clone())
+                } else if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Dev)) {
+                    // If the dependency already exists in `dev-dependencies`, use that.
+                    DependencyType::Dev
+                } else {
+                    // Otherwise, use `dependency-groups.dev`, unless it would introduce a separate table.
+                    match (toml.has_dev_dependencies(), toml.has_dependency_group(&DEV_DEPENDENCIES)) {
+                        (true, false) => DependencyType::Dev,
+                        (false, true) => DependencyType::Group(DEV_DEPENDENCIES.clone()),
+                        (true, true) => DependencyType::Group(DEV_DEPENDENCIES.clone()),
+                        (false, false) => DependencyType::Group(DEV_DEPENDENCIES.clone()),
+                    }
+                }
+            }
+            DependencyType::Group(group) if group == &*DEV_DEPENDENCIES => {
+                let existing = toml.find_dependency(&requirement.name, None);
+                if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Group(group) if group == &*DEV_DEPENDENCIES)) {
+                    // If the dependency already exists in `dependency-groups.dev`, use that.
+                    DependencyType::Group(DEV_DEPENDENCIES.clone())
+                } else if existing.iter().any(|dependency_type| matches!(dependency_type, DependencyType::Dev)) {
+                    // If the dependency already exists in `dev-dependencies`, use that.
+                    DependencyType::Dev
+                } else {
+                    // Otherwise, use `dependency-groups.dev`.
+                    DependencyType::Group(DEV_DEPENDENCIES.clone())
+                }
+            }
+            DependencyType::Production => DependencyType::Production,
+            DependencyType::Optional(extra) => DependencyType::Optional(extra.clone()),
+            DependencyType::Group(group) => DependencyType::Group(group.clone()),
+        };
+
         // Update the `pyproject.toml`.
-        let edit = match dependency_type {
+        let edit = match &dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
             DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
-            DependencyType::Optional(ref group) => {
-                toml.add_optional_dependency(group, &requirement, source.as_ref())?
+            DependencyType::Optional(ref extra) => {
+                toml.add_optional_dependency(extra, &requirement, source.as_ref())?
+            }
+            DependencyType::Group(ref group) => {
+                toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
             }
         };
 
         // If the edit was inserted before the end of the list, update the existing edits.
         if let ArrayEdit::Add(index) = &edit {
             for edit in &mut edits {
-                if *edit.dependency_type == dependency_type {
+                if edit.dependency_type == dependency_type {
                     match &mut edit.edit {
                         ArrayEdit::Add(existing) => {
                             if *existing >= *index {
@@ -492,7 +535,7 @@ pub(crate) async fn add(
         }
 
         edits.push(DependencyEdit {
-            dependency_type: &dependency_type,
+            dependency_type,
             requirement,
             source,
             edit,
@@ -556,8 +599,8 @@ pub(crate) async fn add(
 
     // Update the `pypackage.toml` in-memory.
     let project = project
-        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
-        .ok_or(ProjectError::TomlUpdate)?;
+        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)
+        .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     // Set the Ctrl-C handler to revert changes on exit.
     let _ = ctrlc::set_handler({
@@ -585,7 +628,6 @@ pub(crate) async fn add(
         &venv,
         state,
         locked,
-        frozen,
         no_sync,
         &dependency_type,
         raw_sources,
@@ -642,11 +684,10 @@ pub(crate) async fn add(
 async fn lock_and_sync(
     mut project: VirtualProject,
     toml: &mut PyProjectTomlMut,
-    edits: &[DependencyEdit<'_>],
+    edits: &[DependencyEdit],
     venv: &PythonEnvironment,
     state: SharedState,
     locked: bool,
-    frozen: bool,
     no_sync: bool,
     dependency_type: &DependencyType,
     raw_sources: bool,
@@ -658,11 +699,15 @@ async fn lock_and_sync(
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
+    let mode = if locked {
+        LockMode::Locked(venv.interpreter())
+    } else {
+        LockMode::Write(venv.interpreter())
+    };
+
     let mut lock = project::lock::do_safe_lock(
-        locked,
-        frozen,
+        mode,
         project.workspace(),
-        venv.interpreter(),
         settings.into(),
         bounds,
         &state,
@@ -739,8 +784,11 @@ async fn lock_and_sync(
                 DependencyType::Dev => {
                     toml.set_dev_dependency_minimum_version(*index, minimum)?;
                 }
-                DependencyType::Optional(ref group) => {
-                    toml.set_optional_dependency_minimum_version(group, *index, minimum)?;
+                DependencyType::Optional(ref extra) => {
+                    toml.set_optional_dependency_minimum_version(extra, *index, minimum)?;
+                }
+                DependencyType::Group(ref group) => {
+                    toml.set_dependency_group_requirement_minimum_version(group, *index, minimum)?;
                 }
             }
 
@@ -758,8 +806,10 @@ async fn lock_and_sync(
 
             // Update the `pypackage.toml` in-memory.
             project = project
-                .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::TomlParse)?)
-                .ok_or(ProjectError::TomlUpdate)?;
+                .with_pyproject_toml(
+                    toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?,
+                )
+                .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
             // Invalidate the project metadata.
             if let VirtualProject::Project(ref project) = project {
@@ -773,10 +823,8 @@ async fn lock_and_sync(
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
             lock = project::lock::do_safe_lock(
-                locked,
-                frozen,
+                mode,
                 project.workspace(),
-                venv.interpreter(),
                 settings.into(),
                 bounds,
                 &state,
@@ -800,17 +848,23 @@ async fn lock_and_sync(
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
             let extras = ExtrasSpecification::None;
-            let dev = DevMode::Exclude;
+            let dev = DevGroupsSpecification::from(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
             let extras = ExtrasSpecification::None;
-            let dev = DevMode::Include;
+            let dev = DevGroupsSpecification::from(DevMode::Include);
             (extras, dev)
         }
-        DependencyType::Optional(ref group_name) => {
-            let extras = ExtrasSpecification::Some(vec![group_name.clone()]);
-            let dev = DevMode::Exclude;
+        DependencyType::Optional(ref extra_name) => {
+            let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
+            let dev = DevGroupsSpecification::from(DevMode::Exclude);
+            (extras, dev)
+        }
+        DependencyType::Group(ref group_name) => {
+            let extras = ExtrasSpecification::None;
+            let dev =
+                DevGroupsSpecification::from(GroupsSpecification::from_group(group_name.clone()));
             (extras, dev)
         }
     };
@@ -820,7 +874,7 @@ async fn lock_and_sync(
         venv,
         &lock,
         &extras,
-        dev,
+        &DevGroupsManifest::from_spec(dev),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
@@ -910,7 +964,7 @@ fn resolve_requirement(
     requirement: uv_pypi_types::Requirement,
     workspace: bool,
     editable: Option<bool>,
-    index: Option<String>,
+    index: Option<IndexName>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -966,8 +1020,8 @@ impl Target {
 }
 
 #[derive(Debug, Clone)]
-struct DependencyEdit<'a> {
-    dependency_type: &'a DependencyType,
+struct DependencyEdit {
+    dependency_type: DependencyType,
     requirement: Requirement,
     source: Option<Source>,
     edit: ArrayEdit,

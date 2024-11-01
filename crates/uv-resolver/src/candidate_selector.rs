@@ -178,11 +178,15 @@ impl CandidateSelector {
                 let preferences_match =
                     preferences.get(package_name).filter(|(marker, _version)| {
                         // `.unwrap_or(true)` because the universal marker is considered matching.
-                        marker.map(|marker| marker == fork_markers).unwrap_or(true)
+                        marker
+                            .map(|marker| !marker.is_disjoint(fork_markers))
+                            .unwrap_or(true)
                     });
                 let preferences_mismatch =
                     preferences.get(package_name).filter(|(marker, _version)| {
-                        marker.map(|marker| marker != fork_markers).unwrap_or(false)
+                        marker
+                            .map(|marker| marker.is_disjoint(fork_markers))
+                            .unwrap_or(false)
                     });
                 self.get_preferred_from_iter(
                     preferences_match.chain(preferences_mismatch),

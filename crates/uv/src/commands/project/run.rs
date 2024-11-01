@@ -17,8 +17,8 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
-    SourceStrategy,
+    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
+    InstallOptions, LowerBound, SourceStrategy,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
@@ -43,9 +43,10 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    validate_requires_python, EnvironmentSpecification, ProjectError, PythonRequestSource,
-    WorkspacePython,
+    default_dependency_groups, validate_dependency_groups, validate_requires_python,
+    EnvironmentSpecification, ProjectError, PythonRequestSource, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{diagnostics, project, ExitStatus, SharedState};
@@ -68,7 +69,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     editable: EditableMode,
     python: Option<String>,
     settings: ResolverInstallerSettings,
@@ -336,11 +337,14 @@ pub(crate) async fn run(
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        if matches!(dev, DevMode::Exclude) {
-            warn_user!("`--no-dev` is not supported for Python scripts with inline metadata");
+        if let Some(dev_mode) = dev.dev_mode() {
+            warn_user!(
+                "`{}` is not supported for Python scripts with inline metadata",
+                dev_mode.as_flag()
+            );
         }
-        if matches!(dev, DevMode::Only) {
-            warn_user!("`--only-dev` is not supported for Python scripts with inline metadata");
+        if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+            warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
         }
         if package.is_some() {
             warn_user!(
@@ -413,11 +417,14 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used alongside `--no-project`");
             }
-            if matches!(dev, DevMode::Exclude) {
-                warn_user!("`--no-dev` has no effect when used alongside `--no-project`");
+            if let Some(dev_mode) = dev.dev_mode() {
+                warn_user!(
+                    "`{}` has no effect when used alongside `--no-project`",
+                    dev_mode.as_flag()
+                );
             }
-            if matches!(dev, DevMode::Only) {
-                warn_user!("`--only-dev` has no effect when used alongside `--no-project`");
+            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+                warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if locked {
                 warn_user!("`--locked` has no effect when used alongside `--no-project`");
@@ -433,11 +440,14 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used outside of a project");
             }
-            if matches!(dev, DevMode::Exclude) {
-                warn_user!("`--no-dev` has no effect when used outside of a project");
+            if let Some(dev_mode) = dev.dev_mode() {
+                warn_user!(
+                    "`{}` has no effect when used outside of a project",
+                    dev_mode.as_flag()
+                );
             }
-            if matches!(dev, DevMode::Only) {
-                warn_user!("`--only-dev` has no effect when used outside of a project");
+            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+                warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if locked {
                 warn_user!("`--locked` has no effect when used outside of a project");
@@ -540,11 +550,22 @@ pub(crate) async fn run(
                         .flatten();
                 }
             } else {
+                // Determine the default groups to include.
+                validate_dependency_groups(&project, &dev)?;
+                let defaults = default_dependency_groups(project.pyproject_toml())?;
+
+                // Determine the lock mode.
+                let mode = if frozen {
+                    LockMode::Frozen
+                } else if locked {
+                    LockMode::Locked(venv.interpreter())
+                } else {
+                    LockMode::Write(venv.interpreter())
+                };
+
                 let result = match project::lock::do_safe_lock(
-                    locked,
-                    frozen,
+                    mode,
                     project.workspace(),
-                    venv.interpreter(),
                     settings.as_ref().into(),
                     LowerBound::Allow,
                     &state,
@@ -590,7 +611,7 @@ pub(crate) async fn run(
                     &venv,
                     result.lock(),
                     &extras,
-                    dev,
+                    &dev.with_defaults(defaults),
                     editable,
                     install_options,
                     Modifications::Sufficient,

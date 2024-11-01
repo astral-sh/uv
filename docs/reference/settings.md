@@ -30,10 +30,34 @@ constraint-dependencies = ["grpcio<1.65"]
 
 ---
 
+### [`default-groups`](#default-groups) {: #default-groups }
+
+The list of `dependency-groups` to install by default.
+
+**Default value**: `["dev"]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+default-groups = ["docs"]
+```
+
+---
+
 ### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
-The project's development dependencies. Development dependencies will be installed by
-default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
+The project's development dependencies.
+
+Development dependencies will be installed by default in `uv run` and `uv sync`, but will
+not appear in the project's published metadata.
+
+Use of this field is not recommend anymore. Instead, use the `dependency-groups.dev` field
+which is a standardized way to declare development dependencies. The contents of
+`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the the
+final requirements of the `dev` dependency group.
 
 **Default value**: `[]`
 
@@ -110,7 +134,7 @@ PyPI default index.
 **Example usage**:
 
 ```toml title="pyproject.toml"
-[tool.uv]
+
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cu121"
@@ -198,6 +222,32 @@ package = false
 
 ---
 
+### [`sources`](#sources) {: #sources }
+
+The sources to use when resolving dependencies.
+
+`tool.uv.sources` enriches the dependency metadata with additional sources, incorporated
+during development. A dependency source can be a Git repository, a URL, a local path, or an
+alternative registry.
+
+See [Dependencies](../concepts/dependencies.md) for more.
+
+**Default value**: `"[]"`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.sources]
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
+pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
+pydantic = { path = "/path/to/pydantic", editable = true }
+```
+
+---
+
 ### `workspace`
 
 #### [`exclude`](#workspace_exclude) {: #workspace_exclude }
@@ -272,7 +322,6 @@ bypasses SSL verification and could expose you to MITM attacks.
 === "uv.toml"
 
     ```toml
-    
     allow-insecure-host = ["localhost:8080"]
     ```
 
@@ -300,7 +349,6 @@ Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
 === "uv.toml"
 
     ```toml
-    
     cache-dir = "./.uv_cache"
     ```
 
@@ -353,7 +401,6 @@ globs are interpreted as relative to the project directory.
 === "uv.toml"
 
     ```toml
-    
     cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
     ```
 
@@ -387,7 +434,6 @@ ignore errors.
 === "uv.toml"
 
     ```toml
-    
     compile-bytecode = true
     ```
 
@@ -415,7 +461,6 @@ Defaults to the number of available CPU cores.
 === "uv.toml"
 
     ```toml
-    
     concurrent-builds = 4
     ```
 
@@ -441,7 +486,6 @@ time.
 === "uv.toml"
 
     ```toml
-    
     concurrent-downloads = 4
     ```
 
@@ -468,7 +512,6 @@ Defaults to the number of available CPU cores.
 === "uv.toml"
 
     ```toml
-    
     concurrent-installs = 4
     ```
 
@@ -494,7 +537,6 @@ specified as `KEY=VALUE` pairs.
 === "uv.toml"
 
     ```toml
-    
     config-settings = { editable_mode = "compat" }
     ```
 
@@ -533,7 +575,6 @@ standard, though only the following fields are respected:
 === "uv.toml"
 
     ```toml
-    
     dependency-metadata = [
         { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
     ]
@@ -564,7 +605,6 @@ system's configured time zone.
 === "uv.toml"
 
     ```toml
-    
     exclude-newer = "2006-12-02"
     ```
 
@@ -601,7 +641,6 @@ To control uv's resolution strategy when multiple indexes are present, see
 === "uv.toml"
 
     ```toml
-    
     extra-index-url = ["https://download.pytorch.org/whl/cpu"]
     ```
 
@@ -633,7 +672,6 @@ formats described above.
 === "uv.toml"
 
     ```toml
-    
     find-links = ["https://download.pytorch.org/whl/torch_stable.html"]
     ```
 
@@ -678,7 +716,6 @@ PyPI default index.
 === "pyproject.toml"
 
     ```toml
-    [tool.uv]
     [[tool.uv.index]]
     name = "pytorch"
     url = "https://download.pytorch.org/whl/cu121"
@@ -686,7 +723,6 @@ PyPI default index.
 === "uv.toml"
 
     ```toml
-    
     [[tool.uv.index]]
     name = "pytorch"
     url = "https://download.pytorch.org/whl/cu121"
@@ -722,7 +758,6 @@ same name to an alternate index.
 === "uv.toml"
 
     ```toml
-    
     index-strategy = "unsafe-best-match"
     ```
 
@@ -755,7 +790,6 @@ The index provided by this setting is given lower priority than any indexes spec
 === "uv.toml"
 
     ```toml
-    
     index-url = "https://test.pypi.org/simple"
     ```
 
@@ -783,7 +817,6 @@ use the `keyring` CLI to handle authentication.
 === "uv.toml"
 
     ```toml
-    
     keyring-provider = "subprocess"
     ```
 
@@ -816,7 +849,6 @@ Windows.
 === "uv.toml"
 
     ```toml
-    
     link-mode = "copy"
     ```
 
@@ -849,7 +881,6 @@ included in your system's certificate store.
 === "uv.toml"
 
     ```toml
-    
     native-tls = true
     ```
 
@@ -877,7 +908,6 @@ pre-built wheels to extract package metadata, if available.
 === "uv.toml"
 
     ```toml
-    
     no-binary = true
     ```
 
@@ -902,7 +932,6 @@ Don't install pre-built wheels for a specific package.
 === "uv.toml"
 
     ```toml
-    
     no-binary-package = ["ruff"]
     ```
 
@@ -931,7 +960,6 @@ distributions will exit with an error.
 === "uv.toml"
 
     ```toml
-    
     no-build = true
     ```
 
@@ -959,7 +987,6 @@ are already installed.
 === "uv.toml"
 
     ```toml
-    
     no-build-isolation = true
     ```
 
@@ -987,7 +1014,6 @@ are already installed.
 === "uv.toml"
 
     ```toml
-    
     no-build-isolation-package = ["package1", "package2"]
     ```
 
@@ -1012,7 +1038,6 @@ Don't build source distributions for a specific package.
 === "uv.toml"
 
     ```toml
-    
     no-build-package = ["ruff"]
     ```
 
@@ -1038,7 +1063,6 @@ duration of the operation.
 === "uv.toml"
 
     ```toml
-    
     no-cache = true
     ```
 
@@ -1064,7 +1088,6 @@ those provided via `--find-links`.
 === "uv.toml"
 
     ```toml
-    
     no-index = true
     ```
 
@@ -1091,7 +1114,6 @@ sources.
 === "uv.toml"
 
     ```toml
-    
     no-sources = true
     ```
 
@@ -1116,7 +1138,6 @@ Disable network access, relying only on locally cached data and locally availabl
 === "uv.toml"
 
     ```toml
-    
     offline = true
     ```
 
@@ -1151,7 +1172,6 @@ declared specifiers (`if-necessary-or-explicit`).
 === "uv.toml"
 
     ```toml
-    
     prerelease = "allow"
     ```
 
@@ -1176,7 +1196,6 @@ Whether to enable experimental, preview features.
 === "uv.toml"
 
     ```toml
-    
     preview = true
     ```
 
@@ -1202,7 +1221,6 @@ The URL for publishing packages to the Python package index (by default:
 === "uv.toml"
 
     ```toml
-    
     publish-url = "https://test.pypi.org/legacy/"
     ```
 
@@ -1231,7 +1249,6 @@ Whether to allow Python downloads.
 === "uv.toml"
 
     ```toml
-    
     python-downloads = "manual"
     ```
 
@@ -1262,7 +1279,6 @@ those that are downloaded and installed by uv.
 === "uv.toml"
 
     ```toml
-    
     python-preference = "managed"
     ```
 
@@ -1287,7 +1303,6 @@ Reinstall all packages, regardless of whether they're already installed. Implies
 === "uv.toml"
 
     ```toml
-    
     reinstall = true
     ```
 
@@ -1313,7 +1328,6 @@ Reinstall a specific package, regardless of whether it's already installed. Impl
 === "uv.toml"
 
     ```toml
-    
     reinstall-package = ["ruff"]
     ```
 
@@ -1345,7 +1359,6 @@ By default, uv will use the latest compatible version of each package (`highest`
 === "uv.toml"
 
     ```toml
-    
     resolution = "lowest-direct"
     ```
 
@@ -1374,7 +1387,6 @@ from a fork).
 === "uv.toml"
 
     ```toml
-    
     trusted-publishing = "always"
     ```
 
@@ -1399,7 +1411,6 @@ Allow package upgrades, ignoring pinned versions in any existing output file.
 === "uv.toml"
 
     ```toml
-    
     upgrade = true
     ```
 
@@ -1427,7 +1438,6 @@ Accepts both standalone package names (`ruff`) and version specifiers (`ruff<0.5
 === "uv.toml"
 
     ```toml
-    
     upgrade-package = ["ruff"]
     ```
 
@@ -1890,7 +1900,7 @@ system's configured time zone.
 #### [`extra`](#pip_extra) {: #pip_extra }
 <span id="extra"></span>
 
-Include optional dependencies from the extra group name; may be provided more than once.
+Include optional dependencies from the specified extra; may be provided more than once.
 
 Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
 

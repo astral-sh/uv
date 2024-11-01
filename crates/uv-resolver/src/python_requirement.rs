@@ -71,6 +71,12 @@ impl PythonRequirement {
         })
     }
 
+    /// Returns `true` if the minimum version of Python required by the target is greater than the
+    /// installed version.
+    pub fn raises(&self, target: &RequiresPythonRange) -> bool {
+        target.lower() > self.target.range().lower()
+    }
+
     /// Return the exact version of Python.
     pub fn exact(&self) -> &Version {
         &self.exact

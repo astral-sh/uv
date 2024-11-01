@@ -132,7 +132,7 @@ impl PythonInstallation {
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(&client, installations_dir, &cache_dir, reporter)
+            .fetch(&client, installations_dir, &cache_dir, false, reporter)
             .await?;
 
         let path = match result {
@@ -305,6 +305,17 @@ impl PythonInstallationKey {
     pub fn libc(&self) -> &Libc {
         &self.libc
     }
+
+    /// Return a canonical name for a versioned executable.
+    pub fn versioned_executable_name(&self) -> String {
+        format!(
+            "python{maj}.{min}{var}{exe}",
+            maj = self.major,
+            min = self.minor,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
 }
 
 impl fmt::Display for PythonInstallationKey {
@@ -405,5 +416,6 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
             .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
+            .then_with(|| self.variant.cmp(&other.variant))
     }
 }

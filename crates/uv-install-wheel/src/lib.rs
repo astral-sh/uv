@@ -97,4 +97,6 @@ pub enum Error {
     MismatchedVersion(Version, Version),
     #[error("Invalid egg-link")]
     InvalidEggLink(PathBuf),
+    #[error(transparent)]
+    LauncherError(#[from] uv_trampoline_builder::Error),
 }

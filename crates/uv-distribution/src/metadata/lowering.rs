@@ -1,12 +1,14 @@
-use either::Either;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use either::Either;
 use thiserror::Error;
 use url::Url;
+
 use uv_configuration::LowerBound;
 use uv_distribution_filename::DistExtension;
-use uv_distribution_types::{Index, IndexLocations, Origin};
+use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
 use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
@@ -15,6 +17,8 @@ use uv_pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimPars
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
+
+use crate::metadata::GitWorkspaceMember;
 
 #[derive(Debug, Clone)]
 pub struct LoweredRequirement(Requirement);
@@ -38,6 +42,7 @@ impl LoweredRequirement {
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         lower_bound: LowerBound,
+        git_member: Option<&'data GitWorkspaceMember<'data>>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), RequirementOrigin::Project)
@@ -216,7 +221,24 @@ impl LoweredRequirement {
                                 ))
                             })?;
 
-                            let source = if member.pyproject_toml().is_package() {
+                            let source = if let Some(git_member) = &git_member {
+                                // If the workspace comes from a git dependency, all workspace
+                                // members need to be git deps, too.
+                                let subdirectory =
+                                    uv_fs::relative_to(member.root(), git_member.fetch_root)
+                                        .expect("Workspace member must be relative");
+                                RequirementSource::Git {
+                                    repository: git_member.git_source.git.repository().clone(),
+                                    reference: git_member.git_source.git.reference().clone(),
+                                    precise: git_member.git_source.git.precise(),
+                                    subdirectory: if subdirectory == PathBuf::new() {
+                                        None
+                                    } else {
+                                        Some(subdirectory)
+                                    },
+                                    url,
+                                }
+                            } else if member.pyproject_toml().is_package() {
                                 RequirementSource::Directory {
                                     install_path,
                                     url,
@@ -398,7 +420,7 @@ pub enum LoweringError {
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
     #[error("Package `{0}` references an undeclared index: `{1}`")]
-    MissingIndex(PackageName, String),
+    MissingIndex(PackageName, IndexName),
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
     #[error(transparent)]

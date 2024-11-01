@@ -921,7 +921,7 @@ pub struct PipOptions {
         "#
     )]
     pub strict: Option<bool>,
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the specified extra; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[option(
@@ -1563,11 +1563,13 @@ pub struct OptionsWire {
     #[allow(dead_code)]
     sources: Option<serde::de::IgnoredAny>,
     #[allow(dead_code)]
-    dev_dependencies: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     managed: Option<serde::de::IgnoredAny>,
     #[allow(dead_code)]
     r#package: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    default_groups: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    dev_dependencies: Option<serde::de::IgnoredAny>,
 }
 
 impl From<OptionsWire> for Options {
@@ -1618,9 +1620,10 @@ impl From<OptionsWire> for Options {
             trusted_publishing,
             workspace: _,
             sources: _,
-            dev_dependencies: _,
             managed: _,
             package: _,
+            default_groups: _,
+            dev_dependencies: _,
         } = value;
 
         Self {

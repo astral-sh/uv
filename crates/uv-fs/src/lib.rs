@@ -104,21 +104,22 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
 }
 
-/// Create a symlink at `dst` pointing to `src` or, on Windows, copy `src` to `dst`.
+/// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
+///
+/// This does not replace an existing symlink or file at `dst`.
+///
+/// This does not fallback to copying on Unix.
 ///
 /// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
 /// instead; it will use a junction on Windows, which is more performant.
-pub fn symlink_copy_fallback_file(
-    src: impl AsRef<Path>,
-    dst: impl AsRef<Path>,
-) -> std::io::Result<()> {
+pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     #[cfg(windows)]
     {
         fs_err::copy(src.as_ref(), dst.as_ref())?;
     }
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+        fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
     }
 
     Ok(())

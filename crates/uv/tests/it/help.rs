@@ -54,7 +54,7 @@ fn help() {
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
-          --no-progress                Hide all progress outputs
+          --no-progress                Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
@@ -123,7 +123,7 @@ fn help_flag() {
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
-          --no-progress                Hide all progress outputs
+          --no-progress                Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
@@ -191,7 +191,7 @@ fn help_short_flag() {
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
-          --no-progress                Hide all progress outputs
+          --no-progress                Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
@@ -211,7 +211,7 @@ fn help_short_flag() {
 fn help_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python"), @r##"
+    uv_snapshot!(context.filters(), context.help().arg("python"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -275,8 +275,10 @@ fn help_subcommand() {
           --cache-dir [CACHE_DIR]
               Path to the cache directory.
               
-              Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `%LOCALAPPDATA%/uv/cache` on Windows.
+              Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on macOS and Linux, and
+              `%LOCALAPPDATA%/uv/cache` on Windows.
+              
+              To view the location of the cache directory, run `uv cache dir`.
               
               [env: UV_CACHE_DIR=]
 
@@ -344,6 +346,8 @@ fn help_subcommand() {
               Hide all progress outputs.
               
               For example, spinners or progress bars.
+              
+              [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
               Change to the given directory prior to running the command.
@@ -392,14 +396,14 @@ fn help_subcommand() {
 
 
     ----- stderr -----
-    "##);
+    "###);
 }
 
 #[test]
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r##"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -407,13 +411,15 @@ fn help_subsubcommand() {
 
     Multiple Python versions may be requested.
 
-    Supports CPython and PyPy.
-
-    CPython distributions are downloaded from the `python-build-standalone` project.
+    Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone`
+    project. PyPy distributions are downloaded from `python.org`.
 
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
-    dir`. A `python` executable is not made globally available, managed Python versions are only used in
-    uv commands or in active virtual environments.
+    dir`.
+
+    A `python` executable is not made globally available, managed Python versions are only used in uv
+    commands or in active virtual environments. There is experimental support for adding Python
+    executables to the `PATH` — use the `--preview` flag to enable this behavior.
 
     See `uv help python` to view supported request formats.
 
@@ -445,8 +451,10 @@ fn help_subsubcommand() {
           --cache-dir [CACHE_DIR]
               Path to the cache directory.
               
-              Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv`
-              on Linux, and `%LOCALAPPDATA%/uv/cache` on Windows.
+              Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on macOS and Linux, and
+              `%LOCALAPPDATA%/uv/cache` on Windows.
+              
+              To view the location of the cache directory, run `uv cache dir`.
               
               [env: UV_CACHE_DIR=]
 
@@ -514,6 +522,8 @@ fn help_subsubcommand() {
               Hide all progress outputs.
               
               For example, spinners or progress bars.
+              
+              [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
               Change to the given directory prior to running the command.
@@ -560,7 +570,7 @@ fn help_subsubcommand() {
 
 
     ----- stderr -----
-    "##);
+    "###);
 }
 
 #[test]
@@ -603,7 +613,7 @@ fn help_flag_subcommand() {
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
-          --no-progress                Hide all progress outputs
+          --no-progress                Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
@@ -657,7 +667,7 @@ fn help_flag_subsubcommand() {
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
-          --no-progress                Hide all progress outputs
+          --no-progress                Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
@@ -803,7 +813,7 @@ fn help_with_global_option() {
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
-          --no-progress                Hide all progress outputs
+          --no-progress                Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:
@@ -908,7 +918,7 @@ fn help_with_no_pager() {
           --native-tls                 Whether to load TLS certificates from the platform's native
                                        certificate store [env: UV_NATIVE_TLS=]
           --offline                    Disable network access
-          --no-progress                Hide all progress outputs
+          --no-progress                Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>      Change to the given directory prior to running the command
           --project <PROJECT>          Run the command within the given project directory
           --config-file <CONFIG_FILE>  The path to a `uv.toml` file to use for configuration [env:

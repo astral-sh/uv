@@ -83,7 +83,7 @@ fn generate() -> String {
                 if i == 0 {
                     line.to_string()
                 } else {
-                    format!("  {}", line)
+                    format!("  {line}")
                 }
             })
             .collect::<Vec<_>>()

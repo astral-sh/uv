@@ -643,8 +643,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::pip_tree(
                 args.show_version_specifiers,
                 args.depth,
-                args.prune,
-                args.package,
+                &args.prune,
+                &args.package,
                 args.no_dedupe,
                 args.invert,
                 args.shared.strict,
@@ -923,6 +923,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_with_package)
                 .chain(
+                    args.with_editable
+                        .into_iter()
+                        .map(RequirementsSource::Editable),
+                )
+                .chain(
                     args.with_requirements
                         .into_iter()
                         .map(RequirementsSource::from_requirements_file),
@@ -1052,6 +1057,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 globals.connectivity,
                 cli.top_level.no_config,
+                globals.preview,
                 printer,
             )
             .await
@@ -1106,9 +1112,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Python(PythonNamespace {
-            command: PythonCommand::Dir,
+            command: PythonCommand::Dir(args),
         }) => {
-            commands::python_dir()?;
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::python_dir(args.bin)?;
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {
@@ -1127,6 +1137,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 trusted_publishing,
                 keyring_provider,
                 allow_insecure_host,
+                check_url,
             } = PublishSettings::resolve(args, filesystem);
 
             commands::publish(
@@ -1137,6 +1148,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 allow_insecure_host,
                 username,
                 password,
+                check_url,
+                &cache,
                 globals.connectivity,
                 globals.native_tls,
                 printer,
@@ -1347,6 +1360,7 @@ async fn run_project(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.dry_run,
                 args.python,
                 args.settings,
                 globals.python_preference,
