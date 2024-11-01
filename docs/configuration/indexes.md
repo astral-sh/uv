@@ -138,8 +138,8 @@ url = "https://example.com/simple"
 ```
 
 From there, you can set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and
-`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL_PROXY` is the uppercase version
-of the index name, with non-alphanumeric characters replaced by underscores:
+`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL_PROXY` is the uppercase
+version of the index name, with non-alphanumeric characters replaced by underscores:
 
 ```sh
 export UV_INDEX_INTERNAL_PROXY_USERNAME=public
