@@ -73,7 +73,7 @@ anyhow = { version = "1.0.89" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12" }
 async-trait = { version = "0.1.82" }
-async_http_range_reader = { version = "0.8.0" }
+async_http_range_reader = { version = "0.9.0" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b24604fa7bc223daaad7712c0694bac8f0a87", features = ["deflate", "tokio"] }
 axoupdater = { version = "0.7.2", default-features = false }
 backoff = { version = "0.4.0" }
