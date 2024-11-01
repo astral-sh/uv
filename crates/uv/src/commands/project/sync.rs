@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+
 use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
@@ -20,18 +21,18 @@ use uv_pypi_types::{
     LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, Lock};
+use uv_resolver::{FlatIndex, InstallTarget};
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
-use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, validate_dependency_groups, ProjectError, SharedState,
+    default_dependency_groups, DependencyGroupsTarget, ProjectError, SharedState,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -61,7 +62,7 @@ pub(crate) async fn sync(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Identify the project.
-    let project = if frozen && !all_packages {
+    let project = if frozen {
         VirtualProject::discover(
             project_dir,
             &DiscoveryOptions {
@@ -81,6 +82,24 @@ pub(crate) async fn sync(
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
+    // Validate that any referenced dependency groups are defined in the workspace.
+    if !frozen {
+        let target = match &project {
+            VirtualProject::Project(project) => {
+                if all_packages {
+                    DependencyGroupsTarget::Workspace(project.workspace())
+                } else {
+                    DependencyGroupsTarget::Project(project)
+                }
+            }
+            VirtualProject::NonProject(workspace) => DependencyGroupsTarget::Workspace(workspace),
+        };
+        target.validate(&dev)?;
+    }
+
+    // Determine the default groups to include.
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
+
     // TODO(lucab): improve warning content
     // <https://github.com/astral-sh/uv/issues/7428>
     if project.workspace().pyproject_toml().has_scripts()
@@ -89,22 +108,9 @@ pub(crate) async fn sync(
         warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
     }
 
-    // Identify the target.
-    let target = if let Some(package) = package.as_ref().filter(|_| frozen) {
-        InstallTarget::frozen(&project, package)
-    } else if all_packages {
-        InstallTarget::from_workspace(&project)
-    } else {
-        InstallTarget::from_project(&project)
-    };
-
-    // Determine the default groups to include.
-    validate_dependency_groups(target, &dev)?;
-    let defaults = default_dependency_groups(project.pyproject_toml())?;
-
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
-        target.workspace(),
+        project.workspace(),
         python.as_deref().map(PythonRequest::parse),
         python_preference,
         python_downloads,
@@ -129,7 +135,7 @@ pub(crate) async fn sync(
 
     let lock = match do_safe_lock(
         mode,
-        target.workspace(),
+        project.workspace(),
         settings.as_ref().into(),
         LowerBound::Warn,
         &state,
@@ -164,11 +170,35 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     };
 
+    // Identify the installation target.
+    let target = match &project {
+        VirtualProject::Project(project) => {
+            if all_packages {
+                InstallTarget::Workspace {
+                    workspace: project.workspace(),
+                    lock: &lock,
+                }
+            } else {
+                InstallTarget::Project {
+                    workspace: project.workspace(),
+                    // If `--frozen --package` is specified, and only the root `pyproject.toml` was
+                    // discovered, the child won't be present in the workspace; but we _know_ that
+                    // we want to install it, so we override the package name.
+                    name: package.as_ref().unwrap_or(project.project_name()),
+                    lock: &lock,
+                }
+            }
+        }
+        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+            workspace,
+            lock: &lock,
+        },
+    };
+
     // Perform the sync operation.
     do_sync(
         target,
         &venv,
-        &lock,
         &extras,
         &dev.with_defaults(defaults),
         editable,
@@ -192,7 +222,6 @@ pub(crate) async fn sync(
 pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
-    lock: &Lock,
     extras: &ExtrasSpecification,
     dev: &DevGroupsManifest,
     editable: EditableMode,
@@ -236,13 +265,14 @@ pub(super) async fn do_sync(
     } = settings;
 
     // Validate that the Python version is supported by the lockfile.
-    if !lock
+    if !target
+        .lock()
         .requires_python()
         .contains(venv.interpreter().python_version())
     {
         return Err(ProjectError::LockedPythonIncompatibility(
             venv.interpreter().python_version().clone(),
-            lock.requires_python().clone(),
+            target.lock().requires_python().clone(),
         ));
     }
 
@@ -250,7 +280,7 @@ pub(super) async fn do_sync(
     let markers = venv.interpreter().resolver_markers();
 
     // Validate that the platform is supported by the lockfile.
-    let environments = lock.supported_environments();
+    let environments = target.lock().supported_environments();
     if !environments.is_empty() {
         if !environments.iter().any(|env| env.evaluate(&markers, &[])) {
             return Err(ProjectError::LockedPlatformIncompatibility(
@@ -259,7 +289,9 @@ pub(super) async fn do_sync(
                 // what the end user actually wrote. The non-simplified
                 // environments, by contrast, are explicitly
                 // constrained by `requires-python`.
-                lock.simplified_supported_environments()
+                target
+                    .lock()
+                    .simplified_supported_environments()
                     .iter()
                     .filter_map(MarkerTree::contents)
                     .map(|env| format!("`{env}`"))
@@ -272,15 +304,8 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(
-        target,
-        &markers,
-        tags,
-        extras,
-        dev,
-        build_options,
-        &install_options,
-    )?;
+    let resolution =
+        target.to_resolution(&markers, tags, extras, dev, build_options, &install_options)?;
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);

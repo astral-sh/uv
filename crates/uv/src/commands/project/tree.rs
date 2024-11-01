@@ -9,13 +9,13 @@ use uv_configuration::{Concurrency, DevGroupsSpecification, LowerBound, TargetTr
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::TreeDisplay;
-use uv_workspace::{DiscoveryOptions, InstallTarget, Workspace};
+use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    default_dependency_groups, validate_dependency_groups, ProjectInterpreter,
+    default_dependency_groups, DependencyGroupsTarget, ProjectInterpreter,
 };
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -49,8 +49,13 @@ pub(crate) async fn tree(
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
+    // Validate that any referenced dependency groups are defined in the workspace.
+    if !frozen {
+        let target = DependencyGroupsTarget::Workspace(&workspace);
+        target.validate(&dev)?;
+    }
+
     // Determine the default groups to include.
-    validate_dependency_groups(InstallTarget::Workspace(&workspace), &dev)?;
     let defaults = default_dependency_groups(workspace.pyproject_toml())?;
 
     // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.

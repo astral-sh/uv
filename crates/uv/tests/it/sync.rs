@@ -1771,7 +1771,7 @@ fn no_install_project() -> Result<()> {
 }
 
 /// Avoid syncing workspace members and the project when `--no-install-workspace` is provided, but
-/// include the all of the dependencies.
+/// include all dependencies.
 #[test]
 fn no_install_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1880,6 +1880,19 @@ fn no_install_workspace() -> Result<()> {
 
     ----- stderr -----
     error: Could not find root package `fake`
+    "###);
+
+    // Even if `--all-packages` is used.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--no-install-workspace").arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
     "###);
 
     // But we do require the root `pyproject.toml`.

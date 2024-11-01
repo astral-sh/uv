@@ -31,11 +31,11 @@ use uv_python::{
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::Lock;
+use uv_resolver::{InstallTarget, Lock};
 use uv_scripts::Pep723Item;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -45,7 +45,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    default_dependency_groups, validate_dependency_groups, validate_requires_python,
+    default_dependency_groups, validate_requires_python, DependencyGroupsTarget,
     EnvironmentSpecification, ProjectError, PythonRequestSource, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
@@ -556,14 +556,24 @@ pub(crate) async fn run(
                         .flatten();
                 }
             } else {
-                let target = if all_packages {
-                    InstallTarget::from_workspace(&project)
-                } else {
-                    InstallTarget::from_project(&project)
-                };
+                // Validate that any referenced dependency groups are defined in the workspace.
+                if !frozen {
+                    let target = match &project {
+                        VirtualProject::Project(project) => {
+                            if all_packages {
+                                DependencyGroupsTarget::Workspace(project.workspace())
+                            } else {
+                                DependencyGroupsTarget::Project(project)
+                            }
+                        }
+                        VirtualProject::NonProject(workspace) => {
+                            DependencyGroupsTarget::Workspace(workspace)
+                        }
+                    };
+                    target.validate(&dev)?;
+                }
 
                 // Determine the default groups to include.
-                validate_dependency_groups(target, &dev)?;
                 let defaults = default_dependency_groups(project.pyproject_toml())?;
 
                 // Determine the lock mode.
@@ -616,12 +626,33 @@ pub(crate) async fn run(
                     Err(err) => return Err(err.into()),
                 };
 
+                // Identify the installation target.
+                let target = match &project {
+                    VirtualProject::Project(project) => {
+                        if all_packages {
+                            InstallTarget::Workspace {
+                                workspace: project.workspace(),
+                                lock: result.lock(),
+                            }
+                        } else {
+                            InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: project.project_name(),
+                                lock: result.lock(),
+                            }
+                        }
+                    }
+                    VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+                        workspace,
+                        lock: result.lock(),
+                    },
+                };
+
                 let install_options = InstallOptions::default();
 
                 project::sync::do_sync(
                     target,
                     &venv,
-                    result.lock(),
                     &extras,
                     &dev.with_defaults(defaults),
                     editable,

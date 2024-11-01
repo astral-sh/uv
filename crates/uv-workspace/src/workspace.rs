@@ -1,23 +1,25 @@
 //! Resolve the current [`ProjectWorkspace`] or [`Workspace`].
 
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+
+use glob::{glob, GlobError, PatternError};
+use rustc_hash::FxHashSet;
+use tracing::{debug, trace, warn};
+
+use uv_distribution_types::Index;
+use uv_fs::{Simplified, CWD};
+use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
+use uv_pypi_types::{Requirement, RequirementSource, SupportedEnvironments};
+use uv_static::EnvVars;
+use uv_warnings::{warn_user, warn_user_once};
+
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use crate::pyproject::{
     DependencyGroups, Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources,
     ToolUvWorkspace,
 };
-use either::Either;
-use glob::{glob, GlobError, PatternError};
-use rustc_hash::FxHashSet;
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
-use tracing::{debug, trace, warn};
-use uv_distribution_types::Index;
-use uv_fs::{Simplified, CWD};
-use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use uv_pypi_types::{Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
-use uv_static::EnvVars;
-use uv_warnings::{warn_user, warn_user_once};
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
@@ -1490,130 +1492,6 @@ impl VirtualProject {
     /// Returns `true` if the project is a virtual workspace root.
     pub fn is_non_project(&self) -> bool {
         matches!(self, VirtualProject::NonProject(_))
-    }
-}
-
-/// A target that can be installed.
-#[derive(Debug, Copy, Clone)]
-pub enum InstallTarget<'env> {
-    /// An entire workspace.
-    Workspace(&'env Workspace),
-    /// A (legacy) non-project workspace root.
-    NonProjectWorkspace(&'env Workspace),
-    /// A project (which could be a workspace root or member).
-    Project(&'env ProjectWorkspace),
-    /// A frozen member within a [`Workspace`].
-    FrozenProject(&'env Workspace, &'env PackageName),
-}
-
-impl<'env> InstallTarget<'env> {
-    /// Create an [`InstallTarget`] for a frozen member within a workspace.
-    pub fn frozen(project: &'env VirtualProject, package_name: &'env PackageName) -> Self {
-        Self::FrozenProject(project.workspace(), package_name)
-    }
-
-    /// Return the [`Workspace`] of the target.
-    pub fn workspace(&self) -> &Workspace {
-        match self {
-            Self::Workspace(workspace) => workspace,
-            Self::Project(project) => project.workspace(),
-            Self::NonProjectWorkspace(workspace) => workspace,
-            Self::FrozenProject(workspace, _) => workspace,
-        }
-    }
-
-    /// Return the [`PackageName`] of the target.
-    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
-        match self {
-            Self::Workspace(workspace) => Either::Right(workspace.packages().keys()),
-            Self::Project(project) => Either::Left(std::iter::once(project.project_name())),
-            Self::NonProjectWorkspace(workspace) => Either::Right(workspace.packages().keys()),
-            Self::FrozenProject(_, package_name) => Either::Left(std::iter::once(*package_name)),
-        }
-    }
-
-    /// Return the [`InstallTarget`] dependency groups.
-    ///
-    /// Returns dependencies that apply to the workspace root, but not any of its members. As such,
-    /// only returns a non-empty iterator for virtual workspaces, which can include dev dependencies
-    /// on the virtual root.
-    pub fn groups(
-        &self,
-    ) -> Result<
-        BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-        DependencyGroupError,
-    > {
-        match self {
-            Self::Workspace(_) | Self::Project(_) | Self::FrozenProject(..) => Ok(BTreeMap::new()),
-            Self::NonProjectWorkspace(workspace) => {
-                // For non-projects, we might have `dependency-groups` or `tool.uv.dev-dependencies`
-                // that are attached to the workspace root (which isn't a member).
-
-                // First, collect `tool.uv.dev_dependencies`
-                let dev_dependencies = workspace
-                    .pyproject_toml()
-                    .tool
-                    .as_ref()
-                    .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.dev_dependencies.as_ref());
-
-                // Then, collect `dependency-groups`
-                let dependency_groups = workspace
-                    .pyproject_toml()
-                    .dependency_groups
-                    .iter()
-                    .flatten()
-                    .collect::<BTreeMap<_, _>>();
-
-                // Merge any overlapping groups.
-                let mut map = BTreeMap::new();
-                for (name, dependencies) in
-                    FlatDependencyGroups::from_dependency_groups(&dependency_groups)?
-                        .into_iter()
-                        .chain(
-                            // Only add the `dev` group if `dev-dependencies` is defined.
-                            dev_dependencies.into_iter().map(|requirements| {
-                                (DEV_DEPENDENCIES.clone(), requirements.clone())
-                            }),
-                        )
-                {
-                    match map.entry(name) {
-                        std::collections::btree_map::Entry::Vacant(entry) => {
-                            entry.insert(dependencies);
-                        }
-                        std::collections::btree_map::Entry::Occupied(mut entry) => {
-                            entry.get_mut().extend(dependencies);
-                        }
-                    }
-                }
-
-                Ok(map)
-            }
-        }
-    }
-
-    /// Return the [`PackageName`] of the target, if available.
-    pub fn project_name(&self) -> Option<&PackageName> {
-        match self {
-            Self::Workspace(_) => None,
-            Self::Project(project) => Some(project.project_name()),
-            Self::NonProjectWorkspace(_) => None,
-            Self::FrozenProject(_, package_name) => Some(package_name),
-        }
-    }
-
-    pub fn from_workspace(workspace: &'env VirtualProject) -> Self {
-        match workspace {
-            VirtualProject::Project(project) => Self::Workspace(project.workspace()),
-            VirtualProject::NonProject(workspace) => Self::NonProjectWorkspace(workspace),
-        }
-    }
-
-    pub fn from_project(project: &'env VirtualProject) -> Self {
-        match project {
-            VirtualProject::Project(project) => Self::Project(project),
-            VirtualProject::NonProject(workspace) => Self::NonProjectWorkspace(workspace),
-        }
     }
 }
 

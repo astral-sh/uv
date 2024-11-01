@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
-use std::path::Path;
 
 use itertools::Itertools;
 use petgraph::graph::{EdgeIndex, NodeIndex};
@@ -12,7 +11,7 @@ use uv_configuration::DevGroupsManifest;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{Dependency, PackageId, Source};
+use crate::lock::{Dependency, PackageId};
 use crate::Lock;
 
 #[derive(Debug)]
@@ -40,24 +39,8 @@ impl<'env> TreeDisplay<'env> {
         invert: bool,
     ) -> Self {
         // Identify the workspace members.
-        //
-        // The members are encoded directly in the lockfile, unless the workspace contains a
-        // single member at the root, in which case, we identify it by its source.
         let members: FxHashSet<&PackageId> = if lock.members().is_empty() {
-            lock.packages
-                .iter()
-                .filter_map(|package| {
-                    let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source
-                    else {
-                        return None;
-                    };
-                    if path == Path::new("") {
-                        Some(&package.id)
-                    } else {
-                        None
-                    }
-                })
-                .collect()
+            lock.root().into_iter().map(|package| &package.id).collect()
         } else {
             lock.packages
                 .iter()
