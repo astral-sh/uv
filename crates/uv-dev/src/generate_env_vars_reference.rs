@@ -71,10 +71,23 @@ fn generate() -> String {
     let mut output = String::new();
 
     output.push_str("# Environment variables\n\n");
-    output
-        .push_str("uv accepts the following command-line arguments as environment variables:\n\n");
+    output.push_str("uv respects the following environment variables:\n\n");
 
     for (var, doc) in EnvVars::metadata() {
+        // Remove empty lines and ddd two spaces to the beginning from the second line.
+        let doc = doc
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| !line.trim().is_empty())
+            .map(|(i, line)| {
+                if i == 0 {
+                    line.to_string()
+                } else {
+                    format!("  {}", line)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         output.push_str(&format!("- `{var}`: {doc}\n"));
     }
 

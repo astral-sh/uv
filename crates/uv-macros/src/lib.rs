@@ -50,17 +50,23 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
     gen.into()
 }
 
-fn get_doc_comment(attr: &Attribute) -> Option<String> {
-    if attr.path().is_ident("doc") {
-        if let syn::Meta::NameValue(meta) = &attr.meta {
-            if let syn::Expr::Lit(expr) = &meta.value {
-                if let syn::Lit::Str(str) = &expr.lit {
-                    return Some(str.value().trim().to_string());
+fn get_doc_comment(attrs: &[Attribute]) -> String {
+    attrs
+        .iter()
+        .filter_map(|attr| {
+            if attr.path().is_ident("doc") {
+                if let syn::Meta::NameValue(meta) = &attr.meta {
+                    if let syn::Expr::Lit(expr) = &meta.value {
+                        if let syn::Lit::Str(str) = &expr.lit {
+                            return Some(str.value().trim().to_string());
+                        }
+                    }
                 }
             }
-        }
-    }
-    None
+            None
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {
@@ -69,6 +75,10 @@ fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {
         .find(|attr| attr.path().is_ident("attr_env_var_pattern"))
         .and_then(|attr| attr.parse_args::<LitStr>().ok())
         .map(|lit_str| lit_str.value())
+}
+
+fn is_hidden(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| attr.path().is_ident("attr_hidden"))
 }
 
 /// This attribute is used to generate environment variables metadata for [`uv_static::EnvVars`].
@@ -80,36 +90,18 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         .items
         .iter()
         .filter_map(|item| match item {
-            ImplItem::Const(item)
-                if !item
-                    .attrs
-                    .iter()
-                    .any(|attr| attr.path().is_ident("attr_hidden")) =>
-            {
+            ImplItem::Const(item) if !is_hidden(&item.attrs) => {
                 let name = item.ident.to_string();
-                let doc = item
-                    .attrs
-                    .iter()
-                    .find_map(get_doc_comment)
-                    .unwrap_or_else(|| "No documentation provided.".to_string());
+                let doc = get_doc_comment(&item.attrs);
                 Some((name, doc))
             }
-            ImplItem::Fn(item)
-                if !item
-                    .attrs
-                    .iter()
-                    .any(|attr| attr.path().is_ident("attr_hidden")) =>
-            {
-                // Extract the environment variable patterns
+            ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
+                // Extract the environment variable patterns.
                 if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
-                    let doc = item
-                        .attrs
-                        .iter()
-                        .find_map(get_doc_comment)
-                        .unwrap_or_else(|| "No documentation provided.".to_string());
+                    let doc = get_doc_comment(&item.attrs);
                     Some((pattern, doc))
                 } else {
-                    None // Skip if pattern extraction fails
+                    None // Skip if pattern extraction fails.
                 }
             }
             _ => None,

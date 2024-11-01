@@ -1,11 +1,13 @@
 # Environment variables
 
-uv accepts the following command-line arguments as environment variables:
+uv respects the following environment variables:
 
 - `UV_DEFAULT_INDEX`: Equivalent to the `--default-index` argument. Base index URL for searching packages.
 - `UV_INDEX`: Equivalent to the `--index` argument. Additional indexes for searching packages.
 - `UV_INDEX_URL`: Equivalent to the `--index-url` argument. Base index URL for searching packages.
+  Deprecated: use `UV_DEFAULT_INDEX` instead.
 - `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` argument. Additional indexes for searching packages.
+  Deprecated: use `UV_INDEX` instead.
 - `UV_FIND_LINKS`: Equivalent to the `--find-links` argument. Additional package search locations.
 - `UV_CACHE_DIR`: Equivalent to the `--cache-dir` argument. Custom directory for caching.
 - `UV_NO_CACHE`: Equivalent to the `--no-cache` argument. Disables cache usage.
