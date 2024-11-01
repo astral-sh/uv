@@ -806,6 +806,169 @@ fn run_with() -> Result<()> {
     Ok(())
 }
 
+/// Sync all members in a workspace.
+#[test]
+fn run_in_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>3"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true }
+        child2 = { workspace = true }
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    let child1 = context.temp_dir.child("child1");
+    child1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>1"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child1
+        .child("src")
+        .child("child1")
+        .child("__init__.py")
+        .touch()?;
+
+    let child2 = context.temp_dir.child("child2");
+    child2.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>4"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    child2
+        .child("src")
+        .child("child2")
+        .child("__init__.py")
+        .touch()?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import anyio
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import iniconfig
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import iniconfig
+    ModuleNotFoundError: No module named 'iniconfig'
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--package").arg("child1").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child1==0.1.0 (from file://[TEMP_DIR]/child1)
+     + iniconfig==2.0.0
+    "###);
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r"
+        import typing_extensions
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Audited 4 packages in [TIME]
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/main.py", line 1, in <module>
+        import typing_extensions
+    ModuleNotFoundError: No module named 'typing_extensions'
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--all-packages").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + child2==0.1.0 (from file://[TEMP_DIR]/child2)
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
 #[test]
 fn run_with_editable() -> Result<()> {
     let context = TestContext::new("3.12");

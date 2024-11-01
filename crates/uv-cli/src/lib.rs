@@ -2740,10 +2740,20 @@ pub struct RunArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Run the command with all workspace members installed.
+    ///
+    /// The workspace's environment (`.venv`) is updated to include all workspace
+    /// members.
+    ///
+    /// Any extras or groups specified via `--extra`, `--group`, or related options
+    /// will be applied to all workspace members.
+    #[arg(long, conflicts_with = "package")]
+    pub all_packages: bool,
+
     /// Run the command in a specific package in the workspace.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// Avoid discovering the project or workspace.
