@@ -74,7 +74,7 @@ fn generate() -> String {
     output
         .push_str("uv accepts the following command-line arguments as environment variables:\n\n");
 
-    for (var, doc) in EnvVars::constants() {
+    for (var, doc) in EnvVars::metadata() {
         output.push_str(&format!("- `{var}`: {doc}\n"));
     }
 

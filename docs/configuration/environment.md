@@ -54,6 +54,8 @@ uv accepts the following command-line arguments as environment variables:
 - `UV_UPDATE_SCHEMA`: Use to update the json schema files.
 - `UV_NO_WRAP`: Use to disable line wrapping for diagnostics.
 - `UV_STACK_SIZE`: Use to control the stack size used by uv. Typically more relevant for Windows in debug mode.
+- `UV_INDEX_{name}_USERNAME`: Generates the environment variable key for the HTTP Basic authentication username.
+- `UV_INDEX_{name}_PASSWORD`: Generates the environment variable key for the HTTP Basic authentication password.
 - `XDG_CONFIG_DIRS`: Path to system-level configuration directory on Unix systems.
 - `SYSTEMDRIVE`: Path to system-level configuration directory on Windows systems.
 - `XDG_CONFIG_HOME`: Path to user-level configuration directory on Unix systems.

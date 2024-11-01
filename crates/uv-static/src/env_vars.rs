@@ -1,4 +1,4 @@
-use uv_macros::{attr_hidden, attribute_env_vars_metadata};
+use uv_macros::{attr_env_var_pattern, attr_hidden, attribute_env_vars_metadata};
 
 /// Declares all environment variable used throughout `uv` and its crates.
 pub struct EnvVars;
@@ -170,11 +170,13 @@ impl EnvVars {
     pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
 
     /// Generates the environment variable key for the HTTP Basic authentication username.
+    #[attr_env_var_pattern("UV_INDEX_{name}_USERNAME")]
     pub fn index_username(name: &str) -> String {
         format!("UV_INDEX_{name}_USERNAME")
     }
 
     /// Generates the environment variable key for the HTTP Basic authentication password.
+    #[attr_env_var_pattern("UV_INDEX_{name}_PASSWORD")]
     pub fn index_password(name: &str) -> String {
         format!("UV_INDEX_{name}_PASSWORD")
     }
