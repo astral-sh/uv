@@ -316,7 +316,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     fork_preferences
                         .iter()
                         .rev()
-                        .map(|fork_preference| state.clone().with_markers(fork_preference.clone()))
+                        .filter_map(|fork_preference| {
+                            state.clone().with_markers(fork_preference.clone())
+                        })
                         .collect()
                 }
             } else {
@@ -693,14 +695,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         forks
             .into_iter()
             .enumerate()
-            .map(move |(i, fork)| {
+            .filter_map(move |(i, fork)| {
                 let is_last = i == forks_len - 1;
                 let forked_state = cur_state.take().unwrap();
                 if !is_last {
                     cur_state = Some(forked_state.clone());
                 }
 
-                let mut forked_state = forked_state.with_markers(fork.markers);
+                let markers = fork.markers.clone();
+                Some((fork, forked_state.with_markers(markers)?))
+            })
+            .map(move |(fork, mut forked_state)| {
                 forked_state.add_package_version_dependencies(
                     for_package,
                     version,
@@ -2320,8 +2325,16 @@ impl ForkState {
 
     /// Subset the current markers with the new markers and update the python requirements fields
     /// accordingly.
-    fn with_markers(mut self, markers: MarkerTree) -> Self {
+    fn with_markers(mut self, markers: MarkerTree) -> Option<Self> {
         let combined_markers = self.markers.and(markers);
+        let python_marker = self.python_requirement.to_marker_tree();
+        if combined_markers.is_disjoint(&python_marker) {
+            debug!(
+                "Skipping split {combined_markers:?} \
+                 because of Python requirement {python_marker:?}",
+            );
+            return None;
+        }
 
         // If the fork contains a narrowed Python requirement, apply it.
         let python_requirement = marker::requires_python(&combined_markers)
@@ -2335,7 +2348,7 @@ impl ForkState {
         }
 
         self.markers = ResolverMarkers::Fork(combined_markers);
-        self
+        Some(self)
     }
 
     fn into_resolution(self) -> Resolution {
