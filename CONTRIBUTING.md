@@ -200,7 +200,7 @@ Releases can only be performed by Astral team members.
 
 Changelog entries and version bumps are automated. First, run:
 
-```
+```shell
 ./scripts/release.sh
 ```
 
