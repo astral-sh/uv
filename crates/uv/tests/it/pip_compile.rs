@@ -487,14 +487,10 @@ typing_extensions==4.3.0
     apache-airflow==2.3.4     # via apache-airflow-providers-microsoft-azure, -r requirements.in
     apache-airflow-providers-common-sql==1.4.0  # via apache-airflow-providers-sqlite
     apache-airflow-providers-ftp==3.3.1  # via apache-airflow
-    apache-airflow-providers-ftp==3.7.0 ; python_version < '0'  # via apache-airflow
     apache-airflow-providers-http==4.3.0  # via apache-airflow
-    apache-airflow-providers-http==4.10.0 ; python_version < '0'  # via apache-airflow
     apache-airflow-providers-imap==3.1.1  # via apache-airflow
-    apache-airflow-providers-imap==3.5.0 ; python_version < '0'  # via apache-airflow
     apache-airflow-providers-microsoft-azure==4.2.0  # via apache-airflow, -c constraints.txt
     apache-airflow-providers-sqlite==3.3.2  # via apache-airflow
-    apache-airflow-providers-sqlite==3.7.1 ; python_version < '0'  # via apache-airflow
     apispec==3.3.2            # via flask-appbuilder
     argcomplete==3.2.3        # via apache-airflow
     asgiref==3.8.1            # via apache-airflow-providers-http, connexion, flask
@@ -504,13 +500,10 @@ typing_extensions==4.3.0
     azure-batch==14.1.0       # via apache-airflow-providers-microsoft-azure
     azure-common==1.1.28      # via azure-batch, azure-keyvault-secrets, azure-mgmt-containerinstance, azure-mgmt-datafactory, azure-mgmt-datalake-store, azure-mgmt-resource, azure-storage-common, azure-storage-file
     azure-core==1.29.1        # via azure-cosmos, azure-identity, azure-keyvault-secrets, azure-mgmt-core, azure-servicebus, azure-storage-blob, msrest
-    azure-core==1.30.1 ; python_version < '0'  # via azure-identity
     azure-cosmos==4.5.1       # via apache-airflow-providers-microsoft-azure
-    azure-cosmos==4.6.0 ; python_version < '0'  # via apache-airflow-providers-microsoft-azure
     azure-datalake-store==0.0.53  # via apache-airflow-providers-microsoft-azure
     azure-identity==1.10.0    # via apache-airflow-providers-microsoft-azure, -c constraints.txt
     azure-keyvault-secrets==4.7.0  # via apache-airflow-providers-microsoft-azure
-    azure-keyvault-secrets==4.8.0 ; python_version < '0'  # via apache-airflow-providers-microsoft-azure
     azure-kusto-data==0.0.45  # via apache-airflow-providers-microsoft-azure
     azure-mgmt-containerinstance==1.5.0  # via apache-airflow-providers-microsoft-azure
     azure-mgmt-core==1.4.0    # via azure-mgmt-datafactory, azure-mgmt-resource
@@ -526,16 +519,13 @@ typing_extensions==4.3.0
     azure-storage-file==2.1.0  # via apache-airflow-providers-microsoft-azure
     babel==2.14.0             # via flask-babel
     black==22.12.0            # via -r requirements.in
-    black==24.3.0 ; python_version < '0'  # via -r requirements.in
     blinker==1.7.0            # via apache-airflow
     cachelib==0.9.0           # via flask-caching
     cattrs==23.1.2            # via apache-airflow
-    cattrs==23.2.3 ; python_version < '0'  # via apache-airflow
     certifi==2024.2.2         # via httpcore, httpx, msrest, requests
     cffi==1.16.0              # via azure-datalake-store, cryptography
     charset-normalizer==3.3.2  # via requests
     click==8.1.3              # via black, flask, flask-appbuilder, -c constraints.txt
-    colorama==0.4.5           # via click, colorlog, flask-appbuilder, ipython, -c constraints.txt
     colorlog==4.8.0           # via apache-airflow
     connexion==3.0.6          # via apache-airflow
     cron-descriptor==1.4.3    # via apache-airflow
@@ -574,7 +564,6 @@ typing_extensions==4.3.0
     jinja2==3.1.3             # via apache-airflow, connexion, flask, flask-babel, python-nvd3, swagger-ui-bundle
     joblib==1.3.2             # via scikit-learn
     jsonschema==4.17.3        # via apache-airflow, connexion, flask-appbuilder
-    jsonschema==4.21.1 ; python_version < '0'  # via apache-airflow, flask-appbuilder
     lazy-object-proxy==1.10.0  # via apache-airflow
     linkify-it-py==2.0.3      # via apache-airflow
     lockfile==0.12.2          # via apache-airflow, python-daemon
@@ -629,7 +618,6 @@ typing_extensions==4.3.0
     requests-oauthlib==2.0.0  # via msrest
     requests-toolbelt==1.0.0  # via apache-airflow-providers-http
     rich==13.3.1              # via apache-airflow
-    rich==13.7.1 ; python_version < '0'  # via apache-airflow
     scikit-learn==1.2.2       # via -r requirements.in
     scipy==1.12.0             # via scikit-learn
     setproctitle==1.3.3       # via apache-airflow
@@ -662,7 +650,7 @@ typing_extensions==4.3.0
     yarl==1.9.4               # via aiohttp
 
     ----- stderr -----
-    Resolved 183 packages in [TIME]
+    Resolved 172 packages in [TIME]
     "###
     );
 
