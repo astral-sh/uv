@@ -2034,6 +2034,12 @@ uv export [OPTIONS]
 
 <dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies</p>
 
+</dd><dt><code>--all-packages</code></dt><dd><p>Export the entire workspace.</p>
+
+<p>The dependencies for all workspace members will be included in the exported requirements file.</p>
+
+<p>Any extras or groups specified via <code>--extra</code>, <code>--group</code>, or related options will be applied to all workspace members.</p>
+
 </dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>

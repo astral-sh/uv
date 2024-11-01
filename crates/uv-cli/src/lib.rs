@@ -3343,10 +3343,20 @@ pub struct ExportArgs {
     #[arg(long, value_enum, default_value_t = ExportFormat::default())]
     pub format: ExportFormat,
 
+    /// Export the entire workspace.
+    ///
+    /// The dependencies for all workspace members will be included in the
+    /// exported requirements file.
+    ///
+    /// Any extras or groups specified via `--extra`, `--group`, or related options
+    /// will be applied to all workspace members.
+    #[arg(long, conflicts_with = "package")]
+    pub all_packages: bool,
+
     /// Export the dependencies for a specific package in the workspace.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// Include optional dependencies from the specified extra name.
