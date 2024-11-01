@@ -9,7 +9,9 @@ use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipInd
 use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, ExcludeNewer, MultiVersionMode, PrereleaseMode, ResolutionMode,
+};
 
 use crate::{FilesystemOptions, Options, PipOptions};
 
@@ -77,6 +79,7 @@ impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);
 impl_combine_or!(KeyringProviderType);
 impl_combine_or!(LinkMode);
+impl_combine_or!(MultiVersionMode);
 impl_combine_or!(NonZeroUsize);
 impl_combine_or!(PathBuf);
 impl_combine_or!(PipExtraIndex);

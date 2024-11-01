@@ -33,6 +33,9 @@ impl EnvVars {
     /// Equivalent to the `--prerelease` argument. Allows or disallows pre-release versions.
     pub const UV_PRERELEASE: &'static str = "UV_PRERELEASE";
 
+    /// Equivalent to the `--multi-version` argument. Controls version selection across forks.
+    pub const UV_MULTI_VERSION: &'static str = "UV_MULTI_VERSION";
+
     /// Equivalent to the `--system` argument. Use system Python interpreter.
     pub const UV_SYSTEM_PYTHON: &'static str = "UV_SYSTEM_PYTHON";
 

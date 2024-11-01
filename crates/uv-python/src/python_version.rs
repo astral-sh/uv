@@ -50,7 +50,9 @@ impl schemars::JsonSchema for PythonVersion {
                 ..schemars::schema::StringValidation::default()
             })),
             metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("A Python version specifier, e.g. `3.7` or `3.8.0`.".to_string()),
+                description: Some(
+                    "A Python version specifier, e.g. `3.11` or `3.12.4`.".to_string(),
+                ),
                 ..schemars::schema::Metadata::default()
             })),
             ..schemars::schema::SchemaObject::default()

@@ -30,7 +30,9 @@ use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
-use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, DependencyMode, ExcludeNewer, MultiVersionMode, PrereleaseMode, ResolutionMode,
+};
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, PublishOptions, ResolverInstallerOptions,
     ResolverOptions,
@@ -1957,6 +1959,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) multi_version: MultiVersionMode,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -1976,6 +1979,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) allow_insecure_host: &'a [TrustedHost],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) multi_version: MultiVersionMode,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2008,6 +2012,7 @@ impl ResolverSettings {
             allow_insecure_host: &self.allow_insecure_host,
             resolution: self.resolution,
             prerelease: self.prerelease,
+            multi_version: self.multi_version,
             dependency_metadata: &self.dependency_metadata,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
@@ -2042,6 +2047,7 @@ impl From<ResolverOptions> for ResolverSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
+            multi_version: value.multi_version.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
             ),
@@ -2079,6 +2085,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) allow_insecure_host: &'a [TrustedHost],
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) multi_version: MultiVersionMode,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2106,6 +2113,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) multi_version: MultiVersionMode,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2143,6 +2151,7 @@ impl ResolverInstallerSettings {
             allow_insecure_host: &self.allow_insecure_host,
             resolution: self.resolution,
             prerelease: self.prerelease,
+            multi_version: self.multi_version,
             dependency_metadata: &self.dependency_metadata,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
@@ -2179,6 +2188,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
+            multi_version: value.multi_version.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
             ),
@@ -2238,6 +2248,7 @@ pub(crate) struct PipSettings {
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
+    pub(crate) multi_version: MultiVersionMode,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) no_strip_extras: bool,
@@ -2299,6 +2310,7 @@ impl PipSettings {
             allow_empty_requirements,
             resolution,
             prerelease,
+            multi_version,
             dependency_metadata,
             output_file,
             no_strip_extras,
@@ -2341,6 +2353,7 @@ impl PipSettings {
             allow_insecure_host: top_level_allow_insecure_host,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
+            multi_version: top_level_multi_version,
             dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
             no_build_isolation: top_level_no_build_isolation,
@@ -2373,6 +2386,7 @@ impl PipSettings {
         let allow_insecure_host = allow_insecure_host.combine(top_level_allow_insecure_host);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
+        let multi_version = multi_version.combine(top_level_multi_version);
         let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
         let config_settings = config_settings.combine(top_level_config_settings);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
@@ -2417,6 +2431,10 @@ impl PipSettings {
             },
             resolution: args.resolution.combine(resolution).unwrap_or_default(),
             prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            multi_version: args
+                .multi_version
+                .combine(multi_version)
+                .unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 args.dependency_metadata
                     .combine(dependency_metadata)
@@ -2566,6 +2584,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             allow_insecure_host: settings.allow_insecure_host,
             resolution: settings.resolution,
             prerelease: settings.prerelease,
+            multi_version: settings.multi_version,
             dependency_metadata: settings.dependency_metadata,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,
@@ -2618,7 +2637,7 @@ pub(crate) struct PublishSettings {
 }
 
 impl PublishSettings {
-    /// Resolve the [`crate::settings::PublishSettings`] from the CLI and filesystem configuration.
+    /// Resolve the [`PublishSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: PublishArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let Options {
             publish, top_level, ..

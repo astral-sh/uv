@@ -313,6 +313,7 @@ async fn do_lock(
         allow_insecure_host,
         resolution,
         prerelease,
+        multi_version,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -460,6 +461,7 @@ async fn do_lock(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
+        .multi_version_mode(multi_version)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
         .build();
@@ -728,6 +730,15 @@ impl ValidatedLock {
                 "Ignoring existing lockfile due to change in pre-release mode: `{}` vs. `{}`",
                 lock.prerelease_mode().cyan(),
                 options.prerelease_mode.cyan()
+            );
+            return Ok(Self::Unusable(lock));
+        }
+        if lock.multi_version_mode() != options.multi_version_mode {
+            let _ = writeln!(
+                printer.stderr(),
+                "Ignoring existing lockfile due to change in multi-version mode: `{}` vs. `{}`",
+                lock.multi_version_mode().cyan(),
+                options.multi_version_mode.cyan()
             );
             return Ok(Self::Unusable(lock));
         }

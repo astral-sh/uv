@@ -13,7 +13,9 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_resolver::{
+    AnnotationStyle, ExcludeNewer, MultiVersionMode, PrereleaseMode, ResolutionMode,
+};
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -264,6 +266,7 @@ pub struct ResolverOptions {
     pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
+    pub multi_version: Option<MultiVersionMode>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
@@ -456,6 +459,23 @@ pub struct ResolverInstallerOptions {
         possible_values = true
     )]
     pub prerelease: Option<PrereleaseMode>,
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will minimize the number of versions selected for each package (`fewest`),
+    /// to minimize differences between environments. Under `latest`, uv will select the latest
+    /// compatible version for each environment and perform an independent solve for each Python
+    /// minor version, ensuring that the latest-compatible version is used in each environment,
+    /// even if it results in more versions being selected across the lockfile.
+    #[option(
+        default = "\"fewest\"",
+        value_type = "str",
+        example = r#"
+            multi-version = "latest"
+        "#,
+        possible_values = true
+    )]
+    pub multi_version: Option<MultiVersionMode>,
     /// Pre-defined static metadata for dependencies of the project (direct or transitive). When
     /// provided, enables the resolver to use the specified metadata instead of querying the
     /// registry or building the relevant package from source.
@@ -990,6 +1010,23 @@ pub struct PipOptions {
         possible_values = true
     )]
     pub prerelease: Option<PrereleaseMode>,
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will minimize the number of versions selected for each package (`fewest`),
+    /// to minimize differences between environments. Under `latest`, uv will select the latest
+    /// compatible version for each environment and perform an independent solve for each Python
+    /// minor version, ensuring that the latest-compatible version is used in each environment,
+    /// even if it results in more versions being selected across the lockfile.
+    #[option(
+        default = "\"fewest\"",
+        value_type = "str",
+        example = r#"
+            multi-version = "latest"
+        "#,
+        possible_values = true
+    )]
+    pub multi_version: Option<MultiVersionMode>,
     /// Pre-defined static metadata for dependencies of the project (direct or transitive). When
     /// provided, enables the resolver to use the specified metadata instead of querying the
     /// registry or building the relevant package from source.
@@ -1355,6 +1392,7 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            multi_version: value.multi_version,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             exclude_newer: value.exclude_newer,
@@ -1419,6 +1457,7 @@ pub struct ToolOptions {
     pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
+    pub multi_version: Option<MultiVersionMode>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub no_build_isolation: Option<bool>,
@@ -1446,6 +1485,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            multi_version: value.multi_version,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             no_build_isolation: value.no_build_isolation,
@@ -1475,6 +1515,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
+            multi_version: value.multi_version,
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             no_build_isolation: value.no_build_isolation,
@@ -1525,6 +1566,7 @@ pub struct OptionsWire {
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
+    multi_version: Option<MultiVersionMode>,
     dependency_metadata: Option<Vec<StaticMetadata>>,
     config_settings: Option<ConfigSettings>,
     no_build_isolation: Option<bool>,
@@ -1595,6 +1637,7 @@ impl From<OptionsWire> for Options {
             allow_insecure_host,
             resolution,
             prerelease,
+            multi_version,
             dependency_metadata,
             config_settings,
             no_build_isolation,
@@ -1650,6 +1693,7 @@ impl From<OptionsWire> for Options {
                 allow_insecure_host,
                 resolution,
                 prerelease,
+                multi_version,
                 dependency_metadata,
                 config_settings,
                 no_build_isolation,

@@ -33,7 +33,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, validate_dependency_groups, ProjectError, SharedState,
 };
-use crate::commands::{diagnostics, pip, project, ExitStatus};
+use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
@@ -363,7 +363,7 @@ pub(super) async fn do_sync(
     let site_packages = SitePackages::from_environment(venv)?;
 
     // Sync the environment.
-    pip::operations::install(
+    operations::install(
         &resolution,
         site_packages,
         modifications,

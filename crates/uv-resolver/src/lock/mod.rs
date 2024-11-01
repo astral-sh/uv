@@ -16,6 +16,7 @@ use url::Url;
 
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
+use crate::multi_version_mode::MultiVersionMode;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::{
@@ -226,6 +227,7 @@ impl Lock {
         let options = ResolverOptions {
             resolution_mode: graph.options.resolution_mode,
             prerelease_mode: graph.options.prerelease_mode,
+            multi_version_mode: graph.options.multi_version_mode,
             exclude_newer: graph.options.exclude_newer,
         };
         let lock = Self::new(
@@ -529,6 +531,11 @@ impl Lock {
         self.options.prerelease_mode
     }
 
+    /// Returns the multi-version mode used to generate this lock.
+    pub fn multi_version_mode(&self) -> MultiVersionMode {
+        self.options.multi_version_mode
+    }
+
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
         self.options.exclude_newer
@@ -751,6 +758,12 @@ impl Lock {
                 options_table.insert(
                     "prerelease-mode",
                     value(self.options.prerelease_mode.to_string()),
+                );
+            }
+            if self.options.multi_version_mode != MultiVersionMode::default() {
+                options_table.insert(
+                    "multi-version-mode",
+                    value(self.options.multi_version_mode.to_string()),
                 );
             }
             if let Some(exclude_newer) = self.options.exclude_newer {
@@ -1382,6 +1395,9 @@ struct ResolverOptions {
     /// The [`PrereleaseMode`] used to generate this lock.
     #[serde(default)]
     prerelease_mode: PrereleaseMode,
+    /// The [`MultiVersionMode`] used to generate this lock.
+    #[serde(default)]
+    multi_version_mode: MultiVersionMode,
     /// The [`ExcludeNewer`] used to generate this lock.
     exclude_newer: Option<ExcludeNewer>,
 }

@@ -246,6 +246,18 @@ uv run [OPTIONS] [COMMAND]
 
 <p>Equivalent to <code>python -m &lt;module&gt;</code>.</p>
 
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -853,6 +865,18 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -1194,6 +1218,18 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -1527,6 +1563,18 @@ uv sync [OPTIONS]
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -1864,6 +1912,18 @@ uv lock [OPTIONS]
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2179,6 +2239,18 @@ uv export [OPTIONS]
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2519,6 +2591,18 @@ uv tree [OPTIONS]
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2922,6 +3006,18 @@ uv tool run [OPTIONS] [COMMAND]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -3226,6 +3322,18 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -3525,6 +3633,18 @@ uv tool upgrade [OPTIONS] <NAME>...
 <li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
 </ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -5160,6 +5280,18 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
+</ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -5925,6 +6057,18 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 <li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
 </ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
@@ -7399,6 +7543,18 @@ uv build [OPTIONS] [SRC]
 <li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
+</dd><dt><code>--multi-version</code> <i>multi-version</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will minimize the number of versions selected for each package (<code>fewest</code>), to minimize differences between environments. Under <code>latest</code>, uv will select the latest compatible version for each environment, even if it results in more versions being selected.</p>
+
+<p>May also be set with the <code>UV_MULTI_VERSION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>latest</code>:  Resolve the lowest compatible version of each package</li>
 </ul>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 

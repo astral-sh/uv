@@ -131,6 +131,7 @@ async fn build_impl(
         allow_insecure_host,
         resolution: _,
         prerelease: _,
+        multi_version: _,
         dependency_metadata,
         config_setting,
         no_build_isolation,

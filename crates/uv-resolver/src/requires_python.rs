@@ -278,23 +278,6 @@ impl RequiresPython {
         }
     }
 
-    /// Returns the [`RequiresPythonBound`] truncated to the major and minor version.
-    pub fn bound_major_minor(&self) -> LowerBound {
-        match self.range.lower().as_ref() {
-            // Ex) `>=3.10.1` -> `>=3.10`
-            Bound::Included(version) => LowerBound(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            // Ex) `>3.10.1` -> `>=3.10`
-            // This is unintuitive, but `>3.10.1` does indicate that _some_ version of Python 3.10
-            // is supported.
-            Bound::Excluded(version) => LowerBound(Bound::Included(Version::new(
-                version.release().iter().take(2),
-            ))),
-            Bound::Unbounded => LowerBound(Bound::Unbounded),
-        }
-    }
-
     /// Returns the [`Range`] bounding the `Requires-Python` specifier.
     pub fn range(&self) -> &RequiresPythonRange {
         &self.range
@@ -471,6 +454,36 @@ impl RequiresPython {
                 true
             }
         })
+    }
+
+    /// Return a set of fork preferences to cover the range of supported Python minor versions.
+    pub fn forks(&self) -> Vec<MarkerTree> {
+        let mut forks = vec![];
+
+        let python_marker = self.to_marker_tree();
+
+        // Add, e.g., `python_full_version == '3.8.*'` for all supported Python versions.
+        for minor in 7..13 {
+            let python_version = Version::new([3, minor]);
+            let marker = MarkerTree::expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonFullVersion,
+                specifier: VersionSpecifier::equals_star_version(python_version),
+            });
+            if !marker.is_disjoint(&python_marker) {
+                forks.push(marker);
+            }
+        }
+
+        // Add, e.g., `python_full_version >= '3.13'` for the latest supported Python version.
+        let marker = MarkerTree::expression(MarkerExpression::Version {
+            key: MarkerValueVersion::PythonFullVersion,
+            specifier: VersionSpecifier::greater_than_equal_version(Version::new([3, 13])),
+        });
+        if !marker.is_disjoint(&python_marker) {
+            forks.push(marker);
+        }
+
+        forks
     }
 }
 
