@@ -138,12 +138,12 @@ url = "https://example.com/simple"
 ```
 
 From there, you can set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and
-`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL` is the uppercase version
+`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL_PROXY` is the uppercase version
 of the index name, with non-alphanumeric characters replaced by underscores:
 
 ```sh
-export UV_INDEX_INTERNAL_USERNAME=public
-export UV_INDEX_INTERNAL_PASSWORD=koala
+export UV_INDEX_INTERNAL_PROXY_USERNAME=public
+export UV_INDEX_INTERNAL_PROXY_PASSWORD=koala
 ```
 
 By providing credentials via environment variables, you can avoid storing sensitive information in
