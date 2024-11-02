@@ -65,6 +65,7 @@ pub(crate) async fn run(
     frozen: bool,
     no_sync: bool,
     isolated: bool,
+    all_packages: bool,
     package: Option<PackageName>,
     no_project: bool,
     no_config: bool,
@@ -346,6 +347,11 @@ pub(crate) async fn run(
         if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
             warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
         }
+        if all_packages {
+            warn_user!(
+                "`--all-packages` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
+        }
         if package.is_some() {
             warn_user!(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
@@ -550,8 +556,14 @@ pub(crate) async fn run(
                         .flatten();
                 }
             } else {
+                let target = if all_packages {
+                    InstallTarget::from_workspace(&project)
+                } else {
+                    InstallTarget::from_project(&project)
+                };
+
                 // Determine the default groups to include.
-                validate_dependency_groups(InstallTarget::from_project(&project), &dev)?;
+                validate_dependency_groups(target, &dev)?;
                 let defaults = default_dependency_groups(project.pyproject_toml())?;
 
                 // Determine the lock mode.
@@ -607,7 +619,7 @@ pub(crate) async fn run(
                 let install_options = InstallOptions::default();
 
                 project::sync::do_sync(
-                    InstallTarget::from_project(&project),
+                    target,
                     &venv,
                     result.lock(),
                     &extras,

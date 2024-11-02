@@ -78,6 +78,12 @@ uv run [OPTIONS] [COMMAND]
 
 <p>This option is only available when running in a project.</p>
 
+</dd><dt><code>--all-packages</code></dt><dd><p>Run the command with all workspace members installed.</p>
+
+<p>The workspace&#8217;s environment (<code>.venv</code>) is updated to include all workspace members.</p>
+
+<p>Any extras or groups specified via <code>--extra</code>, <code>--group</code>, or related options will be applied to all workspace members.</p>
+
 </dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
