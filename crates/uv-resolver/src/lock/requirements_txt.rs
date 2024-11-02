@@ -10,9 +10,6 @@ use petgraph::{Directed, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
-use crate::graph_ops::marker_reachability;
-use crate::lock::{Package, PackageId, Source};
-use crate::{Lock, LockError};
 use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions};
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
@@ -20,7 +17,10 @@ use uv_git::GitReference;
 use uv_normalize::ExtraName;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
-use uv_workspace::InstallTarget;
+
+use crate::graph_ops::marker_reachability;
+use crate::lock::{Package, PackageId, Source};
+use crate::{InstallTarget, LockError};
 
 type LockGraph<'lock> = Graph<Node<'lock>, Edge, Directed>;
 
@@ -34,7 +34,6 @@ pub struct RequirementsTxtExport<'lock> {
 
 impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
-        lock: &'lock Lock,
         target: InstallTarget<'lock>,
         extras: &ExtrasSpecification,
         dev: &DevGroupsManifest,
@@ -42,7 +41,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         hashes: bool,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
-        let size_guess = lock.packages.len();
+        let size_guess = target.lock().packages.len();
         let mut petgraph = LockGraph::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
 
@@ -53,7 +52,8 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         // Add the workspace package to the queue.
         for root_name in target.packages() {
-            let dist = lock
+            let dist = target
+                .lock()
                 .find_by_name(root_name)
                 .expect("found too many packages matching root")
                 .expect("could not find root");
@@ -88,7 +88,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             // Add any development dependencies.
             for group in dev.iter() {
                 for dep in dist.dependency_groups.get(group).into_iter().flatten() {
-                    let dep_dist = lock.find_by_id(&dep.package_id);
+                    let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                     // Add the dependency to the graph.
                     if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
@@ -135,7 +135,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             };
 
             for dep in deps {
-                let dep_dist = lock.find_by_id(&dep.package_id);
+                let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
@@ -175,7 +175,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 install_options.include_package(
                     &package.id.name,
                     target.project_name(),
-                    lock.members(),
+                    target.lock().members(),
                 )
             })
             .map(|(index, package)| Requirement {

@@ -13,13 +13,13 @@ use uv_configuration::{
 };
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::RequirementsTxtExport;
-use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
+use uv_resolver::{InstallTarget, RequirementsTxtExport};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, validate_dependency_groups, ProjectError, ProjectInterpreter,
+    default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
 };
 use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter, SharedState};
 use crate::printer::Printer;
@@ -53,7 +53,7 @@ pub(crate) async fn export(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Identify the project.
-    let project = if frozen && !all_packages {
+    let project = if frozen {
         VirtualProject::discover(
             project_dir,
             &DiscoveryOptions {
@@ -73,9 +73,22 @@ pub(crate) async fn export(
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
-    if project.is_non_project() {
+    let VirtualProject::Project(project) = &project else {
         return Err(anyhow::anyhow!("Legacy non-project roots are not supported in `uv export`; add a `[project]` table to your `pyproject.toml` to enable exports"));
     };
+
+    // Validate that any referenced dependency groups are defined in the workspace.
+    if !frozen {
+        let target = if all_packages {
+            DependencyGroupsTarget::Workspace(project.workspace())
+        } else {
+            DependencyGroupsTarget::Project(project)
+        };
+        target.validate(&dev)?;
+    }
+
+    // Determine the default groups to include.
+    let defaults = default_dependency_groups(project.current_project().pyproject_toml())?;
 
     // Determine the lock mode.
     let interpreter;
@@ -144,18 +157,22 @@ pub(crate) async fn export(
         Err(err) => return Err(err.into()),
     };
 
-    // Identify the target.
-    let target = if let Some(package) = package.as_ref().filter(|_| frozen) {
-        InstallTarget::frozen(&project, package)
-    } else if all_packages {
-        InstallTarget::from_workspace(&project)
+    // Identify the installation target.
+    let target = if all_packages {
+        InstallTarget::Workspace {
+            workspace: project.workspace(),
+            lock: &lock,
+        }
     } else {
-        InstallTarget::from_project(&project)
+        InstallTarget::Project {
+            workspace: project.workspace(),
+            // If `--frozen --package` is specified, and only the root `pyproject.toml` was
+            // discovered, the child won't be present in the workspace; but we _know_ that
+            // we want to install it, so we override the package name.
+            name: package.as_ref().unwrap_or(project.project_name()),
+            lock: &lock,
+        }
     };
-
-    // Determine the default groups to include.
-    validate_dependency_groups(target, &dev)?;
-    let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
@@ -164,7 +181,6 @@ pub(crate) async fn export(
     match format {
         ExportFormat::RequirementsTxt => {
             let export = RequirementsTxtExport::from_lock(
-                &lock,
                 target,
                 &extras,
                 &dev.with_defaults(defaults),

@@ -15,6 +15,7 @@ use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
+pub use crate::lock::target::InstallTarget;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
@@ -44,9 +45,10 @@ use uv_pypi_types::{
 };
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::{InstallTarget, Workspace};
+use uv_workspace::Workspace;
 
 mod requirements_txt;
+mod target;
 mod tree;
 
 /// The current version of the lockfile format.
@@ -542,6 +544,16 @@ impl Lock {
     /// Returns the workspace members that were used to generate this lock.
     pub fn members(&self) -> &BTreeSet<PackageName> {
         &self.manifest.members
+    }
+
+    /// Return the workspace root used to generate this lock.
+    pub fn root(&self) -> Option<&Package> {
+        self.packages.iter().find(|package| {
+            let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source else {
+                return false;
+            };
+            path == Path::new("")
+        })
     }
 
     /// Returns the supported environments that were used to generate this

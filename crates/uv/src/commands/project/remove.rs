@@ -12,11 +12,12 @@ use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_resolver::InstallTarget;
 use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -235,10 +236,22 @@ pub(crate) async fn remove(
     // Determine the default groups to include.
     let defaults = default_dependency_groups(project.pyproject_toml())?;
 
+    // Identify the installation target.
+    let target = match &project {
+        VirtualProject::Project(project) => InstallTarget::Project {
+            workspace: project.workspace(),
+            name: project.project_name(),
+            lock: &lock,
+        },
+        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+            workspace,
+            lock: &lock,
+        },
+    };
+
     project::sync::do_sync(
-        InstallTarget::from_project(&project),
+        target,
         &venv,
-        &lock,
         &extras,
         &DevGroupsManifest::from_defaults(defaults),
         EditableMode::Editable,
