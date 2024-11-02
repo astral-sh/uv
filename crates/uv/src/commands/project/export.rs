@@ -14,7 +14,7 @@ use uv_configuration::{
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
@@ -73,7 +73,7 @@ pub(crate) async fn export(
     };
 
     // Determine the default groups to include.
-    validate_dependency_groups(&project, &dev)?;
+    validate_dependency_groups(InstallTarget::from_project(&project), &dev)?;
     let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     let VirtualProject::Project(project) = project else {

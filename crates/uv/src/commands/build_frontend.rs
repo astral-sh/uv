@@ -43,7 +43,7 @@ pub(crate) async fn build_frontend(
     project_dir: &Path,
     src: Option<PathBuf>,
     package: Option<PackageName>,
-    all: bool,
+    all_packages: bool,
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
@@ -65,7 +65,7 @@ pub(crate) async fn build_frontend(
         project_dir,
         src.as_deref(),
         package.as_ref(),
-        all,
+        all_packages,
         output_dir.as_deref(),
         sdist,
         wheel,
@@ -105,7 +105,7 @@ async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
     package: Option<&PackageName>,
-    all: bool,
+    all_packages: bool,
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
@@ -171,7 +171,7 @@ async fn build_impl(
     // Attempt to discover the workspace; on failure, save the error for later.
     let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
 
-    // If a `--package` or `--all` was provided, adjust the source directory.
+    // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
@@ -201,10 +201,10 @@ async fn build_impl(
         vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
             package.root(),
         )))]
-    } else if all {
+    } else if all_packages {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
-                "Cannot specify `--all` when building from a file"
+                "Cannot specify `--all-packages` when building from a file"
             ));
         }
 
@@ -212,7 +212,7 @@ async fn build_impl(
             Ok(ref workspace) => workspace,
             Err(err) => {
                 return Err(anyhow::Error::from(err)
-                    .context("`--all` was provided, but no workspace was found"));
+                    .context("`--all-packages` was provided, but no workspace was found"));
             }
         };
 

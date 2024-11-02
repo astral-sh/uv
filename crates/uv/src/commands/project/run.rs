@@ -551,7 +551,7 @@ pub(crate) async fn run(
                 }
             } else {
                 // Determine the default groups to include.
-                validate_dependency_groups(&project, &dev)?;
+                validate_dependency_groups(InstallTarget::from_project(&project), &dev)?;
                 let defaults = default_dependency_groups(project.pyproject_toml())?;
 
                 // Determine the lock mode.
@@ -607,7 +607,7 @@ pub(crate) async fn run(
                 let install_options = InstallOptions::default();
 
                 project::sync::do_sync(
-                    InstallTarget::from(&project),
+                    InstallTarget::from_project(&project),
                     &venv,
                     result.lock(),
                     &extras,

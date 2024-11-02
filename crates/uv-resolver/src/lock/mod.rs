@@ -576,7 +576,7 @@ impl Lock {
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     pub fn to_resolution(
         &self,
-        project: InstallTarget<'_>,
+        target: InstallTarget<'_>,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecification,
@@ -588,7 +588,7 @@ impl Lock {
         let mut seen = FxHashSet::default();
 
         // Add the workspace packages to the queue.
-        for root_name in project.packages() {
+        for root_name in target.packages() {
             let root = self
                 .find_by_name(root_name)
                 .map_err(|_| LockErrorKind::MultipleRootPackages {
@@ -638,7 +638,7 @@ impl Lock {
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
         // dependencies in (legacy) non-project workspace roots).
-        let groups = project
+        let groups = target
             .groups()
             .map_err(|err| LockErrorKind::DependencyGroup { err })?;
         for group in dev.iter() {
@@ -688,13 +688,13 @@ impl Lock {
             }
             if install_options.include_package(
                 &dist.id.name,
-                project.project_name(),
+                target.project_name(),
                 &self.manifest.members,
             ) {
                 map.insert(
                     dist.id.name.clone(),
                     ResolvedDist::Installable(dist.to_dist(
-                        project.workspace().install_path(),
+                        target.workspace().install_path(),
                         TagPolicy::Required(tags),
                         build_options,
                     )?),

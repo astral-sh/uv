@@ -870,7 +870,7 @@ async fn lock_and_sync(
     };
 
     project::sync::do_sync(
-        InstallTarget::from(&project),
+        InstallTarget::from_project(&project),
         venv,
         &lock,
         &extras,
