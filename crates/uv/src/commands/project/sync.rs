@@ -81,6 +81,14 @@ pub(crate) async fn sync(
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
+    // TODO(lucab): improve warning content
+    // <https://github.com/astral-sh/uv/issues/7428>
+    if project.workspace().pyproject_toml().has_scripts()
+        && !project.workspace().pyproject_toml().is_package()
+    {
+        warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
+    }
+
     // Identify the target.
     let target = if let Some(package) = package.as_ref().filter(|_| frozen) {
         InstallTarget::frozen(&project, package)
@@ -89,14 +97,6 @@ pub(crate) async fn sync(
     } else {
         InstallTarget::from_project(&project)
     };
-
-    // TODO(lucab): improve warning content
-    // <https://github.com/astral-sh/uv/issues/7428>
-    if project.workspace().pyproject_toml().has_scripts()
-        && !project.workspace().pyproject_toml().is_package()
-    {
-        warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
-    }
 
     // Determine the default groups to include.
     validate_dependency_groups(target, &dev)?;

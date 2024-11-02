@@ -10,17 +10,17 @@ use petgraph::{Directed, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
+use crate::graph_ops::marker_reachability;
+use crate::lock::{Package, PackageId, Source};
+use crate::{Lock, LockError};
 use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions};
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git::GitReference;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::ExtraName;
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
-
-use crate::graph_ops::marker_reachability;
-use crate::lock::{Package, PackageId, Source};
-use crate::{Lock, LockError};
+use uv_workspace::InstallTarget;
 
 type LockGraph<'lock> = Graph<Node<'lock>, Edge, Directed>;
 
@@ -35,7 +35,7 @@ pub struct RequirementsTxtExport<'lock> {
 impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
         lock: &'lock Lock,
-        root_name: &PackageName,
+        target: InstallTarget<'lock>,
         extras: &ExtrasSpecification,
         dev: &DevGroupsManifest,
         editable: EditableMode,
@@ -52,65 +52,67 @@ impl<'lock> RequirementsTxtExport<'lock> {
         let root = petgraph.add_node(Node::Root);
 
         // Add the workspace package to the queue.
-        let dist = lock
-            .find_by_name(root_name)
-            .expect("found too many packages matching root")
-            .expect("could not find root");
+        for root_name in target.packages() {
+            let dist = lock
+                .find_by_name(root_name)
+                .expect("found too many packages matching root")
+                .expect("could not find root");
 
-        if dev.prod() {
-            // Add the workspace package to the graph.
-            if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
-                entry.insert(petgraph.add_node(Node::Package(dist)));
-            }
-
-            // Add an edge from the root.
-            let index = inverse[&dist.id];
-            petgraph.add_edge(root, index, MarkerTree::TRUE);
-
-            // Push its dependencies on the queue.
-            queue.push_back((dist, None));
-            match extras {
-                ExtrasSpecification::None => {}
-                ExtrasSpecification::All => {
-                    for extra in dist.optional_dependencies.keys() {
-                        queue.push_back((dist, Some(extra)));
-                    }
-                }
-                ExtrasSpecification::Some(extras) => {
-                    for extra in extras {
-                        queue.push_back((dist, Some(extra)));
-                    }
-                }
-            }
-        }
-
-        // Add any development dependencies.
-        for group in dev.iter() {
-            for dep in dist.dependency_groups.get(group).into_iter().flatten() {
-                let dep_dist = lock.find_by_id(&dep.package_id);
-
-                // Add the dependency to the graph.
-                if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(petgraph.add_node(Node::Package(dep_dist)));
+            if dev.prod() {
+                // Add the workspace package to the graph.
+                if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
+                    entry.insert(petgraph.add_node(Node::Package(dist)));
                 }
 
-                // Add an edge from the root. Development dependencies may be installed without
-                // installing the workspace package itself (which can never have markers on it
-                // anyway), so they're directly connected to the root.
-                let dep_index = inverse[&dep.package_id];
-                petgraph.add_edge(
-                    root,
-                    dep_index,
-                    dep.simplified_marker.as_simplified_marker_tree().clone(),
-                );
+                // Add an edge from the root.
+                let index = inverse[&dist.id];
+                petgraph.add_edge(root, index, MarkerTree::TRUE);
 
                 // Push its dependencies on the queue.
-                if seen.insert((&dep.package_id, None)) {
-                    queue.push_back((dep_dist, None));
+                queue.push_back((dist, None));
+                match extras {
+                    ExtrasSpecification::None => {}
+                    ExtrasSpecification::All => {
+                        for extra in dist.optional_dependencies.keys() {
+                            queue.push_back((dist, Some(extra)));
+                        }
+                    }
+                    ExtrasSpecification::Some(extras) => {
+                        for extra in extras {
+                            queue.push_back((dist, Some(extra)));
+                        }
+                    }
                 }
-                for extra in &dep.extra {
-                    if seen.insert((&dep.package_id, Some(extra))) {
-                        queue.push_back((dep_dist, Some(extra)));
+            }
+
+            // Add any development dependencies.
+            for group in dev.iter() {
+                for dep in dist.dependency_groups.get(group).into_iter().flatten() {
+                    let dep_dist = lock.find_by_id(&dep.package_id);
+
+                    // Add the dependency to the graph.
+                    if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
+                        entry.insert(petgraph.add_node(Node::Package(dep_dist)));
+                    }
+
+                    // Add an edge from the root. Development dependencies may be installed without
+                    // installing the workspace package itself (which can never have markers on it
+                    // anyway), so they're directly connected to the root.
+                    let dep_index = inverse[&dep.package_id];
+                    petgraph.add_edge(
+                        root,
+                        dep_index,
+                        dep.simplified_marker.as_simplified_marker_tree().clone(),
+                    );
+
+                    // Push its dependencies on the queue.
+                    if seen.insert((&dep.package_id, None)) {
+                        queue.push_back((dep_dist, None));
+                    }
+                    for extra in &dep.extra {
+                        if seen.insert((&dep.package_id, Some(extra))) {
+                            queue.push_back((dep_dist, Some(extra)));
+                        }
                     }
                 }
             }
@@ -170,7 +172,11 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 Node::Package(package) => Some((index, package)),
             })
             .filter(|(_index, package)| {
-                install_options.include_package(&package.id.name, Some(root_name), lock.members())
+                install_options.include_package(
+                    &package.id.name,
+                    target.project_name(),
+                    lock.members(),
+                )
             })
             .map(|(index, package)| Requirement {
                 package,

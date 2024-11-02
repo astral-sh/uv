@@ -30,6 +30,7 @@ use crate::settings::ResolverSettings;
 pub(crate) async fn export(
     project_dir: &Path,
     format: ExportFormat,
+    all_packages: bool,
     package: Option<PackageName>,
     hashes: bool,
     install_options: InstallOptions,
@@ -52,14 +53,7 @@ pub(crate) async fn export(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Identify the project.
-    let project = if let Some(package) = package {
-        VirtualProject::Project(
-            Workspace::discover(project_dir, &DiscoveryOptions::default())
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
-        )
-    } else if frozen {
+    let project = if frozen && !all_packages {
         VirtualProject::discover(
             project_dir,
             &DiscoveryOptions {
@@ -68,15 +62,18 @@ pub(crate) async fn export(
             },
         )
         .await?
+    } else if let Some(package) = package.as_ref() {
+        VirtualProject::Project(
+            Workspace::discover(project_dir, &DiscoveryOptions::default())
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+        )
     } else {
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
-    // Determine the default groups to include.
-    validate_dependency_groups(InstallTarget::from_project(&project), &dev)?;
-    let defaults = default_dependency_groups(project.pyproject_toml())?;
-
-    let VirtualProject::Project(project) = project else {
+    if project.is_non_project() {
         return Err(anyhow::anyhow!("Legacy non-project roots are not supported in `uv export`; add a `[project]` table to your `pyproject.toml` to enable exports"));
     };
 
@@ -147,6 +144,19 @@ pub(crate) async fn export(
         Err(err) => return Err(err.into()),
     };
 
+    // Identify the target.
+    let target = if let Some(package) = package.as_ref().filter(|_| frozen) {
+        InstallTarget::frozen(&project, package)
+    } else if all_packages {
+        InstallTarget::from_workspace(&project)
+    } else {
+        InstallTarget::from_project(&project)
+    };
+
+    // Determine the default groups to include.
+    validate_dependency_groups(target, &dev)?;
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
+
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
 
@@ -155,7 +165,7 @@ pub(crate) async fn export(
         ExportFormat::RequirementsTxt => {
             let export = RequirementsTxtExport::from_lock(
                 &lock,
-                project.project_name(),
+                target,
                 &extras,
                 &dev.with_defaults(defaults),
                 editable,

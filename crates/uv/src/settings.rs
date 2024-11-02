@@ -1094,6 +1094,7 @@ impl TreeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct ExportSettings {
     pub(crate) format: ExportFormat,
+    pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
@@ -1115,6 +1116,7 @@ impl ExportSettings {
     pub(crate) fn resolve(args: ExportArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let ExportArgs {
             format,
+            all_packages,
             package,
             extra,
             all_extras,
@@ -1143,8 +1145,9 @@ impl ExportSettings {
         } = args;
 
         Self {
-            package,
             format,
+            all_packages,
+            package,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
