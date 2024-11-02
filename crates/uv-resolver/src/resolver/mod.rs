@@ -958,6 +958,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
                 return Ok(None);
             }
+            MetadataResponse::RequiresPython(_) => {
+                unreachable!("`requires-python` is not known upfront for URL requirements")
+            }
         };
 
         let version = &metadata.version;
@@ -1085,17 +1088,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .requires_python
                     .as_ref()
                     .and_then(|requires_python| {
-                        if !python_requirement
-                            .installed()
-                            .is_contained_by(requires_python)
-                        {
-                            return Some(IncompatibleDist::Source(
-                                IncompatibleSource::RequiresPython(
-                                    requires_python.clone(),
-                                    PythonRequirementKind::Installed,
-                                ),
-                            ));
-                        }
+                        // if !python_requirement
+                        //     .installed()
+                        //     .is_contained_by(requires_python)
+                        // {
+                        //     return Some(IncompatibleDist::Source(
+                        //         IncompatibleSource::RequiresPython(
+                        //             requires_python.clone(),
+                        //             PythonRequirementKind::Installed,
+                        //         ),
+                        //     ));
+                        // }
                         if !python_requirement.target().is_contained_by(requires_python) {
                             return Some(IncompatibleDist::Source(
                                 IncompatibleSource::RequiresPython(
@@ -1340,6 +1343,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             );
                         return Ok(Dependencies::Unavailable(
                             UnavailableVersion::InvalidStructure,
+                        ));
+                    }
+                    MetadataResponse::RequiresPython(err) => {
+                        warn!("Unable to extract metadata for {name}: {err}");
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::RequiresPython(err.to_string()),
+                            );
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::RequiresPython,
                         ));
                     }
                 };
@@ -1895,12 +1911,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Source distributions must meet both the _target_ Python version and the
                         // _installed_ Python version (to build successfully).
                         if let Some(requires_python) = sdist.file.requires_python.as_ref() {
-                            if !python_requirement
-                                .installed()
-                                .is_contained_by(requires_python)
-                            {
-                                return Ok(None);
-                            }
+                            // if !python_requirement
+                            //     .installed()
+                            //     .is_contained_by(requires_python)
+                            // {
+                            //     return Ok(None);
+                            // }
                             if !python_requirement.target().is_contained_by(requires_python) {
                                 return Ok(None);
                             }

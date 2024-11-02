@@ -42,6 +42,9 @@ pub enum MetadataResponse {
     InvalidStructure(Box<uv_metadata::Error>),
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
+    /// The source distribution has a `requires-python` requirement that is not met by the installed
+    /// Python version (and static metadata is not available).
+    RequiresPython(Box<uv_distribution::Error>),
 }
 
 pub trait ResolverProvider {
@@ -202,6 +205,9 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 }
                 uv_distribution::Error::WheelMetadata(_, err) => {
                     Ok(MetadataResponse::InvalidStructure(err))
+                }
+                uv_distribution::Error::RequiresPython { .. } => {
+                    Ok(MetadataResponse::RequiresPython(Box::new(err)))
                 }
                 err => Err(err),
             },

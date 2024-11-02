@@ -699,6 +699,7 @@ impl PubGrubReportFormatter<'_> {
                                 reason: reason.clone(),
                             });
                         }
+                        IncompletePackage::RequiresPython(_) => {}
                     }
                     break;
                 }

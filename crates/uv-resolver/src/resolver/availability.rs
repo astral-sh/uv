@@ -40,6 +40,9 @@ pub(crate) enum UnavailableVersion {
     InvalidStructure,
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
+    /// The source distribution has a `requires-python` requirement that is not met by the installed
+    /// Python version (and static metadata is not available).
+    RequiresPython,
 }
 
 impl UnavailableVersion {
@@ -51,6 +54,7 @@ impl UnavailableVersion {
             UnavailableVersion::InconsistentMetadata => "inconsistent metadata".into(),
             UnavailableVersion::InvalidStructure => "an invalid package format".into(),
             UnavailableVersion::Offline => "to be downloaded from a registry".into(),
+            UnavailableVersion::RequiresPython => "require a greater Python version".into(),
         }
     }
 
@@ -62,6 +66,7 @@ impl UnavailableVersion {
             UnavailableVersion::InconsistentMetadata => format!("has {self}"),
             UnavailableVersion::InvalidStructure => format!("has {self}"),
             UnavailableVersion::Offline => format!("needs {self}"),
+            UnavailableVersion::RequiresPython => format!("requires {self}"),
         }
     }
 
@@ -73,6 +78,7 @@ impl UnavailableVersion {
             UnavailableVersion::InconsistentMetadata => format!("have {self}"),
             UnavailableVersion::InvalidStructure => format!("have {self}"),
             UnavailableVersion::Offline => format!("need {self}"),
+            UnavailableVersion::RequiresPython => format!("require {self}"),
         }
     }
 }
@@ -143,6 +149,9 @@ pub(crate) enum IncompletePackage {
     InconsistentMetadata(String),
     /// The wheel has an invalid structure.
     InvalidStructure(String),
+    /// The source distribution has a `requires-python` requirement that is not met by the installed
+    /// Python version (and static metadata is not available).
+    RequiresPython(String),
 }
 
 #[derive(Debug, Clone)]

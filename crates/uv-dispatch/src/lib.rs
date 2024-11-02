@@ -132,6 +132,10 @@ impl<'a> BuildDispatch<'a> {
 impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
 
+    fn interpreter(&self) -> &Interpreter {
+        self.interpreter
+    }
+
     fn cache(&self) -> &Cache {
         self.cache
     }
