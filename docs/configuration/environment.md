@@ -1,14 +1,14 @@
 # Environment variables
 
-uv accepts the following command-line arguments as environment variables:
+uv respects the following environment variables:
 
-- `UV_INDEX`: Equivalent to the `--index` command-line argument. If set, uv will use this
-  space-separated list of URLs as additional indexes when searching for packages.
 - `UV_DEFAULT_INDEX`: Equivalent to the `--default-index` command-line argument. If set, uv will use
   this URL as the default index when searching for packages.
+- `UV_INDEX`: Equivalent to the `--index` command-line argument. If set, uv will use this
+  space-separated list of URLs as additional indexes when searching for packages.
 - `UV_INDEX_URL`: Equivalent to the `--index-url` command-line argument. If set, uv will use this
-  URL as the default index when searching for packages. (Deprecated: use `UV_DEFAULT_INDEX`
-  instead.)
+  URL as the default index when searching for packages.
+  (Deprecated: use `UV_DEFAULT_INDEX` instead.)
 - `UV_EXTRA_INDEX_URL`: Equivalent to the `--extra-index-url` command-line argument. If set, uv will
   use this space-separated list of URLs as additional indexes when searching for packages.
   (Deprecated: use `UV_INDEX` instead.)
@@ -23,16 +23,17 @@ uv accepts the following command-line arguments as environment variables:
 - `UV_PRERELEASE`: Equivalent to the `--prerelease` command-line argument. For example, if set to
   `allow`, uv will allow pre-release versions for all dependencies.
 - `UV_SYSTEM_PYTHON`: Equivalent to the `--system` command-line argument. If set to `true`, uv will
-  use the first Python interpreter found in the system `PATH`. WARNING: `UV_SYSTEM_PYTHON=true` is
-  intended for use in continuous integration (CI) or containerized environments and should be used
-  with caution, as modifying the system Python can lead to unexpected behavior.
+  use the first Python interpreter found in the system `PATH`.
+  WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI)
+  or containerized environments and should be used with caution, as modifying the system
+  Python can lead to unexpected behavior.
 - `UV_PYTHON`: Equivalent to the `--python` command-line argument. If set to a path, uv will use
   this Python interpreter for all operations.
-- `UV_BREAK_SYSTEM_PACKAGES`: Equivalent to the `--break-system-packages` command-line argument. If
-  set to `true`, uv will allow the installation of packages that conflict with system-installed
-  packages. WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integration
-  (CI) or containerized environments and should be used with caution, as modifying the system Python
-  can lead to unexpected behavior.
+- `UV_BREAK_SYSTEM_PACKAGES`: Equivalent to the `--break-system-packages` command-line argument. If set to `true`,
+  uv will allow the installation of packages that conflict with system-installed packages.
+  WARNING: `UV_BREAK_SYSTEM_PACKAGES=true` is intended for use in continuous integration
+  (CI) or containerized environments and should be used with caution, as modifying the system
+  Python can lead to unexpected behavior.
 - `UV_NATIVE_TLS`: Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
   use the system's trust store instead of the bundled `webpki-roots` crate.
 - `UV_INDEX_STRATEGY`: Equivalent to the `--index-strategy` command-line argument. For example, if
@@ -42,15 +43,14 @@ uv accepts the following command-line arguments as environment variables:
   uv will require that all dependencies have a hash specified in the requirements file.
 - `UV_CONSTRAINT`: Equivalent to the `--constraint` command-line argument. If set, uv will use this
   file as the constraints file. Uses space-separated list of files.
-- `UV_BUILD_CONSTRAINT`: Equivalent to the `--build-constraint` command-line argument. If set, uv
-  will use this file as constraints for any source distribution builds. Uses space-separated list of
-  files.
+- `UV_BUILD_CONSTRAINT`: Equivalent to the `--build-constraint` command-line argument. If set, uv will use this file
+  as constraints for any source distribution builds. Uses space-separated list of files.
 - `UV_OVERRIDE`: Equivalent to the `--override` command-line argument. If set, uv will use this file
   as the overrides file. Uses space-separated list of files.
 - `UV_LINK_MODE`: Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
   a link mode.
-- `UV_NO_BUILD_ISOLATION`: Equivalent to the `--no-build-isolation` command-line argument. If set,
-  uv will skip isolation when building source distributions.
+- `UV_NO_BUILD_ISOLATION`: Equivalent to the `--no-build-isolation` command-line argument. If set, uv will
+  skip isolation when building source distributions.
 - `UV_CUSTOM_COMPILE_COMMAND`: Equivalent to the `--custom-compile-command` command-line argument.
   Used to override uv in the output header of the `requirements.txt` files generated by
   `uv pip compile`. Intended for use-cases in which `uv pip compile` is called from within a wrapper
@@ -79,78 +79,115 @@ uv accepts the following command-line arguments as environment variables:
   set, uv will use this username for publishing.
 - `UV_PUBLISH_PASSWORD`: Equivalent to the `--password` command-line argument in `uv publish`. If
   set, uv will use this password for publishing.
+- `UV_PUBLISH_CHECK_URL`: Don't upload a file if it already exists on the index. The value is the URL of the index.
 - `UV_NO_SYNC`: Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
   the environment.
 - `UV_LOCKED`: Equivalent to the `--locked` command-line argument. If set, uv will assert that the
   `uv.lock` remains unchanged.
 - `UV_FROZEN`: Equivalent to the `--frozen` command-line argument. If set, uv will run without
   updating the `uv.lock` file.
-
-In each case, the corresponding command-line argument takes precedence over an environment variable.
-
-In addition, uv respects the following environment variables:
-
+- `UV_PREVIEW`: Equivalent to the `--preview` argument. Enables preview mode.
+- `UV_GITHUB_TOKEN`: Equivalent to the `--token` argument for self update. A GitHub token for authentication.
+- `UV_VERIFY_HASHES`: Equivalent to the `--verify-hashes` argument. Verifies included hashes.
+- `UV_INSECURE_HOST`: Equivalent to the `--allow-insecure-host` argument.
 - `UV_CONCURRENT_DOWNLOADS`: Sets the maximum number of in-flight concurrent downloads that uv will
   perform at any given time.
 - `UV_CONCURRENT_BUILDS`: Sets the maximum number of source distributions that uv will build
   concurrently at any given time.
-- `UV_CONCURRENT_INSTALLS`: Used to control the number of threads used when installing and unzipping
+- `UV_CONCURRENT_INSTALLS`: Controls the number of threads used when installing and unzipping
   packages.
-- `UV_TOOL_DIR`: Used to specify the directory where uv will store managed tools.
-- `UV_TOOL_BIN_DIR`: Used to specify the "bin" directory where uv will install tool executables.
-- `UV_PROJECT_ENVIRONMENT`: Use to specify the path to the directory to use for a project virtual
-  environment. See the
-  [project documentation](../concepts/projects.md#configuring-the-project-environment-path) for more
-  details.
-- `UV_PYTHON_INSTALL_DIR`: Used to specify the directory where uv will store managed Python
-  installations.
+- `UV_TOOL_DIR`: Specifies the directory where uv stores managed tools.
+- `UV_TOOL_BIN_DIR`: Specifies the "bin" directory for installing tool executables.
+- `UV_PROJECT_ENVIRONMENT`: Specifies the path to the directory to use for a project virtual environment.
+  See the [project documentation](../concepts/projects.md#configuring-the-project-environment-path)
+  for more details.
+- `UV_PYTHON_BIN_DIR`: Specifies the directory to place links to installed, managed Python executables.
+- `UV_PYTHON_INSTALL_DIR`: Specifies the directory for storing managed Python installations.
 - `UV_PYTHON_INSTALL_MIRROR`: Managed Python installations are downloaded from
-  [`python-build-standalone`](https://github.com/indygreg/python-build-standalone). This variable
-  can be set to a mirror URL to use a different source for Python installations. The provided URL
-  will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
+  [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
+  This variable can be set to a mirror URL to use a different source for Python installations.
+  The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
   `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
   Distributions can be read from a local directory by using the `file://` URL scheme.
 - `UV_PYPY_INSTALL_MIRROR`: Managed PyPy installations are downloaded from
   [python.org](https://downloads.python.org/). This variable can be set to a mirror URL to use a
   different source for PyPy installations. The provided URL will replace
   `https://downloads.python.org/pypy` in, e.g.,
-  `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`. Distributions can be read from a
-  local directory by using the `file://` URL scheme.
-- `XDG_CONFIG_HOME`: Used to specify the path to uv user-level configuration directory on Unix
-  systems.
-- `XDG_CACHE_HOME`: Used to specify the directory where uv stores cache files on Unix systems.
-- `XDG_DATA_HOME`: Used to specify the directory where uv stores managed Python installations and
-  managed tools on Unix systems.
-- `XDG_BIN_HOME`: Used to specify the directory where executables are installed into.
-- `SSL_CERT_FILE`: If set, uv will use this file as the certificate bundle instead of the system's
-  trust store.
-- `SSL_CLIENT_CERT`: If set, uv will use this file for mTLS authentication. This should be a single
-  file containing both the certificate and the private key in PEM format.
-- `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
-  any filter compatible with the `tracing_subscriber` crate. For example, `RUST_LOG=trace` will
-  enable trace-level logging. See the
-  [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
-  for more.
-- `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: The proxy to use for all HTTP/HTTPS requests.
-- `HTTP_TIMEOUT` (or `UV_HTTP_TIMEOUT`): If set, uv will use this value (in seconds) as the timeout
-  for HTTP reads (default: 30 s).
-- `NETRC`: If set, uv will read authentication information from this file instead of `~/.netrc`.
-- `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`. See:
-  [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
+  `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+  Distributions can be read from a local directory by using the `file://` URL scheme.
+- `UV_NO_WRAP`: Use to disable line wrapping for diagnostics.
+- `UV_STACK_SIZE`: Use to control the stack size used by uv. Typically more relevant for Windows in debug mode.
+- `UV_INDEX_{name}_USERNAME`: Generates the environment variable key for the HTTP Basic authentication username.
+- `UV_INDEX_{name}_PASSWORD`: Generates the environment variable key for the HTTP Basic authentication password.
+- `XDG_CONFIG_DIRS`: Path to system-level configuration directory on Unix systems.
+- `SYSTEMDRIVE`: Path to system-level configuration directory on Windows systems.
+- `XDG_CONFIG_HOME`: Path to user-level configuration directory on Unix systems.
+- `XDG_CACHE_HOME`: Path to cache directory on Unix systems.
+- `XDG_DATA_HOME`: Path to directory for storing managed Python installations and tools.
+- `XDG_BIN_HOME`: Path to directory where executables are installed.
+- `SSL_CERT_FILE`: Custom certificate bundle file path for SSL connections.
+- `SSL_CLIENT_CERT`: If set, uv will use this file for mTLS authentication.
+  This should be a single file containing both the certificate and the private key in PEM format.
+- `HTTP_PROXY`: Proxy for HTTP requests.
+- `HTTPS_PROXY`: Proxy for HTTPS requests.
+- `ALL_PROXY`: General proxy for all network requests.
+- `UV_HTTP_TIMEOUT`: Timeout (in seconds) for HTTP requests. (default: 30 s)
+- `UV_REQUEST_TIMEOUT`: Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
+- `HTTP_TIMEOUT`: Timeout (in seconds) for HTTP requests. Equivalent to `UV_HTTP_TIMEOUT`.
+- `PYC_INVALIDATION_MODE`: The validation modes to use when run with `--compile`.
+  See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 - `VIRTUAL_ENV`: Used to detect an activated virtual environment.
 - `CONDA_PREFIX`: Used to detect an activated Conda environment.
-- `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
 - `VIRTUAL_ENV_DISABLE_PROMPT`: If set to `1` before a virtual environment is activated, then the
   virtual environment name will not be prepended to the terminal prompt.
-- `NU_VERSION`: Used to detect the use of NuShell.
-- `FISH_VERSION`: Used to detect the use of the Fish shell.
-- `BASH_VERSION`: Used to detect the use of the Bash shell.
-- `ZSH_VERSION`: Used to detect the use of the Zsh shell.
+- `PROMPT`: Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
+- `NU_VERSION`: Used to detect `NuShell` usage.
+- `FISH_VERSION`: Used to detect Fish shell usage.
+- `BASH_VERSION`: Used to detect Bash shell usage.
+- `ZSH_VERSION`: Used to detect Zsh shell usage.
+- `ZDOTDIR`: Used to determine which `.zshenv` to use when Zsh is being used.
+- `KSH_VERSION`: Used to detect Ksh shell usage.
 - `MACOSX_DEPLOYMENT_TARGET`: Used with `--python-platform macos` and related variants to set the
-  deployment target (i.e., the minimum supported macOS version). Defaults to `12.0`, the
-  least-recent non-EOL macOS version at time of writing.
-- `NO_COLOR`: Disable colors. Takes precedence over `FORCE_COLOR`. See
-  [no-color.org](https://no-color.org).
-- `UV_NO_PROGRESS`: Disable progress indicators like spinners and progress bars.
-- `FORCE_COLOR`: Enforce colors regardless of TTY support. See
-  [force-color.org](https://force-color.org).
+  deployment target (i.e., the minimum supported macOS version).
+  Defaults to `12.0`, the least-recent non-EOL macOS version at time of writing.
+- `NO_COLOR`: Disables colored output (takes precedence over `FORCE_COLOR`).
+  See [no-color.org](https://no-color.org).
+- `UV_NO_PROGRESS`: Disables all progress output. For example, spinners and progress bars.
+- `FORCE_COLOR`: Forces colored output regardless of terminal support.
+  See [force-color.org](https://force-color.org).
+- `CLICOLOR_FORCE`: Use to control color via `anstyle`.
+- `PATH`: The standard `PATH` env var.
+- `HOME`: The standard `HOME` env var.
+- `SHELL`: The standard `SHELL` posix env var.
+- `PWD`: The standard `PWD` posix env var.
+- `LOCALAPPDATA`: Used to look for Microsoft Store Pythons installations.
+- `GIT_DIR`: Path to the `.git` directory. Ignored by `uv` when performing fetch.
+- `GIT_WORK_TREE`: Path to the git working tree. Ignored by `uv` when performing fetch.
+- `GIT_INDEX_FILE`: Path to the index file for staged changes. Ignored by `uv` when performing fetch.
+- `GIT_OBJECT_DIRECTORY`: Path to where git object files are located. Ignored by `uv` when performing fetch.
+- `GIT_ALTERNATE_OBJECT_DIRECTORIES`: Alternate locations for git objects. Ignored by `uv` when performing fetch.
+- `GIT_CEILING_DIRECTORIES`: Used in tests for better git isolation.
+  For example, we run some tests in ~/.local/share/uv/tests.
+  And if the user's `$HOME` directory is a git repository,
+  this will change the behavior of some tests. Setting
+  `GIT_CEILING_DIRECTORIES=/home/andrew/.local/share/uv/tests` will
+  prevent git from crawling up the directory tree past that point to find
+  parent git repositories.
+- `GITHUB_ACTIONS`: Used for trusted publishing via `uv publish`.
+- `ACTIONS_ID_TOKEN_REQUEST_URL`: Used for trusted publishing via `uv publish`. Contains the oidc token url.
+- `ACTIONS_ID_TOKEN_REQUEST_TOKEN`: Used for trusted publishing via `uv publish`. Contains the oidc request token.
+- `PYTHONIOENCODING`: Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).
+- `PYTHONUNBUFFERED`: Forces unbuffered I/O streams, equivalent to `-u` in Python.
+- `PYTHONUTF8`: Enables UTF-8 mode for Python, equivalent to `-X utf8`.
+- `PYTHONPATH`: Adds directories to Python module search path (e.g., PYTHONPATH=/path/to/modules).
+- `CI`: Typically set by CI runners, used to detect a CI runner.
+- `NETRC`: Use to set the .netrc file location.
+- `PAGER`: The standard `PAGER` posix env var. Used by `uv` to configure the appropriate pager.
+- `JPY_SESSION_NAME`: Used to detect when running inside a Jupyter notebook.
+- `TRACING_DURATIONS_TEST_ROOT`: Use to create the tracing root directory via the `tracing-durations-export` feature.
+- `TRACING_DURATIONS_FILE`: Use to create the tracing durations file via the `tracing-durations-export` feature.
+- `RUST_LOG`: If set, uv will use this value as the log level for its `--verbose` output. Accepts
+  any filter compatible with the `tracing_subscriber` crate.
+  For example, `RUST_LOG=trace` will enable trace-level logging.
+  See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
+  for more.
