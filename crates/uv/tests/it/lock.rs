@@ -13435,7 +13435,7 @@ fn lock_named_index_cli() -> Result<()> {
     )?;
 
     // The package references a non-existent index.
-    uv_snapshot!(context.filters(), context.lock().env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13447,7 +13447,7 @@ fn lock_named_index_cli() -> Result<()> {
     "###);
 
     // But it's fine if it comes from the CLI.
-    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove("UV_EXCLUDE_NEWER"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("pytorch=https://download.pytorch.org/whl/cu121").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
