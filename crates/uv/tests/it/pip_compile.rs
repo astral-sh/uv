@@ -11961,7 +11961,7 @@ fn file_url() -> Result<()> {
 fn no_binary_only_binary() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("source-distribution")?;
+    requirements_in.write_str("source-distribution<=0.0.1")?;
 
     uv_snapshot!(context
         .pip_compile()
@@ -11975,8 +11975,8 @@ fn no_binary_only_binary() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only source-distribution==0.0.1 is available and source-distribution==0.0.1 has no usable wheels and building from source is disabled, we can conclude that all versions of source-distribution cannot be used.
-          And because you require source-distribution, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only source-distribution>=0.0.1 is available and source-distribution==0.0.1 has no usable wheels and building from source is disabled, we can conclude that source-distribution<=0.0.1 cannot be used.
+          And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
