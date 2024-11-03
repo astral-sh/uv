@@ -61,7 +61,11 @@ from subprocess import PIPE, check_call, check_output, run
 from time import sleep
 
 import httpx
-from packaging.utils import parse_sdist_filename, parse_wheel_filename
+from packaging.utils import (
+    InvalidSdistFilename,
+    parse_sdist_filename,
+    parse_wheel_filename,
+)
 from packaging.version import Version
 
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
@@ -128,14 +132,24 @@ def get_new_version(project_name: str, client: httpx.Client) -> Version:
     for target_config in all_targets.values():
         if target_config.project_name != project_name:
             continue
-        for filename in get_filenames(
-            target_config.index_url + project_name + "/", client
-        ):
-            if filename.endswith(".whl"):
-                [_name, version, _build, _tags] = parse_wheel_filename(filename)
+        url = target_config.index_url + project_name + "/"
+
+        # Get with retries
+        error = None
+        for _ in range(5):
+            try:
+                versions.update(collect_versions(url, client))
+            except httpx.HTTPError as err:
+                error = err
+                print(f"Error getting version, sleeping for 1s: {err}")
+                time.sleep(1)
+            except InvalidSdistFilename as err:
+                # Sometimes there's a link that says "status page"
+                error = err
+                print(f"Invalid index page, sleeping for 1s: {err}")
+                time.sleep(1)
             else:
-                [_name, version] = parse_sdist_filename(filename)
-            versions.add(version)
+                raise RuntimeError(f"Failed to fetch {url}") from error
     max_version = max(versions)
 
     # Bump the path version to obtain an empty version
@@ -144,21 +158,22 @@ def get_new_version(project_name: str, client: httpx.Client) -> Version:
     return Version(".".join(str(i) for i in release))
 
 
+def collect_versions(url: str, client: httpx.Client) -> set[Version]:
+    """Return all version from an index page."""
+    versions = set()
+    for filename in get_filenames(url, client):
+        if filename.endswith(".whl"):
+            [_name, version, _build, _tags] = parse_wheel_filename(filename)
+        else:
+            [_name, version] = parse_sdist_filename(filename)
+        versions.add(version)
+    return versions
+
+
 def get_filenames(url: str, client: httpx.Client) -> list[str]:
     """Get the filenames (source dists and wheels) from an index URL."""
-    # Get with retries
-    error = None
-    for _ in range(5):
-        try:
-            response = client.get(url)
-            data = response.text
-            break
-        except httpx.HTTPError as err:
-            error = err
-            print(f"Error getting version, sleeping for 1s: {err}")
-            time.sleep(1)
-    else:
-        raise RuntimeError(f"Failed to fetch {url}") from error
+    response = client.get(url)
+    data = response.text
     # Works for the indexes in the list
     href_text = r"<a(?: +[\w-]+=(?:'[^']+'|\"[^\"]+\"))* *>([^<>]+)</a>"
     return [m.group(1) for m in re.finditer(href_text, data)]
