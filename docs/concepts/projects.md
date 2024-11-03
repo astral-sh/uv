@@ -235,8 +235,8 @@ Hello from example-lib!
 
 !!! tip
 
-Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
-backends such as `maturin` and `scikit-build-core`.
+    Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
+    backends such as `maturin` and `scikit-build-core`.
 
 ### Packaged applications
 
