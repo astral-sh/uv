@@ -462,7 +462,7 @@ pub enum Scheme {
 impl Scheme {
     /// Determine the [`Scheme`] from the given string, if possible.
     pub fn parse(s: &str) -> Option<Self> {
-        if let Some(("git", transport)) = s.split_once("+") {
+        if let Some(("git", transport)) = s.split_once('+') {
             return Some(Self::Git(transport.into()));
         }
         match s {
@@ -500,7 +500,7 @@ impl std::fmt::Display for Scheme {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::File => write!(f, "file"),
-            Self::Git(transport) => write!(f, "git+{}", transport),
+            Self::Git(transport) => write!(f, "git+{transport}"),
             Self::BzrHttp => write!(f, "bzr+http"),
             Self::BzrHttps => write!(f, "bzr+https"),
             Self::BzrSsh => write!(f, "bzr+ssh"),
