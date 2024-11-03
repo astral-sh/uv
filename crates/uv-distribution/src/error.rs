@@ -10,7 +10,7 @@ use uv_client::WrappedReqwestError;
 use uv_distribution_filename::WheelFilenameError;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigest, ParsedUrlError};
 
 #[derive(Debug, thiserror::Error)]
@@ -96,6 +96,8 @@ pub enum Error {
     NotFound(Url),
     #[error("Attempted to re-extract the source distribution for `{0}`, but the hashes didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
     CacheHeal(String),
+    #[error("The source distribution requires Python {0}, but {1} is installed")]
+    RequiresPython(VersionSpecifiers, Version),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.

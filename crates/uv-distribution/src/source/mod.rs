@@ -1,10 +1,18 @@
 //! Fetch and build source distributions from remote sources.
 
 use std::borrow::Cow;
+use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::distribution_database::ManagedClient;
+use crate::error::Error;
+use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
+use crate::reporter::Facade;
+use crate::source::built_wheel_metadata::BuiltWheelMetadata;
+use crate::source::revision::Revision;
+use crate::{Reporter, RequiresDist};
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::Response;
@@ -26,18 +34,11 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_metadata::read_archive_metadata;
+use uv_pep440::release_specifiers_to_ranges;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
-
-use crate::distribution_database::ManagedClient;
-use crate::error::Error;
-use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
-use crate::reporter::Facade;
-use crate::source::built_wheel_metadata::BuiltWheelMetadata;
-use crate::source::revision::Revision;
-use crate::{Reporter, RequiresDist};
 
 mod built_wheel_metadata;
 mod revision;
@@ -1797,6 +1798,27 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source_strategy: SourceStrategy,
     ) -> Result<Option<ResolutionMetadata>, Error> {
         debug!("Preparing metadata for: {source}");
+
+        // Ensure that the _installed_ Python version is compatible with the `requires-python`
+        // specifier.
+        if let Some(requires_python) = source.requires_python() {
+            let installed = self.build_context.interpreter().python_version();
+            let target = release_specifiers_to_ranges(requires_python.clone())
+                .bounding_range()
+                .map(|bounding_range| bounding_range.0.cloned())
+                .unwrap_or(Bound::Unbounded);
+            let is_compatible = match target {
+                Bound::Included(target) => *installed >= target,
+                Bound::Excluded(target) => *installed > target,
+                Bound::Unbounded => true,
+            };
+            if !is_compatible {
+                return Err(Error::RequiresPython(
+                    requires_python.clone(),
+                    installed.clone(),
+                ));
+            }
+        }
 
         // Set up the builder.
         let mut builder = self

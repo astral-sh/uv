@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::IndexStrategy;
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ErrorTree;
@@ -699,6 +699,14 @@ impl PubGrubReportFormatter<'_> {
                                 reason: reason.clone(),
                             });
                         }
+                        IncompletePackage::RequiresPython(requires_python, python_version) => {
+                            hints.insert(PubGrubHint::IncompatibleBuildRequirement {
+                                package: package.clone(),
+                                version: version.clone(),
+                                requires_python: requires_python.clone(),
+                                python_version: python_version.clone(),
+                            });
+                        }
                     }
                     break;
                 }
@@ -862,6 +870,17 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         reason: String,
     },
+    /// The source distribution has a `requires-python` requirement that is not met by the installed
+    /// Python version (and static metadata is not available).
+    IncompatibleBuildRequirement {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+        // excluded from `PartialEq` and `Hash`
+        requires_python: VersionSpecifiers,
+        // excluded from `PartialEq` and `Hash`
+        python_version: Version,
+    },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
         source: PythonRequirementSource,
@@ -932,6 +951,9 @@ enum PubGrubHintCore {
     InvalidVersionStructure {
         package: PubGrubPackage,
     },
+    IncompatibleBuildRequirement {
+        package: PubGrubPackage,
+    },
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
@@ -984,6 +1006,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             }
             PubGrubHint::InvalidVersionStructure { package, .. } => {
                 Self::InvalidVersionStructure { package }
+            }
+            PubGrubHint::IncompatibleBuildRequirement { package, .. } => {
+                Self::IncompatibleBuildRequirement { package }
             }
             PubGrubHint::RequiresPython {
                 source,
@@ -1185,6 +1210,23 @@ impl std::fmt::Display for PubGrubHint {
                     requires_python.bold(),
                     PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
+                )
+            }
+            Self::IncompatibleBuildRequirement {
+                package,
+                version,
+                requires_python,
+                python_version,
+            } => {
+                write!(
+                    f,
+                    "{}{} The source distribution for {}=={} does not include static metadata. Generating metadata for this package requires Python {}, but Python {} is installed.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    version.bold(),
+                    requires_python.bold(),
+                    python_version.bold(),
                 )
             }
             Self::RequiresPython {

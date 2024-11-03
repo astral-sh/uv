@@ -958,6 +958,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
                 return Ok(None);
             }
+            MetadataResponse::RequiresPython(..) => {
+                unreachable!("`requires-python` is only known upfront for registry distributions")
+            }
         };
 
         let version = &metadata.version;
@@ -1074,72 +1077,54 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
 
-        let incompatibility = match dist {
+        // Validate the Python requirement.
+        let requires_python = match dist {
             CompatibleDist::InstalledDist(_) => None,
             CompatibleDist::SourceDist { sdist, .. }
             | CompatibleDist::IncompatibleWheel { sdist, .. } => {
-                // Source distributions must meet both the _target_ Python version and the
-                // _installed_ Python version (to build successfully).
-                sdist
-                    .file
-                    .requires_python
-                    .as_ref()
-                    .and_then(|requires_python| {
-                        if !python_requirement
-                            .installed()
-                            .is_contained_by(requires_python)
-                        {
-                            return Some(IncompatibleDist::Source(
-                                IncompatibleSource::RequiresPython(
-                                    requires_python.clone(),
-                                    PythonRequirementKind::Installed,
-                                ),
-                            ));
-                        }
-                        if !python_requirement.target().is_contained_by(requires_python) {
-                            return Some(IncompatibleDist::Source(
-                                IncompatibleSource::RequiresPython(
-                                    requires_python.clone(),
-                                    PythonRequirementKind::Target,
-                                ),
-                            ));
-                        }
-                        None
-                    })
+                sdist.file.requires_python.as_ref()
             }
-            CompatibleDist::CompatibleWheel { wheel, .. } => {
-                // Wheels must meet the _target_ Python version.
-                wheel
-                    .file
-                    .requires_python
-                    .as_ref()
-                    .and_then(|requires_python| {
-                        if python_requirement.installed() == python_requirement.target() {
-                            if !python_requirement
-                                .installed()
-                                .is_contained_by(requires_python)
-                            {
-                                return Some(IncompatibleDist::Wheel(
-                                    IncompatibleWheel::RequiresPython(
-                                        requires_python.clone(),
-                                        PythonRequirementKind::Installed,
-                                    ),
-                                ));
-                            }
-                        } else {
-                            if !python_requirement.target().is_contained_by(requires_python) {
-                                return Some(IncompatibleDist::Wheel(
-                                    IncompatibleWheel::RequiresPython(
-                                        requires_python.clone(),
-                                        PythonRequirementKind::Target,
-                                    ),
-                                ));
-                            }
-                        }
-                        None
-                    })
-            }
+            CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
         };
+        let incompatibility = requires_python.and_then(|requires_python| {
+            if python_requirement.installed() == python_requirement.target() {
+                if !python_requirement
+                    .installed()
+                    .is_contained_by(requires_python)
+                {
+                    return if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
+                        Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+                            requires_python.clone(),
+                            PythonRequirementKind::Installed,
+                        )))
+                    } else {
+                        Some(IncompatibleDist::Source(
+                            IncompatibleSource::RequiresPython(
+                                requires_python.clone(),
+                                PythonRequirementKind::Installed,
+                            ),
+                        ))
+                    };
+                }
+            } else {
+                if !python_requirement.target().is_contained_by(requires_python) {
+                    return if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
+                        Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+                            requires_python.clone(),
+                            PythonRequirementKind::Target,
+                        )))
+                    } else {
+                        Some(IncompatibleDist::Source(
+                            IncompatibleSource::RequiresPython(
+                                requires_python.clone(),
+                                PythonRequirementKind::Target,
+                            ),
+                        ))
+                    };
+                }
+            }
+            None
+        });
 
         // The version is incompatible due to its Python requirement.
         if let Some(incompatibility) = incompatibility {
@@ -1340,6 +1325,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             );
                         return Ok(Dependencies::Unavailable(
                             UnavailableVersion::InvalidStructure,
+                        ));
+                    }
+                    MetadataResponse::RequiresPython(requires_python, python_version) => {
+                        warn!(
+                            "Unable to extract metadata for {name}: {}",
+                            uv_distribution::Error::RequiresPython(
+                                requires_python.clone(),
+                                python_version.clone()
+                            )
+                        );
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::RequiresPython(
+                                    requires_python.clone(),
+                                    python_version.clone(),
+                                ),
+                            );
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::RequiresPython(requires_python.clone()),
                         ));
                     }
                 };
@@ -1888,33 +1895,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 }
 
-                match dist {
-                    CompatibleDist::InstalledDist(_) => {}
+                // Validate the Python requirement.
+                let requires_python = match dist {
+                    CompatibleDist::InstalledDist(_) => None,
                     CompatibleDist::SourceDist { sdist, .. }
                     | CompatibleDist::IncompatibleWheel { sdist, .. } => {
-                        // Source distributions must meet both the _target_ Python version and the
-                        // _installed_ Python version (to build successfully).
-                        if let Some(requires_python) = sdist.file.requires_python.as_ref() {
-                            if !python_requirement
-                                .installed()
-                                .is_contained_by(requires_python)
-                            {
-                                return Ok(None);
-                            }
-                            if !python_requirement.target().is_contained_by(requires_python) {
-                                return Ok(None);
-                            }
-                        }
+                        sdist.file.requires_python.as_ref()
                     }
                     CompatibleDist::CompatibleWheel { wheel, .. } => {
-                        // Wheels must meet the _target_ Python version.
-                        if let Some(requires_python) = wheel.file.requires_python.as_ref() {
-                            if !python_requirement.target().is_contained_by(requires_python) {
-                                return Ok(None);
-                            }
-                        }
+                        wheel.file.requires_python.as_ref()
                     }
                 };
+                if let Some(requires_python) = requires_python.as_ref() {
+                    if !python_requirement.target().is_contained_by(requires_python) {
+                        return Ok(None);
+                    }
+                }
 
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
