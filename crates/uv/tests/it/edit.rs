@@ -6819,7 +6819,7 @@ fn add_index_credentials() -> Result<()> {
     "#})?;
 
     // Provide credentials for the index via the environment variable.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env("UV_DEFAULT_INDEX", "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6913,7 +6913,7 @@ fn add_index_comments() -> Result<()> {
     "#})?;
 
     // Preserve the comment on the index URL, despite replacing it.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env("UV_DEFAULT_INDEX", "https://pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -88,7 +88,9 @@ fn generate() -> String {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        output.push_str(&format!("- `{var}`: {doc}\n"));
+        output.push_str(&format!(
+            "- <a id=\"{var}\"></a> [`{var}`](#{var}): {doc}\n"
+        ));
     }
 
     output

@@ -478,7 +478,7 @@ impl TestContext {
 
         if cfg!(unix) {
             // Avoid locale issues in tests
-            command.env("LC_ALL", "C");
+            command.env(EnvVars::LC_ALL, "C");
         }
 
         if cfg!(all(windows, debug_assertions)) {
@@ -663,10 +663,9 @@ impl TestContext {
             .env(EnvVars::UV_PYTHON_BIN_DIR, bin.as_os_str())
             .env(
                 EnvVars::PATH,
-                std::env::join_paths(
-                    std::iter::once(bin)
-                        .chain(std::env::split_paths(&env::var("PATH").unwrap_or_default())),
-                )
+                std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(
+                    &env::var(EnvVars::PATH).unwrap_or_default(),
+                )))
                 .unwrap(),
             )
             .current_dir(&self.temp_dir);

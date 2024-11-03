@@ -185,6 +185,9 @@ impl EnvVars {
     /// packages.
     pub const UV_CONCURRENT_INSTALLS: &'static str = "UV_CONCURRENT_INSTALLS";
 
+    /// Disables all progress output. For example, spinners and progress bars.
+    pub const UV_NO_PROGRESS: &'static str = "UV_NO_PROGRESS";
+
     /// Specifies the directory where uv stores managed tools.
     pub const UV_TOOL_DIR: &'static str = "UV_TOOL_DIR";
 
@@ -370,9 +373,6 @@ impl EnvVars {
     /// See [no-color.org](https://no-color.org).
     pub const NO_COLOR: &'static str = "NO_COLOR";
 
-    /// Disables all progress output. For example, spinners and progress bars.
-    pub const UV_NO_PROGRESS: &'static str = "UV_NO_PROGRESS";
-
     /// Forces colored output regardless of terminal support.
     ///
     /// See [force-color.org](https://force-color.org).
@@ -397,18 +397,23 @@ impl EnvVars {
     pub const LOCALAPPDATA: &'static str = "LOCALAPPDATA";
 
     /// Path to the `.git` directory. Ignored by `uv` when performing fetch.
+    #[attr_hidden]
     pub const GIT_DIR: &'static str = "GIT_DIR";
 
     /// Path to the git working tree. Ignored by `uv` when performing fetch.
+    #[attr_hidden]
     pub const GIT_WORK_TREE: &'static str = "GIT_WORK_TREE";
 
     /// Path to the index file for staged changes. Ignored by `uv` when performing fetch.
+    #[attr_hidden]
     pub const GIT_INDEX_FILE: &'static str = "GIT_INDEX_FILE";
 
     /// Path to where git object files are located. Ignored by `uv` when performing fetch.
+    #[attr_hidden]
     pub const GIT_OBJECT_DIRECTORY: &'static str = "GIT_OBJECT_DIRECTORY";
 
     /// Alternate locations for git objects. Ignored by `uv` when performing fetch.
+    #[attr_hidden]
     pub const GIT_ALTERNATE_OBJECT_DIRECTORIES: &'static str = "GIT_ALTERNATE_OBJECT_DIRECTORIES";
 
     /// Used in tests for better git isolation.
@@ -419,6 +424,7 @@ impl EnvVars {
     /// `GIT_CEILING_DIRECTORIES=/home/andrew/.local/share/uv/tests` will
     /// prevent git from crawling up the directory tree past that point to find
     /// parent git repositories.
+    #[attr_hidden]
     pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
 
     /// Used for trusted publishing via `uv publish`.
@@ -431,18 +437,26 @@ impl EnvVars {
     pub const ACTIONS_ID_TOKEN_REQUEST_TOKEN: &'static str = "ACTIONS_ID_TOKEN_REQUEST_TOKEN";
 
     /// Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).
+    #[attr_hidden]
     pub const PYTHONIOENCODING: &'static str = "PYTHONIOENCODING";
 
     /// Forces unbuffered I/O streams, equivalent to `-u` in Python.
+    #[attr_hidden]
     pub const PYTHONUNBUFFERED: &'static str = "PYTHONUNBUFFERED";
 
     /// Enables UTF-8 mode for Python, equivalent to `-X utf8`.
+    #[attr_hidden]
     pub const PYTHONUTF8: &'static str = "PYTHONUTF8";
 
     /// Adds directories to Python module search path (e.g., PYTHONPATH=/path/to/modules).
     pub const PYTHONPATH: &'static str = "PYTHONPATH";
 
+    /// Used in tests to enforce a consistent locale setting.
+    #[attr_hidden]
+    pub const LC_ALL: &'static str = "LC_ALL";
+
     /// Typically set by CI runners, used to detect a CI runner.
+    #[attr_hidden]
     pub const CI: &'static str = "CI";
 
     /// Use to set the .netrc file location.
@@ -455,6 +469,7 @@ impl EnvVars {
     pub const JPY_SESSION_NAME: &'static str = "JPY_SESSION_NAME";
 
     /// Use to create the tracing root directory via the `tracing-durations-export` feature.
+    #[attr_hidden]
     pub const TRACING_DURATIONS_TEST_ROOT: &'static str = "TRACING_DURATIONS_TEST_ROOT";
 
     /// Use to create the tracing durations file via the `tracing-durations-export` feature.
