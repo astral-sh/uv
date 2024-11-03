@@ -96,8 +96,7 @@ pub enum Error {
     NotFound(Url),
     #[error("Attempted to re-extract the source distribution for `{0}`, but the hashes didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
     CacheHeal(String),
-
-    #[error("The source distribution requires Python {0}, but the current Python version is {1}")]
+    #[error("The source distribution requires Python {0}, but {1} is installed")]
     RequiresPython(VersionSpecifiers, Version),
 
     /// A generic request middleware error happened while making a request.

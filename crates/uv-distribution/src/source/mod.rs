@@ -34,7 +34,7 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_metadata::read_archive_metadata;
-use uv_pep440::{release_specifiers_to_ranges, Version};
+use uv_pep440::release_specifiers_to_ranges;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use uv_types::{BuildContext, SourceBuildTrait};

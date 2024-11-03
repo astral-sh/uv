@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use uv_distribution_types::IncompatibleDist;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -42,7 +42,7 @@ pub(crate) enum UnavailableVersion {
     Offline,
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
-    RequiresPython,
+    RequiresPython(VersionSpecifiers),
 }
 
 impl UnavailableVersion {
@@ -54,7 +54,9 @@ impl UnavailableVersion {
             UnavailableVersion::InconsistentMetadata => "inconsistent metadata".into(),
             UnavailableVersion::InvalidStructure => "an invalid package format".into(),
             UnavailableVersion::Offline => "to be downloaded from a registry".into(),
-            UnavailableVersion::RequiresPython => "require a greater Python version".into(),
+            UnavailableVersion::RequiresPython(requires_python) => {
+                format!("Python {requires_python}")
+            }
         }
     }
 
@@ -66,7 +68,7 @@ impl UnavailableVersion {
             UnavailableVersion::InconsistentMetadata => format!("has {self}"),
             UnavailableVersion::InvalidStructure => format!("has {self}"),
             UnavailableVersion::Offline => format!("needs {self}"),
-            UnavailableVersion::RequiresPython => format!("requires {self}"),
+            UnavailableVersion::RequiresPython(..) => format!("requires {self}"),
         }
     }
 
@@ -78,7 +80,7 @@ impl UnavailableVersion {
             UnavailableVersion::InconsistentMetadata => format!("have {self}"),
             UnavailableVersion::InvalidStructure => format!("have {self}"),
             UnavailableVersion::Offline => format!("need {self}"),
-            UnavailableVersion::RequiresPython => format!("require {self}"),
+            UnavailableVersion::RequiresPython(..) => format!("require {self}"),
         }
     }
 }
@@ -151,7 +153,7 @@ pub(crate) enum IncompletePackage {
     InvalidStructure(String),
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
-    RequiresPython(String),
+    RequiresPython(VersionSpecifiers, Version),
 }
 
 #[derive(Debug, Clone)]

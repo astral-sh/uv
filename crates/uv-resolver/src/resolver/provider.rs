@@ -4,6 +4,7 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl};
 use uv_normalize::PackageName;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
@@ -44,7 +45,7 @@ pub enum MetadataResponse {
     Offline,
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
-    RequiresPython(Box<uv_distribution::Error>),
+    RequiresPython(VersionSpecifiers, Version),
 }
 
 pub trait ResolverProvider {
@@ -206,8 +207,8 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 uv_distribution::Error::WheelMetadata(_, err) => {
                     Ok(MetadataResponse::InvalidStructure(err))
                 }
-                uv_distribution::Error::RequiresPython { .. } => {
-                    Ok(MetadataResponse::RequiresPython(Box::new(err)))
+                uv_distribution::Error::RequiresPython(requires_python, version) => {
+                    Ok(MetadataResponse::RequiresPython(requires_python, version))
                 }
                 err => Err(err),
             },
