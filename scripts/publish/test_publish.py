@@ -139,6 +139,7 @@ def get_new_version(project_name: str, client: httpx.Client) -> Version:
         for _ in range(5):
             try:
                 versions.update(collect_versions(url, client))
+                break
             except httpx.HTTPError as err:
                 error = err
                 print(f"Error getting version, sleeping for 1s: {err}")
@@ -148,8 +149,8 @@ def get_new_version(project_name: str, client: httpx.Client) -> Version:
                 error = err
                 print(f"Invalid index page, sleeping for 1s: {err}")
                 time.sleep(1)
-            else:
-                raise RuntimeError(f"Failed to fetch {url}") from error
+        else:
+            raise RuntimeError(f"Failed to fetch {url}") from error
     max_version = max(versions)
 
     # Bump the path version to obtain an empty version
