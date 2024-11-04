@@ -618,6 +618,9 @@ pub enum ProjectCommand {
     /// arguments to uv. All options to uv must be provided before the command,
     /// e.g., `uv run --verbose foo`. A `--` can be used to separate the command
     /// from uv options for clarity, e.g., `uv run --python 3.12 -- python`.
+    ///
+    /// Respects `.env` files in the current directory unless `--no-env-file` is
+    /// provided.
     #[command(
         after_help = "Use `uv help run` for more details.",
         after_long_help = ""
@@ -2655,6 +2658,16 @@ pub struct RunArgs {
     /// non-editable.
     #[arg(long)]
     pub no_editable: bool,
+
+    /// Load environment variables from a `.env` file.
+    ///
+    /// Defaults to reading `.env` in the current working directory.
+    #[arg(long, value_parser = parse_file_path, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Option<PathBuf>,
+
+    /// Avoid reading environment variables from a `.env` file.
+    #[arg(long, conflicts_with = "env_file", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    pub no_env_file: bool,
 
     /// The command to run.
     ///
