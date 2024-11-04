@@ -1268,6 +1268,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.native_tls,
                 &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1364,6 +1365,7 @@ async fn run_project(
                 globals.concurrency,
                 globals.native_tls,
                 &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1393,6 +1395,7 @@ async fn run_project(
                 globals.concurrency,
                 globals.native_tls,
                 &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1445,6 +1448,7 @@ async fn run_project(
                 globals.concurrency,
                 globals.native_tls,
                 &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             ))
@@ -1486,6 +1490,7 @@ async fn run_project(
                 globals.concurrency,
                 globals.native_tls,
                 &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1520,6 +1525,7 @@ async fn run_project(
                 globals.concurrency,
                 globals.native_tls,
                 &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1555,6 +1561,7 @@ async fn run_project(
                 globals.concurrency,
                 globals.native_tls,
                 &globals.allow_insecure_host,
+                no_config,
                 globals.quiet,
                 &cache,
                 printer,

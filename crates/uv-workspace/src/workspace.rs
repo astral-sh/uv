@@ -925,6 +925,7 @@ impl ProjectWorkspace {
                 // Only walk up the given directory, if any.
                 options
                     .stop_discovery_at
+                    .and_then(Path::parent)
                     .map(|stop_discovery_at| stop_discovery_at != *path)
                     .unwrap_or(true)
             })
@@ -1127,6 +1128,7 @@ async fn find_workspace(
             // Only walk up the given directory, if any.
             options
                 .stop_discovery_at
+                .and_then(Path::parent)
                 .map(|stop_discovery_at| stop_discovery_at != *path)
                 .unwrap_or(true)
         })
@@ -1219,6 +1221,7 @@ pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryO
             // Only walk up the given directory, if any.
             options
                 .stop_discovery_at
+                .and_then(Path::parent)
                 .map(|stop_discovery_at| stop_discovery_at != *path)
                 .unwrap_or(true)
         })
@@ -1385,6 +1388,7 @@ impl VirtualProject {
                 // Only walk up the given directory, if any.
                 options
                     .stop_discovery_at
+                    .and_then(Path::parent)
                     .map(|stop_discovery_at| stop_discovery_at != *path)
                     .unwrap_or(true)
             })

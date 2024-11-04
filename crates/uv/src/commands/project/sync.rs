@@ -59,6 +59,7 @@ pub(crate) async fn sync(
     concurrency: Concurrency,
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -118,6 +119,7 @@ pub(crate) async fn sync(
         connectivity,
         native_tls,
         allow_insecure_host,
+        no_config,
         cache,
         printer,
     )
