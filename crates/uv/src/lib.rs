@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use anstream::eprintln;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
@@ -1126,6 +1126,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if globals.preview.is_disabled() {
                 warn_user_once!("`uv publish` is experimental and may change without warning");
+            }
+
+            if args.skip_existing {
+                bail!(
+                    "`uv publish` does not support `--skip-existing`, \
+                    use `--check-url` with the simple index URL instead."
+                );
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.

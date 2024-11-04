@@ -4863,8 +4863,11 @@ pub struct PublishArgs {
     /// file succeeds even without `--check-url`, while most other indexes error.
     ///
     /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
-    #[arg(long,env = EnvVars::UV_PUBLISH_CHECK_URL)]
+    #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL)]
     pub check_url: Option<IndexUrl>,
+
+    #[arg(long, hide = true)]
+    pub skip_existing: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
