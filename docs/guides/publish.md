@@ -62,6 +62,44 @@ parallel uploads. Note that existing files need to match exactly with those prev
 the registry, this avoids accidentally publishing source distribution and wheels with different
 contents for the same version.
 
+### Using the keyring for local publishing
+
+!!! tip
+
+    We recommend publishing from a continuous integration service, such as GitHub Actions, since it
+    is better reproducibile, avoids stale files on developer machines, can be audited and is more
+    secure.
+
+Instead of entering your password or token manually, you can use the `keyring` package to save them
+to the system keyring. The system keyring stores your passwords and tokens securely, depending on
+operating system and platform they are encrypted or even in a hardware enclave. The `keyring`
+package also allows plugins to interface with external services, some alternative registries only
+provide their credentials only through keyring plugins (e.g. `keyrings.google-artifactregistry-auth`
+or `artifacts-keyring`). For local publishing to PyPI and many other registries, we only need the
+plain keyring package.
+
+To use keyring, install it as tool first:
+
+```shell
+uv tool install keyring
+```
+
+Keyring associates URL/password combination with one password or token. When publishing to PyPI,
+tokens are usually scoped to a single package, so we have different passwords for the same
+URL/password combination. We work around this by attaching the package name as (fake) query
+parameter, e.g., `https://upload.pypi.org/legacy/?PACKAGE_NAME`, replacing `PACKAGE_NAME` with the
+name of your package. Enter the token you got from your registry in the interactive prompt:
+
+```shell
+keyring set https://upload.pypi.org/legacy/?PACKAGE_NAME __token__
+```
+
+Then you can publish with:
+
+```shell
+uv publish --username __token__ --keyring-provider subprocess --publish-url https://upload.pypi.org/legacy/?PACKAGE_NAME
+```
+
 ## Installing your package
 
 Test that the package can be installed and imported with `uv run`:
