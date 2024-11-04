@@ -74,19 +74,25 @@ See the [settings reference](../reference/settings.md) for an enumeration of the
 
 ## `.env`
 
-By default, `uv run` will load environment variables from a `.env` file in the current working
-directory, following the discovery and parsing rules of the
-[`dotenvy`](https://github.com/allan2/dotenvy) crate.
+`uv run` can load environment variables from dotenv files (e.g., `.env`, `.env.local`,
+`.env.development`), powered by the [`dotenvy`](https://github.com/allan2/dotenvy) crate.
 
 To load a `.env` file from a dedicated location, set the `UV_ENV_FILE` environment variable, or pass
 the `--env-file` flag to `uv run`.
+
+For example, to load environment variables from a `.env` file in the current working directory:
+
+```console
+$ uv run --env-file .env -- echo $MY_ENV_VAR
+```
 
 The `--env-file` flag can be provided multiple times, with subsequent files overriding values
 defined in previous files. To provide multiple files via the `UV_ENV_FILE` environment variable,
 separate the paths with a space (e.g., `UV_ENV_FILE="/path/to/file1 /path/to/file2"`).
 
-To disable this behavior, set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the
-`--no-env-file` flag to `uv run`.
+To disable dotenv loading (e.g., to override `UV_ENV_FILE` or the `--env-file` command-line
+argument), set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the`--no-env-file` flag to
+`uv run`.
 
 If the same variable is defined in the environment and in a `.env` file, the value from the
 environment will take precedence.

@@ -64,8 +64,6 @@ When used outside a project, if a virtual environment can be found in the curren
 
 Arguments following the command (or script) are not interpreted as arguments to uv. All options to uv must be provided before the command, e.g., `uv run --verbose foo`. A `--` can be used to separate the command from uv options for clarity, e.g., `uv run --python 3.12 -- python`.
 
-Respects `.env` files in the current directory unless `--no-env-file` is provided.
-
 <h3 class="cli-reference">Usage</h3>
 
 ```
@@ -144,8 +142,6 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt><code>--env-file</code> <i>env-file</i></dt><dd><p>Load environment variables from a <code>.env</code> file.</p>
 
 <p>Can be provided multiple times, with subsequent files overriding values defined in previous files.</p>
-
-<p>Defaults to reading <code>.env</code> in the current working directory.</p>
 
 <p>May also be set with the <code>UV_ENV_FILE</code> environment variable.</p>
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>

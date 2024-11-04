@@ -2855,6 +2855,18 @@ fn run_with_env() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    None
+    None
+    None
+    None
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
     palpatine
     leia_organa
     obi_wan_kenobi
@@ -2965,50 +2977,10 @@ fn run_with_env_omitted() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--no-env-file").arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("--no-env-file").arg("test.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    None
-
-    ----- stderr -----
-    "###);
-
-    Ok(())
-}
-
-#[test]
-fn run_with_parent_env() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    context
-        .temp_dir
-        .child("test")
-        .child("test.py")
-        .write_str(indoc! { "
-        import os
-        print(os.environ.get('THE_EMPIRE_VARIABLE'))
-        print(os.environ.get('REBEL_1'))
-        print(os.environ.get('REBEL_2'))
-        print(os.environ.get('REBEL_3'))
-       "
-        })?;
-
-    context.temp_dir.child(".env").write_str(indoc! { "
-        THE_EMPIRE_VARIABLE=palpatine
-        REBEL_1=leia_organa
-        REBEL_2=obi_wan_kenobi
-        REBEL_3=C3PO
-       "
-    })?;
-
-    uv_snapshot!(context.filters(), context.run().arg("test.py").current_dir(context.temp_dir.child("test")), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    None
-    None
-    None
     None
 
     ----- stderr -----
@@ -3032,7 +3004,7 @@ fn run_with_malformed_env() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("test.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env").arg("test.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
