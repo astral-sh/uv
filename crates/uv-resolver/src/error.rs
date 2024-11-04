@@ -7,6 +7,14 @@ use pubgrub::{
     DefaultStringReporter, DerivationTree, Derived, External, Range, Ranges, Reporter, Term,
 };
 use rustc_hash::FxHashMap;
+use tracing::trace;
+
+use uv_distribution_types::{
+    BuiltDist, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist, SourceDist,
+};
+use uv_normalize::PackageName;
+use uv_pep440::{LocalVersionSlice, Version};
+use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
@@ -14,16 +22,10 @@ use crate::fork_urls::ForkUrls;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
-use crate::resolver::{IncompletePackage, ResolverMarkers, UnavailablePackage, UnavailableReason};
-use crate::Options;
-use tracing::trace;
-use uv_distribution_types::{
-    BuiltDist, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist, SourceDist,
+use crate::resolver::{
+    IncompletePackage, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
-use uv_normalize::PackageName;
-use uv_pep440::{LocalVersionSlice, Version};
-use uv_pep508::MarkerTree;
-use uv_static::EnvVars;
+use crate::Options;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -42,24 +44,34 @@ pub enum ResolveError {
     #[error("Overrides contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
     ConflictingOverrideUrls(PackageName, String, String),
 
-    #[error("Requirements contain conflicting URLs for package `{0}`:\n- {}", _1.join("\n- "))]
-    ConflictingUrlsUniversal(PackageName, Vec<String>),
-
-    #[error("Requirements contain conflicting URLs for package `{package_name}` in split `{fork_markers:?}`:\n- {}", urls.join("\n- "))]
-    ConflictingUrlsFork {
+    #[error(
+        "Requirements contain conflicting URLs for package `{package_name}`{}:\n- {}",
+        if env.marker_environment().is_some() {
+            String::new()
+        } else {
+            format!(" in {env}")
+        },
+        urls.join("\n- "),
+    )]
+    ConflictingUrls {
         package_name: PackageName,
         urls: Vec<String>,
-        fork_markers: MarkerTree,
+        env: ResolverEnvironment,
     },
 
-    #[error("Requirements contain conflicting indexes for package `{0}`:\n- {}", _1.join("\n- "))]
-    ConflictingIndexesUniversal(PackageName, Vec<String>),
-
-    #[error("Requirements contain conflicting indexes for package `{package_name}` in split `{fork_markers:?}`:\n- {}", indexes.join("\n- "))]
-    ConflictingIndexesFork {
+    #[error(
+        "Requirements contain conflicting indexes for package `{package_name}`{}:\n- {}",
+        if env.marker_environment().is_some() {
+            String::new()
+        } else {
+            format!(" in {env}")
+        },
+        indexes.join("\n- "),
+    )]
+    ConflictingIndexesForEnvironment {
         package_name: PackageName,
         indexes: Vec<String>,
-        fork_markers: MarkerTree,
+        env: ResolverEnvironment,
     },
 
     #[error("Requirements contain conflicting indexes for package `{0}`: `{1}` vs. `{2}`")]
@@ -129,7 +141,7 @@ pub struct NoSolutionError {
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
     fork_urls: ForkUrls,
-    markers: ResolverMarkers,
+    env: ResolverEnvironment,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
 }
@@ -147,7 +159,7 @@ impl NoSolutionError {
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: ForkUrls,
-        markers: ResolverMarkers,
+        env: ResolverEnvironment,
         workspace_members: BTreeSet<PackageName>,
         options: Options,
     ) -> Self {
@@ -162,7 +174,7 @@ impl NoSolutionError {
             unavailable_packages,
             incomplete_packages,
             fork_urls,
-            markers,
+            env,
             workspace_members,
             options,
         }
@@ -365,7 +377,7 @@ impl NoSolutionError {
 
     /// Initialize a [`NoSolutionHeader`] for this error.
     pub fn header(&self) -> NoSolutionHeader {
-        NoSolutionHeader::new(self.markers.clone())
+        NoSolutionHeader::new(self.env.clone())
     }
 }
 
@@ -420,7 +432,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.unavailable_packages,
             &self.incomplete_packages,
             &self.fork_urls,
-            &self.markers,
+            &self.env,
             &self.workspace_members,
             self.options,
             &mut additional_hints,
@@ -843,19 +855,16 @@ fn drop_root_dependency_on_project(
 
 #[derive(Debug)]
 pub struct NoSolutionHeader {
-    /// The [`ResolverMarkers`] that caused the failure.
-    markers: ResolverMarkers,
+    /// The [`ResolverEnvironment`] that caused the failure.
+    env: ResolverEnvironment,
     /// The additional context for the resolution failure.
     context: Option<&'static str>,
 }
 
 impl NoSolutionHeader {
-    /// Create a new [`NoSolutionHeader`] with the given [`ResolverMarkers`].
-    pub fn new(markers: ResolverMarkers) -> Self {
-        Self {
-            markers,
-            context: None,
-        }
+    /// Create a new [`NoSolutionHeader`] with the given [`ResolverEnvironment`].
+    pub fn new(env: ResolverEnvironment) -> Self {
+        Self { env, context: None }
     }
 
     /// Set the context for the resolution failure.
@@ -868,30 +877,20 @@ impl NoSolutionHeader {
 
 impl std::fmt::Display for NoSolutionHeader {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.markers {
-            ResolverMarkers::SpecificEnvironment(_) | ResolverMarkers::Universal { .. } => {
-                if let Some(context) = self.context {
-                    write!(
-                        f,
-                        "No solution found when resolving {context} dependencies:"
-                    )
-                } else {
-                    write!(f, "No solution found when resolving dependencies:")
-                }
-            }
-            ResolverMarkers::Fork(markers) => {
-                if let Some(context) = self.context {
-                    write!(
-                        f,
-                        "No solution found when resolving {context} dependencies for split ({markers:?}):",
-                    )
-                } else {
-                    write!(
-                        f,
-                        "No solution found when resolving dependencies for split ({markers:?}):",
-                    )
-                }
-            }
+        match (self.context, self.env.end_user_fork_display()) {
+            (None, None) => write!(f, "No solution found when resolving dependencies:"),
+            (Some(context), None) => write!(
+                f,
+                "No solution found when resolving {context} dependencies:"
+            ),
+            (None, Some(split)) => write!(
+                f,
+                "No solution found when resolving dependencies for {split}:"
+            ),
+            (Some(context), Some(split)) => write!(
+                f,
+                "No solution found when resolving {context} dependencies for {split}:"
+            ),
         }
     }
 }

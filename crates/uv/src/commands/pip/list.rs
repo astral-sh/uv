@@ -112,7 +112,7 @@ pub(crate) fn pip_list(
     // Validate that the environment is consistent.
     if strict {
         // Determine the markers to use for resolution.
-        let markers = environment.interpreter().resolver_markers();
+        let markers = environment.interpreter().resolver_marker_environment();
 
         for diagnostic in site_packages.diagnostics(&markers)? {
             writeln!(

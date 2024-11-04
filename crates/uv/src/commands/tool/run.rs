@@ -540,7 +540,7 @@ async fn get_or_create_environment(
                 site_packages.satisfies(
                     &requirements,
                     &constraints,
-                    &interpreter.resolver_markers()
+                    &interpreter.resolver_marker_environment()
                 ),
                 Ok(SatisfiesResult::Fresh { .. })
             ) {

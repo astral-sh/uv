@@ -1,5 +1,7 @@
 //! Given a set of requirements, find a set of compatible packages.
 
+#![allow(warnings)]
+
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -20,9 +22,9 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, instrument, trace, warn, Level};
 
+pub use environment::ResolverEnvironment;
 pub(crate) use fork_map::{ForkMap, ForkSet};
 use locals::Locals;
-pub use resolver_markers::ResolverMarkers;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -74,6 +76,7 @@ use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options};
 
 mod availability;
 mod batch_prefetch;
+mod environment;
 mod fork_map;
 mod groups;
 mod index;
@@ -81,7 +84,6 @@ mod indexes;
 mod locals;
 mod provider;
 mod reporter;
-mod resolver_markers;
 mod urls;
 
 pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider> {
@@ -107,7 +109,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     indexes: Indexes,
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
-    markers: ResolverMarkers,
+    env: ResolverEnvironment,
     python_requirement: PythonRequirement,
     workspace_members: BTreeSet<PackageName>,
     selector: CandidateSelector,
@@ -148,7 +150,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         manifest: Manifest,
         options: Options,
         python_requirement: &'a PythonRequirement,
-        markers: ResolverMarkers,
+        env: ResolverEnvironment,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
@@ -162,7 +164,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             flat_index,
             tags,
             python_requirement.target(),
-            AllowedYanks::from_manifest(&manifest, &markers, options.dependency_mode),
+            AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
             options.exclude_newer,
             build_context.build_options(),
@@ -173,7 +175,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             manifest,
             options,
             hasher,
-            markers,
+            env,
             python_requirement,
             index,
             build_context.git(),
@@ -193,7 +195,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         manifest: Manifest,
         options: Options,
         hasher: &HashStrategy,
-        markers: ResolverMarkers,
+        env: ResolverEnvironment,
         python_requirement: &PythonRequirement,
         index: &InMemoryIndex,
         git: &GitResolver,
@@ -206,12 +208,12 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             index: index.clone(),
             git: git.clone(),
             capabilities: capabilities.clone(),
-            selector: CandidateSelector::for_resolution(options, &manifest, &markers),
+            selector: CandidateSelector::for_resolution(options, &manifest, &env),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(&manifest, &markers, git, options.dependency_mode)?,
-            locals: Locals::from_manifest(&manifest, &markers, options.dependency_mode),
-            indexes: Indexes::from_manifest(&manifest, &markers, options.dependency_mode),
-            groups: Groups::from_manifest(&manifest, &markers),
+            urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode)?,
+            locals: Locals::from_manifest(&manifest, &env, options.dependency_mode),
+            indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
+            groups: Groups::from_manifest(&manifest, &env),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
@@ -221,7 +223,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
             locations: locations.clone(),
-            markers,
+            env,
             python_requirement: python_requirement.clone(),
             installed_packages,
             unavailable_packages: DashMap::default(),
@@ -304,32 +306,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let state = ForkState::new(
             State::init(root.clone(), MIN_VERSION.clone()),
             root,
-            self.markers.clone(),
+            self.env.clone(),
             self.python_requirement.clone(),
         );
         let mut preferences = self.preferences.clone();
-        let mut forked_states =
-            if let ResolverMarkers::Universal { fork_preferences } = &self.markers {
-                if fork_preferences.is_empty() {
-                    vec![state]
-                } else {
-                    fork_preferences
-                        .iter()
-                        .rev()
-                        .filter_map(|fork_preference| {
-                            state.clone().with_markers(fork_preference.clone())
-                        })
-                        .collect()
-                }
-            } else {
-                vec![state]
-            };
+        let mut forked_states = self.env.initial_forked_states(state);
         let mut resolutions = vec![];
 
         'FORK: while let Some(mut state) = forked_states.pop() {
-            if let ResolverMarkers::Fork(markers) = &state.markers {
+            if let Some(split) = state.env.end_user_fork_display() {
                 let requires_python = state.python_requirement.target();
-                debug!("Solving split {markers:?} (requires-python: {requires_python:?})");
+                debug!("Solving {split} (requires-python: {requires_python:?})");
             }
             let start = Instant::now();
             loop {
@@ -339,7 +326,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         err,
                         state.fork_urls,
                         &state.fork_indexes,
-                        state.markers,
+                        state.env,
                         &visited,
                         &self.locations,
                         &self.capabilities,
@@ -367,8 +354,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         prefetcher.log_tried_versions();
                     }
                     debug!(
-                        "Split {} resolution took {:.3}s",
-                        state.markers,
+                        "{} resolution took {:.3}s",
+                        state.env,
                         start.elapsed().as_secs_f32()
                     );
 
@@ -380,7 +367,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     for (package, version) in &resolution.nodes {
                         preferences.insert(
                             package.name.clone(),
-                            resolution.markers.fork_markers().cloned(),
+                            resolution.env.try_markers().cloned(),
                             version.clone(),
                         );
                     }
@@ -423,7 +410,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &mut state.pins,
                     &preferences,
                     &state.fork_urls,
-                    &state.markers,
+                    &state.env,
                     &state.python_requirement,
                     &mut visited,
                     &request_sink,
@@ -488,7 +475,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         &self.index,
                         &self.capabilities,
                         &self.selector,
-                        &state.markers,
+                        &state.env,
                     )?;
                 }
 
@@ -519,7 +506,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.next,
                     &version,
                     &state.fork_urls,
-                    &state.markers,
+                    &state.env,
                     &state.python_requirement,
                 )?;
                 match forked_deps {
@@ -563,8 +550,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         diverging_packages,
                     } => {
                         debug!(
-                            "Pre-fork split {} took {:.3}s",
-                            state.markers,
+                            "Pre-fork {} took {:.3}s",
+                            state.env,
                             start.elapsed().as_secs_f32()
                         );
 
@@ -590,9 +577,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             );
         }
         for resolution in &resolutions {
-            if let Some(markers) = resolution.markers.fork_markers() {
+            if let Some(env) = resolution.env.end_user_fork_display() {
                 debug!(
-                    "Distinct solution for ({markers:?}) with {} packages",
+                    "Distinct solution for {env} with {} packages",
                     resolution.nodes.len()
                 );
             }
@@ -623,11 +610,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if !tracing::enabled!(Level::TRACE) {
             return;
         }
-        if let Some(markers) = combined.markers.fork_markers() {
-            trace!("Resolution: {:?}", markers);
-        } else {
-            trace!("Resolution: <matches all marker environments>");
-        }
+        trace!("Resolution: {:?}", combined.env);
         for edge in &combined.edges {
             trace!(
                 "Resolution edge: {} -> {}",
@@ -703,7 +686,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
 
                 let markers = fork.markers.clone();
-                Some((fork, forked_state.with_markers(markers)?))
+                Some((fork, forked_state.with_env(&markers)?))
             })
             .map(move |(fork, mut forked_state)| {
                 forked_state.add_package_version_dependencies(
@@ -738,7 +721,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // match any marker environments.
             .filter(|result| {
                 if let Ok(ref forked_state) = result {
-                    let markers = forked_state.markers.fork_markers().expect("is a fork");
+                    let markers = forked_state.env.try_markers().expect("is a fork");
                     if markers.is_false() {
                         return false;
                     }
@@ -862,7 +845,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins,
         preferences: &Preferences,
         fork_urls: &ForkUrls,
-        fork_markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -892,7 +875,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         range,
                         package,
                         preferences,
-                        fork_markers,
+                        env,
                         python_requirement,
                         pins,
                         visited,
@@ -1011,7 +994,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         range: &Range<Version>,
         package: &PubGrubPackage,
         preferences: &Preferences,
-        fork_markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
@@ -1060,7 +1043,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             preferences,
             &self.installed_packages,
             &self.exclusions,
-            fork_markers,
+            env,
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
@@ -1186,21 +1169,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         fork_urls: &ForkUrls,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let result =
-            self.get_dependencies(package, version, fork_urls, markers, python_requirement);
-        match markers {
-            ResolverMarkers::SpecificEnvironment(_) => result.map(|deps| match deps {
+        let result = self.get_dependencies(package, version, fork_urls, env, python_requirement);
+        if env.marker_environment().is_some() {
+            result.map(|deps| match deps {
                 Dependencies::Available(deps) | Dependencies::Unforkable(deps) => {
                     ForkedDependencies::Unforked(deps)
                 }
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
-            }),
-            ResolverMarkers::Universal { .. } | ResolverMarkers::Fork(_) => {
-                Ok(result?.fork(python_requirement))
-            }
+            })
+        } else {
+            Ok(result?.fork(python_requirement))
         }
     }
 
@@ -1211,7 +1192,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: &PubGrubPackage,
         version: &Version,
         fork_urls: &ForkUrls,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
     ) -> Result<Dependencies, ResolveError> {
         let url = package.name().and_then(|name| fork_urls.get(name));
@@ -1224,7 +1205,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     None,
                     None,
-                    markers,
+                    env,
                     python_requirement,
                 );
 
@@ -1357,7 +1338,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     extra.as_ref(),
                     dev.as_ref(),
                     Some(name),
-                    markers,
+                    env,
                     python_requirement,
                 );
 
@@ -1481,7 +1462,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         extra: Option<&'a ExtraName>,
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
-        markers: &'a ResolverMarkers,
+        env: &'a ResolverEnvironment,
         python_requirement: &'a PythonRequirement,
     ) -> Vec<Cow<'a, Requirement>> {
         // Start with the requirements for the current extra of the package (for an extra
@@ -1493,12 +1474,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Either::Right(dependencies.iter())
         };
         let mut requirements = self
-            .requirements_for_extra(
-                regular_and_dev_dependencies,
-                extra,
-                markers,
-                python_requirement,
-            )
+            .requirements_for_extra(regular_and_dev_dependencies, extra, env, python_requirement)
             .collect::<Vec<_>>();
 
         // Check if there are recursive self inclusions and we need to go into the expensive branch.
@@ -1522,7 +1498,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 continue;
             }
             for requirement in
-                self.requirements_for_extra(dependencies, Some(&extra), markers, python_requirement)
+                self.requirements_for_extra(dependencies, Some(&extra), env, python_requirement)
             {
                 if name == Some(&requirement.name) {
                     // Add each transitively included extra.
@@ -1546,7 +1522,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'data self,
         dependencies: impl IntoIterator<Item = &'data Requirement> + 'parameters,
         extra: Option<&'parameters ExtraName>,
-        markers: &'parameters ResolverMarkers,
+        env: &'parameters ResolverEnvironment,
         python_requirement: &'parameters PythonRequirement,
     ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
     where
@@ -1568,29 +1544,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
-                if let ResolverMarkers::Fork(markers) = markers {
-                    if markers.is_disjoint(&requirement.marker) {
-                        trace!("skipping {requirement} because of context resolver markers {markers:?}");
-                        return None;
-                    }
+                if !env.included(&requirement.marker) {
+                    trace!("skipping {requirement} because of {env}");
+                    return None;
                 }
 
                 // If the requirement isn't relevant for the current platform, skip it.
                 match extra {
                     Some(source_extra) => {
                         // Only include requirements that are relevant for the current extra.
-                        if requirement.evaluate_markers(markers.marker_environment(), &[]) {
+                        if requirement.evaluate_markers(env.marker_environment(), &[]) {
                             return None;
                         }
                         if !requirement.evaluate_markers(
-                            markers.marker_environment(),
+                            env.marker_environment(),
                             std::slice::from_ref(source_extra),
                         ) {
                             return None;
                         }
                     }
                     None => {
-                        if !requirement.evaluate_markers(markers.marker_environment(), &[]) {
+                        if !requirement.evaluate_markers(env.marker_environment(), &[]) {
                             return None;
                         }
                     }
@@ -1662,25 +1636,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                             // If we're in a fork in universal mode, ignore any dependency that isn't part of
                             // this fork (but will be part of another fork).
-                            if let ResolverMarkers::Fork(markers) = markers {
-                                if markers.is_disjoint(&constraint.marker) {
-                                    trace!("skipping {constraint} because of context resolver markers {markers:?}");
-                                    return None;
-                                }
+                            if !env.included(&constraint.marker) {
+                                trace!("skipping {constraint} because of {env}");
+                                return None;
                             }
 
                             // If the constraint isn't relevant for the current platform, skip it.
                             match extra {
                                 Some(source_extra) => {
                                     if !constraint.evaluate_markers(
-                                        markers.marker_environment(),
+                                        env.marker_environment(),
                                         std::slice::from_ref(source_extra),
                                     ) {
                                         return None;
                                     }
                                 }
                                 None => {
-                                    if !constraint.evaluate_markers(markers.marker_environment(), &[]) {
+                                    if !constraint.evaluate_markers(env.marker_environment(), &[]) {
                                         return None;
                                     }
                                 }
@@ -1871,7 +1843,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.exclusions,
                     // We don't have access to the fork state when prefetching, so assume that
                     // pre-release versions are allowed.
-                    &ResolverMarkers::universal(vec![]),
+                    &ResolverEnvironment::universal(vec![]),
                 ) else {
                     return Ok(None);
                 };
@@ -1975,7 +1947,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         mut err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         fork_indexes: &ForkIndexes,
-        markers: ResolverMarkers,
+        env: ResolverEnvironment,
         visited: &FxHashSet<PackageName>,
         index_locations: &IndexLocations,
         index_capabilities: &IndexCapabilities,
@@ -2059,7 +2031,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             unavailable_packages,
             incomplete_packages,
             fork_urls,
-            markers,
+            env,
             self.workspace_members.clone(),
             self.options,
         ))
@@ -2144,7 +2116,7 @@ struct ForkState {
     /// completely disjoint marker expression (i.e., it can never be true given
     /// that the marker expression that provoked the fork is true), then that
     /// dependency is completely ignored.
-    markers: ResolverMarkers,
+    env: ResolverEnvironment,
     /// The Python requirement for this fork. Defaults to the Python requirement for
     /// the resolution, but may be narrowed if a `python_version` marker is present
     /// in a given fork.
@@ -2164,7 +2136,7 @@ impl ForkState {
     fn new(
         pubgrub: State<UvDependencyProvider>,
         root: PubGrubPackage,
-        markers: ResolverMarkers,
+        env: ResolverEnvironment,
         python_requirement: PythonRequirement,
     ) -> Self {
         Self {
@@ -2175,7 +2147,7 @@ impl ForkState {
             fork_indexes: ForkIndexes::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
-            markers,
+            env,
             python_requirement,
         }
     }
@@ -2207,15 +2179,15 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                if let Some(url) = urls.get_url(name, url.as_ref(), git)? {
-                    self.fork_urls.insert(name, url, &self.markers)?;
+                if let Some(url) = urls.get_url(&self.env, name, url.as_ref(), git)? {
+                    self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
                 };
 
                 // If the specifier is an exact version and the user requested a local version for this
                 // fork that's more precise than the specifier, use the local version instead.
                 if let Some(specifier) = specifier {
-                    let locals = locals.get(name, &self.markers);
+                    let locals = locals.get(name, &self.env);
 
                     // It's possible that there are multiple matching local versions requested with
                     // different marker expressions. All of these are potentially compatible until we
@@ -2238,8 +2210,8 @@ impl ForkState {
                 }
 
                 // If the package is pinned to an exact index, add it to the fork.
-                for index in indexes.get(name, &self.markers) {
-                    self.fork_indexes.insert(name, index, &self.markers)?;
+                for index in indexes.get(name, &self.env) {
+                    self.fork_indexes.insert(name, index, &self.env)?;
                 }
             }
 
@@ -2324,29 +2296,18 @@ impl ForkState {
 
     /// Subset the current markers with the new markers and update the python requirements fields
     /// accordingly.
-    fn with_markers(mut self, markers: MarkerTree) -> Option<Self> {
-        let combined_markers = self.markers.and(markers);
-        let python_marker = self.python_requirement.to_marker_tree();
-        if combined_markers.is_disjoint(&python_marker) {
-            debug!(
-                "Skipping split {combined_markers:?} \
-                 because of Python requirement {python_marker:?}",
-            );
-            return None;
-        }
-
+    ///
+    /// If the fork should be dropped (e.g., because its markers can never be true for its
+    /// Python requirement), then this returns `None`.
+    fn with_env(mut self, markers: &MarkerTree) -> Option<Self> {
+        self.env = self
+            .env
+            .narrow_environment(&self.python_requirement, markers)?;
         // If the fork contains a narrowed Python requirement, apply it.
-        let python_requirement = marker::requires_python(&combined_markers)
-            .and_then(|marker| self.python_requirement.narrow(&marker));
-        if let Some(python_requirement) = python_requirement {
-            debug!(
-                "Narrowed `requires-python` bound to: {}",
-                python_requirement.target()
-            );
-            self.python_requirement = python_requirement;
+        if let Some(req) = self.env.narrow_python_requirement(&self.python_requirement) {
+            debug!("Narrowed `requires-python` bound to: {}", req.target());
+            self.python_requirement = req;
         }
-
-        self.markers = ResolverMarkers::Fork(combined_markers);
         Some(self)
     }
 
@@ -2545,7 +2506,7 @@ impl ForkState {
             nodes,
             edges,
             pins: self.pins,
-            markers: self.markers,
+            env: self.env,
         }
     }
 }
@@ -2559,8 +2520,8 @@ pub(crate) struct Resolution {
     pub(crate) edges: FxHashSet<ResolutionDependencyEdge>,
     /// Map each package name, version tuple from `packages` to a distribution.
     pub(crate) pins: FilePins,
-    /// The marker setting this resolution was found under.
-    pub(crate) markers: ResolverMarkers,
+    /// The environment setting this resolution was found under.
+    pub(crate) env: ResolverEnvironment,
 }
 
 /// Package representation we used during resolution where each extra and also the dev-dependencies

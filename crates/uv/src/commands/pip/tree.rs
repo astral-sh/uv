@@ -59,7 +59,7 @@ pub(crate) fn pip_tree(
     };
 
     // Determine the markers to use for the resolution.
-    let markers = environment.interpreter().resolver_markers();
+    let markers = environment.interpreter().resolver_marker_environment();
 
     // Render the tree.
     let rendered_tree = DisplayDependencyGraph::new(

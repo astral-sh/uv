@@ -28,7 +28,7 @@ use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, LockVersion, Options, OptionsBuilder, PythonRequirement,
-    RequiresPython, ResolverManifest, ResolverMarkers, SatisfiesResult, VERSION,
+    RequiresPython, ResolverEnvironment, ResolverManifest, SatisfiesResult, VERSION,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
@@ -590,7 +590,7 @@ async fn do_lock(
             // `preferences-dependent-forking` packse scenario). To avoid this, we store the forks in the
             // lockfile. We read those after all the lockfile filters, to allow the forks to change when
             // the environment changed, e.g. the python bound check above can lead to different forking.
-            let resolver_markers = ResolverMarkers::universal(
+            let resolver_env = ResolverEnvironment::universal(
                 forks_lock
                     .map(|lock| lock.fork_markers().to_vec())
                     .unwrap_or_else(|| {
@@ -633,7 +633,7 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                resolver_markers,
+                resolver_env,
                 python_requirement,
                 &client,
                 &flat_index,

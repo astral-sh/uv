@@ -7,7 +7,7 @@ use uv_pep508::PackageName;
 use uv_pypi_types::RequirementSource;
 
 use crate::resolver::ForkMap;
-use crate::{DependencyMode, Manifest, ResolverMarkers};
+use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
 /// A map of package names to their associated, required local versions across all forks.
 #[derive(Debug, Default, Clone)]
@@ -17,14 +17,14 @@ impl Locals {
     /// Determine the set of permitted local versions in the [`Manifest`].
     pub(crate) fn from_manifest(
         manifest: &Manifest,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         dependencies: DependencyMode,
     ) -> Self {
         let mut locals = ForkMap::default();
 
         // Add all direct requirements and constraints. There's no need to look for conflicts,
         // since conflicts will be enforced by the solver.
-        for requirement in manifest.requirements(markers, dependencies) {
+        for requirement in manifest.requirements(env, dependencies) {
             if let Some(local) = from_source(&requirement.source) {
                 locals.add(&requirement, local);
             }
@@ -37,9 +37,9 @@ impl Locals {
     pub(crate) fn get(
         &self,
         package_name: &PackageName,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Vec<&Version> {
-        self.0.get(package_name, markers)
+        self.0.get(package_name, env)
     }
 
     /// Given a specifier that may include the version _without_ a local segment, return a specifier

@@ -9,7 +9,7 @@ use uv_pypi_types::Requirement;
 use uv_types::RequestedRequirements;
 
 use crate::preferences::Preferences;
-use crate::{DependencyMode, Exclusions, ResolverMarkers};
+use crate::{DependencyMode, Exclusions, ResolverEnvironment};
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
@@ -109,57 +109,55 @@ impl Manifest {
     /// - Determining which requirements should allow local version specifiers (e.g., `torch==2.2.0+cpu`).
     pub fn requirements<'a>(
         &'a self,
-        markers: &'a ResolverMarkers,
+        env: &'a ResolverEnvironment,
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
-        self.requirements_no_overrides(markers, mode)
-            .chain(self.overrides(markers, mode))
+        self.requirements_no_overrides(env, mode)
+            .chain(self.overrides(env, mode))
     }
 
     /// Like [`Self::requirements`], but without the overrides.
     pub fn requirements_no_overrides<'a>(
         &'a self,
-        markers: &'a ResolverMarkers,
+        env: &'a ResolverEnvironment,
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         match mode {
             // Include all direct and transitive requirements, with constraints and overrides applied.
-            DependencyMode::Transitive => {
-                Either::Left(
-                    self.lookaheads
-                        .iter()
-                        .flat_map(move |lookahead| {
-                            self.overrides.apply(lookahead.requirements()).filter(
-                                move |requirement| {
-                                    requirement.evaluate_markers(
-                                        markers.marker_environment(),
-                                        lookahead.extras(),
-                                    )
-                                },
-                            )
-                        })
-                        .chain(self.overrides.apply(&self.requirements).filter(
-                            move |requirement| {
-                                requirement.evaluate_markers(markers.marker_environment(), &[])
-                            },
-                        ))
-                        .chain(
-                            self.constraints
-                                .requirements()
-                                .filter(move |requirement| {
-                                    requirement.evaluate_markers(markers.marker_environment(), &[])
-                                })
-                                .map(Cow::Borrowed),
-                        ),
-                )
-            }
+            DependencyMode::Transitive => Either::Left(
+                self.lookaheads
+                    .iter()
+                    .flat_map(move |lookahead| {
+                        self.overrides
+                            .apply(lookahead.requirements())
+                            .filter(move |requirement| {
+                                requirement
+                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
+                            })
+                    })
+                    .chain(
+                        self.overrides
+                            .apply(&self.requirements)
+                            .filter(move |requirement| {
+                                requirement.evaluate_markers(env.marker_environment(), &[])
+                            }),
+                    )
+                    .chain(
+                        self.constraints
+                            .requirements()
+                            .filter(move |requirement| {
+                                requirement.evaluate_markers(env.marker_environment(), &[])
+                            })
+                            .map(Cow::Borrowed),
+                    ),
+            ),
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
                 self.overrides
                     .apply(&self.requirements)
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
                     .filter(move |requirement| {
-                        requirement.evaluate_markers(markers.marker_environment(), &[])
+                        requirement.evaluate_markers(env.marker_environment(), &[])
                     }),
             ),
         }
@@ -168,7 +166,7 @@ impl Manifest {
     /// Only the overrides from [`Self::requirements`].
     pub fn overrides<'a>(
         &'a self,
-        markers: &'a ResolverMarkers,
+        env: &'a ResolverEnvironment,
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         match mode {
@@ -177,7 +175,7 @@ impl Manifest {
                 self.overrides
                     .requirements()
                     .filter(move |requirement| {
-                        requirement.evaluate_markers(markers.marker_environment(), &[])
+                        requirement.evaluate_markers(env.marker_environment(), &[])
                     })
                     .map(Cow::Borrowed),
             ),
@@ -186,7 +184,7 @@ impl Manifest {
                 self.overrides
                     .requirements()
                     .filter(move |requirement| {
-                        requirement.evaluate_markers(markers.marker_environment(), &[])
+                        requirement.evaluate_markers(env.marker_environment(), &[])
                     })
                     .map(Cow::Borrowed),
             ),
@@ -205,41 +203,37 @@ impl Manifest {
     ///   the `lowest-direct` strategy is in use.
     pub fn user_requirements<'a>(
         &'a self,
-        markers: &'a ResolverMarkers,
+        env: &'a ResolverEnvironment,
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         match mode {
             // Include direct requirements, dependencies of editables, and transitive dependencies
             // of local packages.
-            DependencyMode::Transitive => {
-                Either::Left(
-                    self.lookaheads
-                        .iter()
-                        .filter(|lookahead| lookahead.direct())
-                        .flat_map(move |lookahead| {
-                            self.overrides.apply(lookahead.requirements()).filter(
-                                move |requirement| {
-                                    requirement.evaluate_markers(
-                                        markers.marker_environment(),
-                                        lookahead.extras(),
-                                    )
-                                },
-                            )
-                        })
-                        .chain(self.overrides.apply(&self.requirements).filter(
-                            move |requirement| {
-                                requirement.evaluate_markers(markers.marker_environment(), &[])
-                            },
-                        )),
-                )
-            }
+            DependencyMode::Transitive => Either::Left(
+                self.lookaheads
+                    .iter()
+                    .filter(|lookahead| lookahead.direct())
+                    .flat_map(move |lookahead| {
+                        self.overrides
+                            .apply(lookahead.requirements())
+                            .filter(move |requirement| {
+                                requirement
+                                    .evaluate_markers(env.marker_environment(), lookahead.extras())
+                            })
+                    })
+                    .chain(
+                        self.overrides
+                            .apply(&self.requirements)
+                            .filter(move |requirement| {
+                                requirement.evaluate_markers(env.marker_environment(), &[])
+                            }),
+                    ),
+            ),
 
             // Restrict to the direct requirements.
             DependencyMode::Direct => {
                 Either::Right(self.overrides.apply(self.requirements.iter()).filter(
-                    move |requirement| {
-                        requirement.evaluate_markers(markers.marker_environment(), &[])
-                    },
+                    move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]),
                 ))
             }
         }
@@ -252,13 +246,11 @@ impl Manifest {
     ///   resolution (assuming the user enabled development dependencies).
     pub fn direct_requirements<'a>(
         &'a self,
-        markers: &'a ResolverMarkers,
+        env: &'a ResolverEnvironment,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         self.overrides
             .apply(self.requirements.iter())
-            .filter(move |requirement| {
-                requirement.evaluate_markers(markers.marker_environment(), &[])
-            })
+            .filter(move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
     }
 
     /// Apply the overrides and constraints to a set of requirements.
