@@ -438,7 +438,7 @@ async fn build_package(
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&interpreter.resolver_markers()),
+            Some(&interpreter.resolver_marker_environment()),
             hash_checking,
         )?
     } else {

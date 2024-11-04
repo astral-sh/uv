@@ -2656,6 +2656,17 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_editable: bool,
 
+    /// Load environment variables from a `.env` file.
+    ///
+    /// Can be provided multiple times, with subsequent files overriding values defined in
+    /// previous files.
+    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<PathBuf>,
+
+    /// Avoid reading environment variables from a `.env` file.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    pub no_env_file: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be
@@ -3935,8 +3946,16 @@ pub struct PythonInstallArgs {
     ///
     /// By default, uv will exit successfully if the version is already
     /// installed.
-    #[arg(long, short, alias = "force")]
+    #[arg(long, short)]
     pub reinstall: bool,
+
+    /// Replace existing Python executables during installation.
+    ///
+    /// By default, uv will refuse to replace executables that it does not manage.
+    ///
+    /// Implies `--reinstall`.
+    #[arg(long, short)]
+    pub force: bool,
 }
 
 #[derive(Args)]

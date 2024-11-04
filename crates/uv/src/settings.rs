@@ -242,6 +242,8 @@ pub(crate) struct RunSettings {
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) env_file: Vec<PathBuf>,
+    pub(crate) no_env_file: bool,
 }
 
 impl RunSettings {
@@ -277,6 +279,8 @@ impl RunSettings {
             no_project,
             python,
             show_resolution,
+            env_file,
+            no_env_file,
         } = args;
 
         Self {
@@ -308,6 +312,8 @@ impl RunSettings {
                 resolver_installer_options(installer, build),
                 filesystem,
             ),
+            env_file,
+            no_env_file,
         }
     }
 }
@@ -623,15 +629,24 @@ impl PythonDirSettings {
 pub(crate) struct PythonInstallSettings {
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
+    pub(crate) force: bool,
 }
 
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
-        let PythonInstallArgs { targets, reinstall } = args;
+        let PythonInstallArgs {
+            targets,
+            reinstall,
+            force,
+        } = args;
 
-        Self { targets, reinstall }
+        Self {
+            targets,
+            reinstall,
+            force,
+        }
     }
 }
 

@@ -1546,7 +1546,10 @@ impl PythonPreference {
     }
 
     pub(crate) fn allows_managed(self) -> bool {
-        matches!(self, Self::Managed | Self::OnlyManaged)
+        match self {
+            Self::OnlySystem => false,
+            Self::Managed | Self::System | Self::OnlyManaged => true,
+        }
     }
 }
 

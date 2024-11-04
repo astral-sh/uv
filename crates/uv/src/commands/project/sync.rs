@@ -277,12 +277,15 @@ pub(super) async fn do_sync(
     }
 
     // Determine the markers to use for resolution.
-    let markers = venv.interpreter().resolver_markers();
+    let marker_env = venv.interpreter().resolver_marker_environment();
 
     // Validate that the platform is supported by the lockfile.
     let environments = target.lock().supported_environments();
     if !environments.is_empty() {
-        if !environments.iter().any(|env| env.evaluate(&markers, &[])) {
+        if !environments
+            .iter()
+            .any(|env| env.evaluate(&marker_env, &[]))
+        {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 // For error reporting, we use the "simplified"
                 // supported environments, because these correspond to
@@ -304,8 +307,14 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution =
-        target.to_resolution(&markers, tags, extras, dev, build_options, &install_options)?;
+    let resolution = target.to_resolution(
+        &marker_env,
+        tags,
+        extras,
+        dev,
+        build_options,
+        &install_options,
+    )?;
 
     // Always skip virtual projects, which shouldn't be built or installed.
     let resolution = apply_no_virtual_project(resolution);

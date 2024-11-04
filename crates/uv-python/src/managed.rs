@@ -88,7 +88,7 @@ pub enum Error {
     LibcDetection(#[from] LibcDetectionError),
 }
 /// A collection of uv-managed Python installations installed on the current system.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ManagedPythonInstallations {
     /// The path to the top-level directory of the installed Python versions.
     root: PathBuf,
@@ -541,6 +541,35 @@ impl ManagedPythonInstallation {
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
+    }
+
+    /// Returns `true` if self is a suitable upgrade of other.
+    pub fn is_upgrade_of(&self, other: &ManagedPythonInstallation) -> bool {
+        // Require matching implementation
+        if self.key.implementation != other.key.implementation {
+            return false;
+        }
+        // Require a matching variant
+        if self.key.variant != other.key.variant {
+            return false;
+        }
+        // Require matching minor version
+        if (self.key.major, self.key.minor) != (other.key.major, other.key.minor) {
+            return false;
+        }
+        // Require a newer, or equal patch version (for pre-release upgrades)
+        if self.key.patch <= other.key.patch {
+            return false;
+        }
+        if let Some(other_pre) = other.key.prerelease {
+            if let Some(self_pre) = self.key.prerelease {
+                return self_pre > other_pre;
+            }
+            // Do not upgrade from non-prerelease to prerelease
+            return false;
+        }
+        // Do not upgrade if the patch versions are the same
+        self.key.patch != other.key.patch
     }
 }
 

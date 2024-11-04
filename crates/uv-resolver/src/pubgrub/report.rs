@@ -19,7 +19,7 @@ use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
-use crate::{Flexibility, Options, RequiresPython, ResolverMarkers};
+use crate::{Flexibility, Options, RequiresPython, ResolverEnvironment};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 
@@ -510,7 +510,7 @@ impl PubGrubReportFormatter<'_> {
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         workspace_members: &BTreeSet<PackageName>,
         options: Options,
         output_hints: &mut IndexSet<PubGrubHint>,
@@ -528,7 +528,7 @@ impl PubGrubReportFormatter<'_> {
                                 name,
                                 set,
                                 selector,
-                                markers,
+                                env,
                                 output_hints,
                             );
                         }
@@ -596,7 +596,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
-                    markers,
+                    env,
                     workspace_members,
                     options,
                     output_hints,
@@ -610,7 +610,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
-                    markers,
+                    env,
                     workspace_members,
                     options,
                     output_hints,
@@ -756,7 +756,7 @@ impl PubGrubReportFormatter<'_> {
         name: &PackageName,
         set: &Range<Version>,
         selector: &CandidateSelector,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let any_prerelease = set.iter().any(|(start, end)| {
@@ -775,7 +775,7 @@ impl PubGrubReportFormatter<'_> {
 
         if any_prerelease {
             // A pre-release marker appeared in the version requirements.
-            if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
+            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseRequested {
                     package: package.clone(),
                     range: self.simplify_set(set, package).into_owned(),
@@ -793,7 +793,7 @@ impl PubGrubReportFormatter<'_> {
             })
         {
             // There are pre-release versions available for the package.
-            if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
+            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseAvailable {
                     package: package.clone(),
                     version: version.clone(),
