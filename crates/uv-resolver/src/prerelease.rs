@@ -1,9 +1,10 @@
 use uv_pypi_types::RequirementSource;
 
-use uv_normalize::PackageName;
-
 use crate::resolver::ForkSet;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
+
+use uv_normalize::PackageName;
+use uv_pep440::Operator;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -84,6 +85,9 @@ impl PrereleaseStrategy {
 
                     if specifier
                         .iter()
+                        .filter(|spec| {
+                            !matches!(spec.operator(), Operator::NotEqual | Operator::NotEqualStar)
+                        })
                         .any(uv_pep440::VersionSpecifier::any_prerelease)
                     {
                         packages.add(&requirement, ());
