@@ -1389,7 +1389,7 @@ impl std::fmt::Display for Prerelease {
     }
 }
 
-/// Either a sequence of local segments or [`LocalVersion::Sentinel``], an internal-only value that compares greater than all other local versions.
+/// Either a sequence of local segments or [`LocalVersion::Sentinel`], an internal-only value that compares greater than all other local versions.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 #[cfg_attr(
     feature = "rkyv",
@@ -1414,7 +1414,7 @@ pub enum LocalVersionSlice<'a> {
 
 impl LocalVersion {
     /// convert into a local version slice
-    pub fn as_slice<'a>(&'a self) -> LocalVersionSlice<'a> {
+    pub fn as_slice(&self) -> LocalVersionSlice<'_> {
         match self {
             LocalVersion::Actual(segments) => LocalVersionSlice::Actual(segments),
             LocalVersion::Max => LocalVersionSlice::Sentinel,
