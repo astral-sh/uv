@@ -139,6 +139,7 @@ uv respects the following environment variables:
   See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 - <a id="VIRTUAL_ENV"></a> [`VIRTUAL_ENV`](#VIRTUAL_ENV): Used to detect an activated virtual environment.
 - <a id="CONDA_PREFIX"></a> [`CONDA_PREFIX`](#CONDA_PREFIX): Used to detect an activated Conda environment.
+- <a id="CONDA_DEFAULT_ENV"></a> [`CONDA_DEFAULT_ENV`](#CONDA_DEFAULT_ENV): Used to determine if an active Conda environment is the base environment or not.
 - <a id="VIRTUAL_ENV_DISABLE_PROMPT"></a> [`VIRTUAL_ENV_DISABLE_PROMPT`](#VIRTUAL_ENV_DISABLE_PROMPT): If set to `1` before a virtual environment is activated, then the
   virtual environment name will not be prepended to the terminal prompt.
 - <a id="PROMPT"></a> [`PROMPT`](#PROMPT): Used to detect the use of the Windows Command Prompt (as opposed to PowerShell).
