@@ -25,7 +25,7 @@ pub(crate) async fn publish(
     publish_url: Url,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
+    allow_insecure_host: &[TrustedHost],
     username: Option<String>,
     password: Option<String>,
     check_url: Option<IndexUrl>,
@@ -58,7 +58,7 @@ pub(crate) async fn publish(
         .retries(0)
         .keyring(keyring_provider)
         .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.clone())
+        .allow_insecure_host(allow_insecure_host.to_vec())
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
         // Set a very high timeout for uploads, connections are often 10x slower on upload than
@@ -82,7 +82,7 @@ pub(crate) async fn publish(
             .connectivity(connectivity)
             .index_urls(index_urls)
             .keyring(keyring_provider)
-            .allow_insecure_host(allow_insecure_host.clone());
+            .allow_insecure_host(allow_insecure_host.to_vec());
         Some(CheckUrlClient {
             index_url,
             registry_client_builder,

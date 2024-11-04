@@ -58,6 +58,7 @@ pub(crate) async fn build_frontend(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -80,6 +81,7 @@ pub(crate) async fn build_frontend(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -120,6 +122,7 @@ async fn build_impl(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<BuildResult> {
@@ -128,7 +131,6 @@ async fn build_impl(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution: _,
         prerelease: _,
         dependency_metadata,
@@ -144,7 +146,8 @@ async fn build_impl(
 
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
