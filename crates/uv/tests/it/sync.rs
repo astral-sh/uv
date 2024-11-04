@@ -2434,6 +2434,7 @@ fn sync_custom_environment_path() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
     Creating virtual environment at: foo
     Activate with: source foo/[BIN]/activate
     "###);
@@ -3603,6 +3604,7 @@ fn sync_invalid_environment() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###);
@@ -3669,6 +3671,7 @@ fn sync_invalid_environment() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###);
@@ -3749,6 +3752,127 @@ fn sync_no_sources_missing_member() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + root==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_python_version() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+
+    // We should respect the project's required version, not the first on the path
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // Unless explicitly requested...
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.10"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    error: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`
+    "###);
+
+    // But a pin should take precedence
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // Create a pin that's incompatible with the project
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.10").arg("--no-workspace"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `3.12` -> `3.10`
+
+    ----- stderr -----
+    "###);
+
+    // We should warn on subsequent uses, but respect the pinned version?
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
+    error: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`
+    "###);
+
+    // Unless the pin file is outside the project, in which case we should just ignore it entirely
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all().unwrap();
+
+    let pyproject_toml = child_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&child_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
      + sniffio==1.3.1
     "###);
 

@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    PYTHON_VERSION_FILENAME,
+    VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject};
@@ -40,7 +40,8 @@ pub(crate) async fn pin(
         }
     };
 
-    let version_file = PythonVersionFile::discover(project_dir, false, false).await;
+    let version_file =
+        PythonVersionFile::discover(project_dir, &VersionFileDiscoveryOptions::default()).await;
 
     let Some(request) = request else {
         // Display the current pinned Python version

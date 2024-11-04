@@ -23,7 +23,8 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionRequest,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
@@ -391,9 +392,12 @@ async fn build_package(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(source.directory(), no_config, false)
-            .await?
-            .and_then(PythonVersionFile::into_version);
+        interpreter_request = PythonVersionFile::discover(
+            source.directory(),
+            &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+        )
+        .await?
+        .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
