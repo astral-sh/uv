@@ -229,9 +229,7 @@ impl NoSolutionError {
     /// The `[max]` sentinel is used to represent the maximum local version of a package, to
     /// implement PEP 440 semantics for local version equality. For example, `1.0.0+foo` needs to
     /// satisfy `==1.0.0`.
-    pub(crate) fn simplify_local_version_segments(
-        mut derivation_tree: ErrorTree,
-    ) -> Option<ErrorTree> {
+    pub(crate) fn collapse_local_version_segments(derivation_tree: ErrorTree) -> ErrorTree {
         /// Remove local versions sentinels (`+[max]`) from the given version ranges.
         fn strip_sentinel(versions: &mut Ranges<Version>) {
             versions.iter_mut().for_each(|(lower, upper)| {
@@ -321,58 +319,62 @@ impl NoSolutionError {
             })
         }
 
-        match derivation_tree {
-            DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree),
-            DerivationTree::External(External::NoVersions(_, ref mut versions)) => {
-                if is_sentinel(versions) {
-                    None
-                } else {
+        fn collapse(mut derivation_tree: ErrorTree) -> Option<ErrorTree> {
+            match derivation_tree {
+                DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree),
+                DerivationTree::External(External::NoVersions(_, ref mut versions)) => {
+                    if is_sentinel(versions) {
+                        return None;
+                    }
+
                     strip_sentinel(versions);
                     Some(derivation_tree)
                 }
-            }
-            DerivationTree::External(External::FromDependencyOf(
-                _,
-                ref mut versions1,
-                _,
-                ref mut versions2,
-            )) => {
-                strip_sentinel(versions1);
-                strip_sentinel(versions2);
-                Some(derivation_tree)
-            }
-            DerivationTree::External(External::Custom(_, ref mut versions, _)) => {
-                strip_sentinel(versions);
-                Some(derivation_tree)
-            }
-            DerivationTree::Derived(mut derived) => {
-                let cause1 = Self::simplify_local_version_segments((*derived.cause1).clone());
-                let cause2 = Self::simplify_local_version_segments((*derived.cause2).clone());
-                match (cause1, cause2) {
-                    (Some(cause1), Some(cause2)) => Some(DerivationTree::Derived(Derived {
-                        cause1: Arc::new(cause1),
-                        cause2: Arc::new(cause2),
-                        terms: std::mem::take(&mut derived.terms)
-                            .into_iter()
-                            .map(|(pkg, mut term)| {
-                                match &mut term {
-                                    Term::Positive(versions) => {
-                                        strip_sentinel(versions);
+                DerivationTree::External(External::FromDependencyOf(
+                    _,
+                    ref mut versions1,
+                    _,
+                    ref mut versions2,
+                )) => {
+                    strip_sentinel(versions1);
+                    strip_sentinel(versions2);
+                    Some(derivation_tree)
+                }
+                DerivationTree::External(External::Custom(_, ref mut versions, _)) => {
+                    strip_sentinel(versions);
+                    Some(derivation_tree)
+                }
+                DerivationTree::Derived(mut derived) => {
+                    let cause1 = collapse((*derived.cause1).clone());
+                    let cause2 = collapse((*derived.cause2).clone());
+                    match (cause1, cause2) {
+                        (Some(cause1), Some(cause2)) => Some(DerivationTree::Derived(Derived {
+                            cause1: Arc::new(cause1),
+                            cause2: Arc::new(cause2),
+                            terms: std::mem::take(&mut derived.terms)
+                                .into_iter()
+                                .map(|(pkg, mut term)| {
+                                    match &mut term {
+                                        Term::Positive(versions) => {
+                                            strip_sentinel(versions);
+                                        }
+                                        Term::Negative(versions) => {
+                                            strip_sentinel(versions);
+                                        }
                                     }
-                                    Term::Negative(versions) => {
-                                        strip_sentinel(versions);
-                                    }
-                                }
-                                (pkg, term)
-                            })
-                            .collect(),
-                        shared_id: derived.shared_id,
-                    })),
-                    (Some(cause), None) | (None, Some(cause)) => Some(cause),
-                    _ => None,
+                                    (pkg, term)
+                                })
+                                .collect(),
+                            shared_id: derived.shared_id,
+                        })),
+                        (Some(cause), None) | (None, Some(cause)) => Some(cause),
+                        _ => None,
+                    }
                 }
             }
         }
+
+        collapse(derivation_tree).expect("derivation tree should contain at least one term")
     }
 
     /// Initialize a [`NoSolutionHeader`] for this error.
@@ -403,7 +405,6 @@ impl std::fmt::Display for NoSolutionError {
             display_tree(&tree, "Resolver derivation tree before reduction");
         }
 
-        // simplify_local_version_segments(&mut tree);
         collapse_no_versions_of_workspace_members(&mut tree, &self.workspace_members);
 
         if self.workspace_members.len() == 1 {

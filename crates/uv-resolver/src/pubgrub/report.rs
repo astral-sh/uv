@@ -496,16 +496,6 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
-    // fn simplify_locals<'a>(
-    //     &self,
-    //     set: &'a Range<Version>,
-    // ) -> Cow<'a, Range<Version>> {
-    //     // for (lower, upper) in set.iter() {
-    //     //
-    //     // }
-    //     Cow::Owned(Range::from((Bound::Included(Version::new([0])), Bound::Excluded(Version::new([1])))))
-    // }
-
     /// Generate the [`PubGrubHints`] for a derivation tree.
     ///
     /// The [`PubGrubHints`] help users resolve errors by providing additional context or modifying
