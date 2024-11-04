@@ -1130,8 +1130,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if args.skip_existing {
                 bail!(
-                    "`uv publish` does not support `--skip-existing`, \
-                    use `--check-url` with the simple index URL instead."
+                    "`uv publish` does not support `--skip-existing` because there is not a \
+                    reliable way to identify when an upload fails due to an existing \
+                    distribution. Instead, use `--check-url` to provide the URL to the simple \
+                    API for your index. uv will check the index for existing distributions before \
+                    attempting uploads."
                 );
             }
 
