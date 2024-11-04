@@ -403,7 +403,7 @@ fn help_subcommand() {
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r##"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -436,6 +436,27 @@ fn help_subsubcommand() {
               See `uv help python` to view supported request formats.
 
     Options:
+          --mirror <MIRROR>
+              Set the URL to use as the source for downloading Python installations.
+              
+              The provided URL will replace
+              `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
+              `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+              
+              Distributions can be read from a local directory by using the `file://` URL scheme.
+              
+              [env: UV_PYTHON_INSTALL_MIRROR=]
+
+          --pypy-mirror <PYPY_MIRROR>
+              Set the URL to use as the source for downloading PyPy installations.
+              
+              The provided URL will replace `https://downloads.python.org/pypy` in, e.g.,
+              `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+              
+              Distributions can be read from a local directory by using the `file://` URL scheme.
+              
+              [env: UV_PYPY_INSTALL_MIRROR=]
+
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
               
@@ -577,7 +598,7 @@ fn help_subsubcommand() {
 
 
     ----- stderr -----
-    "###);
+    "##);
 }
 
 #[test]
@@ -652,8 +673,12 @@ fn help_flag_subsubcommand() {
       [TARGETS]...  The Python version(s) to install
 
     Options:
-      -r, --reinstall  Reinstall the requested Python version, if it's already installed
-      -f, --force      Replace existing Python executables during installation
+          --mirror <MIRROR>            Set the URL to use as the source for downloading Python
+                                       installations [env: UV_PYTHON_INSTALL_MIRROR=]
+          --pypy-mirror <PYPY_MIRROR>  Set the URL to use as the source for downloading PyPy
+                                       installations [env: UV_PYPY_INSTALL_MIRROR=]
+      -r, --reinstall                  Reinstall the requested Python version, if it's already installed
+      -f, --force                      Replace existing Python executables during installation
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary

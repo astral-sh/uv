@@ -30,7 +30,7 @@ fn sync() -> Result<()> {
     )?;
 
     // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -41,7 +41,7 @@ fn sync() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
 

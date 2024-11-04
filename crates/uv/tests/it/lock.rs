@@ -3080,7 +3080,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3103,7 +3103,7 @@ fn lock_requires_python() -> Result<()> {
           hint: Pre-releases are available for pygls in the requested range (e.g., 2.0.0a2), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
-    "###);
+    ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
     pyproject_toml.write_str(
