@@ -725,7 +725,12 @@ impl std::fmt::Display for Version {
         let local = if self.local().is_empty() {
             String::new()
         } else {
-            format!("+{}", self.local().local_identifier_string())
+            match self.local() {
+                LocalVersionSlice::Actual(_) => {
+                    format!("+{}", self.local().local_identifier_string())
+                }
+                LocalVersionSlice::Sentinel => String::new(),
+            }
         };
         write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
     }
@@ -1389,7 +1394,8 @@ impl std::fmt::Display for Prerelease {
     }
 }
 
-/// Either a sequence of local segments or [`LocalVersion::Sentinel`], an internal-only value that compares greater than all other local versions.
+/// Either a sequence of local segments or [`LocalVersion::Sentinel`], an internal-only value that
+/// compares greater than all other local versions.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 #[cfg_attr(
     feature = "rkyv",
@@ -1397,9 +1403,9 @@ impl std::fmt::Display for Prerelease {
 )]
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 pub enum LocalVersion {
-    /// A sequence of local segments
+    /// A sequence of local segments.
     Actual(Vec<LocalSegment>),
-    /// An internal-only value that compares greater to all other local versions
+    /// An internal-only value that compares greater to all other local versions.
     Max,
 }
 
@@ -1408,12 +1414,12 @@ pub enum LocalVersion {
 pub enum LocalVersionSlice<'a> {
     /// Like [`LocalVersion::Actual`]
     Actual(&'a [LocalSegment]),
-    /// Like [`LocalVersion::Sentintel`]
+    /// Like [`LocalVersion::Sentinel`]
     Sentinel,
 }
 
 impl LocalVersion {
-    /// convert into a local version slice
+    /// Convert the local version segments into a slice.
     pub fn as_slice(&self) -> LocalVersionSlice<'_> {
         match self {
             LocalVersion::Actual(segments) => LocalVersionSlice::Actual(segments),
@@ -1421,16 +1427,20 @@ impl LocalVersion {
         }
     }
 
-    /// clear the local version segments, if they exist
+    /// Clear the local version segments, if they exist.
     pub fn clear(&mut self) {
-        if let Self::Actual(segments) = self {
-            segments.clear();
+        match self {
+            Self::Actual(segments) => segments.clear(),
+            Self::Max => *self = Self::Actual(Vec::new()),
         }
     }
 }
 
 impl LocalVersionSlice<'_> {
-    /// output the local version identifier string. [`LocalVersionSlice::Sentinel`] maps to `"[max-local-version]"` which is otherwise an illegal local version because `<` and `>` are not allowed
+    /// Output the local version identifier string.
+    ///
+    /// [`LocalVersionSlice::Sentinel`] maps to `"[max]"` which is otherwise an illegal local
+    /// version because `[` and `]` are not allowed.
     pub fn local_identifier_string(&self) -> String {
         match self {
             LocalVersionSlice::Actual(segments) => segments
@@ -1438,7 +1448,7 @@ impl LocalVersionSlice<'_> {
                 .map(ToString::to_string)
                 .collect::<Vec<String>>()
                 .join("."),
-            LocalVersionSlice::Sentinel => String::from("[max-local-version]"),
+            LocalVersionSlice::Sentinel => String::from("[max]"),
         }
     }
 }

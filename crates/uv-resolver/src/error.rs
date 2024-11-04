@@ -1,9 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::fmt::Formatter;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
-use pubgrub::{DefaultStringReporter, DerivationTree, Derived, External, Range, Reporter};
+use pubgrub::{
+    DefaultStringReporter, DerivationTree, Derived, External, Range, Ranges, Reporter, Term,
+};
 use rustc_hash::FxHashMap;
 
 use crate::candidate_selector::CandidateSelector;
@@ -19,7 +21,7 @@ use uv_distribution_types::{
     BuiltDist, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist, SourceDist,
 };
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{LocalVersionSlice, Version};
 use uv_pep508::MarkerTree;
 use uv_static::EnvVars;
 
@@ -210,6 +212,157 @@ impl NoSolutionError {
             .expect("derivation tree should contain at least one external term")
     }
 
+    /// Simplifies the version ranges on any incompatibilities to remove the `[max]` sentinel.
+    ///
+    /// The `[max]` sentinel is used to represent the maximum local version of a package, to
+    /// implement PEP 440 semantics for local version equality. For example, `1.0.0+foo` needs to
+    /// satisfy `==1.0.0`.
+    pub(crate) fn simplify_local_version_segments(
+        mut derivation_tree: ErrorTree,
+    ) -> Option<ErrorTree> {
+        /// Remove local versions sentinels (`+[max]`) from the given version ranges.
+        fn strip_sentinel(versions: &mut Ranges<Version>) {
+            versions.iter_mut().for_each(|(lower, upper)| {
+                match (&lower, &upper) {
+                    (Bound::Unbounded, Bound::Unbounded) => {}
+                    (Bound::Unbounded, Bound::Included(v)) => {
+                        // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                        if v.local() == LocalVersionSlice::Sentinel {
+                            *upper = Bound::Included(v.clone().without_local());
+                        }
+                    }
+                    (Bound::Unbounded, Bound::Excluded(v)) => {
+                        // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                        if v.local() == LocalVersionSlice::Sentinel {
+                            *upper = Bound::Excluded(v.clone().without_local());
+                        }
+                    }
+                    (Bound::Included(v), Bound::Unbounded) => {
+                        // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                        if v.local() == LocalVersionSlice::Sentinel {
+                            *lower = Bound::Excluded(v.clone().without_local());
+                        }
+                    }
+                    (Bound::Included(v), Bound::Included(b)) => {
+                        // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                        if v.local() == LocalVersionSlice::Sentinel {
+                            *lower = Bound::Excluded(v.clone().without_local());
+                        }
+                        // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                        if b.local() == LocalVersionSlice::Sentinel {
+                            *upper = Bound::Included(b.clone().without_local());
+                        }
+                    }
+                    (Bound::Included(v), Bound::Excluded(b)) => {
+                        // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                        if v.local() == LocalVersionSlice::Sentinel {
+                            *lower = Bound::Excluded(v.clone().without_local());
+                        }
+                        // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                        if b.local() == LocalVersionSlice::Sentinel {
+                            *upper = Bound::Included(b.clone().without_local());
+                        }
+                    }
+                    (Bound::Excluded(v), Bound::Unbounded) => {
+                        // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                        if v.local() == LocalVersionSlice::Sentinel {
+                            *lower = Bound::Excluded(v.clone().without_local());
+                        }
+                    }
+                    (Bound::Excluded(v), Bound::Included(b)) => {
+                        // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                        if v.local() == LocalVersionSlice::Sentinel {
+                            *lower = Bound::Excluded(v.clone().without_local());
+                        }
+                        // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                        if b.local() == LocalVersionSlice::Sentinel {
+                            *upper = Bound::Included(b.clone().without_local());
+                        }
+                    }
+                    (Bound::Excluded(v), Bound::Excluded(b)) => {
+                        // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                        if v.local() == LocalVersionSlice::Sentinel {
+                            *lower = Bound::Excluded(v.clone().without_local());
+                        }
+                        // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                        if b.local() == LocalVersionSlice::Sentinel {
+                            *upper = Bound::Excluded(b.clone().without_local());
+                        }
+                    }
+                }
+            });
+        }
+
+        /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]`.
+        fn is_sentinel(versions: &mut Ranges<Version>) -> bool {
+            versions.iter().all(|(lower, upper)| {
+                let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
+                    return false;
+                };
+                if lower.local() == LocalVersionSlice::Sentinel {
+                    return false;
+                }
+                if upper.local() != LocalVersionSlice::Sentinel {
+                    return false;
+                }
+                *lower == upper.clone().without_local()
+            })
+        }
+
+        match derivation_tree {
+            DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree),
+            DerivationTree::External(External::NoVersions(_, ref mut versions)) => {
+                if is_sentinel(versions) {
+                    None
+                } else {
+                    strip_sentinel(versions);
+                    Some(derivation_tree)
+                }
+            }
+            DerivationTree::External(External::FromDependencyOf(
+                _,
+                ref mut versions1,
+                _,
+                ref mut versions2,
+            )) => {
+                strip_sentinel(versions1);
+                strip_sentinel(versions2);
+                Some(derivation_tree)
+            }
+            DerivationTree::External(External::Custom(_, ref mut versions, _)) => {
+                strip_sentinel(versions);
+                Some(derivation_tree)
+            }
+            DerivationTree::Derived(mut derived) => {
+                let cause1 = Self::simplify_local_version_segments((*derived.cause1).clone());
+                let cause2 = Self::simplify_local_version_segments((*derived.cause2).clone());
+                match (cause1, cause2) {
+                    (Some(cause1), Some(cause2)) => Some(DerivationTree::Derived(Derived {
+                        cause1: Arc::new(cause1),
+                        cause2: Arc::new(cause2),
+                        terms: std::mem::take(&mut derived.terms)
+                            .into_iter()
+                            .map(|(pkg, mut term)| {
+                                match &mut term {
+                                    Term::Positive(versions) => {
+                                        strip_sentinel(versions);
+                                    }
+                                    Term::Negative(versions) => {
+                                        strip_sentinel(versions);
+                                    }
+                                }
+                                (pkg, term)
+                            })
+                            .collect(),
+                        shared_id: derived.shared_id,
+                    })),
+                    (Some(cause), None) | (None, Some(cause)) => Some(cause),
+                    _ => None,
+                }
+            }
+        }
+    }
+
     /// Initialize a [`NoSolutionHeader`] for this error.
     pub fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.markers.clone())
@@ -238,6 +391,7 @@ impl std::fmt::Display for NoSolutionError {
             display_tree(&tree, "Resolver derivation tree before reduction");
         }
 
+        // simplify_local_version_segments(&mut tree);
         collapse_no_versions_of_workspace_members(&mut tree, &self.workspace_members);
 
         if self.workspace_members.len() == 1 {

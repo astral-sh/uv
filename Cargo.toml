@@ -127,8 +127,8 @@ petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
 procfs = { version = "0.17.0" , default-features = false, features = ["flate2"] }
 proc-macro2 = { version = "1.0.86" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
-version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", branch = "charlie/mut" }
+version-ranges = { git = "https://github.com/astral-sh/pubgrub", branch = "charlie/mut" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }

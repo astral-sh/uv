@@ -2,7 +2,10 @@
 
 use version_ranges::Ranges;
 
-use crate::{LocalVersion, Operator, Prerelease, Version, VersionSpecifier, VersionSpecifiers};
+use crate::{
+    LocalVersion, LocalVersionSlice, Operator, Prerelease, Version, VersionSpecifier,
+    VersionSpecifiers,
+};
 
 impl From<VersionSpecifiers> for Ranges<Version> {
     /// Convert [`VersionSpecifiers`] to a PubGrub-compatible version range, using PEP 440
@@ -23,13 +26,13 @@ impl From<VersionSpecifier> for Ranges<Version> {
         let VersionSpecifier { operator, version } = specifier;
         match operator {
             Operator::Equal => match version.local() {
-                crate::LocalVersionSlice::Actual(&[]) => {
+                LocalVersionSlice::Actual(&[]) => {
                     let low = version;
                     let high = low.clone().with_local(LocalVersion::Max);
                     Ranges::between(low, high)
                 }
-                crate::LocalVersionSlice::Actual(_) => Ranges::singleton(version),
-                crate::LocalVersionSlice::Sentinel => unreachable!(
+                LocalVersionSlice::Actual(_) => Ranges::singleton(version),
+                LocalVersionSlice::Sentinel => unreachable!(
                     "found `LocalVersionSlice::Sentinel`, which should be an internal-only value"
                 ),
             },
@@ -146,34 +149,21 @@ pub fn release_specifier_to_range(specifier: VersionSpecifier) -> Ranges<Version
     match operator {
         Operator::Equal => {
             let version = version.only_release();
-            match version.local() {
-                crate::LocalVersionSlice::Actual(&[]) => {
-                    let low = version;
-                    let high = low.clone().with_local(LocalVersion::Max);
-                    Ranges::between(low, high)
-                }
-                crate::LocalVersionSlice::Actual(_) => Ranges::singleton(version),
-                crate::LocalVersionSlice::Sentinel => unreachable!(
-                    "found `LocalVersionSlice::Sentinel`, which should be an internal-only value"
-                ),
-            }
+            Ranges::singleton(version)
         }
         Operator::ExactEqual => {
             let version = version.only_release();
             Ranges::singleton(version)
         }
-        Operator::NotEqual => release_specifier_to_range(VersionSpecifier {
-            operator: Operator::Equal,
-            version,
-        })
-        .complement(),
+        Operator::NotEqual => {
+            let version = version.only_release();
+            Ranges::singleton(version).complement()
+        }
         Operator::TildeEqual => {
             let [rest @ .., last, _] = version.release() else {
                 unreachable!("~= must have at least two segments");
             };
-            let upper =
-                // greater release includes local
-                Version::new(rest.iter().chain([&(last + 1)]));
+            let upper = Version::new(rest.iter().chain([&(last + 1)]));
             let version = version.only_release();
             Ranges::from_range_bounds(version..upper)
         }
@@ -183,7 +173,7 @@ pub fn release_specifier_to_range(specifier: VersionSpecifier) -> Ranges<Version
         }
         Operator::LessThanEqual => {
             let version = version.only_release();
-            Ranges::lower_than(version.with_local(LocalVersion::Max))
+            Ranges::lower_than(version)
         }
         Operator::GreaterThan => {
             let version = version.only_release();
