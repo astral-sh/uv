@@ -226,3 +226,9 @@ impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
         distributions.0
     }
 }
+
+impl From<BTreeMap<Version, PrioritizedDist>> for FlatDistributions {
+    fn from(distributions: BTreeMap<Version, PrioritizedDist>) -> Self {
+        Self(distributions)
+    }
+}
