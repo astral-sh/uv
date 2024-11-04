@@ -4384,6 +4384,12 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--force</code>, <code>-f</code></dt><dd><p>Replace existing Python executables during installation.</p>
+
+<p>By default, uv will refuse to replace executables that it does not manage.</p>
+
+<p>Implies <code>--reinstall</code>.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>

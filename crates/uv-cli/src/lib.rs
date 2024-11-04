@@ -3946,8 +3946,16 @@ pub struct PythonInstallArgs {
     ///
     /// By default, uv will exit successfully if the version is already
     /// installed.
-    #[arg(long, short, alias = "force")]
+    #[arg(long, short)]
     pub reinstall: bool,
+
+    /// Replace existing Python executables during installation.
+    ///
+    /// By default, uv will refuse to replace executables that it does not manage.
+    ///
+    /// Implies `--reinstall`.
+    #[arg(long, short)]
+    pub force: bool,
 }
 
 #[derive(Args)]
