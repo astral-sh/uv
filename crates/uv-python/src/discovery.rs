@@ -26,8 +26,8 @@ use crate::microsoft_store::find_microsoft_store_pythons;
 #[cfg(windows)]
 use crate::py_launcher::{registry_pythons, WindowsPython};
 use crate::virtualenv::{
-    conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
-    virtualenv_python_executable,
+    conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
+    virtualenv_python_executable, CondaEnvironmentKind,
 };
 use crate::{Interpreter, PythonVersion};
 
@@ -179,6 +179,8 @@ pub enum PythonSource {
     ActiveEnvironment,
     /// A conda environment was active e.g. via `CONDA_PREFIX`
     CondaPrefix,
+    /// A base conda environment was active e.g. via `CONDA_PREFIX`
+    BaseCondaPrefix,
     /// An environment was discovered e.g. via `.venv`
     DiscoveredEnvironment,
     /// An executable was found in the search path i.e. `PATH`
@@ -227,18 +229,17 @@ pub enum Error {
     SourceNotAllowed(PythonRequest, PythonSource, PythonPreference),
 }
 
-/// Lazily iterate over Python executables in mutable environments.
+/// Lazily iterate over Python executables in mutable virtual environments.
 ///
 /// The following sources are supported:
 ///
 /// - Active virtual environment (via `VIRTUAL_ENV`)
-/// - Active conda environment (via `CONDA_PREFIX`)
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_environments<'a>(
+fn python_executables_from_virtual_environments<'a>(
 ) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
-    let from_virtual_environment = std::iter::once_with(|| {
+    let from_active_environment = std::iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
             .map(virtualenv_python_executable)
@@ -246,8 +247,9 @@ fn python_executables_from_environments<'a>(
     })
     .flatten();
 
+    // N.B. we prefer the conda environment over discovered virtual environments
     let from_conda_environment = std::iter::once_with(|| {
-        conda_prefix_from_env()
+        conda_environment_from_env(CondaEnvironmentKind::Child)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::CondaPrefix, path)))
@@ -265,7 +267,7 @@ fn python_executables_from_environments<'a>(
     })
     .flatten_ok();
 
-    from_virtual_environment
+    from_active_environment
         .chain(from_conda_environment)
         .chain(from_discovered_environment)
 }
@@ -400,23 +402,35 @@ fn python_executables<'a>(
     })
     .flatten();
 
-    let from_environments = python_executables_from_environments();
+    // Check if the the base conda environment is active
+    let from_base_conda_environment = std::iter::once_with(|| {
+        conda_environment_from_env(CondaEnvironmentKind::Base)
+            .into_iter()
+            .map(virtualenv_python_executable)
+            .map(|path| Ok((PythonSource::BaseCondaPrefix, path)))
+    })
+    .flatten();
+
+    let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed = python_executables_from_installed(version, implementation, preference);
 
     // Limit the search to the relevant environment preference; we later validate that they match
     // the preference but queries are expensive and we query less interpreters this way.
     match environments {
         EnvironmentPreference::OnlyVirtual => {
-            Box::new(from_parent_interpreter.chain(from_environments))
+            Box::new(from_parent_interpreter.chain(from_virtual_environments))
         }
         EnvironmentPreference::ExplicitSystem | EnvironmentPreference::Any => Box::new(
             from_parent_interpreter
-                .chain(from_environments)
+                .chain(from_virtual_environments)
+                .chain(from_base_conda_environment)
                 .chain(from_installed),
         ),
-        EnvironmentPreference::OnlySystem => {
-            Box::new(from_parent_interpreter.chain(from_installed))
-        }
+        EnvironmentPreference::OnlySystem => Box::new(
+            from_parent_interpreter
+                .chain(from_base_conda_environment)
+                .chain(from_installed),
+        ),
     }
 }
 
@@ -611,8 +625,8 @@ fn satisfies_environment_preference(
 ) -> bool {
     match (
         preference,
-        // Conda environments are not conformant virtual environments but we treat them as such
-        interpreter.is_virtualenv() || matches!(source, PythonSource::CondaPrefix),
+        // Conda environments are not conformant virtual environments but we treat them as such.
+        interpreter.is_virtualenv() || (matches!(source, PythonSource::CondaPrefix)),
     ) {
         (EnvironmentPreference::Any, _) => true,
         (EnvironmentPreference::OnlyVirtual, true) => true,
@@ -1503,6 +1517,7 @@ impl PythonSource {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
             | Self::CondaPrefix
+            | Self::BaseCondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
@@ -1515,6 +1530,7 @@ impl PythonSource {
         match self {
             Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
             Self::CondaPrefix
+            | Self::BaseCondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
@@ -1834,6 +1850,7 @@ impl VersionRequest {
             Self::Default => match source {
                 PythonSource::ParentInterpreter
                 | PythonSource::CondaPrefix
+                | PythonSource::BaseCondaPrefix
                 | PythonSource::ProvidedPath
                 | PythonSource::DiscoveredEnvironment
                 | PythonSource::ActiveEnvironment => Self::Any,
@@ -2244,7 +2261,7 @@ impl fmt::Display for PythonSource {
         match self {
             Self::ProvidedPath => f.write_str("provided path"),
             Self::ActiveEnvironment => f.write_str("active virtual environment"),
-            Self::CondaPrefix => f.write_str("conda prefix"),
+            Self::CondaPrefix | Self::BaseCondaPrefix => f.write_str("conda prefix"),
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
             Self::SearchPath => f.write_str("search path"),
             Self::Registry => f.write_str("registry"),
