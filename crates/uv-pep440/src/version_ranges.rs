@@ -2,7 +2,7 @@
 
 use version_ranges::Ranges;
 
-use crate::{Operator, Prerelease, Version, VersionSpecifier, VersionSpecifiers};
+use crate::{LocalVersion, Operator, Prerelease, Version, VersionSpecifier, VersionSpecifiers};
 
 impl From<VersionSpecifiers> for Ranges<Version> {
     /// Convert [`VersionSpecifiers`] to a PubGrub-compatible version range, using PEP 440
@@ -22,9 +22,23 @@ impl From<VersionSpecifier> for Ranges<Version> {
     fn from(specifier: VersionSpecifier) -> Self {
         let VersionSpecifier { operator, version } = specifier;
         match operator {
-            Operator::Equal => Ranges::singleton(version),
+            Operator::Equal => match version.local() {
+                crate::LocalVersionSlice::Actual(&[]) => {
+                    let low = version;
+                    let high = low.clone().with_local(LocalVersion::Max);
+                    Ranges::between(low, high)
+                }
+                crate::LocalVersionSlice::Actual(_) => Ranges::singleton(version),
+                crate::LocalVersionSlice::Sentinel => unreachable!(
+                    "found `LocalVersionSlice::Sentinel`, which should be an internal-only value"
+                ),
+            },
             Operator::ExactEqual => Ranges::singleton(version),
-            Operator::NotEqual => Ranges::singleton(version).complement(),
+            Operator::NotEqual => Ranges::from(VersionSpecifier {
+                operator: Operator::Equal,
+                version,
+            })
+            .complement(),
             Operator::TildeEqual => {
                 let [rest @ .., last, _] = version.release() else {
                     unreachable!("~= must have at least two segments");
@@ -45,7 +59,7 @@ impl From<VersionSpecifier> for Ranges<Version> {
                     Ranges::strictly_lower_than(version.with_min(Some(0)))
                 }
             }
-            Operator::LessThanEqual => Ranges::lower_than(version),
+            Operator::LessThanEqual => Ranges::lower_than(version.with_local(LocalVersion::Max)),
             Operator::GreaterThan => {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
                 // the given version unless V itself is a post release."
@@ -132,21 +146,34 @@ pub fn release_specifier_to_range(specifier: VersionSpecifier) -> Ranges<Version
     match operator {
         Operator::Equal => {
             let version = version.only_release();
-            Ranges::singleton(version)
+            match version.local() {
+                crate::LocalVersionSlice::Actual(&[]) => {
+                    let low = version;
+                    let high = low.clone().with_local(LocalVersion::Max);
+                    Ranges::between(low, high)
+                }
+                crate::LocalVersionSlice::Actual(_) => Ranges::singleton(version),
+                crate::LocalVersionSlice::Sentinel => unreachable!(
+                    "found `LocalVersionSlice::Sentinel`, which should be an internal-only value"
+                ),
+            }
         }
         Operator::ExactEqual => {
             let version = version.only_release();
             Ranges::singleton(version)
         }
-        Operator::NotEqual => {
-            let version = version.only_release();
-            Ranges::singleton(version).complement()
-        }
+        Operator::NotEqual => release_specifier_to_range(VersionSpecifier {
+            operator: Operator::Equal,
+            version,
+        })
+        .complement(),
         Operator::TildeEqual => {
             let [rest @ .., last, _] = version.release() else {
                 unreachable!("~= must have at least two segments");
             };
-            let upper = Version::new(rest.iter().chain([&(last + 1)]));
+            let upper =
+                // greater release includes local
+                Version::new(rest.iter().chain([&(last + 1)]));
             let version = version.only_release();
             Ranges::from_range_bounds(version..upper)
         }
@@ -156,7 +183,7 @@ pub fn release_specifier_to_range(specifier: VersionSpecifier) -> Ranges<Version
         }
         Operator::LessThanEqual => {
             let version = version.only_release();
-            Ranges::lower_than(version)
+            Ranges::lower_than(version.with_local(LocalVersion::Max))
         }
         Operator::GreaterThan => {
             let version = version.only_release();

@@ -125,46 +125,50 @@ fn test_packaging_versions() {
         ("1.1.dev1", Version::new([1, 1]).with_dev(Some(1))),
         (
             "1.2+123abc",
-            Version::new([1, 2]).with_local(vec![LocalSegment::String("123abc".to_string())]),
+            Version::new([1, 2])
+                .with_local_segments(vec![LocalSegment::String("123abc".to_string())]),
         ),
         (
             "1.2+123abc456",
-            Version::new([1, 2]).with_local(vec![LocalSegment::String("123abc456".to_string())]),
+            Version::new([1, 2])
+                .with_local_segments(vec![LocalSegment::String("123abc456".to_string())]),
         ),
         (
             "1.2+abc",
-            Version::new([1, 2]).with_local(vec![LocalSegment::String("abc".to_string())]),
+            Version::new([1, 2]).with_local_segments(vec![LocalSegment::String("abc".to_string())]),
         ),
         (
             "1.2+abc123",
-            Version::new([1, 2]).with_local(vec![LocalSegment::String("abc123".to_string())]),
+            Version::new([1, 2])
+                .with_local_segments(vec![LocalSegment::String("abc123".to_string())]),
         ),
         (
             "1.2+abc123def",
-            Version::new([1, 2]).with_local(vec![LocalSegment::String("abc123def".to_string())]),
+            Version::new([1, 2])
+                .with_local_segments(vec![LocalSegment::String("abc123def".to_string())]),
         ),
         (
             "1.2+1234.abc",
-            Version::new([1, 2]).with_local(vec![
+            Version::new([1, 2]).with_local_segments(vec![
                 LocalSegment::Number(1234),
                 LocalSegment::String("abc".to_string()),
             ]),
         ),
         (
             "1.2+123456",
-            Version::new([1, 2]).with_local(vec![LocalSegment::Number(123_456)]),
+            Version::new([1, 2]).with_local_segments(vec![LocalSegment::Number(123_456)]),
         ),
         (
             "1.2.r32+123456",
             Version::new([1, 2])
                 .with_post(Some(32))
-                .with_local(vec![LocalSegment::Number(123_456)]),
+                .with_local_segments(vec![LocalSegment::Number(123_456)]),
         ),
         (
             "1.2.rev33+123456",
             Version::new([1, 2])
                 .with_post(Some(33))
-                .with_local(vec![LocalSegment::Number(123_456)]),
+                .with_local_segments(vec![LocalSegment::Number(123_456)]),
         ),
         // Explicit epoch of 1
         (
@@ -316,35 +320,35 @@ fn test_packaging_versions() {
             "1!1.2+123abc",
             Version::new([1, 2])
                 .with_epoch(1)
-                .with_local(vec![LocalSegment::String("123abc".to_string())]),
+                .with_local_segments(vec![LocalSegment::String("123abc".to_string())]),
         ),
         (
             "1!1.2+123abc456",
             Version::new([1, 2])
                 .with_epoch(1)
-                .with_local(vec![LocalSegment::String("123abc456".to_string())]),
+                .with_local_segments(vec![LocalSegment::String("123abc456".to_string())]),
         ),
         (
             "1!1.2+abc",
             Version::new([1, 2])
                 .with_epoch(1)
-                .with_local(vec![LocalSegment::String("abc".to_string())]),
+                .with_local_segments(vec![LocalSegment::String("abc".to_string())]),
         ),
         (
             "1!1.2+abc123",
             Version::new([1, 2])
                 .with_epoch(1)
-                .with_local(vec![LocalSegment::String("abc123".to_string())]),
+                .with_local_segments(vec![LocalSegment::String("abc123".to_string())]),
         ),
         (
             "1!1.2+abc123def",
             Version::new([1, 2])
                 .with_epoch(1)
-                .with_local(vec![LocalSegment::String("abc123def".to_string())]),
+                .with_local_segments(vec![LocalSegment::String("abc123def".to_string())]),
         ),
         (
             "1!1.2+1234.abc",
-            Version::new([1, 2]).with_epoch(1).with_local(vec![
+            Version::new([1, 2]).with_epoch(1).with_local_segments(vec![
                 LocalSegment::Number(1234),
                 LocalSegment::String("abc".to_string()),
             ]),
@@ -353,28 +357,28 @@ fn test_packaging_versions() {
             "1!1.2+123456",
             Version::new([1, 2])
                 .with_epoch(1)
-                .with_local(vec![LocalSegment::Number(123_456)]),
+                .with_local_segments(vec![LocalSegment::Number(123_456)]),
         ),
         (
             "1!1.2.r32+123456",
             Version::new([1, 2])
                 .with_epoch(1)
                 .with_post(Some(32))
-                .with_local(vec![LocalSegment::Number(123_456)]),
+                .with_local_segments(vec![LocalSegment::Number(123_456)]),
         ),
         (
             "1!1.2.rev33+123456",
             Version::new([1, 2])
                 .with_epoch(1)
                 .with_post(Some(33))
-                .with_local(vec![LocalSegment::Number(123_456)]),
+                .with_local_segments(vec![LocalSegment::Number(123_456)]),
         ),
         (
             "98765!1.2.rev33+123456",
             Version::new([1, 2])
                 .with_epoch(98765)
                 .with_post(Some(33))
-                .with_local(vec![LocalSegment::Number(123_456)]),
+                .with_local_segments(vec![LocalSegment::Number(123_456)]),
         ),
     ];
     for (string, structured) in versions {
@@ -879,50 +883,50 @@ fn parse_version_valid() {
     // local tests
     assert_eq!(
         p("5+2"),
-        Version::new([5]).with_local(vec![LocalSegment::Number(2)])
+        Version::new([5]).with_local_segments(vec![LocalSegment::Number(2)])
     );
     assert_eq!(
         p("5+a"),
-        Version::new([5]).with_local(vec![LocalSegment::String("a".to_string())])
+        Version::new([5]).with_local_segments(vec![LocalSegment::String("a".to_string())])
     );
     assert_eq!(
         p("5+abc.123"),
-        Version::new([5]).with_local(vec![
+        Version::new([5]).with_local_segments(vec![
             LocalSegment::String("abc".to_string()),
             LocalSegment::Number(123),
         ])
     );
     assert_eq!(
         p("5+123.abc"),
-        Version::new([5]).with_local(vec![
+        Version::new([5]).with_local_segments(vec![
             LocalSegment::Number(123),
             LocalSegment::String("abc".to_string()),
         ])
     );
     assert_eq!(
         p("5+18446744073709551615.abc"),
-        Version::new([5]).with_local(vec![
+        Version::new([5]).with_local_segments(vec![
             LocalSegment::Number(18_446_744_073_709_551_615),
             LocalSegment::String("abc".to_string()),
         ])
     );
     assert_eq!(
         p("5+18446744073709551616.abc"),
-        Version::new([5]).with_local(vec![
+        Version::new([5]).with_local_segments(vec![
             LocalSegment::String("18446744073709551616".to_string()),
             LocalSegment::String("abc".to_string()),
         ])
     );
     assert_eq!(
         p("5+ABC.123"),
-        Version::new([5]).with_local(vec![
+        Version::new([5]).with_local_segments(vec![
             LocalSegment::String("abc".to_string()),
             LocalSegment::Number(123),
         ])
     );
     assert_eq!(
         p("5+ABC-123.4_5_xyz-MNO"),
-        Version::new([5]).with_local(vec![
+        Version::new([5]).with_local_segments(vec![
             LocalSegment::String("abc".to_string()),
             LocalSegment::Number(123),
             LocalSegment::Number(4),
@@ -933,21 +937,21 @@ fn parse_version_valid() {
     );
     assert_eq!(
         p("5.6.7+abc-00123"),
-        Version::new([5, 6, 7]).with_local(vec![
+        Version::new([5, 6, 7]).with_local_segments(vec![
             LocalSegment::String("abc".to_string()),
             LocalSegment::Number(123),
         ])
     );
     assert_eq!(
         p("5.6.7+abc-foo00123"),
-        Version::new([5, 6, 7]).with_local(vec![
+        Version::new([5, 6, 7]).with_local_segments(vec![
             LocalSegment::String("abc".to_string()),
             LocalSegment::String("foo00123".to_string()),
         ])
     );
     assert_eq!(
         p("5.6.7+abc-00123a"),
-        Version::new([5, 6, 7]).with_local(vec![
+        Version::new([5, 6, 7]).with_local_segments(vec![
             LocalSegment::String("abc".to_string()),
             LocalSegment::String("00123a".to_string()),
         ])
@@ -992,7 +996,7 @@ fn parse_version_valid() {
     assert_eq!(p("  5  "), Version::new([5]));
     assert_eq!(
         p("  5.6.7+abc.123.xyz  "),
-        Version::new([5, 6, 7]).with_local(vec![
+        Version::new([5, 6, 7]).with_local_segments(vec![
             LocalSegment::String("abc".to_string()),
             LocalSegment::Number(123),
             LocalSegment::String("xyz".to_string())
