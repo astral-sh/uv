@@ -1964,7 +1964,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         index_locations: &IndexLocations,
         index_capabilities: &IndexCapabilities,
     ) -> ResolveError {
-        err = NoSolutionError::collapse_proxies(err);
+        err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
+            err,
+        ));
 
         let mut unavailable_packages = FxHashMap::default();
         for package in err.packages() {

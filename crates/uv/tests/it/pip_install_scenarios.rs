@@ -334,10 +334,10 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
+      ╰─▶ Because only the following versions of package-a are available:
               package-a==1.0.0
               package-a>2.0.0,<=3.0.0
-          we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -445,10 +445,10 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
+      ╰─▶ Because only the following versions of package-a are available:
               package-a==1.0.0
               package-a>2.0.0,<=3.0.0
-          we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -529,17 +529,17 @@ fn excluded_only_compatible_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
+      ╰─▶ Because only the following versions of package-a are available:
               package-a==1.0.0
               package-a==2.0.0
               package-a==3.0.0
-          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all of:
               package-a<2.0.0
               package-a>2.0.0
           depend on one of:
-              package-b<=1.0.0
-              package-b>=3.0.0
+              package-b==1.0.0
+              package-b==3.0.0
 
           And because you require one of:
               package-a<2.0.0
@@ -1276,8 +1276,10 @@ fn transitive_incompatible_with_transitive() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a>=1.2.3
+/// │       ├── satisfied by a-1.2.3+bar
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
+///     ├── a-1.2.3+bar
 ///     └── a-1.2.3+foo
 /// ```
 #[test]
@@ -1354,8 +1356,10 @@ fn local_greater_than() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a<=1.2.3
+/// │       ├── satisfied by a-1.2.3+bar
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
+///     ├── a-1.2.3+bar
 ///     └── a-1.2.3+foo
 /// ```
 #[test]
@@ -1369,19 +1373,22 @@ fn local_less_than_or_equal() {
     uv_snapshot!(filters, command(&context)
         .arg("local-less-than-or-equal-a<=1.2.3")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.2.3+foo is available and you require package-a<=1.2.3, we can conclude that your requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3+foo
     "###);
 
     // The version '1.2.3+foo' satisfies the constraint '<=1.2.3'.
-    assert_not_installed(
+    assert_installed(
         &context.venv,
         "local_less_than_or_equal_a",
+        "1.2.3+foo",
         &context.temp_dir,
     );
 }
@@ -1500,14 +1507,14 @@ fn local_not_used_with_sdist() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + package-a==1.2.3
+     + package-a==1.2.3+foo
     "###);
 
     // The version '1.2.3' with an sdist satisfies the constraint '==1.2.3'.
     assert_installed(
         &context.venv,
         "local_not_used_with_sdist_a",
-        "1.2.3",
+        "1.2.3+foo",
         &context.temp_dir,
     );
 }
@@ -1520,8 +1527,10 @@ fn local_not_used_with_sdist() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a==1.2.3
+/// │       ├── satisfied by a-1.2.3+bar
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
+///     ├── a-1.2.3+bar
 ///     └── a-1.2.3+foo
 /// ```
 #[test]
@@ -1535,17 +1544,24 @@ fn local_simple() {
     uv_snapshot!(filters, command(&context)
         .arg("local-simple-a==1.2.3")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that your requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3+foo
     "###);
 
     // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
-    assert_not_installed(&context.venv, "local_simple_a", &context.temp_dir);
+    assert_installed(
+        &context.venv,
+        "local_simple_a",
+        "1.2.3+foo",
+        &context.temp_dir,
+    );
 }
 
 /// A dependency depends on a conflicting local version of a direct dependency, but we can backtrack to a compatible version.
@@ -1563,14 +1579,14 @@ fn local_simple() {
 /// ├── a
 /// │   ├── a-1.0.0
 /// │   │   └── requires b==2.0.0
-/// │   │       ├── satisfied by b-2.0.0+foo
-/// │   │       └── satisfied by b-2.0.0+bar
+/// │   │       ├── satisfied by b-2.0.0+bar
+/// │   │       └── satisfied by b-2.0.0+foo
 /// │   └── a-2.0.0
 /// │       └── requires b==2.0.0+bar
 /// │           └── satisfied by b-2.0.0+bar
 /// └── b
-///     ├── b-2.0.0+foo
-///     └── b-2.0.0+bar
+///     ├── b-2.0.0+bar
+///     └── b-2.0.0+foo
 /// ```
 #[test]
 fn local_transitive_backtrack() {
@@ -1627,8 +1643,8 @@ fn local_transitive_backtrack() {
 /// │       └── requires b==2.0.0+bar
 /// │           └── satisfied by b-2.0.0+bar
 /// └── b
-///     ├── b-2.0.0+foo
-///     └── b-2.0.0+bar
+///     ├── b-2.0.0+bar
+///     └── b-2.0.0+foo
 /// ```
 #[test]
 fn local_transitive_conflicting() {
@@ -1677,9 +1693,11 @@ fn local_transitive_conflicting() {
 /// │   └── a-1.0.0
 /// │       └── requires b==2.0.0
 /// │           ├── satisfied by b-2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
 /// │           └── satisfied by b-2.0.0+foo
 /// └── b
 ///     ├── b-2.0.0
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1693,20 +1711,29 @@ fn local_transitive_confounding() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-confounding-a")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because package-b==2.0.0 has no wheels with a matching Python ABI tag and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0+foo
     "###);
 
     // The version '2.0.0+foo' satisfies the constraint '==2.0.0'.
-    assert_not_installed(
+    assert_installed(
         &context.venv,
         "local_transitive_confounding_a",
+        "1.0.0",
+        &context.temp_dir,
+    );
+    assert_installed(
+        &context.venv,
+        "local_transitive_confounding_b",
+        "2.0.0+foo",
         &context.temp_dir,
     );
 }
@@ -1725,8 +1752,10 @@ fn local_transitive_confounding() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires b>=2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
 /// │           └── satisfied by b-2.0.0+foo
 /// └── b
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1784,6 +1813,7 @@ fn local_transitive_greater_than_or_equal() {
 /// │       └── requires b>2.0.0
 /// │           └── unsatisfied: no matching version
 /// └── b
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1834,8 +1864,10 @@ fn local_transitive_greater_than() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires b<=2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
 /// │           └── satisfied by b-2.0.0+foo
 /// └── b
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1893,6 +1925,7 @@ fn local_transitive_less_than_or_equal() {
 /// │       └── requires b<2.0.0
 /// │           └── unsatisfied: no matching version
 /// └── b
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1943,9 +1976,11 @@ fn local_transitive_less_than() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires b==2.0.0
-/// │           └── satisfied by b-2.0.0+foo
+/// │           ├── satisfied by b-2.0.0+foo
+/// │           └── satisfied by b-2.0.0+bar
 /// └── b
-///     └── b-2.0.0+foo
+///     ├── b-2.0.0+foo
+///     └── b-2.0.0+bar
 /// ```
 #[test]
 fn local_transitive() {
@@ -2011,19 +2046,22 @@ fn local_used_without_sdist() {
     uv_snapshot!(filters, command(&context)
         .arg("local-used-without-sdist-a==1.2.3")
         , @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.2.3 has no wheels with a matching Python ABI tag and you require package-a==1.2.3, we can conclude that your requirements are unsatisfiable.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + package-a==1.2.3+foo
     "###);
 
     // The version '1.2.3+foo' satisfies the constraint '==1.2.3'.
-    assert_not_installed(
+    assert_installed(
         &context.venv,
         "local_used_without_sdist_a",
+        "1.2.3+foo",
         &context.temp_dir,
     );
 }

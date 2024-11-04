@@ -2113,7 +2113,9 @@ impl FromStr for VersionRequest {
                 return Err(Error::InvalidVersionRequest(s.to_string()));
             }
 
-            let [uv_pep440::LocalSegment::String(local)] = version.local() else {
+            let uv_pep440::LocalVersionSlice::Segments([uv_pep440::LocalSegment::String(local)]) =
+                version.local()
+            else {
                 return Err(Error::InvalidVersionRequest(s.to_string()));
             };
 
