@@ -1276,8 +1276,10 @@ fn transitive_incompatible_with_transitive() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a>=1.2.3
+/// │       ├── satisfied by a-1.2.3+bar
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
+///     ├── a-1.2.3+bar
 ///     └── a-1.2.3+foo
 /// ```
 #[test]
@@ -1354,8 +1356,10 @@ fn local_greater_than() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a<=1.2.3
+/// │       ├── satisfied by a-1.2.3+bar
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
+///     ├── a-1.2.3+bar
 ///     └── a-1.2.3+foo
 /// ```
 #[test]
@@ -1523,8 +1527,10 @@ fn local_not_used_with_sdist() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a==1.2.3
+/// │       ├── satisfied by a-1.2.3+bar
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
+///     ├── a-1.2.3+bar
 ///     └── a-1.2.3+foo
 /// ```
 #[test]
@@ -1573,14 +1579,14 @@ fn local_simple() {
 /// ├── a
 /// │   ├── a-1.0.0
 /// │   │   └── requires b==2.0.0
-/// │   │       ├── satisfied by b-2.0.0+foo
-/// │   │       └── satisfied by b-2.0.0+bar
+/// │   │       ├── satisfied by b-2.0.0+bar
+/// │   │       └── satisfied by b-2.0.0+foo
 /// │   └── a-2.0.0
 /// │       └── requires b==2.0.0+bar
 /// │           └── satisfied by b-2.0.0+bar
 /// └── b
-///     ├── b-2.0.0+foo
-///     └── b-2.0.0+bar
+///     ├── b-2.0.0+bar
+///     └── b-2.0.0+foo
 /// ```
 #[test]
 fn local_transitive_backtrack() {
@@ -1637,8 +1643,8 @@ fn local_transitive_backtrack() {
 /// │       └── requires b==2.0.0+bar
 /// │           └── satisfied by b-2.0.0+bar
 /// └── b
-///     ├── b-2.0.0+foo
-///     └── b-2.0.0+bar
+///     ├── b-2.0.0+bar
+///     └── b-2.0.0+foo
 /// ```
 #[test]
 fn local_transitive_conflicting() {
@@ -1687,9 +1693,11 @@ fn local_transitive_conflicting() {
 /// │   └── a-1.0.0
 /// │       └── requires b==2.0.0
 /// │           ├── satisfied by b-2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
 /// │           └── satisfied by b-2.0.0+foo
 /// └── b
 ///     ├── b-2.0.0
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1744,8 +1752,10 @@ fn local_transitive_confounding() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires b>=2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
 /// │           └── satisfied by b-2.0.0+foo
 /// └── b
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1803,6 +1813,7 @@ fn local_transitive_greater_than_or_equal() {
 /// │       └── requires b>2.0.0
 /// │           └── unsatisfied: no matching version
 /// └── b
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1853,8 +1864,10 @@ fn local_transitive_greater_than() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires b<=2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
 /// │           └── satisfied by b-2.0.0+foo
 /// └── b
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1912,6 +1925,7 @@ fn local_transitive_less_than_or_equal() {
 /// │       └── requires b<2.0.0
 /// │           └── unsatisfied: no matching version
 /// └── b
+///     ├── b-2.0.0+bar
 ///     └── b-2.0.0+foo
 /// ```
 #[test]
@@ -1962,9 +1976,11 @@ fn local_transitive_less_than() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires b==2.0.0
-/// │           └── satisfied by b-2.0.0+foo
+/// │           ├── satisfied by b-2.0.0+foo
+/// │           └── satisfied by b-2.0.0+bar
 /// └── b
-///     └── b-2.0.0+foo
+///     ├── b-2.0.0+foo
+///     └── b-2.0.0+bar
 /// ```
 #[test]
 fn local_transitive() {
