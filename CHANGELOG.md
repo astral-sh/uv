@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.4.30
+
+### Enhancements
+
+- Add support for `.env` and custom env files in `uv run` ([#8811](https://github.com/astral-sh/uv/pull/8811))
+- Add support for `--all-packages` in `uv run`, `uv sync`, and `uv export` ([#8742](https://github.com/astral-sh/uv/pull/8742), [#8741](https://github.com/astral-sh/uv/pull/8741), [#8739](https://github.com/astral-sh/uv/pull/8739))
+- Allow use of `--frozen` with `--all-packages` in `uv sync` and `uv export` ([#8760](https://github.com/astral-sh/uv/pull/8760))
+- Show full error chain on tool upgrade failures ([#8753](https://github.com/astral-sh/uv/pull/8753))
+- Add `--check-url` to `uv publish` to check for existing distributions during upload ([#8531](https://github.com/astral-sh/uv/pull/8531))
+- Suggest using `--check-url` when `--skip-existing` is used ([#8803](https://github.com/astral-sh/uv/pull/8803))
+
+### Bug fixes
+
+- Allow incompatible `requires-python` for source distributions with static metadata ([#8768](https://github.com/astral-sh/uv/pull/8768))
+- Allow managed downloads with `--python-preference system` ([#8808](https://github.com/astral-sh/uv/pull/8808))
+- Avoid error for `--group` defined in non-root workspace member ([#8734](https://github.com/astral-sh/uv/pull/8734))
+- Avoid showing dependency group annotations on workspace members in tree ([#8730](https://github.com/astral-sh/uv/pull/8730))
+- Do not error when the Python bin directory is missing on `uv python uninstall` ([#8725](https://github.com/astral-sh/uv/pull/8725))
+- Include member groups when locking workspace ([#8736](https://github.com/astral-sh/uv/pull/8736))
+- Fix bug where `python_version < '0'` could appear in a final resolution ([#8759](https://github.com/astral-sh/uv/pull/8759))
+- Sanitize filenames during zip extraction ([#8732](https://github.com/astral-sh/uv/pull/8732))
+- Switch to RFC 9110 compatible format for exclude newer requests ([#8752](https://github.com/astral-sh/uv/pull/8752))
+
+### Preview features
+
+- Add support for installing versioned Python executables on Windows ([#8663](https://github.com/astral-sh/uv/pull/8663))
+- Improve interactions with existing Python executables during install ([#8733](https://github.com/astral-sh/uv/pull/8733))
+
+### Rust API
+
+- Extend `BaseClient` to accept extra middleware ([#8807](https://github.com/astral-sh/uv/pull/8807))
+- Add `From` for `FlatDistributions` struct ([#8800](https://github.com/astral-sh/uv/pull/8800))
+
+### Documentation
+
+- Fix environment variable name in providing credentials section ([#8740](https://github.com/astral-sh/uv/pull/8740))
+- Fix `add httpx` example with real git branch ([#8756](https://github.com/astral-sh/uv/pull/8756))
+- Fix indentation in `projects.md` ([#8772](https://github.com/astral-sh/uv/pull/8772))
+- Fix link to publish guide in `README` ([#8720](https://github.com/astral-sh/uv/pull/8720))
+- Generate environment variables documentation from code ([#8493](https://github.com/astral-sh/uv/pull/8493))
+- Improve and fix some documents ([#8749](https://github.com/astral-sh/uv/pull/8749))
+- Improve environment variables document ([#8777](https://github.com/astral-sh/uv/pull/8777))
+
 ## 0.4.29
 
 ### Enhancements
