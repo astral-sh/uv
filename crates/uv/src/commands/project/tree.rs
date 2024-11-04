@@ -46,6 +46,7 @@ pub(crate) async fn tree(
     concurrency: Concurrency,
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -68,12 +69,14 @@ pub(crate) async fn tree(
         Some(
             ProjectInterpreter::discover(
                 &workspace,
+                project_dir,
                 python.as_deref().map(PythonRequest::parse),
                 python_preference,
                 python_downloads,
                 connectivity,
                 native_tls,
                 allow_insecure_host,
+                no_config,
                 cache,
                 printer,
             )
