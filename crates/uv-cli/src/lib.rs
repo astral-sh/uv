@@ -2656,6 +2656,17 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_editable: bool,
 
+    /// Load environment variables from a `.env` file.
+    ///
+    /// Can be provided multiple times, with subsequent files overriding values defined in
+    /// previous files.
+    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<PathBuf>,
+
+    /// Avoid reading environment variables from a `.env` file.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    pub no_env_file: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be
