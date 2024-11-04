@@ -425,10 +425,6 @@ fn compile_constraints_omit_impossible_dependencies() -> Result<()> {
     requirements_in.write_str(
         "\
 apache-airflow[microsoft.azure]==2.3.4
-scikit-learn==1.2.2
-ipython>=8.4.0
-mypy
-black
 ",
     )?;
 
@@ -436,17 +432,10 @@ black
     constraints_txt.write_str(
         "\
 apache-airflow-providers-microsoft-azure==4.2.0
-attrs==22.1.0
-azure-identity==1.10.0
 click==8.1.3
 colorama==0.4.5
-markdown-it-py==2.1.0
 msal-extensions==1.0.0
-msrestazure==0.6.4
-numpy==1.22.4
-packaging==21.3
 portalocker==2.5.1
-typing_extensions==4.3.0
 ",
     )?;
 
@@ -494,16 +483,15 @@ typing_extensions==4.3.0
     apispec==3.3.2            # via flask-appbuilder
     argcomplete==3.2.3        # via apache-airflow
     asgiref==3.8.1            # via apache-airflow-providers-http, connexion, flask
-    asttokens==2.4.1          # via stack-data
     async-timeout==4.0.3 ; python_full_version < '3.11'  # via aiohttp
-    attrs==22.1.0             # via aiohttp, cattrs, jsonschema, -c constraints.txt
+    attrs==23.2.0             # via aiohttp, cattrs, jsonschema, referencing
     azure-batch==14.1.0       # via apache-airflow-providers-microsoft-azure
-    azure-common==1.1.28      # via azure-batch, azure-keyvault-secrets, azure-mgmt-containerinstance, azure-mgmt-datafactory, azure-mgmt-datalake-store, azure-mgmt-resource, azure-storage-common, azure-storage-file
-    azure-core==1.29.1        # via azure-cosmos, azure-identity, azure-keyvault-secrets, azure-mgmt-core, azure-servicebus, azure-storage-blob, msrest
-    azure-cosmos==4.5.1       # via apache-airflow-providers-microsoft-azure
+    azure-common==1.1.28      # via azure-batch, azure-mgmt-containerinstance, azure-mgmt-datafactory, azure-mgmt-datalake-store, azure-mgmt-resource, azure-storage-common, azure-storage-file
+    azure-core==1.30.1        # via azure-cosmos, azure-identity, azure-keyvault-secrets, azure-mgmt-core, azure-servicebus, azure-storage-blob, msrest
+    azure-cosmos==4.6.0       # via apache-airflow-providers-microsoft-azure
     azure-datalake-store==0.0.53  # via apache-airflow-providers-microsoft-azure
-    azure-identity==1.10.0    # via apache-airflow-providers-microsoft-azure, -c constraints.txt
-    azure-keyvault-secrets==4.7.0  # via apache-airflow-providers-microsoft-azure
+    azure-identity==1.15.0    # via apache-airflow-providers-microsoft-azure
+    azure-keyvault-secrets==4.8.0  # via apache-airflow-providers-microsoft-azure
     azure-kusto-data==0.0.45  # via apache-airflow-providers-microsoft-azure
     azure-mgmt-containerinstance==1.5.0  # via apache-airflow-providers-microsoft-azure
     azure-mgmt-core==1.4.0    # via azure-mgmt-datafactory, azure-mgmt-resource
@@ -518,27 +506,24 @@ typing_extensions==4.3.0
     azure-storage-common==2.1.0  # via apache-airflow-providers-microsoft-azure, azure-storage-file
     azure-storage-file==2.1.0  # via apache-airflow-providers-microsoft-azure
     babel==2.14.0             # via flask-babel
-    black==22.12.0            # via -r requirements.in
     blinker==1.7.0            # via apache-airflow
     cachelib==0.9.0           # via flask-caching
-    cattrs==23.1.2            # via apache-airflow
+    cattrs==23.2.3            # via apache-airflow
     certifi==2024.2.2         # via httpcore, httpx, msrest, requests
     cffi==1.16.0              # via azure-datalake-store, cryptography
     charset-normalizer==3.3.2  # via requests
-    click==8.1.3              # via black, flask, flask-appbuilder, -c constraints.txt
+    click==8.1.3              # via flask, flask-appbuilder, -c constraints.txt
     colorlog==4.8.0           # via apache-airflow
     connexion==3.0.6          # via apache-airflow
     cron-descriptor==1.4.3    # via apache-airflow
     croniter==2.0.3           # via apache-airflow
     cryptography==42.0.5      # via adal, apache-airflow, azure-identity, azure-storage-blob, azure-storage-common, msal, pyjwt
-    decorator==5.1.1          # via ipython
     deprecated==1.2.14        # via apache-airflow
     dill==0.3.8               # via apache-airflow
     dnspython==2.6.1          # via email-validator
     docutils==0.20.1          # via python-daemon
     email-validator==1.3.1    # via flask-appbuilder
-    exceptiongroup==1.2.0 ; python_full_version < '3.11'  # via anyio, cattrs, ipython
-    executing==2.0.1          # via stack-data
+    exceptiongroup==1.2.0 ; python_full_version < '3.11'  # via anyio, cattrs
     flask==2.2.5              # via apache-airflow, connexion, flask-appbuilder, flask-babel, flask-caching, flask-jwt-extended, flask-login, flask-session, flask-sqlalchemy, flask-wtf
     flask-appbuilder==4.1.3   # via apache-airflow
     flask-babel==2.0.0        # via flask-appbuilder
@@ -557,55 +542,41 @@ typing_extensions==4.3.0
     httpx==0.27.0             # via apache-airflow, connexion
     idna==3.6                 # via anyio, email-validator, httpx, requests, yarl
     inflection==0.5.1         # via connexion
-    ipython==8.22.2           # via -r requirements.in
     isodate==0.6.1            # via azure-keyvault-secrets, azure-mgmt-resource, azure-servicebus, msrest
     itsdangerous==2.1.2       # via apache-airflow, flask, flask-wtf
-    jedi==0.19.1              # via ipython
     jinja2==3.1.3             # via apache-airflow, connexion, flask, flask-babel, python-nvd3, swagger-ui-bundle
-    joblib==1.3.2             # via scikit-learn
-    jsonschema==4.17.3        # via apache-airflow, connexion, flask-appbuilder
+    jsonschema==4.21.1        # via apache-airflow, connexion, flask-appbuilder
+    jsonschema-specifications==2023.12.[X]  # via jsonschema
     lazy-object-proxy==1.10.0  # via apache-airflow
     linkify-it-py==2.0.3      # via apache-airflow
     lockfile==0.12.2          # via apache-airflow, python-daemon
     mako==1.3.2               # via alembic
     markdown==3.6             # via apache-airflow
-    markdown-it-py==2.1.0     # via apache-airflow, mdit-py-plugins, rich, -c constraints.txt
+    markdown-it-py==3.0.0     # via apache-airflow, mdit-py-plugins, rich
     markupsafe==2.1.5         # via apache-airflow, jinja2, mako, werkzeug, wtforms
     marshmallow==3.21.1       # via flask-appbuilder, marshmallow-enum, marshmallow-oneofschema, marshmallow-sqlalchemy
     marshmallow-enum==1.5.1   # via flask-appbuilder
     marshmallow-oneofschema==3.1.1  # via apache-airflow
     marshmallow-sqlalchemy==0.26.1  # via flask-appbuilder
-    matplotlib-inline==0.1.6  # via ipython
     mdit-py-plugins==0.4.0    # via apache-airflow
     mdurl==0.1.2              # via markdown-it-py
     msal==1.28.0              # via azure-datalake-store, azure-identity, msal-extensions
     msal-extensions==1.0.0    # via azure-identity, -c constraints.txt
     msgspec==0.18.6           # via flask-session
     msrest==0.7.1             # via azure-mgmt-containerinstance, azure-mgmt-datafactory, azure-storage-blob, msrestazure
-    msrestazure==0.6.4        # via azure-batch, azure-kusto-data, azure-mgmt-containerinstance, azure-mgmt-datalake-store, -c constraints.txt
+    msrestazure==0.6.4        # via azure-batch, azure-kusto-data, azure-mgmt-containerinstance, azure-mgmt-datalake-store
     multidict==6.0.5          # via aiohttp, yarl
-    mypy==1.9.0               # via -r requirements.in
-    mypy-extensions==1.0.0    # via black, mypy
-    numpy==1.22.4             # via scikit-learn, scipy, -c constraints.txt
     oauthlib==3.2.2           # via requests-oauthlib
-    packaging==21.3           # via apache-airflow, gunicorn, marshmallow, -c constraints.txt
-    parso==0.8.3              # via jedi
-    pathspec==0.9.0           # via apache-airflow, black
+    packaging==24.0           # via apache-airflow, gunicorn, marshmallow
+    pathspec==0.9.0           # via apache-airflow
     pendulum==3.0.0           # via apache-airflow
-    pexpect==4.9.0 ; sys_platform != 'emscripten' and sys_platform != 'win32'  # via ipython
-    platformdirs==4.2.0       # via black
     pluggy==1.4.0             # via apache-airflow
     portalocker==2.5.1        # via msal-extensions, -c constraints.txt
     prison==0.2.1             # via flask-appbuilder
-    prompt-toolkit==3.0.43    # via ipython
     psutil==5.9.8             # via apache-airflow
-    ptyprocess==0.7.0 ; sys_platform != 'emscripten' and sys_platform != 'win32'  # via pexpect
-    pure-eval==0.2.2          # via stack-data
     pycparser==2.21           # via cffi
-    pygments==2.17.2          # via apache-airflow, ipython, rich
+    pygments==2.17.2          # via apache-airflow, rich
     pyjwt==2.8.0              # via adal, apache-airflow, flask-appbuilder, flask-jwt-extended, msal
-    pyparsing==3.1.2          # via packaging
-    pyrsistent==0.20.0        # via jsonschema
     python-daemon==3.0.1      # via apache-airflow
     python-dateutil==2.9.0.post0  # via adal, apache-airflow, azure-kusto-data, azure-storage-common, croniter, flask-appbuilder, pendulum, time-machine
     python-multipart==0.0.9   # via connexion
@@ -614,43 +585,38 @@ typing_extensions==4.3.0
     pytz==2024.1              # via croniter, flask-babel
     pywin32==306 ; platform_system == 'Windows'  # via portalocker
     pyyaml==6.0.1             # via apispec, connexion
+    referencing==0.34.0       # via jsonschema, jsonschema-specifications
     requests==2.31.0          # via adal, apache-airflow-providers-http, azure-core, azure-datalake-store, azure-kusto-data, azure-storage-common, connexion, msal, msrest, requests-oauthlib, requests-toolbelt
     requests-oauthlib==2.0.0  # via msrest
     requests-toolbelt==1.0.0  # via apache-airflow-providers-http
-    rich==13.3.1              # via apache-airflow
-    scikit-learn==1.2.2       # via -r requirements.in
-    scipy==1.12.0             # via scikit-learn
+    rich==13.7.1              # via apache-airflow
+    rpds-py==0.18.0           # via jsonschema, referencing
     setproctitle==1.3.3       # via apache-airflow
     setuptools==69.2.0        # via python-daemon
-    six==1.16.0               # via asttokens, azure-core, azure-identity, isodate, msrestazure, prison, python-dateutil
+    six==1.16.0               # via azure-core, isodate, msrestazure, prison, python-dateutil
     sniffio==1.3.1            # via anyio, httpx
     sqlalchemy==1.4.52        # via alembic, apache-airflow, flask-appbuilder, flask-sqlalchemy, marshmallow-sqlalchemy, sqlalchemy-jsonfield, sqlalchemy-utils
     sqlalchemy-jsonfield==1.0.2  # via apache-airflow
     sqlalchemy-utils==0.41.2  # via flask-appbuilder
     sqlparse==0.4.4           # via apache-airflow-providers-common-sql
-    stack-data==0.6.3         # via ipython
     starlette==0.37.2         # via connexion
     swagger-ui-bundle==1.1.0  # via connexion
     tabulate==0.9.0           # via apache-airflow
     tenacity==8.2.3           # via apache-airflow
     termcolor==2.4.0          # via apache-airflow
     text-unidecode==1.3       # via python-slugify
-    threadpoolctl==3.4.0      # via scikit-learn
     time-machine==2.14.1 ; implementation_name != 'pypy'  # via pendulum
-    tomli==2.0.1 ; python_full_version < '3.11'  # via black, mypy
-    traitlets==5.14.2         # via ipython, matplotlib-inline
-    typing-extensions==4.3.0  # via alembic, anyio, apache-airflow, asgiref, azure-core, azure-keyvault-secrets, azure-servicebus, cattrs, connexion, mypy, -c constraints.txt
+    typing-extensions==4.10.0  # via alembic, anyio, apache-airflow, asgiref, azure-core, azure-cosmos, azure-keyvault-secrets, azure-servicebus, cattrs, connexion
     uc-micro-py==1.0.3        # via linkify-it-py
     unicodecsv==0.14.1        # via apache-airflow
     urllib3==2.2.1            # via requests
-    wcwidth==0.2.13           # via prompt-toolkit
     werkzeug==3.0.1           # via apache-airflow, connexion, flask, flask-jwt-extended, flask-login
     wrapt==1.16.0             # via deprecated
     wtforms==2.3.3            # via flask-appbuilder, flask-wtf
     yarl==1.9.4               # via aiohttp
 
     ----- stderr -----
-    Resolved 172 packages in [TIME]
+    Resolved 149 packages in [TIME]
     "###
     );
 
