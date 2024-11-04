@@ -456,7 +456,7 @@ to resolve the requirements of the project with an error.
 !!! note
 
     There is currently no way to declare conflicting dependency groups. See
-    [astral.sh/uv#6981](https://github.com/astral-sh/uv/issues/6981) to track support.
+    [astral.sh/uv#8814](https://github.com/astral-sh/uv/issues/8814) to track support.
 
 ### Default groups
 
