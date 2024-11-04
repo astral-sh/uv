@@ -22,17 +22,16 @@ use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVariant, PythonVersionFile, VersionRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::Changelog;
-use crate::commands::project::find_requires_python;
+use crate::commands::project::{validate_requires_python, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -184,35 +183,22 @@ async fn venv_impl(
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    // (1) Explicit request from user
-    let mut interpreter_request = python_request.map(PythonRequest::parse);
-
-    // (2) Request from `.python-version`
-    if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(project_dir, no_config, false)
-            .await
-            .into_diagnostic()?
-            .and_then(PythonVersionFile::into_version);
-    }
-
-    // (3) `Requires-Python` in `pyproject.toml`
-    if interpreter_request.is_none() {
-        if let Some(project) = project {
-            interpreter_request = find_requires_python(project.workspace())
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
-        }
-    }
+    let WorkspacePython {
+        source,
+        python_request,
+        requires_python,
+    } = WorkspacePython::from_request(
+        python_request.map(PythonRequest::parse),
+        project.as_ref().map(VirtualProject::workspace),
+        project_dir,
+        no_config,
+    )
+    .await
+    .into_diagnostic()?;
 
     // Locate the Python interpreter to use in the environment
     let python = PythonInstallation::find_or_download(
-        interpreter_request.as_ref(),
+        python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -252,6 +238,21 @@ async fn venv_impl(
         )
         .into_diagnostic()?;
     }
+
+    // Check if the discovered Python version is incompatible with the current workspace
+    if let Some(requires_python) = requires_python {
+        match validate_requires_python(
+            &interpreter,
+            project.as_ref().map(VirtualProject::workspace),
+            &requires_python,
+            &source,
+        ) {
+            Ok(()) => {}
+            Err(err) => {
+                warn_user!("{err}");
+            }
+        }
+    };
 
     writeln!(
         printer.stderr(),
