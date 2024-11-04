@@ -336,7 +336,7 @@ impl<'a> BaseClientBuilder<'a> {
 
                 // When supplied add the extra middleware
                 if let Some(extra_middleware) = &self.extra_middleware {
-                    for middleware in extra_middleware.0.iter() {
+                    for middleware in &extra_middleware.0 {
                         client = client.with_arc(middleware.clone());
                     }
                 }
