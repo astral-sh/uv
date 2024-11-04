@@ -26,7 +26,7 @@ use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
 
-use crate::base_client::BaseClientBuilder;
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
@@ -107,6 +107,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn client(mut self, client: Client) -> Self {
         self.base_client_builder = self.base_client_builder.client(client);
+        self
+    }
+
+    #[must_use]
+    pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
+        self.base_client_builder = self.base_client_builder.extra_middleware(middleware);
         self
     }
 

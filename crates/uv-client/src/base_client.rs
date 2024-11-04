@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder, Response};
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
@@ -8,6 +8,7 @@ use reqwest_retry::{
 use std::error::Error;
 use std::fmt::Debug;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{env, iter};
 use tracing::debug;
@@ -54,6 +55,19 @@ pub struct BaseClientBuilder<'a> {
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
     default_timeout: Duration,
+    extra_middleware: Option<ExtraMiddleware>,
+}
+
+/// A list of user-defined middlewares to be applied to the client.
+#[derive(Clone)]
+pub struct ExtraMiddleware(pub Vec<Arc<dyn Middleware>>);
+
+impl Debug for ExtraMiddleware {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExtraMiddleware")
+            .field("0", &format!("{} middlewares", self.0.len()))
+            .finish()
+    }
 }
 
 impl Default for BaseClientBuilder<'_> {
@@ -75,6 +89,7 @@ impl BaseClientBuilder<'_> {
             platform: None,
             auth_integration: AuthIntegration::default(),
             default_timeout: Duration::from_secs(30),
+            extra_middleware: None,
         }
     }
 }
@@ -137,6 +152,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn default_timeout(mut self, default_timeout: Duration) -> Self {
         self.default_timeout = default_timeout;
+        self
+    }
+
+    #[must_use]
+    pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
+        self.extra_middleware = Some(middleware);
         self
     }
 
@@ -310,6 +331,13 @@ impl<'a> BaseClientBuilder<'a> {
                     }
                     AuthIntegration::NoAuthMiddleware => {
                         // The downstream code uses custom auth logic.
+                    }
+                }
+
+                // When supplied add the extra middleware
+                if let Some(extra_middleware) = &self.extra_middleware {
+                    for middleware in extra_middleware.0.iter() {
+                        client = client.with_arc(middleware.clone());
                     }
                 }
 
