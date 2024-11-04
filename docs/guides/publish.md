@@ -97,7 +97,7 @@ keyring set 'https://upload.pypi.org/legacy/?PACKAGE_NAME' __token__
 Then you can publish with:
 
 ```shell
-uv publish --username __token__ --keyring-provider subprocess --publish-url https://upload.pypi.org/legacy/?PACKAGE_NAME
+uv publish --username __token__ --keyring-provider subprocess --publish-url 'https://upload.pypi.org/legacy/?PACKAGE_NAME'
 ```
 
 ## Installing your package
