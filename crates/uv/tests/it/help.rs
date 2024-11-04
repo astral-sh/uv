@@ -441,6 +441,13 @@ fn help_subsubcommand() {
               
               By default, uv will exit successfully if the version is already installed.
 
+      -f, --force
+              Replace existing Python executables during installation.
+              
+              By default, uv will refuse to replace executables that it does not manage.
+              
+              Implies `--reinstall`.
+
     Cache options:
       -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
@@ -646,6 +653,7 @@ fn help_flag_subsubcommand() {
 
     Options:
       -r, --reinstall  Reinstall the requested Python version, if it's already installed
+      -f, --force      Replace existing Python executables during installation
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary

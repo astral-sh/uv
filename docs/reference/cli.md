@@ -139,6 +139,11 @@ uv run [OPTIONS] [COMMAND]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--env-file</code> <i>env-file</i></dt><dd><p>Load environment variables from a <code>.env</code> file.</p>
+
+<p>Can be provided multiple times, with subsequent files overriding values defined in previous files.</p>
+
+<p>May also be set with the <code>UV_ENV_FILE</code> environment variable.</p>
 </dd><dt><code>--exclude-newer</code> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
 
 <p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
@@ -296,6 +301,9 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+</dd><dt><code>--no-env-file</code></dt><dd><p>Avoid reading environment variables from a <code>.env</code> file</p>
+
+<p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p>
 </dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
 
 <p>May be provided multiple times.</p>
@@ -4375,6 +4383,12 @@ uv python install [OPTIONS] [TARGETS]...
 <p>Relative paths are resolved with the given directory as the base.</p>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
+
+</dd><dt><code>--force</code>, <code>-f</code></dt><dd><p>Replace existing Python executables during installation.</p>
+
+<p>By default, uv will refuse to replace executables that it does not manage.</p>
+
+<p>Implies <code>--reinstall</code>.</p>
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 

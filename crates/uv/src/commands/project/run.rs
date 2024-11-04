@@ -81,6 +81,8 @@ pub(crate) async fn run(
     native_tls: bool,
     cache: &Cache,
     printer: Printer,
+    env_file: Vec<PathBuf>,
+    no_env_file: bool,
 ) -> anyhow::Result<ExitStatus> {
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
@@ -106,6 +108,44 @@ pub(crate) async fn run(
 
     // Initialize any shared state.
     let state = SharedState::default();
+
+    // Read from the `.env` file, if necessary.
+    if !no_env_file {
+        for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
+            match dotenvy::from_path(env_file_path) {
+                Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    bail!(
+                        "No environment file found at: `{}`",
+                        env_file_path.simplified_display()
+                    );
+                }
+                Err(dotenvy::Error::Io(err)) => {
+                    bail!(
+                        "Failed to read environment file `{}`: {err}",
+                        env_file_path.simplified_display()
+                    );
+                }
+                Err(dotenvy::Error::LineParse(content, position)) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}` at position {position}: {content}",
+                        env_file_path.simplified_display(),
+                    );
+                }
+                Err(err) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}`: {err}",
+                        env_file_path.simplified_display(),
+                    );
+                }
+                Ok(()) => {
+                    debug!(
+                        "Read environment file at: `{}`",
+                        env_file_path.simplified_display()
+                    );
+                }
+            }
+        }
+    }
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
