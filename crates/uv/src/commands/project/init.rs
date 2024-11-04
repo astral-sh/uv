@@ -18,7 +18,7 @@ use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVariant, PythonVersionFile, VersionRequest,
+    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
@@ -26,7 +26,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
 
-use crate::commands::project::{find_requires_python, script_python_requirement};
+use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -51,6 +51,7 @@ pub(crate) async fn init(
     connectivity: Connectivity,
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -75,6 +76,7 @@ pub(crate) async fn init(
                 package,
                 native_tls,
                 allow_insecure_host,
+                no_config,
             )
             .await?;
 
@@ -131,6 +133,7 @@ pub(crate) async fn init(
                 connectivity,
                 native_tls,
                 allow_insecure_host,
+                no_config,
                 cache,
                 printer,
             )
@@ -183,6 +186,7 @@ async fn init_script(
     package: bool,
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
+    no_config: bool,
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -226,12 +230,13 @@ async fn init_script(
         }
     };
 
-    let requires_python = script_python_requirement(
+    let requires_python = init_script_python_requirement(
         python.as_deref(),
         &CWD,
         no_pin_python,
         python_preference,
         python_downloads,
+        no_config,
         &client_builder,
         cache,
         &reporter,
@@ -266,6 +271,7 @@ async fn init_project(
     connectivity: Connectivity,
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<()> {
@@ -318,10 +324,35 @@ async fn init_project(
         .native_tls(native_tls)
         .allow_insecure_host(allow_insecure_host.to_vec());
 
-    // Add a `requires-python` field to the `pyproject.toml` and return the corresponding interpreter.
-    let (requires_python, python_request) = if let Some(request) = python.as_deref() {
+    // First, determine if there is an request for Python
+    let python_request = if let Some(request) = python {
         // (1) Explicit request from user
-        match PythonRequest::parse(request) {
+        Some(PythonRequest::parse(&request))
+    } else if let Some(file) = PythonVersionFile::discover(
+        path,
+        &VersionFileDiscoveryOptions::default()
+            .with_stop_discovery_at(
+                workspace
+                    .as_ref()
+                    .map(Workspace::install_path)
+                    .map(PathBuf::as_ref),
+            )
+            .with_no_config(no_config),
+    )
+    .await?
+    {
+        // (2) Request from `.python-version`
+        file.into_version()
+    } else {
+        None
+    };
+
+    // Add a `requires-python` field to the `pyproject.toml` and return the corresponding interpreter.
+    let (requires_python, python_request) = if let Some(python_request) = python_request {
+        // (1) A request from the user or `.python-version` file
+        // This can be arbitrary, i.e., not a version — in which case we may need to resolve the
+        // interpreter
+        match python_request {
             PythonRequest::Version(VersionRequest::MajorMinor(
                 major,
                 minor,
@@ -427,7 +458,7 @@ async fn init_project(
             }
         }
     } else if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
-        // (2) `Requires-Python` from the workspace
+        // (2) `requires-python` from the workspace
         let python_request = PythonRequest::Version(VersionRequest::Range(
             requires_python.specifiers().clone(),
             PythonVariant::Default,
@@ -687,7 +718,7 @@ impl InitProjectKind {
 
         // Write .python-version if it doesn't exist.
         if let Some(python_request) = python_request {
-            if PythonVersionFile::discover(path, false, false)
+            if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
                 .is_none()
             {
@@ -741,7 +772,7 @@ impl InitProjectKind {
 
         // Write .python-version if it doesn't exist.
         if let Some(python_request) = python_request {
-            if PythonVersionFile::discover(path, false, false)
+            if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
                 .is_none()
             {

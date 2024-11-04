@@ -195,11 +195,43 @@ fn python_find_pin() {
 
     ----- stderr -----
     "###);
+
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all().unwrap();
+
+    // We should also find pinned versions in the parent directory
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11").current_dir(&child_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `3.12` -> `3.11`
+
+    ----- stderr -----
+    "###);
+
+    // Unless the child directory also has a pin
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    "###);
 }
 
 #[test]
 fn python_find_project() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml
@@ -207,7 +239,7 @@ fn python_find_project() {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.11"
         dependencies = ["anyio==3.7.0"]
     "#})
         .unwrap();
@@ -217,23 +249,87 @@ fn python_find_project() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [PYTHON-3.12]
-
-    ----- stderr -----
-    "###);
-
-    // Unless explicitly requested
-    uv_snapshot!(context.filters(), context.python_find().arg("3.11"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
     [PYTHON-3.11]
 
     ----- stderr -----
     "###);
 
+    // Unless explicitly requested
+    uv_snapshot!(context.filters(), context.python_find().arg("3.10"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    warning: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`
+    "###);
+
     // Or `--no-project` is used
     uv_snapshot!(context.filters(), context.python_find().arg("--no-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    "###);
+
+    // But a pin should take precedence
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    "###);
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
+    // Create a pin that's incompatible with the project
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.10").arg("--no-workspace"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `3.12` -> `3.10`
+
+    ----- stderr -----
+    "###);
+
+    // We should warn on subsequent uses, but respect the pinned version?
+    uv_snapshot!(context.filters(), context.python_find(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.10]
+
+    ----- stderr -----
+    warning: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`
+    "###);
+
+    // Unless the pin file is outside the project, in which case we should just ignore it
+    let child_dir = context.temp_dir.child("child");
+    child_dir.create_dir_all().unwrap();
+
+    let pyproject_toml = child_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
