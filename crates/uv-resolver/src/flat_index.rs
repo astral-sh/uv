@@ -227,6 +227,7 @@ impl From<FlatDistributions> for BTreeMap<Version, PrioritizedDist> {
     }
 }
 
+/// For external users.
 impl From<BTreeMap<Version, PrioritizedDist>> for FlatDistributions {
     fn from(distributions: BTreeMap<Version, PrioritizedDist>) -> Self {
         Self(distributions)
