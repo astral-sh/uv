@@ -91,7 +91,7 @@ parameter, e.g., `https://upload.pypi.org/legacy/?PACKAGE_NAME`, replacing `PACK
 name of your package. Enter the token you got from your registry in the interactive prompt:
 
 ```shell
-keyring set https://upload.pypi.org/legacy/?PACKAGE_NAME __token__
+keyring set 'https://upload.pypi.org/legacy/?PACKAGE_NAME' __token__
 ```
 
 Then you can publish with:
