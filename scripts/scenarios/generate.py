@@ -172,7 +172,6 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
     for scenario in data["scenarios"]:
         resolver_options = scenario["resolver_options"] or {}
         if resolver_options.get("universal"):
-            print(scenario["name"])
             lock_scenarios.append(scenario)
         elif resolver_options.get("python") is not None:
             compile_scenarios.append(scenario)
