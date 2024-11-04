@@ -24,7 +24,6 @@ use tracing::{debug, info, instrument, trace, warn, Level};
 
 pub use environment::ResolverEnvironment;
 pub(crate) use fork_map::{ForkMap, ForkSet};
-use locals::Locals;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -81,7 +80,6 @@ mod fork_map;
 mod groups;
 mod index;
 mod indexes;
-mod locals;
 mod provider;
 mod reporter;
 mod urls;
@@ -105,7 +103,6 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     locations: IndexLocations,
     exclusions: Exclusions,
     urls: Urls,
-    locals: Locals,
     indexes: Indexes,
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
@@ -211,7 +208,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             selector: CandidateSelector::for_resolution(options, &manifest, &env),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode)?,
-            locals: Locals::from_manifest(&manifest, &env, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
             groups: Groups::from_manifest(&manifest, &env),
             project: manifest.project,
@@ -525,7 +521,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &version,
                             &self.urls,
                             &self.indexes,
-                            &self.locals,
                             dependencies.clone(),
                             &self.git,
                             self.selector.resolution_strategy(),
@@ -694,7 +689,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     version,
                     &self.urls,
                     &self.indexes,
-                    &self.locals,
                     fork.dependencies.clone(),
                     &self.git,
                     self.selector.resolution_strategy(),
@@ -2152,14 +2146,13 @@ impl ForkState {
     }
 
     /// Add the dependencies for the selected version of the current package, checking for
-    /// self-dependencies, and handling URLs and locals.
+    /// self-dependencies and handling URLs.
     fn add_package_version_dependencies(
         &mut self,
         for_package: Option<&str>,
         version: &Version,
         urls: &Urls,
         indexes: &Indexes,
-        locals: &Locals,
         mut dependencies: Vec<PubGrubDependency>,
         git: &GitResolver,
         resolution_strategy: &ResolutionStrategy,
@@ -2168,8 +2161,8 @@ impl ForkState {
             let PubGrubDependency {
                 package,
                 version,
-                specifier,
                 url,
+                ..
             } = dependency;
 
             let mut has_url = false;
@@ -2182,31 +2175,6 @@ impl ForkState {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
                 };
-
-                // If the specifier is an exact version and the user requested a local version for this
-                // fork that's more precise than the specifier, use the local version instead.
-                if let Some(specifier) = specifier {
-                    let locals = locals.get(name, &self.env);
-
-                    // It's possible that there are multiple matching local versions requested with
-                    // different marker expressions. All of these are potentially compatible until we
-                    // narrow to a specific fork.
-                    for local in locals {
-                        let local = specifier
-                            .iter()
-                            .map(|specifier| {
-                                Locals::map(local, specifier)
-                                    .map_err(ResolveError::InvalidVersion)
-                                    .map(Ranges::from)
-                            })
-                            .fold_ok(Range::full(), |range, specifier| {
-                                range.intersection(&specifier)
-                            })?;
-
-                        // Add the local version.
-                        *version = version.union(&local);
-                    }
-                }
 
                 // If the package is pinned to an exact index, add it to the fork.
                 for index in indexes.get(name, &self.env) {
