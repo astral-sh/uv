@@ -709,18 +709,17 @@ fn parse_url<T: Pep508Url>(
             len += c.len_utf8();
 
             // If we see a top-level semicolon or hash followed by whitespace, we're done.
-            match c {
-                ';' if cursor.peek_char().is_some_and(char::is_whitespace) => {
+            if cursor.peek_char().is_some_and(|c| matches!(c, ';' | '#')) {
+                let mut cursor = cursor.clone();
+                cursor.next();
+                if cursor.peek_char().is_some_and(char::is_whitespace) {
                     break;
                 }
-                '#' if cursor.peek_char().is_some_and(char::is_whitespace) => {
-                    break;
-                }
-                _ => {}
             }
         }
         (start, len)
     };
+
     let url = cursor.slice(start, len);
     if url.is_empty() {
         return Err(Pep508Error {
@@ -729,19 +728,6 @@ fn parse_url<T: Pep508Url>(
             len,
             input: cursor.to_string(),
         });
-    }
-
-    for c in [';', '#'] {
-        if url.ends_with(c) {
-            return Err(Pep508Error {
-                message: Pep508ErrorSource::String(format!(
-                    "Missing space before '{c}', the end of the URL is ambiguous"
-                )),
-                start: start + len - 1,
-                len: 1,
-                input: cursor.to_string(),
-            });
-        }
     }
 
     let url = T::parse_url(url, working_dir).map_err(|err| Pep508Error {
@@ -970,8 +956,13 @@ fn parse_pep508_requirement<T: Pep508Url>(
 
     // wsp*
     cursor.eat_whitespace();
-    if let Some((pos, char)) = cursor.next() {
-        let message = if marker.is_none() {
+
+    if let Some((pos, char)) = cursor.next().filter(|(_, c)| *c != '#') {
+        let message = if char == '#' {
+            format!(
+                r#"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"#
+            )
+        } else if marker.is_none() {
             format!(r#"Expected end of input or `;`, found `{char}`"#)
         } else {
             format!(r#"Expected end of input, found `{char}`"#)

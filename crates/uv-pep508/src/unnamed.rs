@@ -174,7 +174,11 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     // wsp*
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
-        let message = if marker.is_none() {
+        let message = if char == '#' {
+            format!(
+                r#"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"#
+            )
+        } else if marker.is_none() {
             format!(r#"Expected end of input or `;`, found `{char}`"#)
         } else {
             format!(r#"Expected end of input, found `{char}`"#)
@@ -388,15 +392,11 @@ fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
             len += c.len_utf8();
 
             // If we see a top-level semicolon or hash followed by whitespace, we're done.
-            if depth == 0 {
-                match c {
-                    ';' if cursor.peek_char().is_some_and(char::is_whitespace) => {
-                        break;
-                    }
-                    '#' if cursor.peek_char().is_some_and(char::is_whitespace) => {
-                        break;
-                    }
-                    _ => {}
+            if depth == 0 && cursor.peek_char().is_some_and(|c| matches!(c, ';' | '#')) {
+                let mut cursor = cursor.clone();
+                cursor.next();
+                if cursor.peek_char().is_some_and(char::is_whitespace) {
+                    break;
                 }
             }
         }
@@ -411,19 +411,6 @@ fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
             len,
             input: cursor.to_string(),
         });
-    }
-
-    for c in [';', '#'] {
-        if url.ends_with(c) {
-            return Err(Pep508Error {
-                message: Pep508ErrorSource::String(format!(
-                    "Missing space before '{c}', the end of the URL is ambiguous"
-                )),
-                start: start + len - 1,
-                len: 1,
-                input: cursor.to_string(),
-            });
-        }
     }
 
     let url = preprocess_unnamed_url(url, working_dir, cursor, start, len)?;
