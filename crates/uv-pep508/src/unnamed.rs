@@ -160,7 +160,6 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
 
     // Parse the URL itself, along with any extras.
     let (url, extras) = parse_unnamed_url::<Url>(cursor, working_dir)?;
-    let requirement_end = cursor.pos();
 
     // wsp*
     cursor.eat_whitespace();
@@ -175,22 +174,6 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     // wsp*
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
-        if marker.is_none() {
-            if let Some(given) = url.given() {
-                for c in [';', '#'] {
-                    if given.ends_with(c) {
-                        return Err(Pep508Error {
-                            message: Pep508ErrorSource::String(format!(
-                                "Missing space before '{c}', the end of the URL is ambiguous"
-                            )),
-                            start: requirement_end - c.len_utf8(),
-                            len: c.len_utf8(),
-                            input: cursor.to_string(),
-                        });
-                    }
-                }
-            }
-        }
         let message = if marker.is_none() {
             format!(r#"Expected end of input or `;`, found `{char}`"#)
         } else {
@@ -428,6 +411,19 @@ fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
             len,
             input: cursor.to_string(),
         });
+    }
+
+    for c in [';', '#'] {
+        if url.ends_with(c) {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::String(format!(
+                    "Missing space before '{c}', the end of the URL is ambiguous"
+                )),
+                start: start + len - 1,
+                len: 1,
+                input: cursor.to_string(),
+            });
+        }
     }
 
     let url = preprocess_unnamed_url(url, working_dir, cursor, start, len)?;

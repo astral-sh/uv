@@ -731,6 +731,19 @@ fn parse_url<T: Pep508Url>(
         });
     }
 
+    for c in [';', '#'] {
+        if url.ends_with(c) {
+            return Err(Pep508Error {
+                message: Pep508ErrorSource::String(format!(
+                    "Missing space before '{c}', the end of the URL is ambiguous"
+                )),
+                start: start + len - 1,
+                len: 1,
+                input: cursor.to_string(),
+            });
+        }
+    }
+
     let url = T::parse_url(url, working_dir).map_err(|err| Pep508Error {
         message: Pep508ErrorSource::UrlError(err),
         start,
@@ -927,8 +940,6 @@ fn parse_pep508_requirement<T: Pep508Url>(
         }
     };
 
-    let requirement_end = cursor.pos();
-
     // If the requirement consists solely of a package name, and that name appears to be an archive,
     // treat it as a URL requirement, for consistency and security. (E.g., `requests-2.26.0.tar.gz`
     // is a valid Python package name, but we should treat it as a reference to a file.)
@@ -960,23 +971,6 @@ fn parse_pep508_requirement<T: Pep508Url>(
     // wsp*
     cursor.eat_whitespace();
     if let Some((pos, char)) = cursor.next() {
-        if marker.is_none() {
-            if let Some(VersionOrUrl::Url(url)) = requirement_kind {
-                let url = url.to_string();
-                for c in [';', '#'] {
-                    if url.ends_with(c) {
-                        return Err(Pep508Error {
-                            message: Pep508ErrorSource::String(format!(
-                                "Missing space before '{c}', the end of the URL is ambiguous"
-                            )),
-                            start: requirement_end - c.len_utf8(),
-                            len: c.len_utf8(),
-                            input: cursor.to_string(),
-                        });
-                    }
-                }
-            }
-        }
         let message = if marker.is_none() {
             format!(r#"Expected end of input or `;`, found `{char}`"#)
         } else {
