@@ -122,7 +122,7 @@ impl BatchPrefetcher {
                     }
                 }
                 BatchPrefetchStrategy::InOrder { previous } => {
-                    let mut range = if selector.use_highest_version(name) {
+                    let mut range = if selector.use_highest_version(name, env) {
                         Range::strictly_lower_than(previous)
                     } else {
                         Range::strictly_higher_than(previous)

@@ -276,7 +276,7 @@ impl CandidateSelector {
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
-        let highest = self.use_highest_version(package_name);
+        let highest = self.use_highest_version(package_name, env);
 
         let allow_prerelease = match self.prerelease_strategy.allows(package_name, env) {
             AllowPrerelease::Yes => true,
@@ -359,12 +359,16 @@ impl CandidateSelector {
 
     /// By default, we select the latest version, but we also allow using the lowest version instead
     /// to check the lower bounds.
-    pub(crate) fn use_highest_version(&self, package_name: &PackageName) -> bool {
+    pub(crate) fn use_highest_version(
+        &self,
+        package_name: &PackageName,
+        env: &ResolverEnvironment,
+    ) -> bool {
         match &self.resolution_strategy {
             ResolutionStrategy::Highest => true,
             ResolutionStrategy::Lowest => false,
             ResolutionStrategy::LowestDirect(direct_dependencies) => {
-                !direct_dependencies.contains(package_name)
+                !direct_dependencies.contains(package_name, env)
             }
         }
     }
