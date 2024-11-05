@@ -838,12 +838,12 @@ impl FromStr for Version {
 ///   `min, .devN, aN, bN, rcN, <no suffix>, .postN, max`.
 ///   Its representation is thus:
 ///   * The most significant 3 bits of Byte 2 corresponds to a value in
-///     the range 0-6 inclusive, corresponding to min, dev, pre-a, pre-b, pre-rc,
-///     no-suffix or post releases, respectively. `min` is a special version that
-///     does not exist in PEP 440, but is used here to represent the smallest
-///     possible version, preceding any `dev`, `pre`, `post` or releases. `max` is
-///     an analogous concept for the largest possible version, following any `post`
-///     or local releases.
+///     the range 0-7 inclusive, corresponding to min, dev, pre-a, pre-b,
+///     pre-rc, no-suffix, post or max releases, respectively. `min` is a
+///     special version that does not exist in PEP 440, but is used here to
+///     represent the smallest possible version, preceding any `dev`, `pre`,
+///     `post` or releases. `max` is an analogous concept for the largest
+///     possible version, following any `post` or local releases.
 ///   * The low 5 bits combined with the bits in bytes 1 and 0 correspond
 ///     to the release number of the suffix, if one exists. If there is no
 ///     suffix, then these bits are always 0.
@@ -902,6 +902,20 @@ struct VersionSmall {
 }
 
 impl VersionSmall {
+    // Constants for each suffix kind. They form an enumeration.
+    //
+    // The specific values are assigned in a way that provides the suffix kinds
+    // their ordering. i.e., No suffix should sort after a dev suffix but
+    // before a post suffix.
+    //
+    // The maximum possible suffix value is SUFFIX_KIND_MASK. If you need to
+    // add another suffix value and you're at the max, then the mask must gain
+    // another bit. And adding another bit to the mask will require taking it
+    // from somewhere else. (Usually the suffix version.)
+    //
+    // NOTE: If you do change the bit format here, you'll need to bump any
+    // cache versions in uv that use rkyv with `Version` in them. That includes
+    // *at least* the "simple" cache.
     const SUFFIX_MIN: u64 = 0;
     const SUFFIX_DEV: u64 = 1;
     const SUFFIX_PRE_ALPHA: u64 = 2;
@@ -910,12 +924,29 @@ impl VersionSmall {
     const SUFFIX_NONE: u64 = 5;
     const SUFFIX_POST: u64 = 6;
     const SUFFIX_MAX: u64 = 7;
-    const SUFFIX_MAX_VERSION: u64 = 0x001F_FFFF;
+
+    // The mask to get only the release segment bits.
+    //
+    // NOTE: If you change the release mask to have more or less bits,
+    // then you'll also need to change `push_release` below and also
+    // `Parser::parse_fast`.
+    const SUFFIX_RELEASE_MASK: u64 = 0xFFFF_FFFF_FF00_0000;
+    // The mask to get the version suffix.
+    const SUFFIX_VERSION_MASK: u64 = 0x001F_FFFF;
+    // The number of bits used by the version suffix. Shifting the `repr`
+    // right by this number of bits should put the suffix kind in the least
+    // significant bits.
+    const SUFFIX_VERSION_BIT_LEN: u64 = 21;
+    // The mask to get only the suffix kind, after shifting right by the
+    // version bits. If you need to add a bit here, then you'll probably need
+    // to take a bit from the suffix version. (Which requires a change to both
+    // the mask and the bit length above.)
+    const SUFFIX_KIND_MASK: u64 = 0b111;
 
     #[inline]
     fn new() -> Self {
         Self {
-            repr: 0x0000_0000_00A0_0000,
+            repr: Self::SUFFIX_NONE << Self::SUFFIX_VERSION_BIT_LEN,
             release: [0, 0, 0, 0],
             len: 0,
         }
@@ -943,7 +974,7 @@ impl VersionSmall {
 
     #[inline]
     fn clear_release(&mut self) {
-        self.repr &= !0xFFFF_FFFF_FF00_0000;
+        self.repr &= !Self::SUFFIX_RELEASE_MASK;
         self.release = [0, 0, 0, 0];
         self.len = 0;
     }
@@ -996,7 +1027,7 @@ impl VersionSmall {
                 self.set_suffix_kind(Self::SUFFIX_NONE);
             }
             Some(number) => {
-                if number > Self::SUFFIX_MAX_VERSION {
+                if number > Self::SUFFIX_VERSION_MASK {
                     return false;
                 }
                 self.set_suffix_kind(Self::SUFFIX_POST);
@@ -1043,7 +1074,7 @@ impl VersionSmall {
                 self.set_suffix_kind(Self::SUFFIX_NONE);
             }
             Some(Prerelease { kind, number }) => {
-                if number > Self::SUFFIX_MAX_VERSION {
+                if number > Self::SUFFIX_VERSION_MASK {
                     return false;
                 }
                 match kind {
@@ -1086,7 +1117,7 @@ impl VersionSmall {
                 self.set_suffix_kind(Self::SUFFIX_NONE);
             }
             Some(number) => {
-                if number > Self::SUFFIX_MAX_VERSION {
+                if number > Self::SUFFIX_VERSION_MASK {
                     return false;
                 }
                 self.set_suffix_kind(Self::SUFFIX_DEV);
@@ -1119,7 +1150,7 @@ impl VersionSmall {
                 self.set_suffix_kind(Self::SUFFIX_NONE);
             }
             Some(number) => {
-                if number > Self::SUFFIX_MAX_VERSION {
+                if number > Self::SUFFIX_VERSION_MASK {
                     return false;
                 }
                 self.set_suffix_kind(Self::SUFFIX_MIN);
@@ -1152,7 +1183,7 @@ impl VersionSmall {
                 self.set_suffix_kind(Self::SUFFIX_NONE);
             }
             Some(number) => {
-                if number > Self::SUFFIX_MAX_VERSION {
+                if number > Self::SUFFIX_VERSION_MASK {
                     return false;
                 }
                 self.set_suffix_kind(Self::SUFFIX_MAX);
@@ -1172,7 +1203,7 @@ impl VersionSmall {
 
     #[inline]
     fn suffix_kind(&self) -> u64 {
-        let kind = (self.repr >> 21) & 0b111;
+        let kind = (self.repr >> Self::SUFFIX_VERSION_BIT_LEN) & Self::SUFFIX_KIND_MASK;
         debug_assert!(kind <= Self::SUFFIX_MAX);
         kind
     }
@@ -1180,8 +1211,8 @@ impl VersionSmall {
     #[inline]
     fn set_suffix_kind(&mut self, kind: u64) {
         debug_assert!(kind <= Self::SUFFIX_MAX);
-        self.repr &= !0x00E0_0000;
-        self.repr |= kind << 21;
+        self.repr &= !(Self::SUFFIX_KIND_MASK << Self::SUFFIX_VERSION_BIT_LEN);
+        self.repr |= kind << Self::SUFFIX_VERSION_BIT_LEN;
         if kind == Self::SUFFIX_NONE {
             self.set_suffix_version(0);
         }
@@ -1189,13 +1220,13 @@ impl VersionSmall {
 
     #[inline]
     fn suffix_version(&self) -> u64 {
-        self.repr & 0x001F_FFFF
+        self.repr & Self::SUFFIX_VERSION_MASK
     }
 
     #[inline]
     fn set_suffix_version(&mut self, value: u64) {
-        debug_assert!(value <= 0x001F_FFFF);
-        self.repr &= !0x001F_FFFF;
+        debug_assert!(value <= Self::SUFFIX_VERSION_MASK);
+        self.repr &= !Self::SUFFIX_VERSION_MASK;
         self.repr |= value;
     }
 }
@@ -1577,17 +1608,11 @@ impl<'a> Parser<'a> {
         *release.get_mut(usize::from(len))? = cur;
         len += 1;
         let small = VersionSmall {
-            // Clippy warns about no-ops like `(0x00 << 16)`, but I
-            // think it makes the bit logic much clearer, and makes it
-            // explicit that nothing was forgotten.
-            #[allow(clippy::identity_op)]
             repr: (u64::from(release[0]) << 48)
                 | (u64::from(release[1]) << 40)
                 | (u64::from(release[2]) << 32)
                 | (u64::from(release[3]) << 24)
-                | (0xA0 << 16)
-                | (0x00 << 8)
-                | (0x00 << 0),
+                | (VersionSmall::SUFFIX_NONE << VersionSmall::SUFFIX_VERSION_BIT_LEN),
             release: [
                 u64::from(release[0]),
                 u64::from(release[1]),
