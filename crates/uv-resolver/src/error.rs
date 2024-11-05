@@ -230,81 +230,94 @@ impl NoSolutionError {
     /// implement PEP 440 semantics for local version equality. For example, `1.0.0+foo` needs to
     /// satisfy `==1.0.0`.
     pub(crate) fn collapse_local_version_segments(derivation_tree: ErrorTree) -> ErrorTree {
-        /// Remove local versions sentinels (`+[max]`) from the given version ranges.
-        fn strip_sentinel(versions: &mut Ranges<Version>) {
-            versions.iter_mut().for_each(|(lower, upper)| {
-                match (&lower, &upper) {
-                    (Bound::Unbounded, Bound::Unbounded) => {}
-                    (Bound::Unbounded, Bound::Included(v)) => {
-                        // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                        if v.local() == LocalVersionSlice::Max {
-                            *upper = Bound::Included(v.clone().without_local());
-                        }
-                    }
-                    (Bound::Unbounded, Bound::Excluded(v)) => {
-                        // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                        if v.local() == LocalVersionSlice::Max {
-                            *upper = Bound::Excluded(v.clone().without_local());
-                        }
-                    }
-                    (Bound::Included(v), Bound::Unbounded) => {
-                        // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Max {
-                            *lower = Bound::Excluded(v.clone().without_local());
-                        }
-                    }
-                    (Bound::Included(v), Bound::Included(b)) => {
-                        // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Max {
-                            *lower = Bound::Excluded(v.clone().without_local());
-                        }
-                        // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                        if b.local() == LocalVersionSlice::Max {
-                            *upper = Bound::Included(b.clone().without_local());
-                        }
-                    }
-                    (Bound::Included(v), Bound::Excluded(b)) => {
-                        // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Max {
-                            *lower = Bound::Excluded(v.clone().without_local());
-                        }
-                        // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                        if b.local() == LocalVersionSlice::Max {
-                            *upper = Bound::Included(b.clone().without_local());
-                        }
-                    }
-                    (Bound::Excluded(v), Bound::Unbounded) => {
-                        // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Max {
-                            *lower = Bound::Excluded(v.clone().without_local());
-                        }
-                    }
-                    (Bound::Excluded(v), Bound::Included(b)) => {
-                        // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Max {
-                            *lower = Bound::Excluded(v.clone().without_local());
-                        }
-                        // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                        if b.local() == LocalVersionSlice::Max {
-                            *upper = Bound::Included(b.clone().without_local());
-                        }
-                    }
-                    (Bound::Excluded(v), Bound::Excluded(b)) => {
-                        // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Max {
-                            *lower = Bound::Excluded(v.clone().without_local());
-                        }
-                        // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                        if b.local() == LocalVersionSlice::Max {
-                            *upper = Bound::Excluded(b.clone().without_local());
-                        }
+        /// Remove local versions sentinels (`+[max]`) from the interval.
+        fn strip_sentinel(
+            mut lower: Bound<Version>,
+            mut upper: Bound<Version>,
+        ) -> (Bound<Version>, Bound<Version>) {
+            match (&lower, &upper) {
+                (Bound::Unbounded, Bound::Unbounded) => {}
+                (Bound::Unbounded, Bound::Included(v)) => {
+                    // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                    if v.local() == LocalVersionSlice::Max {
+                        upper = Bound::Included(v.clone().without_local());
                     }
                 }
-            });
+                (Bound::Unbounded, Bound::Excluded(v)) => {
+                    // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                    if v.local() == LocalVersionSlice::Max {
+                        upper = Bound::Excluded(v.clone().without_local());
+                    }
+                }
+                (Bound::Included(v), Bound::Unbounded) => {
+                    // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                    if v.local() == LocalVersionSlice::Max {
+                        lower = Bound::Excluded(v.clone().without_local());
+                    }
+                }
+                (Bound::Included(v), Bound::Included(b)) => {
+                    // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                    if v.local() == LocalVersionSlice::Max {
+                        lower = Bound::Excluded(v.clone().without_local());
+                    }
+                    // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                    if b.local() == LocalVersionSlice::Max {
+                        upper = Bound::Included(b.clone().without_local());
+                    }
+                }
+                (Bound::Included(v), Bound::Excluded(b)) => {
+                    // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                    if v.local() == LocalVersionSlice::Max {
+                        lower = Bound::Excluded(v.clone().without_local());
+                    }
+                    // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                    if b.local() == LocalVersionSlice::Max {
+                        upper = Bound::Included(b.clone().without_local());
+                    }
+                }
+                (Bound::Excluded(v), Bound::Unbounded) => {
+                    // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                    if v.local() == LocalVersionSlice::Max {
+                        lower = Bound::Excluded(v.clone().without_local());
+                    }
+                }
+                (Bound::Excluded(v), Bound::Included(b)) => {
+                    // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                    if v.local() == LocalVersionSlice::Max {
+                        lower = Bound::Excluded(v.clone().without_local());
+                    }
+                    // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                    if b.local() == LocalVersionSlice::Max {
+                        upper = Bound::Included(b.clone().without_local());
+                    }
+                }
+                (Bound::Excluded(v), Bound::Excluded(b)) => {
+                    // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                    if v.local() == LocalVersionSlice::Max {
+                        lower = Bound::Excluded(v.clone().without_local());
+                    }
+                    // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                    if b.local() == LocalVersionSlice::Max {
+                        upper = Bound::Excluded(b.clone().without_local());
+                    }
+                }
+            }
+            (lower, upper)
+        }
+
+        /// Remove local versions sentinels (`+[max]`) from the version ranges.
+        // TODO(konsti): Add `impl IntoIterator for Ranges` without leaking the internal
+        // smallvec to remove the cloning
+        #[allow(clippy::needless_pass_by_value)]
+        fn strip_sentinels(versions: Ranges<Version>) -> Ranges<Version> {
+            versions
+                .iter()
+                .map(|(lower, upper)| strip_sentinel(lower.clone(), upper.clone()))
+                .collect()
         }
 
         /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]`.
-        fn is_sentinel(versions: &mut Ranges<Version>) -> bool {
+        fn is_sentinel(versions: &Ranges<Version>) -> bool {
             versions.iter().all(|(lower, upper)| {
                 let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
                     return false;
@@ -319,30 +332,36 @@ impl NoSolutionError {
             })
         }
 
-        fn collapse(mut derivation_tree: ErrorTree) -> Option<ErrorTree> {
+        fn collapse(derivation_tree: ErrorTree) -> Option<ErrorTree> {
             match derivation_tree {
                 DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree),
-                DerivationTree::External(External::NoVersions(_, ref mut versions)) => {
-                    if is_sentinel(versions) {
+                DerivationTree::External(External::NoVersions(package, versions)) => {
+                    if is_sentinel(&versions) {
                         return None;
                     }
 
-                    strip_sentinel(versions);
-                    Some(derivation_tree)
+                    let versions = strip_sentinels(versions);
+                    Some(DerivationTree::External(External::NoVersions(
+                        package, versions,
+                    )))
                 }
                 DerivationTree::External(External::FromDependencyOf(
-                    _,
-                    ref mut versions1,
-                    _,
-                    ref mut versions2,
+                    package1,
+                    versions1,
+                    package2,
+                    versions2,
                 )) => {
-                    strip_sentinel(versions1);
-                    strip_sentinel(versions2);
-                    Some(derivation_tree)
+                    let versions1 = strip_sentinels(versions1);
+                    let versions2 = strip_sentinels(versions2);
+                    Some(DerivationTree::External(External::FromDependencyOf(
+                        package1, versions1, package2, versions2,
+                    )))
                 }
-                DerivationTree::External(External::Custom(_, ref mut versions, _)) => {
-                    strip_sentinel(versions);
-                    Some(derivation_tree)
+                DerivationTree::External(External::Custom(package, versions, reason)) => {
+                    let versions = strip_sentinels(versions);
+                    Some(DerivationTree::External(External::Custom(
+                        package, versions, reason,
+                    )))
                 }
                 DerivationTree::Derived(mut derived) => {
                     let cause1 = collapse((*derived.cause1).clone());
@@ -353,15 +372,15 @@ impl NoSolutionError {
                             cause2: Arc::new(cause2),
                             terms: std::mem::take(&mut derived.terms)
                                 .into_iter()
-                                .map(|(pkg, mut term)| {
-                                    match &mut term {
+                                .map(|(pkg, term)| {
+                                    let term = match term {
                                         Term::Positive(versions) => {
-                                            strip_sentinel(versions);
+                                            Term::Positive(strip_sentinels(versions))
                                         }
                                         Term::Negative(versions) => {
-                                            strip_sentinel(versions);
+                                            Term::Negative(strip_sentinels(versions))
                                         }
-                                    }
+                                    };
                                     (pkg, term)
                                 })
                                 .collect(),
