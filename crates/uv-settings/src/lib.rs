@@ -46,6 +46,7 @@ impl FilesystemOptions {
         match read_file(&file) {
             Ok(options) => {
                 tracing::debug!("Found user configuration in: `{}`", file.display());
+                validate_uv_toml(&file, &options)?;
                 Ok(Some(Self(options)))
             }
             Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -82,11 +83,11 @@ impl FilesystemOptions {
                 Ok(None) => {
                     // Continue traversing the directory tree.
                 }
-                Err(Error::PyprojectToml(file, err)) => {
+                Err(Error::PyprojectToml(path, err)) => {
                     // If we see an invalid `pyproject.toml`, warn but continue.
                     warn_user!(
                         "Failed to parse `{}` during settings discovery:\n{}",
-                        file.cyan(),
+                        path.user_display().cyan(),
                         textwrap::indent(&err.to_string(), "  ")
                     );
                 }
@@ -107,7 +108,7 @@ impl FilesystemOptions {
         match fs_err::read_to_string(&path) {
             Ok(content) => {
                 let options: Options = toml::from_str(&content)
-                    .map_err(|err| Error::UvToml(path.user_display().to_string(), err))?;
+                    .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
                 // warn.
@@ -124,6 +125,7 @@ impl FilesystemOptions {
                 }
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
+                validate_uv_toml(&path, &options)?;
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -136,7 +138,7 @@ impl FilesystemOptions {
             Ok(content) => {
                 // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
                 let pyproject: PyProjectToml = toml::from_str(&content)
-                    .map_err(|err| Error::PyprojectToml(path.user_display().to_string(), err))?;
+                    .map_err(|err| Error::PyprojectToml(path.clone(), Box::new(err)))?;
                 let Some(tool) = pyproject.tool else {
                     tracing::debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
@@ -244,9 +246,41 @@ fn system_config_file() -> Option<PathBuf> {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options: Options = toml::from_str(&content)
-        .map_err(|err| Error::UvToml(path.user_display().to_string(), err))?;
+    let options: Options =
+        toml::from_str(&content).map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
     Ok(options)
+}
+
+/// Validate that an [`Options`] schema is compatible with `uv.toml`.
+fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
+    // The `uv.toml` format is not allowed to include any of the following, which are
+    // permitted by the schema since they _can_ be included in `pyproject.toml` files
+    // (and we want to use `deny_unknown_fields`).
+    if options.workspace.is_some() {
+        return Err(Error::PyprojectOnlyField(path.to_path_buf(), "workspace"));
+    }
+    if options.sources.is_some() {
+        return Err(Error::PyprojectOnlyField(path.to_path_buf(), "sources"));
+    }
+    if options.dev_dependencies.is_some() {
+        return Err(Error::PyprojectOnlyField(
+            path.to_path_buf(),
+            "dev-dependencies",
+        ));
+    }
+    if options.default_groups.is_some() {
+        return Err(Error::PyprojectOnlyField(
+            path.to_path_buf(),
+            "default-groups",
+        ));
+    }
+    if options.managed.is_some() {
+        return Err(Error::PyprojectOnlyField(path.to_path_buf(), "managed"));
+    }
+    if options.package.is_some() {
+        return Err(Error::PyprojectOnlyField(path.to_path_buf(), "package"));
+    }
+    Ok(())
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -254,11 +288,14 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    #[error("Failed to parse: `{0}`")]
-    PyprojectToml(String, #[source] toml::de::Error),
+    #[error("Failed to parse: `{}`", _0.user_display())]
+    PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: `{0}`")]
-    UvToml(String, #[source] toml::de::Error),
+    #[error("Failed to parse: `{}`", _0.user_display())]
+    UvToml(PathBuf, #[source] Box<toml::de::Error>),
+
+    #[error("Failed to parse: `{}`. The `{1}` field is not allowed in a `uv.toml` file. `{1}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display())]
+    PyprojectOnlyField(PathBuf, &'static str),
 }
 
 #[cfg(test)]
