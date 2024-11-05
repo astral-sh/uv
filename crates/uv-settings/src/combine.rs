@@ -1,5 +1,6 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+
 use url::Url;
 
 use uv_configuration::{
@@ -120,6 +121,12 @@ impl Combine for Option<ConfigSettings> {
 }
 
 impl Combine for serde::de::IgnoredAny {
+    fn combine(self, _other: Self) -> Self {
+        self
+    }
+}
+
+impl Combine for Option<serde::de::IgnoredAny> {
     fn combine(self, _other: Self) -> Self {
         self
     }
