@@ -546,42 +546,6 @@ fn error_extras_not_closed() {
 }
 
 #[test]
-fn error_no_space_after_url() {
-    assert_snapshot!(
-        parse_pep508_err(r"name @ https://example.com/; extra == 'example'"),
-        @r#"
-    Missing space before ';', the end of the URL is ambiguous
-    name @ https://example.com/; extra == 'example'
-                               ^
-    "#
-    );
-}
-
-#[test]
-fn error_no_space_after_file_url() {
-    assert_snapshot!(
-        parse_pep508_err(r"name @ file:///test.whl; extra == 'example'"),
-        @r###"
-    Missing space before ';', the end of the URL is ambiguous
-    name @ file:///test.whl; extra == 'example'
-                           ^
-    "###
-    );
-}
-
-#[test]
-fn error_no_space_after_file_path() {
-    assert_snapshot!(
-        parse_pep508_err(r"name @ ./test.whl; extra == 'example'"),
-        @r###"
-    Missing space before ';', the end of the URL is ambiguous
-    name @ ./test.whl; extra == 'example'
-                     ^
-    "###
-    );
-}
-
-#[test]
 fn error_name_at_nothing() {
     assert_snapshot!(
         parse_pep508_err(r"name @"),

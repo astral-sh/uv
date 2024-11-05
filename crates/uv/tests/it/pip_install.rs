@@ -296,31 +296,6 @@ dependencies = ["flask==1.0.x"]
 }
 
 #[test]
-fn trailing_semicolon() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("./flask.whl; sys_platform == 'win32'")?;
-
-    uv_snapshot!(context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
-        .arg("--strict"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Couldn't parse requirement in `requirements.txt` at position 0
-      Caused by: Missing space before ';', the end of the URL is ambiguous
-    ./flask.whl; sys_platform == 'win32'
-               ^
-    "###
-    );
-
-    Ok(())
-}
-
-#[test]
 fn missing_pip() {
     uv_snapshot!(Command::new(get_bin()).arg("install"), @r###"
     success: false

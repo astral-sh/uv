@@ -5638,3 +5638,53 @@ fn sanitize() -> Result<()> {
 
     Ok(())
 }
+
+/// Allow semicolons attached to markers, as long as they're preceded by a space.
+#[test]
+fn semicolon_trailing_space() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl; python_version > '3.10'")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    "###
+    );
+
+    Ok(())
+}
+
+/// Treat a semicolon that's not whitespace-separated as a part of the URL.
+#[test]
+fn semicolon_no_space() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Couldn't parse requirement in `requirements.txt` at position 0
+      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version%20%3E%20'3.10'`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
+    iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    "###
+    );
+
+    Ok(())
+}
