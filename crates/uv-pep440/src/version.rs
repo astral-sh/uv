@@ -534,7 +534,7 @@ impl Version {
         if value.is_empty() {
             self.without_local()
         } else {
-            self.make_full().local = LocalVersion::Actual(value);
+            self.make_full().local = LocalVersion::Segments(value);
             self
         }
     }
@@ -544,7 +544,7 @@ impl Version {
     #[must_use]
     pub fn with_local(mut self, value: LocalVersion) -> Self {
         match value {
-            LocalVersion::Actual(segments) => self.with_local_segments(segments),
+            LocalVersion::Segments(segments) => self.with_local_segments(segments),
             LocalVersion::Max => {
                 self.make_full().local = value;
                 self
@@ -628,7 +628,7 @@ impl Version {
                 pre: small.pre(),
                 post: small.post(),
                 dev: small.dev(),
-                local: LocalVersion::Actual(vec![]),
+                local: LocalVersion::Segments(vec![]),
             };
             *self = Self {
                 inner: Arc::new(VersionInner::Full { full }),
@@ -726,10 +726,10 @@ impl std::fmt::Display for Version {
             String::new()
         } else {
             match self.local() {
-                LocalVersionSlice::Actual(_) => {
-                    format!("+{}", self.local().local_identifier_string())
+                LocalVersionSlice::Segments(_) => {
+                    format!("+{}", self.local())
                 }
-                LocalVersionSlice::Sentinel => String::new(),
+                LocalVersionSlice::Max => String::new(),
             }
         };
         write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
@@ -849,7 +849,7 @@ impl FromStr for Version {
 ///   `min, .devN, aN, bN, rcN, <no suffix>, .postN, max`.
 ///   Its representation is thus:
 ///   * The most significant 3 bits of Byte 2 corresponds to a value in
-///     the range 0-6 inclusive, corresponding to min, dev, pre-a, pre-b, pre-rc,
+///     the range 0-7 inclusive, corresponding to min, dev, pre-a, pre-b, pre-rc,
 ///     no-suffix or post releases, respectively. `min` is a special version that
 ///     does not exist in PEP 440, but is used here to represent the smallest
 ///     possible version, preceding any `dev`, `pre`, `post` or releases. `max` is
@@ -1178,7 +1178,7 @@ impl VersionSmall {
     fn local(&self) -> LocalVersionSlice {
         // A "small" version is never used if the version has a non-zero number
         // of local segments.
-        LocalVersionSlice::Actual(&[])
+        LocalVersionSlice::Segments(&[])
     }
 
     #[inline]
@@ -1200,13 +1200,13 @@ impl VersionSmall {
 
     #[inline]
     fn suffix_version(&self) -> u64 {
-        self.repr & 0x001F_FFFF
+        self.repr & Self::SUFFIX_MAX_VERSION
     }
 
     #[inline]
     fn set_suffix_version(&mut self, value: u64) {
-        debug_assert!(value <= 0x001F_FFFF);
-        self.repr &= !0x001F_FFFF;
+        debug_assert!(value <= Self::SUFFIX_MAX_VERSION);
+        self.repr &= !Self::SUFFIX_MAX_VERSION;
         self.repr |= value;
     }
 }
@@ -1404,7 +1404,7 @@ impl std::fmt::Display for Prerelease {
 #[cfg_attr(feature = "rkyv", rkyv(derive(Debug, Eq, PartialEq, PartialOrd, Ord)))]
 pub enum LocalVersion {
     /// A sequence of local segments.
-    Actual(Vec<LocalSegment>),
+    Segments(Vec<LocalSegment>),
     /// An internal-only value that compares greater to all other local versions.
     Max,
 }
@@ -1412,43 +1412,47 @@ pub enum LocalVersion {
 /// Like [`LocalVersion`], but using a slice
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum LocalVersionSlice<'a> {
-    /// Like [`LocalVersion::Actual`]
-    Actual(&'a [LocalSegment]),
+    /// Like [`LocalVersion::Segments`]
+    Segments(&'a [LocalSegment]),
     /// Like [`LocalVersion::Sentinel`]
-    Sentinel,
+    Max,
 }
 
 impl LocalVersion {
     /// Convert the local version segments into a slice.
     pub fn as_slice(&self) -> LocalVersionSlice<'_> {
         match self {
-            LocalVersion::Actual(segments) => LocalVersionSlice::Actual(segments),
-            LocalVersion::Max => LocalVersionSlice::Sentinel,
+            LocalVersion::Segments(segments) => LocalVersionSlice::Segments(segments),
+            LocalVersion::Max => LocalVersionSlice::Max,
         }
     }
 
     /// Clear the local version segments, if they exist.
     pub fn clear(&mut self) {
         match self {
-            Self::Actual(segments) => segments.clear(),
-            Self::Max => *self = Self::Actual(Vec::new()),
+            Self::Segments(segments) => segments.clear(),
+            Self::Max => *self = Self::Segments(Vec::new()),
         }
     }
 }
 
-impl LocalVersionSlice<'_> {
-    /// Output the local version identifier string.
-    ///
-    /// [`LocalVersionSlice::Sentinel`] maps to `"[max]"` which is otherwise an illegal local
-    /// version because `[` and `]` are not allowed.
-    pub fn local_identifier_string(&self) -> String {
+/// Output the local version identifier string.
+///
+/// [`LocalVersionSlice::Max`] maps to `"[max]"` which is otherwise an illegal local
+/// version because `[` and `]` are not allowed.
+impl std::fmt::Display for LocalVersionSlice<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LocalVersionSlice::Actual(segments) => segments
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("."),
-            LocalVersionSlice::Sentinel => String::from("[max]"),
+            LocalVersionSlice::Segments(segments) => {
+                for (i, segment) in segments.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ".")?;
+                    }
+                    write!(f, "{segment}")?;
+                }
+                Ok(())
+            }
+            LocalVersionSlice::Max => write!(f, "[max]"),
         }
     }
 }
@@ -1462,10 +1466,10 @@ impl PartialOrd for LocalVersionSlice<'_> {
 impl Ord for LocalVersionSlice<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (LocalVersionSlice::Actual(lv1), LocalVersionSlice::Actual(lv2)) => lv1.cmp(lv2),
-            (LocalVersionSlice::Actual(_), LocalVersionSlice::Sentinel) => Ordering::Less,
-            (LocalVersionSlice::Sentinel, LocalVersionSlice::Actual(_)) => Ordering::Greater,
-            (LocalVersionSlice::Sentinel, LocalVersionSlice::Sentinel) => Ordering::Equal,
+            (LocalVersionSlice::Segments(lv1), LocalVersionSlice::Segments(lv2)) => lv1.cmp(lv2),
+            (LocalVersionSlice::Segments(_), LocalVersionSlice::Max) => Ordering::Less,
+            (LocalVersionSlice::Max, LocalVersionSlice::Segments(_)) => Ordering::Greater,
+            (LocalVersionSlice::Max, LocalVersionSlice::Max) => Ordering::Equal,
         }
     }
 }
@@ -1473,7 +1477,7 @@ impl Ord for LocalVersionSlice<'_> {
 impl LocalVersionSlice<'_> {
     /// Whether the local version is absent
     pub fn is_empty(&self) -> bool {
-        matches!(self, Self::Actual(&[]))
+        matches!(self, Self::Segments(&[]))
     }
 }
 
@@ -1924,7 +1928,7 @@ impl<'a> Parser<'a> {
             .with_pre(self.pre)
             .with_post(self.post)
             .with_dev(self.dev)
-            .with_local(LocalVersion::Actual(self.local));
+            .with_local(LocalVersion::Segments(self.local));
         VersionPattern {
             version,
             wildcard: self.wildcard,

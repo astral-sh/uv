@@ -26,13 +26,13 @@ impl From<VersionSpecifier> for Ranges<Version> {
         let VersionSpecifier { operator, version } = specifier;
         match operator {
             Operator::Equal => match version.local() {
-                LocalVersionSlice::Actual(&[]) => {
+                LocalVersionSlice::Segments(&[]) => {
                     let low = version;
                     let high = low.clone().with_local(LocalVersion::Max);
                     Ranges::between(low, high)
                 }
-                LocalVersionSlice::Actual(_) => Ranges::singleton(version),
-                LocalVersionSlice::Sentinel => unreachable!(
+                LocalVersionSlice::Segments(_) => Ranges::singleton(version),
+                LocalVersionSlice::Max => unreachable!(
                     "found `LocalVersionSlice::Sentinel`, which should be an internal-only value"
                 ),
             },

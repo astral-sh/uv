@@ -237,65 +237,65 @@ impl NoSolutionError {
                     (Bound::Unbounded, Bound::Unbounded) => {}
                     (Bound::Unbounded, Bound::Included(v)) => {
                         // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                        if v.local() == LocalVersionSlice::Sentinel {
+                        if v.local() == LocalVersionSlice::Max {
                             *upper = Bound::Included(v.clone().without_local());
                         }
                     }
                     (Bound::Unbounded, Bound::Excluded(v)) => {
                         // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                        if v.local() == LocalVersionSlice::Sentinel {
+                        if v.local() == LocalVersionSlice::Max {
                             *upper = Bound::Excluded(v.clone().without_local());
                         }
                     }
                     (Bound::Included(v), Bound::Unbounded) => {
                         // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Sentinel {
+                        if v.local() == LocalVersionSlice::Max {
                             *lower = Bound::Excluded(v.clone().without_local());
                         }
                     }
                     (Bound::Included(v), Bound::Included(b)) => {
                         // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Sentinel {
+                        if v.local() == LocalVersionSlice::Max {
                             *lower = Bound::Excluded(v.clone().without_local());
                         }
                         // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                        if b.local() == LocalVersionSlice::Sentinel {
+                        if b.local() == LocalVersionSlice::Max {
                             *upper = Bound::Included(b.clone().without_local());
                         }
                     }
                     (Bound::Included(v), Bound::Excluded(b)) => {
                         // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Sentinel {
+                        if v.local() == LocalVersionSlice::Max {
                             *lower = Bound::Excluded(v.clone().without_local());
                         }
                         // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                        if b.local() == LocalVersionSlice::Sentinel {
+                        if b.local() == LocalVersionSlice::Max {
                             *upper = Bound::Included(b.clone().without_local());
                         }
                     }
                     (Bound::Excluded(v), Bound::Unbounded) => {
                         // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Sentinel {
+                        if v.local() == LocalVersionSlice::Max {
                             *lower = Bound::Excluded(v.clone().without_local());
                         }
                     }
                     (Bound::Excluded(v), Bound::Included(b)) => {
                         // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Sentinel {
+                        if v.local() == LocalVersionSlice::Max {
                             *lower = Bound::Excluded(v.clone().without_local());
                         }
                         // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                        if b.local() == LocalVersionSlice::Sentinel {
+                        if b.local() == LocalVersionSlice::Max {
                             *upper = Bound::Included(b.clone().without_local());
                         }
                     }
                     (Bound::Excluded(v), Bound::Excluded(b)) => {
                         // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                        if v.local() == LocalVersionSlice::Sentinel {
+                        if v.local() == LocalVersionSlice::Max {
                             *lower = Bound::Excluded(v.clone().without_local());
                         }
                         // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                        if b.local() == LocalVersionSlice::Sentinel {
+                        if b.local() == LocalVersionSlice::Max {
                             *upper = Bound::Excluded(b.clone().without_local());
                         }
                     }
@@ -309,10 +309,10 @@ impl NoSolutionError {
                 let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
                     return false;
                 };
-                if lower.local() == LocalVersionSlice::Sentinel {
+                if lower.local() == LocalVersionSlice::Max {
                     return false;
                 }
-                if upper.local() != LocalVersionSlice::Sentinel {
+                if upper.local() != LocalVersionSlice::Max {
                     return false;
                 }
                 *lower == upper.clone().without_local()
