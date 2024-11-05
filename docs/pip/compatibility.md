@@ -386,8 +386,8 @@ installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync
 ## Strictness and spec enforcement
 
 uv tends to be stricter than `pip`, and will often reject packages that `pip` would install. For
-example, uv omits packages with invalid version specifiers in its metadata, which `pip` similarly
-plans to exclude in a [future release](https://github.com/pypa/pip/issues/12063).
+example, uv rejects HTML indexes with invalid URL fragments (see:
+[PEP 503](https://peps.python.org/pep-0503/)), while `pip` will ignore such fragments.
 
 In some cases, uv implements lenient behavior for popular packages that are known to have specific
 spec compliance issues.
