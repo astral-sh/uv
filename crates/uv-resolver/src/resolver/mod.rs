@@ -72,7 +72,7 @@ pub use crate::resolver::provider::{
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
-use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options};
+use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode};
 
 mod availability;
 mod batch_prefetch;
@@ -364,12 +364,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // Walk over the selected versions, and mark them as preferences. We have to
                     // add forks back as to not override the preferences from the lockfile for
                     // the next fork
-                    for (package, version) in &resolution.nodes {
-                        preferences.insert(
-                            package.name.clone(),
-                            resolution.env.try_markers().cloned(),
-                            version.clone(),
-                        );
+                    //
+                    // If we're using a resolution mode that varies based on whether a dependency is
+                    // direct or transitive, skip preferences, as we risk adding a preference from
+                    // one fork (in which it's a transitive dependency) to another fork (in which
+                    // it's direct).
+                    if matches!(
+                        self.options.resolution_mode,
+                        ResolutionMode::Lowest | ResolutionMode::Highest
+                    ) {
+                        for (package, version) in &resolution.nodes {
+                            preferences.insert(
+                                package.name.clone(),
+                                resolution.env.try_markers().cloned(),
+                                version.clone(),
+                            );
+                        }
                     }
 
                     resolutions.push(resolution);
@@ -1832,6 +1842,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
+                // We don't have access to the fork state when prefetching, so assume that
+                // pre-release versions are allowed.
+                let env = ResolverEnvironment::universal(vec![]);
+
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
                 let Some(candidate) = self.selector.select(
@@ -1841,9 +1855,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.preferences,
                     &self.installed_packages,
                     &self.exclusions,
-                    // We don't have access to the fork state when prefetching, so assume that
-                    // pre-release versions are allowed.
-                    &ResolverEnvironment::universal(vec![]),
+                    &env,
                 ) else {
                     return Ok(None);
                 };
@@ -1857,7 +1869,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // often leads to failed attempts to build legacy versions of packages that are
                 // incompatible with modern build tools.
                 if dist.wheel().is_none() {
-                    if !self.selector.use_highest_version(&package_name) {
+                    if !self.selector.use_highest_version(&package_name, &env) {
                         if let Some((lower, _)) = range.iter().next() {
                             if lower == &Bound::Unbounded {
                                 debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
