@@ -2,8 +2,6 @@ use std::env;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
-use tracing::debug;
-
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
@@ -42,16 +40,16 @@ impl FilesystemOptions {
         let root = dir.join("uv");
         let file = root.join("uv.toml");
 
-        debug!("Searching for user configuration in: `{}`", file.display());
+        tracing::debug!("Searching for user configuration in: `{}`", file.display());
         match read_file(&file) {
             Ok(options) => {
-                debug!("Found user configuration in: `{}`", file.display());
+                tracing::debug!("Found user configuration in: `{}`", file.display());
                 Ok(Some(Self(options)))
             }
             Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(_) if !dir.is_dir() => {
                 // Ex) `XDG_CONFIG_HOME=/dev/null`
-                debug!(
+                tracing::debug!(
                     "User configuration directory `{}` does not exist or is not a directory",
                     dir.display()
                 );
@@ -65,7 +63,7 @@ impl FilesystemOptions {
         let Some(file) = system_config_file() else {
             return Ok(None);
         };
-        debug!("Found system configuration in: `{}`", file.display());
+        tracing::debug!("Found system configuration in: `{}`", file.display());
         Ok(Some(Self(read_file(&file)?)))
     }
 
@@ -123,7 +121,7 @@ impl FilesystemOptions {
                     }
                 }
 
-                debug!("Found workspace configuration at `{}`", path.display());
+                tracing::debug!("Found workspace configuration at `{}`", path.display());
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -138,21 +136,21 @@ impl FilesystemOptions {
                 let pyproject: PyProjectToml = toml::from_str(&content)
                     .map_err(|err| Error::PyprojectToml(path.user_display().to_string(), err))?;
                 let Some(tool) = pyproject.tool else {
-                    debug!(
+                    tracing::debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
                         dir.display()
                     );
                     return Ok(None);
                 };
                 let Some(options) = tool.uv else {
-                    debug!(
+                    tracing::debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool.uv]` section)",
                         dir.display()
                     );
                     return Ok(None);
                 };
 
-                debug!("Found workspace configuration at `{}`", path.display());
+                tracing::debug!("Found workspace configuration at `{}`", path.display());
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -241,7 +239,14 @@ fn system_config_file() -> Option<PathBuf> {
         // Fallback to `/etc/uv/uv.toml` if `XDG_CONFIG_DIRS` is not set or no valid
         // path is found.
         let candidate = Path::new("/etc/uv/uv.toml");
-        candidate.is_file().then(|| candidate.to_path_buf())
+        match candidate.try_exists() {
+            Ok(true) => Some(candidate.to_path_buf()),
+            Ok(false) => None,
+            Err(err) => {
+                tracing::warn!("Failed to query system configuration file: {err}");
+                None
+            }
+        }
     }
 }
 
