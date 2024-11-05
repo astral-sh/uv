@@ -643,7 +643,7 @@ impl InitProjectKind {
         let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
 
         // Include additional project configuration for packaged applications
-        if package {
+        if package || build_backend.is_some() {
             // Since it'll be packaged, we can add a `[project.scripts]` entry
             pyproject.push('\n');
             pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
