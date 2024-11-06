@@ -390,7 +390,7 @@ impl Version {
     #[inline]
     pub fn local(&self) -> LocalVersionSlice {
         match *self.inner {
-            VersionInner::Small { ref small } => small.local(),
+            VersionInner::Small { ref small } => small.local_slice(),
             VersionInner::Full { ref full } => full.local.as_slice(),
         }
     }
@@ -546,6 +546,11 @@ impl Version {
         match value {
             LocalVersion::Segments(segments) => self.with_local_segments(segments),
             LocalVersion::Max => {
+                if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+                    if small.set_local(LocalVersion::Max) {
+                        return self;
+                    }
+                }
                 self.make_full().local = value;
                 self
             }
@@ -559,12 +564,12 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn without_local(mut self) -> Self {
-        // A "small" version is already guaranteed not to have a local
-        // component, so we only need to do anything if we have a "full"
-        // version.
-        if let VersionInner::Full { ref mut full } = Arc::make_mut(&mut self.inner) {
-            full.local.clear();
+        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+            if small.set_local(LocalVersion::empty()) {
+                return self;
+            }
         }
+        self.make_full().local = LocalVersion::empty();
         self
     }
 
@@ -628,7 +633,7 @@ impl Version {
                 pre: small.pre(),
                 post: small.post(),
                 dev: small.dev(),
-                local: LocalVersion::Segments(vec![]),
+                local: small.local(),
             };
             *self = Self {
                 inner: Arc::new(VersionInner::Full { full }),
@@ -846,16 +851,16 @@ impl FromStr for Version {
 /// * Bytes 5, 4 and 3 correspond to the second, third and fourth release
 ///   segments, respectively.
 /// * Bytes 2, 1 and 0 represent *one* of the following:
-///   `min, .devN, aN, bN, rcN, <no suffix>, .postN, max`.
+///   `min, .devN, aN, bN, rcN, <no suffix>, local, .postN, max`.
 ///   Its representation is thus:
-///   * The most significant 3 bits of Byte 2 corresponds to a value in
-///     the range 0-7 inclusive, corresponding to min, dev, pre-a, pre-b,
+///   * The most significant 4 bits of Byte 2 corresponds to a value in
+///     the range 0-8 inclusive, corresponding to min, dev, pre-a, pre-b,
 ///     pre-rc, no-suffix, post or max releases, respectively. `min` is a
 ///     special version that does not exist in PEP 440, but is used here to
 ///     represent the smallest possible version, preceding any `dev`, `pre`,
 ///     `post` or releases. `max` is an analogous concept for the largest
 ///     possible version, following any `post` or local releases.
-///   * The low 5 bits combined with the bits in bytes 1 and 0 correspond
+///   * The low 4 bits combined with the bits in bytes 1 and 0 correspond
 ///     to the release number of the suffix, if one exists. If there is no
 ///     suffix, then these bits are always 0.
 ///
@@ -933,8 +938,9 @@ impl VersionSmall {
     const SUFFIX_PRE_BETA: u64 = 3;
     const SUFFIX_PRE_RC: u64 = 4;
     const SUFFIX_NONE: u64 = 5;
-    const SUFFIX_POST: u64 = 6;
-    const SUFFIX_MAX: u64 = 7;
+    const SUFFIX_LOCAL: u64 = 6;
+    const SUFFIX_POST: u64 = 7;
+    const SUFFIX_MAX: u64 = 8;
 
     // The mask to get only the release segment bits.
     //
@@ -943,16 +949,16 @@ impl VersionSmall {
     // `Parser::parse_fast`.
     const SUFFIX_RELEASE_MASK: u64 = 0xFFFF_FFFF_FF00_0000;
     // The mask to get the version suffix.
-    const SUFFIX_VERSION_MASK: u64 = 0x001F_FFFF;
+    const SUFFIX_VERSION_MASK: u64 = 0x000F_FFFF;
     // The number of bits used by the version suffix. Shifting the `repr`
     // right by this number of bits should put the suffix kind in the least
     // significant bits.
-    const SUFFIX_VERSION_BIT_LEN: u64 = 21;
+    const SUFFIX_VERSION_BIT_LEN: u64 = 20;
     // The mask to get only the suffix kind, after shifting right by the
     // version bits. If you need to add a bit here, then you'll probably need
     // to take a bit from the suffix version. (Which requires a change to both
     // the mask and the bit length above.)
-    const SUFFIX_KIND_MASK: u64 = 0b111;
+    const SUFFIX_KIND_MASK: u64 = 0b1111;
 
     #[inline]
     fn new() -> Self {
@@ -1026,11 +1032,8 @@ impl VersionSmall {
 
     #[inline]
     fn set_post(&mut self, value: Option<u64>) -> bool {
-        if self.min().is_some()
-            || self.pre().is_some()
-            || self.dev().is_some()
-            || self.max().is_some()
-        {
+        let suffix_kind = self.suffix_kind();
+        if !(suffix_kind == Self::SUFFIX_NONE || suffix_kind == Self::SUFFIX_POST) {
             return value.is_none();
         }
         match value {
@@ -1073,10 +1076,11 @@ impl VersionSmall {
 
     #[inline]
     fn set_pre(&mut self, value: Option<Prerelease>) -> bool {
-        if self.min().is_some()
-            || self.dev().is_some()
-            || self.post().is_some()
-            || self.max().is_some()
+        let suffix_kind = self.suffix_kind();
+        if !(suffix_kind == Self::SUFFIX_NONE
+            || suffix_kind == Self::SUFFIX_PRE_ALPHA
+            || suffix_kind == Self::SUFFIX_PRE_BETA
+            || suffix_kind == Self::SUFFIX_PRE_RC)
         {
             return value.is_none();
         }
@@ -1116,11 +1120,8 @@ impl VersionSmall {
 
     #[inline]
     fn set_dev(&mut self, value: Option<u64>) -> bool {
-        if self.min().is_some()
-            || self.pre().is_some()
-            || self.post().is_some()
-            || self.max().is_some()
-        {
+        let suffix_kind = self.suffix_kind();
+        if !(suffix_kind == Self::SUFFIX_NONE || suffix_kind == Self::SUFFIX_DEV) {
             return value.is_none();
         }
         match value {
@@ -1149,11 +1150,8 @@ impl VersionSmall {
 
     #[inline]
     fn set_min(&mut self, value: Option<u64>) -> bool {
-        if self.dev().is_some()
-            || self.pre().is_some()
-            || self.post().is_some()
-            || self.max().is_some()
-        {
+        let suffix_kind = self.suffix_kind();
+        if !(suffix_kind == Self::SUFFIX_NONE || suffix_kind == Self::SUFFIX_MIN) {
             return value.is_none();
         }
         match value {
@@ -1182,11 +1180,8 @@ impl VersionSmall {
 
     #[inline]
     fn set_max(&mut self, value: Option<u64>) -> bool {
-        if self.dev().is_some()
-            || self.pre().is_some()
-            || self.post().is_some()
-            || self.min().is_some()
-        {
+        let suffix_kind = self.suffix_kind();
+        if !(suffix_kind == Self::SUFFIX_NONE || suffix_kind == Self::SUFFIX_MAX) {
             return value.is_none();
         }
         match value {
@@ -1205,11 +1200,40 @@ impl VersionSmall {
     }
 
     #[inline]
-    #[allow(clippy::unused_self)]
-    fn local(&self) -> LocalVersionSlice {
-        // A "small" version is never used if the version has a non-zero number
-        // of local segments.
-        LocalVersionSlice::Segments(&[])
+    fn local(&self) -> LocalVersion {
+        if self.suffix_kind() == Self::SUFFIX_LOCAL {
+            LocalVersion::Max
+        } else {
+            LocalVersion::empty()
+        }
+    }
+
+    #[inline]
+    fn local_slice(&self) -> LocalVersionSlice {
+        if self.suffix_kind() == Self::SUFFIX_LOCAL {
+            LocalVersionSlice::Max
+        } else {
+            LocalVersionSlice::empty()
+        }
+    }
+
+    #[inline]
+    fn set_local(&mut self, value: LocalVersion) -> bool {
+        let suffix_kind = self.suffix_kind();
+        if !(suffix_kind == Self::SUFFIX_NONE || suffix_kind == Self::SUFFIX_LOCAL) {
+            return value.is_empty();
+        }
+        match value {
+            LocalVersion::Max => {
+                self.set_suffix_kind(Self::SUFFIX_LOCAL);
+                true
+            }
+            LocalVersion::Segments(segments) if segments.is_empty() => {
+                self.set_suffix_kind(Self::SUFFIX_NONE);
+                true
+            }
+            LocalVersion::Segments(_) => false,
+        }
     }
 
     #[inline]
@@ -1224,7 +1248,7 @@ impl VersionSmall {
         debug_assert!(kind <= Self::SUFFIX_MAX);
         self.repr &= !(Self::SUFFIX_KIND_MASK << Self::SUFFIX_VERSION_BIT_LEN);
         self.repr |= kind << Self::SUFFIX_VERSION_BIT_LEN;
-        if kind == Self::SUFFIX_NONE {
+        if kind == Self::SUFFIX_NONE || kind == Self::SUFFIX_LOCAL {
             self.set_suffix_version(0);
         }
     }
@@ -1450,6 +1474,19 @@ pub enum LocalVersionSlice<'a> {
 }
 
 impl LocalVersion {
+    /// Return an empty local version.
+    pub fn empty() -> Self {
+        Self::Segments(Vec::new())
+    }
+
+    /// Returns `true` if the local version is empty.
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Segments(segments) => segments.is_empty(),
+            Self::Max => false,
+        }
+    }
+
     /// Convert the local version segments into a slice.
     pub fn as_slice(&self) -> LocalVersionSlice<'_> {
         match self {
@@ -1506,7 +1543,12 @@ impl Ord for LocalVersionSlice<'_> {
 }
 
 impl LocalVersionSlice<'_> {
-    /// Whether the local version is absent
+    /// Return an empty local version.
+    pub const fn empty() -> Self {
+        Self::Segments(&[])
+    }
+
+    /// Returns `true` if the local version is empty.
     pub fn is_empty(&self) -> bool {
         matches!(self, Self::Segments(&[]))
     }
