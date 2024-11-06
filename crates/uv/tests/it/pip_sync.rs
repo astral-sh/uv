@@ -1410,7 +1410,7 @@ fn install_url_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files for source-distribution ([SIZE])
+    Removed 19 files ([SIZE])
     "###
     );
 
@@ -1505,7 +1505,7 @@ fn install_git_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    No cache entries found for werkzeug
+    No cache entries found
     "###
     );
 
@@ -1605,7 +1605,7 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 20 files for source-distribution ([SIZE])
+    Removed 20 files ([SIZE])
     "###
     );
 
@@ -1702,7 +1702,7 @@ fn install_path_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files for source-distribution ([SIZE])
+    Removed 19 files ([SIZE])
     "###
     );
 
@@ -1787,13 +1787,10 @@ fn install_path_built_dist_cached() -> Result<()> {
 
     let filters = if cfg!(windows) {
         // We do not display sizes on Windows
-        [(
-            "Removed 1 file for tomli",
-            "Removed 1 file for tomli ([SIZE])",
-        )]
-        .into_iter()
-        .chain(context.filters())
-        .collect()
+        [("Removed 1 file", "Removed 1 file ([SIZE])")]
+            .into_iter()
+            .chain(context.filters())
+            .collect()
     } else {
         context.filters()
     };
@@ -1804,7 +1801,7 @@ fn install_path_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 11 files for tomli ([SIZE])
+    Removed 11 files ([SIZE])
     "###
     );
 
@@ -1892,7 +1889,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 43 files for tqdm ([SIZE])
+    Removed 43 files ([SIZE])
     "###
     );
 
