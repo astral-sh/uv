@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
-use uv_cache::{Cache, CleanReporter, Removal};
+use uv_cache::{Cache, Removal};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
@@ -37,7 +37,7 @@ pub(crate) fn cache_clean(
         let reporter = CleaningDirectoryReporter::new(printer, num_paths);
 
         cache
-            .clear(Some(&reporter))
+            .clear(Box::new(reporter))
             .with_context(|| format!("Failed to clear cache at: {}", cache.root().user_display()))?
     } else {
         let reporter = CleaningPackageReporter::new(printer, packages.len());
@@ -46,8 +46,7 @@ pub(crate) fn cache_clean(
         for package in packages {
             let removed = cache.remove(package)?;
             summary += removed;
-
-            reporter.on_clean_package(package.as_str(), &summary);
+            reporter.on_clean(package.as_str(), &summary);
         }
         reporter.on_complete();
 

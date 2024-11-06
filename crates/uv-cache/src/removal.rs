@@ -9,12 +9,34 @@ use crate::CleanReporter;
 
 /// Remove a file or directory and all its contents, returning a [`Removal`] with
 /// the number of files and directories removed, along with a total byte count.
-pub fn rm_rf(path: impl AsRef<Path>, reporter: Option<&dyn CleanReporter>) -> io::Result<Removal> {
-    let mut removal = Removal::default();
-    removal.rm_rf(path.as_ref(), reporter)?;
-    Ok(removal)
+pub fn rm_rf(path: impl AsRef<Path>) -> io::Result<Removal> {
+    Remover::default().rm_rf(path)
 }
 
+/// A builder for a [`Remover`] that can remove files and directories.
+#[derive(Default)]
+pub(crate) struct Remover {
+    reporter: Option<Box<dyn CleanReporter>>,
+}
+
+impl Remover {
+    /// Create a new [`Remover`] with the given reporter.
+    pub(crate) fn new(reporter: Box<dyn CleanReporter>) -> Self {
+        Self {
+            reporter: Some(reporter),
+        }
+    }
+
+    /// Remove a file or directory and all its contents, returning a [`Removal`] with
+    /// the number of files and directories removed, along with a total byte count.
+    pub(crate) fn rm_rf(&self, path: impl AsRef<Path>) -> io::Result<Removal> {
+        let mut removal = Removal::default();
+        removal.rm_rf(path.as_ref(), self.reporter.as_deref())?;
+        Ok(removal)
+    }
+}
+
+/// A removal operation with statistics on the number of files and directories removed.
 #[derive(Debug, Default)]
 pub struct Removal {
     /// The number of files removed.

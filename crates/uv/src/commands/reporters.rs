@@ -557,6 +557,7 @@ impl uv_cache::CleanReporter for CleaningDirectoryReporter {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct CleaningPackageReporter {
     bar: ProgressBar,
 }
@@ -573,12 +574,8 @@ impl CleaningPackageReporter {
         bar.set_prefix(format!("{}", "Cleaning".bold().cyan()));
         Self { bar }
     }
-}
 
-impl uv_cache::CleanReporter for CleaningPackageReporter {
-    fn on_clean(&self) {}
-
-    fn on_clean_package(&self, package: &str, removal: &Removal) {
+    pub(crate) fn on_clean(&self, package: &str, removal: &Removal) {
         self.bar.inc(1);
         self.bar.set_message(format!(
             ": {}, {} files {} folders removed",
@@ -586,7 +583,7 @@ impl uv_cache::CleanReporter for CleaningPackageReporter {
         ));
     }
 
-    fn on_complete(&self) {
+    pub(crate) fn on_complete(&self) {
         self.bar.finish_and_clear();
     }
 }
