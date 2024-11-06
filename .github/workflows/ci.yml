@@ -553,6 +553,28 @@ jobs:
           path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
           retention-days: 1
 
+  cargo-build-msrv:
+    name: "cargo build (msrv)"
+    needs: determine_changes
+    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on:
+      labels: ubuntu-latest-large
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SebRollen/toml-action@v1.2.0
+        id: msrv
+        with:
+          file: "Cargo.toml"
+          field: "workspace.package.rust-version"
+      - name: "Install Rust toolchain"
+        run: rustup default ${{ steps.msrv.outputs.value }}
+      - name: "Install mold"
+        uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +${{ steps.msrv.outputs.value }} build
+      - run: ./target/debug/uv --version
+
   build-binary-freebsd:
     needs: determine_changes
     timeout-minutes: 10
