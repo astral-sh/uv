@@ -117,7 +117,6 @@ jobs:
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
 
       - name: Create Dev Drive using ReFS
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -126,6 +125,10 @@ jobs:
       - name: Copy Git Repo to Dev Drive
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy
