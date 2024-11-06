@@ -1150,6 +1150,39 @@ fn ordering() {
 }
 
 #[test]
+fn local_sentinel_version() {
+    let sentinel = Version::new([1, 0]).with_local(LocalVersion::Max);
+
+    // Ensure that the "max local version" sentinel is less than the following versions.
+    let versions = &["1.0.post0", "1.1"];
+
+    for greater in versions {
+        let greater = greater.parse::<Version>().unwrap();
+        assert_eq!(
+            sentinel.cmp(&greater),
+            Ordering::Less,
+            "less: {:?}\ngreater: {:?}",
+            greater.as_bloated_debug(),
+            sentinel.as_bloated_debug(),
+        );
+    }
+
+    // Ensure that the "max local version" sentinel is greater than the following versions.
+    let versions = &["1.0", "1.0.a0", "1.0+local"];
+
+    for less in versions {
+        let less = less.parse::<Version>().unwrap();
+        assert_eq!(
+            sentinel.cmp(&less),
+            Ordering::Greater,
+            "less: {:?}\ngreater: {:?}",
+            sentinel.as_bloated_debug(),
+            less.as_bloated_debug()
+        );
+    }
+}
+
+#[test]
 fn min_version() {
     // Ensure that the `.min` suffix precedes all other suffixes.
     let less = Version::new([1, 0]).with_min(Some(0));
