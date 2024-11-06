@@ -36,7 +36,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, MIN_VERSION};
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{Requirement, ResolutionMetadata, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictingGroupList, Requirement, ResolutionMetadata, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -106,6 +106,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     hasher: HashStrategy,
     env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    conflicting_groups: ConflictingGroupList,
     workspace_members: BTreeSet<PackageName>,
     selector: CandidateSelector,
     index: InMemoryIndex,
@@ -146,6 +147,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         env: ResolverEnvironment,
+        conflicting_groups: ConflictingGroupList,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
@@ -172,6 +174,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             hasher,
             env,
             python_requirement,
+            conflicting_groups,
             index,
             build_context.git(),
             build_context.capabilities(),
@@ -192,6 +195,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         hasher: &HashStrategy,
         env: ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        conflicting_groups: ConflictingGroupList,
         index: &InMemoryIndex,
         git: &GitResolver,
         capabilities: &IndexCapabilities,
@@ -219,6 +223,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             locations: locations.clone(),
             env,
             python_requirement: python_requirement.clone(),
+            conflicting_groups,
             installed_packages,
             unavailable_packages: DashMap::default(),
             incomplete_packages: DashMap::default(),
@@ -1183,7 +1188,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             })
         } else {
-            Ok(result?.fork(python_requirement))
+            Ok(result?.fork(python_requirement, &self.conflicting_groups))
         }
     }
 
@@ -2662,7 +2667,11 @@ impl Dependencies {
     /// A fork *only* occurs when there are multiple dependencies with the same
     /// name *and* those dependency specifications have corresponding marker
     /// expressions that are completely disjoint with one another.
-    fn fork(self, python_requirement: &PythonRequirement) -> ForkedDependencies {
+    fn fork(
+        self,
+        python_requirement: &PythonRequirement,
+        conflicting_groups: &ConflictingGroupList,
+    ) -> ForkedDependencies {
         let deps = match self {
             Dependencies::Available(deps) => deps,
             Dependencies::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
@@ -2680,7 +2689,7 @@ impl Dependencies {
         let Forks {
             mut forks,
             diverging_packages,
-        } = Forks::new(name_to_deps, python_requirement);
+        } = Forks::new(name_to_deps, python_requirement, conflicting_groups);
         if forks.is_empty() {
             ForkedDependencies::Unforked(vec![])
         } else if forks.len() == 1 {
@@ -2741,6 +2750,7 @@ impl Forks {
     fn new(
         name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>>,
         python_requirement: &PythonRequirement,
+        _conflicting_groups: &ConflictingGroupList,
     ) -> Forks {
         let python_marker = python_requirement.to_marker_tree();
 

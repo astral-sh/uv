@@ -332,6 +332,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 args.environments,
+                args.conflicting_groups,
                 args.settings.extras,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,

@@ -5195,6 +5195,7 @@ dependencies = [
  "mailparse",
  "regex",
  "rkyv",
+ "schemars",
  "serde",
  "serde-untagged",
  "thiserror",

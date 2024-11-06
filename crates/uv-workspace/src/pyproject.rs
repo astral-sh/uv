@@ -24,7 +24,9 @@ use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ConflictingGroupList, RequirementSource, SupportedEnvironments, VerbatimParsedUrl,
+};
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -439,6 +441,50 @@ pub struct ToolUv {
         "#
     )]
     pub environments: Option<SupportedEnvironments>,
+
+    /// Conflicting extras may be declared here.
+    ///
+    /// It's useful to declare conflicting extras when the extras have mutually
+    /// incompatible dependencies. For example, extra `foo` might depend on
+    /// `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`. These
+    /// extras cannot be activated at the same time. This usually isn't a
+    /// problem for pip-style workflows, but when using uv project support
+    /// with universal resolution, it will try to produce a resolution that
+    /// satisfies both extras simultaneously.
+    ///
+    /// When this happens, resolution will fail, because one cannot install
+    /// both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
+    ///
+    /// To work around this, you may specify `foo` and `bar` as conflicting
+    /// extras. When doing universal resolution in project mode, these extras
+    /// will get their own "forks" distinct from one another in order to permit
+    /// conflicting dependencies. In exchange, if one tries to install from the
+    /// lock file with both conflicting extras activated, installation will
+    /// fail.
+    #[cfg_attr(
+        feature = "schemars",
+        // Skipped for now while we iterate on this feature.
+        schemars(skip, description = "A list sets of conflicting groups or extras.")
+    )]
+    /*
+    This is commented out temporarily while we finalize its
+    functionality and naming. This avoids it showing up in docs.
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[list[dict]]",
+        example = r#"
+            # Require that `package[test1]` and `package[test2]`
+            # requirements are resolved in different forks so that they
+            # cannot conflict with one another.
+            conflicting-groups = [
+                [
+                    { extra = "test1" },
+                    { extra = "test2" },
+                ]
+            ]
+        "#
+    )]
+    pub conflicting_groups: Option<ConflictingGroupList>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]

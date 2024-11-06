@@ -3031,6 +3031,102 @@ fn resolve_both() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Tests that errors when parsing `conflicting-groups` are reported.
+#[test]
+fn invalid_conflicting_groups() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // Write in `pyproject.toml` schema and test the singleton case.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [{extra = "dev"}],
+        ]
+    "#})?;
+
+    // The file should be rejected for violating the schema.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 7, column 22
+      |
+    7 | conflicting-groups = [
+      |                      ^
+    Each set of conflicting groups must have at least two entries, but found only one
+    "###
+    );
+
+    // Now test the empty case.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [[]]
+    "#})?;
+
+    // The file should be rejected for violating the schema.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 7, column 22
+      |
+    7 | conflicting-groups = [[]]
+      |                      ^^^^
+    Each set of conflicting groups must have at least two entries, but found none
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests that valid `conflicting-groups` are parsed okay.
+#[test]
+fn valid_conflicting_groups() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // Write in `pyproject.toml` schema.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [{extra = "x1"}, {extra = "x2"}],
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
 /// Read from a `--config-file` command line argument.
 #[test]
 #[cfg_attr(
@@ -3229,7 +3325,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
+    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicting-groups`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
     "###
     );
 

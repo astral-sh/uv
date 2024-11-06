@@ -29,7 +29,7 @@ use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl}
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep508::{ExtraName, RequirementOrigin};
-use uv_pypi_types::{Requirement, SupportedEnvironments};
+use uv_pypi_types::{ConflictingGroupList, Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
@@ -1240,6 +1240,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
+    pub(crate) conflicting_groups: ConflictingGroupList,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
 }
@@ -1331,6 +1332,12 @@ impl PipCompileSettings {
             SupportedEnvironments::default()
         };
 
+        let conflicting_groups = if let Some(configuration) = &filesystem {
+            configuration.conflicting_groups.clone().unwrap_or_default()
+        } else {
+            ConflictingGroupList::empty()
+        };
+
         Self {
             src_file,
             constraint: constraint
@@ -1348,6 +1355,7 @@ impl PipCompileSettings {
             constraints_from_workspace,
             overrides_from_workspace,
             environments,
+            conflicting_groups,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {

@@ -17,6 +17,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_installer::SitePackages;
 use uv_pep508::PackageName;
+use uv_pypi_types::ConflictingGroupList;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
 };
@@ -344,6 +345,7 @@ pub(crate) async fn pip_sync(
         Some(&tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
+        ConflictingGroupList::empty(),
         &client,
         &flat_index,
         &state.index,

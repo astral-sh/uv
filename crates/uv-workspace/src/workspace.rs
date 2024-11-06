@@ -11,7 +11,7 @@ use uv_distribution_types::Index;
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use uv_pypi_types::{Requirement, RequirementSource, SupportedEnvironments};
+use uv_pypi_types::{ConflictingGroupList, Requirement, RequirementSource, SupportedEnvironments};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -390,6 +390,16 @@ impl Workspace {
             .as_ref()
             .and_then(|tool| tool.uv.as_ref())
             .and_then(|uv| uv.environments.as_ref())
+    }
+
+    /// Returns the set of supported environments for the workspace.
+    pub fn conflicting_groups(&self) -> ConflictingGroupList {
+        self.pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.conflicting_groups.clone())
+            .unwrap_or_else(ConflictingGroupList::empty)
     }
 
     /// Returns the set of constraints for the workspace.
