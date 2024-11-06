@@ -5,11 +5,13 @@
 use std::io;
 use std::path::Path;
 
+use crate::CleanReporter;
+
 /// Remove a file or directory and all its contents, returning a [`Removal`] with
 /// the number of files and directories removed, along with a total byte count.
-pub fn rm_rf(path: impl AsRef<Path>) -> io::Result<Removal> {
+pub fn rm_rf(path: impl AsRef<Path>, reporter: Option<&dyn CleanReporter>) -> io::Result<Removal> {
     let mut removal = Removal::default();
-    removal.rm_rf(path.as_ref())?;
+    removal.rm_rf(path.as_ref(), reporter)?;
     Ok(removal)
 }
 
@@ -28,7 +30,7 @@ pub struct Removal {
 
 impl Removal {
     /// Recursively remove a file or directory and all its contents.
-    fn rm_rf(&mut self, path: &Path) -> io::Result<()> {
+    fn rm_rf(&mut self, path: &Path, reporter: Option<&dyn CleanReporter>) -> io::Result<()> {
         let metadata = match fs_err::symlink_metadata(path) {
             Ok(metadata) => metadata,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -47,6 +49,8 @@ impl Removal {
                 remove_file(path)?;
             }
 
+            reporter.map(CleanReporter::on_clean);
+
             return Ok(());
         }
 
@@ -61,7 +65,7 @@ impl Removal {
                         if set_readable(dir).unwrap_or(false) {
                             // Retry the operation; if we _just_ `self.rm_rf(dir)` and continue,
                             // `walkdir` may give us duplicate entries for the directory.
-                            return self.rm_rf(path);
+                            return self.rm_rf(path, reporter);
                         }
                     }
                 }
@@ -88,7 +92,11 @@ impl Removal {
                 }
                 remove_file(entry.path())?;
             }
+
+            reporter.map(CleanReporter::on_clean);
         }
+
+        reporter.map(CleanReporter::on_complete);
 
         Ok(())
     }

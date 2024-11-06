@@ -1995,8 +1995,8 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                                     "Removing dangling source revision: {}",
                                     sibling.path().display()
                                 );
-                                removal +=
-                                    uv_cache::rm_rf(sibling.path()).map_err(Error::CacheWrite)?;
+                                removal += uv_cache::rm_rf(sibling.path(), None)
+                                    .map_err(Error::CacheWrite)?;
                             }
                         }
                     }
@@ -2020,8 +2020,8 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                                     "Removing dangling source revision: {}",
                                     sibling.path().display()
                                 );
-                                removal +=
-                                    uv_cache::rm_rf(sibling.path()).map_err(Error::CacheWrite)?;
+                                removal += uv_cache::rm_rf(sibling.path(), None)
+                                    .map_err(Error::CacheWrite)?;
                             }
                         }
                     }
