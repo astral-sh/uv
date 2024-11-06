@@ -43,6 +43,7 @@ jobs:
               # Generated markdown and JSON files are checked during test runs
               - "docs/reference/cli.md"
               - "docs/reference/settings.md"
+              - "docs/configuration/environment.md"
               - "uv.schema.json"
   lint:
     timeout-minutes: 10
