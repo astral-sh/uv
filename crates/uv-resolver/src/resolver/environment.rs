@@ -6,7 +6,6 @@ use uv_pypi_types::ResolverMarkerEnvironment;
 use crate::requires_python::RequiresPythonRange;
 use crate::resolver::ForkState;
 use crate::PythonRequirement;
-use crate::ResolveError;
 
 /// Represents one or more marker environments for a resolution.
 ///
@@ -226,7 +225,7 @@ impl ResolverEnvironment {
         initial_forks
             .iter()
             .rev()
-            .filter_map(|initial_fork| init.clone().with_env(&initial_fork))
+            .filter_map(|initial_fork| init.clone().with_env(initial_fork))
             .collect()
     }
 
@@ -244,7 +243,7 @@ impl ResolverEnvironment {
         &self,
         python_requirement: &PythonRequirement,
     ) -> Option<PythonRequirement> {
-        Some(python_requirement.narrow(&self.requires_python_range()?)?)
+        python_requirement.narrow(&self.requires_python_range()?)
     }
 
     /// Returns a message formatted for end users representing a fork in the
@@ -352,8 +351,7 @@ mod tests {
 
     fn requires_python_range_lower(lower_version_bound: &str) -> RequiresPythonRange {
         let lower = LowerBound::new(Bound::Included(version(lower_version_bound)));
-        let range = RequiresPythonRange::new(lower, UpperBound::default());
-        range
+        RequiresPythonRange::new(lower, UpperBound::default())
     }
 
     fn marker(marker: &str) -> MarkerTree {
