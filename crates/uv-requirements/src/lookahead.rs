@@ -18,7 +18,7 @@ use crate::{required_dist, Error};
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///
 /// The resolver extends certain privileges to "first-party" requirements. For example, first-party
-/// requirements are allowed to contain direct URL references, local version specifiers, and more.
+/// requirements are allowed to contain direct URL references.
 ///
 /// The lookahead resolver resolves requirements recursively for direct URLs, so that the resolver
 /// can treat them as first-party dependencies for the purpose of analyzing their specifiers.

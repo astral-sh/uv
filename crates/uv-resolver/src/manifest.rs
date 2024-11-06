@@ -106,7 +106,6 @@ impl Manifest {
     /// - Determining which requirements should allow yanked versions.
     /// - Determining which requirements should allow pre-release versions (e.g., `torch>=2.2.0a1`).
     /// - Determining which requirements should allow direct URLs (e.g., `torch @ https://...`).
-    /// - Determining which requirements should allow local version specifiers (e.g., `torch==2.2.0+cpu`).
     pub fn requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
