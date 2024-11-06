@@ -179,6 +179,10 @@ directories.
 
 Ignore `.env` files when executing `uv run` commands.
 
+### `UV_NO_INSTALLER_METADATA`
+
+Skip writing `uv` installer metadata files to site-packages dist-info.
+
 ### `UV_NO_PROGRESS`
 
 Equivalent to the `--no-progress` command-line argument. Disables all progress output. For

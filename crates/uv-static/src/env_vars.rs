@@ -553,4 +553,7 @@ impl EnvVars {
     /// Avoid modifying the `PATH` environment variable when installing uv using the standalone
     /// installer and `self update` feature.
     pub const INSTALLER_NO_MODIFY_PATH: &'static str = "INSTALLER_NO_MODIFY_PATH";
+
+    /// Skip writing `uv` installer metadata files to site-packages dist-info.
+    pub const UV_NO_INSTALLER_METADATA: &'static str = "UV_NO_INSTALLER_METADATA";
 }

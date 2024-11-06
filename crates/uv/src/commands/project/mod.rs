@@ -1216,6 +1216,7 @@ pub(crate) async fn sync_environment(
     settings: InstallerSettingsRef<'_>,
     state: &SharedState,
     logger: Box<dyn InstallLogger>,
+    installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -1334,6 +1335,7 @@ pub(crate) async fn sync_environment(
         cache,
         &venv,
         logger,
+        installer_metadata,
         dry_run,
         printer,
     )
@@ -1369,6 +1371,7 @@ pub(crate) async fn update_environment(
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
+    installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -1575,6 +1578,7 @@ pub(crate) async fn update_environment(
         cache,
         &venv,
         install,
+        installer_metadata,
         dry_run,
         printer,
     )

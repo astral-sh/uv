@@ -37,6 +37,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Install a tool.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     package: String,
     editable: bool,
@@ -49,6 +50,7 @@ pub(crate) async fn install(
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
+    installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -371,6 +373,7 @@ pub(crate) async fn install(
             &state,
             Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
+            installer_metadata,
             connectivity,
             concurrency,
             native_tls,
@@ -438,6 +441,7 @@ pub(crate) async fn install(
             settings.as_ref().into(),
             &state,
             Box::new(DefaultInstallLogger),
+            installer_metadata,
             connectivity,
             concurrency,
             native_tls,

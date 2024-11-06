@@ -7417,3 +7417,35 @@ fn resolve_derivation_chain() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that `UV_NO_INSTALLER_METADATA` env var is respected.
+#[test]
+fn respect_no_installer_metadata_env_var() {
+    let context = TestContext::new("3.12");
+
+    // Install urllib3.
+    uv_snapshot!(context.pip_install()
+        .arg("urllib3==2.2.1")
+        .arg("--strict")
+        .env(EnvVars::UV_NO_INSTALLER_METADATA, "1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + urllib3==2.2.1
+    "###
+    );
+
+    context.assert_command("import urllib3").success();
+
+    // Assert INSTALLER file was _not_ created.
+    let installer_file = context
+        .site_packages()
+        .join("urllib3-2.2.3.dist-info")
+        .join("INSTALLER");
+    assert!(!installer_file.exists());
+}

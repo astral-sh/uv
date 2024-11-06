@@ -63,6 +63,7 @@ impl Display for ToolRunCommand {
 }
 
 /// Run a command.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
@@ -75,6 +76,7 @@ pub(crate) async fn run(
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
+    installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -118,6 +120,7 @@ pub(crate) async fn run(
         isolated,
         python_preference,
         python_downloads,
+        installer_metadata,
         connectivity,
         concurrency,
         native_tls,
@@ -424,6 +427,7 @@ fn warn_executable_not_provided_by_package(
 ///
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
+#[allow(clippy::fn_params_excessive_bools)]
 async fn get_or_create_environment(
     target: &Target<'_>,
     with: &[RequirementsSource],
@@ -434,6 +438,7 @@ async fn get_or_create_environment(
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
+    installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -622,6 +627,7 @@ async fn get_or_create_environment(
         } else {
             Box::new(SummaryInstallLogger)
         },
+        installer_metadata,
         connectivity,
         concurrency,
         native_tls,
