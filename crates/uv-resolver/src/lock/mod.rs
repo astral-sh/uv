@@ -1224,6 +1224,15 @@ impl Lock {
                 }
             };
 
+            // Validate the `version` metadata.
+            if metadata.version != package.id.version {
+                return Ok(SatisfiesResult::MismatchedVersion(
+                    package.id.name.clone(),
+                    package.id.version.clone(),
+                    Some(metadata.version.clone()),
+                ));
+            }
+
             // Validate the `requires-dist` metadata.
             {
                 let expected: BTreeSet<_> = metadata

@@ -17750,3 +17750,125 @@ fn lock_transitive_git() -> Result<()> {
 
     Ok(())
 }
+
+/// Lock a package that's excluded from the parent workspace, but depends on that parent.
+#[test]
+fn lock_dynamic_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dynamic = ["version"]
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        cache-keys = [{ file = "pyproject.toml" }, { file = "src/project/__init__.py" }]
+
+        [tool.setuptools.dynamic]
+        version = { attr = "project.__version__" }
+
+        [tool.setuptools]
+        package-dir = { "" = "src" }
+
+        [tool.setuptools.packages.find]
+        where = ["src"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        "###
+        );
+    });
+
+    // Bump the version.
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .write_str("__version__ = '0.1.1'")?;
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    "###);
+
+    // Re-lock.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Updated project v0.1.0 -> v0.1.1
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.1"
+        source = { editable = "." }
+        "###
+        );
+    });
+
+    Ok(())
+}
