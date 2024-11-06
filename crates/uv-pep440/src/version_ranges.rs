@@ -2,7 +2,10 @@
 
 use version_ranges::Ranges;
 
-use crate::{Operator, Prerelease, Version, VersionSpecifier, VersionSpecifiers};
+use crate::{
+    LocalVersion, LocalVersionSlice, Operator, Prerelease, Version, VersionSpecifier,
+    VersionSpecifiers,
+};
 
 impl From<VersionSpecifiers> for Ranges<Version> {
     /// Convert [`VersionSpecifiers`] to a PubGrub-compatible version range, using PEP 440
@@ -22,9 +25,23 @@ impl From<VersionSpecifier> for Ranges<Version> {
     fn from(specifier: VersionSpecifier) -> Self {
         let VersionSpecifier { operator, version } = specifier;
         match operator {
-            Operator::Equal => Ranges::singleton(version),
+            Operator::Equal => match version.local() {
+                LocalVersionSlice::Segments(&[]) => {
+                    let low = version;
+                    let high = low.clone().with_local(LocalVersion::Max);
+                    Ranges::between(low, high)
+                }
+                LocalVersionSlice::Segments(_) => Ranges::singleton(version),
+                LocalVersionSlice::Max => unreachable!(
+                    "found `LocalVersionSlice::Sentinel`, which should be an internal-only value"
+                ),
+            },
             Operator::ExactEqual => Ranges::singleton(version),
-            Operator::NotEqual => Ranges::singleton(version).complement(),
+            Operator::NotEqual => Ranges::from(VersionSpecifier {
+                operator: Operator::Equal,
+                version,
+            })
+            .complement(),
             Operator::TildeEqual => {
                 let [rest @ .., last, _] = version.release() else {
                     unreachable!("~= must have at least two segments");
@@ -45,7 +62,7 @@ impl From<VersionSpecifier> for Ranges<Version> {
                     Ranges::strictly_lower_than(version.with_min(Some(0)))
                 }
             }
-            Operator::LessThanEqual => Ranges::lower_than(version),
+            Operator::LessThanEqual => Ranges::lower_than(version.with_local(LocalVersion::Max)),
             Operator::GreaterThan => {
                 // Per PEP 440: "The exclusive ordered comparison >V MUST NOT allow a post-release of
                 // the given version unless V itself is a post release."
