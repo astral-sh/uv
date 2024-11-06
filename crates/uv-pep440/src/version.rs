@@ -734,7 +734,7 @@ impl std::fmt::Display for Version {
                 LocalVersionSlice::Segments(_) => {
                     format!("+{}", self.local())
                 }
-                LocalVersionSlice::Max => String::new(),
+                LocalVersionSlice::Max => "+".to_string(),
             }
         };
         write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
