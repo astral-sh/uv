@@ -320,8 +320,8 @@ impl Cache {
     }
 
     /// Clear the cache, removing all entries.
-    pub fn clear(&self) -> Result<Removal, io::Error> {
-        rm_rf(&self.root)
+    pub fn clear(&self, reporter: Option<&dyn CleanReporter>) -> Result<Removal, io::Error> {
+        rm_rf(&self.root, reporter)
     }
 
     /// Remove a package from the cache.
@@ -379,7 +379,7 @@ impl Cache {
                 let path = fs_err::canonicalize(entry.path())?;
                 if !after.contains(&path) && before.contains(&path) {
                     debug!("Removing dangling cache entry: {}", path.display());
-                    summary += rm_rf(path)?;
+                    summary += rm_rf(path, None)?;
                 }
             }
         }
@@ -409,13 +409,13 @@ impl Cache {
                 if CacheBucket::iter().all(|bucket| entry.file_name() != bucket.to_str()) {
                     let path = entry.path();
                     debug!("Removing dangling cache bucket: {}", path.display());
-                    summary += rm_rf(path)?;
+                    summary += rm_rf(path, None)?;
                 }
             } else {
                 // If the file is not a marker file, remove it.
                 let path = entry.path();
                 debug!("Removing dangling cache bucket: {}", path.display());
-                summary += rm_rf(path)?;
+                summary += rm_rf(path, None)?;
             }
         }
 
@@ -427,7 +427,7 @@ impl Cache {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
                     debug!("Removing dangling cache environment: {}", path.display());
-                    summary += rm_rf(path)?;
+                    summary += rm_rf(path, None)?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
@@ -444,7 +444,7 @@ impl Cache {
                         let path = fs_err::canonicalize(entry.path())?;
                         if path.is_dir() {
                             debug!("Removing unzipped wheel entry: {}", path.display());
-                            summary += rm_rf(path)?;
+                            summary += rm_rf(path, None)?;
                         }
                     }
                 }
@@ -472,10 +472,10 @@ impl Cache {
 
                     if path.is_dir() {
                         debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
+                        summary += rm_rf(path, None)?;
                     } else if path.is_symlink() {
                         debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
+                        summary += rm_rf(path, None)?;
                     }
                 }
             }
@@ -505,7 +505,7 @@ impl Cache {
                     let path = fs_err::canonicalize(entry.path())?;
                     if !references.contains(&path) {
                         debug!("Removing dangling cache archive: {}", path.display());
-                        summary += rm_rf(path)?;
+                        summary += rm_rf(path, None)?;
                     }
                 }
             }
@@ -515,6 +515,15 @@ impl Cache {
 
         Ok(summary)
     }
+}
+
+pub trait CleanReporter: Send + Sync {
+    /// Called after one file or directory is removed.
+    fn on_clean(&self);
+    /// Called after a package is cleaned.
+    fn on_clean_package(&self, _package: &str, _removal: &Removal) {}
+    /// Called after all files and directories are removed.
+    fn on_complete(&self);
 }
 
 /// The different kinds of data in the cache are stored in different bucket, which in our case
@@ -800,32 +809,32 @@ impl CacheBucket {
             Self::Wheels => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                summary += rm_rf(root.join(name.to_string()))?;
+                summary += rm_rf(root.join(name.to_string()), None)?;
 
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root) {
-                    summary += rm_rf(directory.join(name.to_string()))?;
+                    summary += rm_rf(directory.join(name.to_string()), None)?;
                 }
 
                 // For direct URLs, we expect a directory for every URL, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for directory in directories(root) {
-                    summary += rm_rf(directory.join(name.to_string()))?;
+                    summary += rm_rf(directory.join(name.to_string()), None)?;
                 }
             }
             Self::SourceDistributions => {
                 // For `pypi` wheels, we expect a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                summary += rm_rf(root.join(name.to_string()))?;
+                summary += rm_rf(root.join(name.to_string()), None)?;
 
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root) {
-                    summary += rm_rf(directory.join(name.to_string()))?;
+                    summary += rm_rf(directory.join(name.to_string()), None)?;
                 }
 
                 // For direct URLs, we expect a directory for every URL, followed by a
@@ -834,7 +843,7 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
                 for url in directories(root) {
                     if directories(&url).any(|version| is_match(&version, name)) {
-                        summary += rm_rf(url)?;
+                        summary += rm_rf(url, None)?;
                     }
                 }
 
@@ -844,7 +853,7 @@ impl CacheBucket {
                 let root = cache.bucket(self).join(WheelCacheKind::Path);
                 for path in directories(root) {
                     if directories(&path).any(|version| is_match(&version, name)) {
-                        summary += rm_rf(path)?;
+                        summary += rm_rf(path, None)?;
                     }
                 }
 
@@ -855,7 +864,7 @@ impl CacheBucket {
                 for repository in directories(root) {
                     for sha in directories(repository) {
                         if is_match(&sha, name) {
-                            summary += rm_rf(sha)?;
+                            summary += rm_rf(sha, None)?;
                         }
                     }
                 }
@@ -863,20 +872,20 @@ impl CacheBucket {
             Self::Simple => {
                 // For `pypi` wheels, we expect a rkyv file per package, indexed by name.
                 let root = cache.bucket(self).join(WheelCacheKind::Pypi);
-                summary += rm_rf(root.join(format!("{name}.rkyv")))?;
+                summary += rm_rf(root.join(format!("{name}.rkyv")), None)?;
 
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
                 for directory in directories(root) {
-                    summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
+                    summary += rm_rf(directory.join(format!("{name}.rkyv")), None)?;
                 }
             }
             Self::FlatIndex => {
                 // We can't know if the flat index includes a package, so we just remove the entire
                 // cache entry.
                 let root = cache.bucket(self);
-                summary += rm_rf(root)?;
+                summary += rm_rf(root, None)?;
             }
             Self::Git => {
                 // Nothing to do.
