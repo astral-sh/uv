@@ -1,4 +1,4 @@
-# Concepts overview
+# Concepts
 
 Read the concept documents to learn more about uv's features:
 
@@ -11,3 +11,9 @@ Read the concept documents to learn more about uv's features:
 - [Caching](./cache.md)
 
 Looking for a quick introduction to features? See the [guides](../guides/index.md) instead.
+
+<style>
+.md-content .md-typeset h1 {
+    display: none;
+}
+</style>

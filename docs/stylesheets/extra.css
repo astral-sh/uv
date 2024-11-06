@@ -147,27 +147,43 @@ See https://github.com/astral-sh/uv/issues/5130 */
     user-select: none;
 }
 
+/* Hide the top-level left nav heading which corresponds to the name of the tab */
+.md-sidebar--primary > .md-sidebar__scrollwrap > .md-sidebar__inner > nav > .md-nav__list > .md-nav__item--active.md-nav__item--section > .md-nav__container {
+  display: none;
+}
+
+/* Remove the top margin from the first item in the nav */
+.md-sidebar--primary .md-nav[data-md-level="1"] > .md-nav__list > li:first-of-type > .md-nav__link .md-ellipsis,
+.md-sidebar--primary .md-nav[data-md-level="1"] > .md-nav__list > li:first-of-type.md-nav__item--section {
+    margin-top: 0;
+}
+
 /* Increase the size of the sections headings, remove the bold */
 .md-nav__container > .md-nav__link:first-child {
   font-size: 17.5px;
   font-weight: normal;
   margin-bottom: 0.1em;
+  margin-top: 0.5em;
 }
 
-/* Increase the size of the index nav item to match the sections */
-.md-nav--primary .md-nav__item:first-child {
-  font-size: 17.5px;
-  font-weight: normal;
-}
 /* But do not increase the size of other nav items */
 .md-nav__item--section > .md-nav > .md-nav__list > .md-nav__item {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: normal;
+  margin-top: 0.22rem;
+}
+
+/* Update the sizing of top-level nav items without chidren to match */
+.md-nav[data-md-level="1"] > .md-nav__list > .md-nav__item:not(.md-nav__item--section):not(.md-nav__item--nested) > .md-nav__link  {
+  font-size: 17.5px;
+  font-weight: normal;
+  padding-top: 0.5em;
+  padding-bottom: 0.5em;
 }
 
 /* Bold the active nav link for accessibility */
 .md-nav__link--active {
-  font-weight: bold;
+  font-weight: bold !important;
 }
 
 /* Styling for the generated CLI reference page */
@@ -191,7 +207,63 @@ h3.cli-reference {
 .toclink {
   color: unset !important;
 }
-
 .toclink:hover {
   color: var(--md-accent-fg-color) !important;
+}
+
+
+/* Style the next and prev page nav */
+.nav-wrapper {
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  margin-top: 3rem;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* Center the icon on the text, remove side padding */
+.nav-wrapper .md-footer__button.md-icon {
+  padding: 0 0 0.5rem 0;
+}
+.md-footer__title {
+  padding: 0 0.2rem;
+  max-width: none;
+  font-size: .75rem;
+}
+/* Remove the "prev" and "next" labels from the page nav */
+.md-footer__direction {
+  display: none;
+}
+/* Dim the arrows for previous and next page nav */
+.md-footer__button.md-icon {
+  opacity: 0.8;
+}
+
+
+/* Show the entire left nav when not in a mobile view */
+@media screen and (min-width: 1220px) {
+  /* .md-sidebar__scrollwrap {
+    height: unset !important;
+    overflow: visible !important;
+    margin: 0 !important;
+  }
+  .md-sidebar--primary, 
+  .md-sidebar--secondary {
+    position: sticky !important;
+    height: auto !important;
+    top: 4rem !important;
+  }
+  .md-sidebar__inner {
+    position: relative !important;
+    top: 0 !important;
+  }  */
+
+  /* Remove extra padding from the top of the left nav */
+  .md-sidebar--primary {
+    padding: unset;
+  }
+
+  /* Add a line between the left nav and the content */
+  .md-sidebar--primary > .md-sidebar__scrollwrap {
+    -webkit-box-shadow: 1px 0 0 rgba(0, 0, 0, 0.1);
+    box-shadow: 1px 0 0 rgba(0, 0, 0, 0.1);
+  }
 }

@@ -20,7 +20,7 @@ pub(crate) fn main(args: &Args) -> anyhow::Result<()> {
     let filename = "environment.md";
     let reference_path = PathBuf::from(ROOT_DIR)
         .join("docs")
-        .join("configuration")
+        .join("reference")
         .join(filename);
 
     match args.mode {

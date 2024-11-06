@@ -1,18 +1,12 @@
+---
+hide:
+  - navigation
+  - toc
+---
+
 # uv
 
 An extremely fast Python package and project manager, written in Rust.
-
-<p align="center">
-  <img alt="Shows a bar chart with benchmark results." src="https://github.com/astral-sh/uv/assets/1309177/629e59c0-9c6e-4013-9ad4-adb2bcf5080d#only-light">
-</p>
-
-<p align="center">
-  <img alt="Shows a bar chart with benchmark results." src="https://github.com/astral-sh/uv/assets/1309177/03aa9163-1c79-4a87-a31d-7a9311ed9310#only-dark">
-</p>
-
-<p align="center">
-  <i>Installing <a href="https://trio.readthedocs.io/">Trio</a>'s dependencies with a warm cache.</i>
-</p>
 
 ## Highlights
 
@@ -237,3 +231,4 @@ See the [pip interface documentation](./pip/index.md) to get started.
 
 See the [first steps](./getting-started/first-steps.md) or jump straight to the
 [guides](./guides/index.md) to start using uv.
+

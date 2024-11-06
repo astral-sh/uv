@@ -9,3 +9,9 @@ The reference section provides information about specific parts of uv:
 - [Platform support](./platforms.md): uv's supported operating systems and architectures.
 
 Looking for a broader overview? Check out the [concepts](../concepts/index.md) documentation.
+
+<style>
+.md-content .md-typeset h1 {
+    display: none;
+}
+</style>

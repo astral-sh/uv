@@ -83,4 +83,5 @@ To learn more about publishing packages, check out the
 [PyPA guides](https://packaging.python.org/en/latest/guides/section-build-and-publish/) on building
 and publishing.
 
-Or, read on for more details about the concepts in uv.
+Read [integration guides](../integration/index.md) on how to use uv with other software, or check
+out the [concepts](../../concepts/index.md) section for more details about uv's features.

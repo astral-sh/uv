@@ -78,10 +78,10 @@ version_files = [
   "README.md",
   "crates/uv/Cargo.toml",
   "crates/uv-version/Cargo.toml",
-  "docs/getting-started/installation.md",
-  "docs/guides/integration/docker.md",
-  "docs/guides/integration/pre-commit.md",
-  "docs/guides/integration/github.md",
+  "docs/getting-started/introduction/installation.md",
+  "docs/getting-started/integration/docker.md",
+  "docs/getting-started/integration/pre-commit.md",
+  "docs/getting-started/integration/github.md",
 ]
 
 [tool.mypy]

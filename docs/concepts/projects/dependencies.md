@@ -1,4 +1,4 @@
-# Specifying dependencies
+# Managing dependencies
 
 In uv, project dependencies are declared across two `pyproject.toml` tables: `project.dependencies`
 and `tool.uv.sources`.

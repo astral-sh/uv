@@ -1,21 +1,20 @@
-# Guides overview
+# Guides
 
-Check out one of the core guides to get started:
+These guides will help you get started with uv:
 
-- [Installing Python versions](./install-python.md)
-- [Running scripts and declaring dependencies](./scripts.md)
-- [Running and installing applications as tools](./tools.md)
-- [Creating and working on projects](./projects.md)
+- [Getting started](getting-started/index.md): Install uv and see an overview of its features.
+- [Core workflows](core/index.md): Get going quickly with guides for common workflows.
+- [Integration guides](integration/index.md): Learn how to integrate uv with other tools and platforms.
 
-Learn how to integrate uv with other software:
+Read on, or jump to ahead to another section if you're already familiar with the basics of uv:
 
-- [Using in Docker images](./integration/docker.md)
-- [Using with Jupyter](./integration/jupyter.md)
-- [Using with pre-commit](./integration/pre-commit.md)
-- [Using in GitHub Actions](./integration/github.md)
-- [Using in GitLab CI/CD](./integration/gitlab.md)
-- [Using with alternative package indexes](./integration/alternative-indexes.md)
-- [Building a FastAPI application](./integration/fastapi.md)
+- Learn more about the [concepts](../concepts/index.md) in uv.
+- Read about how to [configure](../configuration/index.md) uv.
+- Check out the [reference](../reference/index.md) for details on interfaces and advanced topics. 
 
-Or, explore the [concept documentation](../concepts/index.md) for comprehensive breakdown of each
-feature.
+
+<style>
+.md-content .md-typeset h1 {
+    display: none;
+}
+</style>

@@ -1,4 +1,4 @@
-# Benchmarks
+# Benchmarking
 
 uv's performance is continually benchmarked against previous releases, and regularly compared to
 other tools in the space, like pip and Poetry.

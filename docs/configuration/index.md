@@ -1,4 +1,4 @@
-# Configuration overview
+# Configuration
 
 Read about the various ways to configure uv:
 
@@ -9,3 +9,9 @@ Read about the various ways to configure uv:
 
 Or, jump to the [settings reference](../reference/settings.md) which enumerates the available
 configuration options.
+
+<style>
+.md-content .md-typeset h1 {
+    display: none;
+}
+</style>

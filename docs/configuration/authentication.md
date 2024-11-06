@@ -96,5 +96,5 @@ security risks due to the lack of certificate verification.
 
 ## Authentication with alternative package indexes
 
-See the [alternative indexes integration guide](../guides/integration/alternative-indexes.md) for
+See the [alternative indexes integration guide](../getting-started/integration/alternative-indexes.md) for
 details on authentication with popular alternative Python package indexes.

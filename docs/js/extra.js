@@ -51,3 +51,21 @@ function setCopyText() {
 document$.subscribe(function () {
   setCopyText();
 });
+
+// Function to insert navigation
+function moveNavigation() {
+  const nav = document.querySelector('nav[aria-label="Footer"]');
+  const content = document.querySelector('.md-content__inner');
+  
+  if (nav && content && !content.querySelector('.nav-wrapper')) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'nav-wrapper';
+      
+      nav.parentElement.removeChild(nav);
+      wrapper.appendChild(nav);
+      content.appendChild(wrapper);
+  }
+}
+
+// Use document$.subscribe for both initial load and instant navigation
+document$.subscribe(moveNavigation);

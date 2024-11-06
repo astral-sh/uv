@@ -4,6 +4,8 @@ theme:
   logo: assets/logo-letter.svg
   favicon: assets/favicon.ico
   features:
+    - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.instant.progress
@@ -78,63 +80,89 @@ extra:
     - icon: fontawesome/brands/x-twitter
       link: https://x.com/astral_sh
 nav:
-  - Introduction: index.md
-  - Getting started:
-      - getting-started/index.md
-      - Installation: getting-started/installation.md
-      - First steps: getting-started/first-steps.md
-      - Features: getting-started/features.md
-      - Getting help: getting-started/help.md
+  - Overview: index.md
   - Guides:
       - guides/index.md
-      - Installing Python: guides/install-python.md
-      - Running scripts: guides/scripts.md
-      - Using tools: guides/tools.md
-      - Working on projects: guides/projects.md
-      - Publishing packages: guides/publish.md
+      - Getting started: 
+          - guides/getting-started/index.md
+          - Installation: guides/getting-started/installation.md
+          - First steps:  guides/getting-started/first-steps.md
+          - Features: guides/getting-started/features.md
+          - Getting help: guides/getting-started/help.md
+      - Core workflows:
+          - guides/core/index.md
+          - Installing Python: guides/core/install-python.md
+          - Running scripts: guides/core/scripts.md
+          - Using tools: guides/core/tools.md
+          - Working on projects: guides/core/projects.md
+          - Publishing packages: guides/core/publish.md
+      - Integration guides:
+          - guides/integration/index.md
+          - Docker: guides/integration/docker.md
+          - Jupyter: guides/integration/jupyter.md
+          - GitHub Actions: guides/integration/github.md
+          - GitLab CI/CD: guides/integration/gitlab.md
+          - Pre-commit: guides/integration/pre-commit.md
+          - FastAPI: guides/integration/fastapi.md
+          - Alternative indexes: guides/integration/alternative-indexes.md
+          - Dependency bots: guides/integration/dependency-bots.md
   - Concepts:
       - concepts/index.md
-      - Projects: concepts/projects.md
-      - Dependencies: concepts/dependencies.md
-      - Workspaces: concepts/workspaces.md
-      - Tools: concepts/tools.md
-      - Python versions: concepts/python-versions.md
-      - Resolution: concepts/resolution.md
+      - Projects:
+          - concepts/projects/index.md
+          - Project metadata: concepts/projects/projects.md
+          - Creating projects: concepts/projects/creating-projects.md
+          - Running commands: concepts/projects/running-commands.md
+          - Managing dependencies: concepts/projects/dependencies.md
+          - Project environments: concepts/projects/environments.md
+          - Building distributions: concepts/projects/distributions.md
+          - Publishing projects: concepts/projects/publishing-projects.md
+          - Using workspaces: concepts/projects/workspaces.md
+      - Scripts:
+          - concepts/scripts/index.md
+          - Writing scripts: concepts/scripts/writing-scripts.md
+          - Running scripts: concepts/scripts/running-scripts.md
+      - Tools:
+          - concepts/tools/index.md
+          - Using tools: concepts/tools/using-tools.md
+          - Installing tools: concepts/tools/installing-tools.md
+      - Python:
+          - concepts/python/index.md
+          - Overview: concepts/python/python-versions.md
+          - Using Python: concepts/python/using-python.md
+          - Installing Python: concepts/python/installing-python.md
       - Caching: concepts/cache.md
+      - Resolution: concepts/resolution.md
+      - The pip interface:
+          - pip/index.md
+          - Using environments: pip/environments.md
+          - Managing packages: pip/packages.md
+          - Inspecting packages: pip/inspection.md
+          - Declaring dependencies: pip/dependencies.md
+          - Locking environments: pip/compile.md
+          - Compatibility with pip: pip/compatibility.md
   - Configuration:
       - configuration/index.md
       - Configuration files: configuration/files.md
-      - Environment variables: configuration/environment.md
       - Authentication: configuration/authentication.md
       - Package indexes: configuration/indexes.md
       - Installer: configuration/installer.md
-  - Integration guides:
-      - guides/integration/index.md
-      - Docker: guides/integration/docker.md
-      - Jupyter: guides/integration/jupyter.md
-      - GitHub Actions: guides/integration/github.md
-      - GitLab CI/CD: guides/integration/gitlab.md
-      - Pre-commit: guides/integration/pre-commit.md
-      - FastAPI: guides/integration/fastapi.md
-      - Alternative indexes: guides/integration/alternative-indexes.md
-      - Dependency bots: guides/integration/dependency-bots.md
-  - The pip interface:
-      - pip/index.md
-      - Using environments: pip/environments.md
-      - Managing packages: pip/packages.md
-      - Inspecting packages: pip/inspection.md
-      - Declaring dependencies: pip/dependencies.md
-      - Locking environments: pip/compile.md
-      - Compatibility with pip: pip/compatibility.md
   - Reference:
       - reference/index.md
-      - Commands: reference/cli.md
-      - Settings: reference/settings.md
-      - Build Failures: reference/build_failures.md
-      - Resolver: reference/resolver-internals.md
-      - Benchmarks: reference/benchmarks.md
-      - Versioning: reference/versioning.md
-      - Platform support: reference/platforms.md
+      - Interfaces:
+          - reference/interfaces/index.md
+          - Commands: reference/interfaces/cli.md
+          - Settings: reference/interfaces/settings.md
+          - Environment variables: reference/interfaces/environment.md
+      - Advanced topics:
+          - reference/advanced/index.md    
+          - Build failures: reference/advanced/build_failures.md
+          - Resolver internals: reference/advanced/resolver-internals.md
+      - Policies:
+          - reference/policies/index.md
+          - Versioning: reference/policies/versioning.md
+          - Platform support: reference/policies/platforms.md
+          - Benchmarking: reference/policies/benchmarks.md
 validation:
   omitted_files: warn
   absolute_links: warn
