@@ -1539,6 +1539,19 @@ pub(crate) enum DependencyGroupsTarget<'env> {
 }
 
 impl DependencyGroupsTarget<'_> {
+    /// Returns the dependency groups defined in the target.
+    pub(crate) fn groups(&self) -> Vec<&GroupName> {
+        match self {
+            Self::Workspace(workspace) => workspace.groups().into_iter().collect(),
+            Self::Project(project) => project
+                .current_project()
+                .pyproject_toml()
+                .dependency_groups
+                .as_ref()
+                .map_or_else(Vec::new, |groups| groups.keys().collect()),
+        }
+    }
+
     /// Validate the dependency groups requested by the [`DevGroupsSpecification`].
     #[allow(clippy::result_large_err)]
     pub(crate) fn validate(self, dev: &DevGroupsSpecification) -> Result<(), ProjectError> {

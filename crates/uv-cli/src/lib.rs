@@ -2629,6 +2629,10 @@ pub struct RunArgs {
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
+    /// Include dependencies from all dependency groups.
+    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    pub all_groups: bool,
+
     /// Run a Python module.
     ///
     /// Equivalent to `python -m <module>`.
@@ -2854,6 +2858,10 @@ pub struct SyncArgs {
     /// The project itself will also be omitted.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
+
+    /// Include dependencies from all dependency groups.
+    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    pub all_groups: bool,
 
     /// Install any editable dependencies, including the project and any workspace members, as
     /// non-editable.
@@ -3278,6 +3286,10 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
 
+    /// Include dependencies from all dependency groups.
+    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    pub all_groups: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
@@ -3414,6 +3426,10 @@ pub struct ExportArgs {
     /// The project itself will also be omitted.
     #[arg(long, conflicts_with("group"))]
     pub only_group: Vec<GroupName>,
+
+    /// Include dependencies from all dependency groups.
+    #[arg(long, conflicts_with_all = [ "group", "only_group" ])]
+    pub all_groups: bool,
 
     /// Exclude the comment header at the top of the generated output file.
     #[arg(long, overrides_with("header"))]

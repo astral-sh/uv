@@ -36,7 +36,7 @@ pub(crate) async fn export(
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
     extras: ExtrasSpecification,
-    dev: DevGroupsSpecification,
+    mut dev: DevGroupsSpecification,
     editable: EditableMode,
     locked: bool,
     frozen: bool,
@@ -86,6 +86,8 @@ pub(crate) async fn export(
         } else {
             DependencyGroupsTarget::Project(project)
         };
+
+        dev.resolve(target.groups());
         target.validate(&dev)?;
     }
 

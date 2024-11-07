@@ -70,7 +70,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: DevGroupsSpecification,
+    mut dev: DevGroupsSpecification,
     editable: EditableMode,
     python: Option<String>,
     settings: ResolverInstallerSettings,
@@ -592,6 +592,7 @@ pub(crate) async fn run(
                             DependencyGroupsTarget::Workspace(workspace)
                         }
                     };
+                    dev.resolve(target.groups());
                     target.validate(&dev)?;
                 }
 

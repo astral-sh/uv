@@ -47,7 +47,7 @@ pub(crate) async fn sync(
     all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
-    dev: DevGroupsSpecification,
+    mut dev: DevGroupsSpecification,
     editable: EditableMode,
     install_options: InstallOptions,
     modifications: Modifications,
@@ -96,6 +96,7 @@ pub(crate) async fn sync(
             }
             VirtualProject::NonProject(workspace) => DependencyGroupsTarget::Workspace(workspace),
         };
+        dev.resolve(target.groups());
         target.validate(&dev)?;
     }
 
