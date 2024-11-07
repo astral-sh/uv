@@ -1907,6 +1907,16 @@ pub struct PipListArgs {
     #[arg(long, value_enum, default_value_t = ListFormat::default())]
     pub format: ListFormat,
 
+    /// List outdated packages.
+    ///
+    /// The latest version of each package will be shown alongside the installed version. Up-to-date
+    /// packages will be omitted from the output.
+    #[arg(long, overrides_with("no_outdated"))]
+    pub outdated: bool,
+
+    #[arg(long, overrides_with("outdated"), hide = true)]
+    pub no_outdated: bool,
+
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]

@@ -4204,6 +4204,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
+ "rkyv",
  "rustc-hash",
  "serde",
  "serde_json",
