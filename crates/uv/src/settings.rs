@@ -1662,6 +1662,7 @@ pub(crate) struct PipListSettings {
     pub(crate) editable: Option<bool>,
     pub(crate) exclude: Vec<PackageName>,
     pub(crate) format: ListFormat,
+    pub(crate) outdated: bool,
     pub(crate) settings: PipSettings,
 }
 
@@ -1673,6 +1674,8 @@ impl PipListSettings {
             exclude_editable,
             exclude,
             format,
+            outdated,
+            no_outdated,
             strict,
             no_strict,
             python,
@@ -1685,6 +1688,7 @@ impl PipListSettings {
             editable: flag(editable, exclude_editable),
             exclude,
             format,
+            outdated: flag(outdated, no_outdated).unwrap_or(false),
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
