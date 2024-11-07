@@ -171,7 +171,9 @@ uv respects the following environment variables:
 - <a id="TRACING_DURATIONS_FILE"></a> [`TRACING_DURATIONS_FILE`](#TRACING_DURATIONS_FILE): Use to create the tracing durations file via the `tracing-durations-export` feature.
 - <a id="RUST_LOG"></a> [`RUST_LOG`](#RUST_LOG): If set, uv will use this value as the log level for its `--verbose` output. Accepts
   any filter compatible with the `tracing_subscriber` crate.
-  For example, `RUST_LOG=trace` will enable trace-level logging.
+  For example:
+  * `RUST_LOG=uv=debug` is the equivalent of adding `--verbose` to the command line
+  * `RUST_LOG=trace` will enable trace-level logging.
   See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
   for more.
 - <a id="UV_ENV_FILE"></a> [`UV_ENV_FILE`](#UV_ENV_FILE): `.env` files from which to load environment variables when executing `uv run` commands.
