@@ -78,6 +78,8 @@ uv run [OPTIONS] [COMMAND]
 
 <p>This option is only available when running in a project.</p>
 
+</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups</p>
+
 </dd><dt><code>--all-packages</code></dt><dd><p>Run the command with all workspace members installed.</p>
 
 <p>The workspace&#8217;s environment (<code>.venv</code>) is updated to include all workspace members.</p>
@@ -1392,6 +1394,8 @@ uv sync [OPTIONS]
 
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
 
+</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups</p>
+
 </dd><dt><code>--all-packages</code></dt><dd><p>Sync all packages in the workspace.</p>
 
 <p>The workspace&#8217;s environment (<code>.venv</code>) is updated to include all workspace members.</p>
@@ -2051,6 +2055,8 @@ uv export [OPTIONS]
 
 <dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies</p>
 
+</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups</p>
+
 </dd><dt><code>--all-packages</code></dt><dd><p>Export the entire workspace.</p>
 
 <p>The dependencies for all workspace members will be included in the exported requirements file.</p>
@@ -2406,7 +2412,9 @@ uv tree [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups</p>
+
+</dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 
 <p>Can be provided multiple times.</p>
 
