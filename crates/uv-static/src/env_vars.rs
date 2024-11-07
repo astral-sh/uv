@@ -448,7 +448,7 @@ impl EnvVars {
     #[attr_hidden]
     pub const PYTHONUTF8: &'static str = "PYTHONUTF8";
 
-    /// Adds directories to Python module search path (e.g., PYTHONPATH=/path/to/modules).
+    /// Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
     pub const PYTHONPATH: &'static str = "PYTHONPATH";
 
     /// Used in tests to enforce a consistent locale setting.
@@ -525,4 +525,24 @@ impl EnvVars {
 
     /// Ignore `.env` files when executing `uv run` commands.
     pub const UV_NO_ENV_FILE: &'static str = "UV_NO_ENV_FILE";
+
+    /// The URL from which to download uv using the standalone installer and `self update` feature,
+    /// in lieu of the default GitHub URL.
+    pub const UV_INSTALLER_GITHUB_BASE_URL: &'static str = "UV_INSTALLER_GITHUB_BASE_URL";
+
+    /// The URL from which to download uv using the standalone installer and `self update` feature,
+    /// in lieu of the default GitHub Enterprise URL.
+    pub const UV_INSTALLER_GHE_BASE_URL: &'static str = "UV_INSTALLER_GHE_BASE_URL";
+
+    /// The directory in which to install uv using the standalone installer and `self update` feature.
+    /// Defaults to `~/.cargo/bin`.
+    pub const UV_INSTALL_DIR: &'static str = "UV_INSTALL_DIR";
+
+    /// Used ephemeral environments like CI to install uv to a specific path while preventing
+    /// the installer from modifying shell profiles or environment variables.
+    pub const UV_UNMANAGED_INSTALL: &'static str = "UV_UNMANAGED_INSTALL";
+
+    /// Avoid modifying the `PATH` environment variable when installing uv using the standalone
+    /// installer and `self update` feature.
+    pub const INSTALLER_NO_MODIFY_PATH: &'static str = "INSTALLER_NO_MODIFY_PATH";
 }

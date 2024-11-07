@@ -164,7 +164,7 @@ uv respects the following environment variables:
 - <a id="GITHUB_ACTIONS"></a> [`GITHUB_ACTIONS`](#GITHUB_ACTIONS): Used for trusted publishing via `uv publish`.
 - <a id="ACTIONS_ID_TOKEN_REQUEST_URL"></a> [`ACTIONS_ID_TOKEN_REQUEST_URL`](#ACTIONS_ID_TOKEN_REQUEST_URL): Used for trusted publishing via `uv publish`. Contains the oidc token url.
 - <a id="ACTIONS_ID_TOKEN_REQUEST_TOKEN"></a> [`ACTIONS_ID_TOKEN_REQUEST_TOKEN`](#ACTIONS_ID_TOKEN_REQUEST_TOKEN): Used for trusted publishing via `uv publish`. Contains the oidc request token.
-- <a id="PYTHONPATH"></a> [`PYTHONPATH`](#PYTHONPATH): Adds directories to Python module search path (e.g., PYTHONPATH=/path/to/modules).
+- <a id="PYTHONPATH"></a> [`PYTHONPATH`](#PYTHONPATH): Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
 - <a id="NETRC"></a> [`NETRC`](#NETRC): Use to set the .netrc file location.
 - <a id="PAGER"></a> [`PAGER`](#PAGER): The standard `PAGER` posix env var. Used by `uv` to configure the appropriate pager.
 - <a id="JPY_SESSION_NAME"></a> [`JPY_SESSION_NAME`](#JPY_SESSION_NAME): Used to detect when running inside a Jupyter notebook.
@@ -176,3 +176,13 @@ uv respects the following environment variables:
   for more.
 - <a id="UV_ENV_FILE"></a> [`UV_ENV_FILE`](#UV_ENV_FILE): `.env` files from which to load environment variables when executing `uv run` commands.
 - <a id="UV_NO_ENV_FILE"></a> [`UV_NO_ENV_FILE`](#UV_NO_ENV_FILE): Ignore `.env` files when executing `uv run` commands.
+- <a id="UV_INSTALLER_GITHUB_BASE_URL"></a> [`UV_INSTALLER_GITHUB_BASE_URL`](#UV_INSTALLER_GITHUB_BASE_URL): The URL from which to download uv using the standalone installer and `self update` feature,
+  in lieu of the default GitHub URL.
+- <a id="UV_INSTALLER_GHE_BASE_URL"></a> [`UV_INSTALLER_GHE_BASE_URL`](#UV_INSTALLER_GHE_BASE_URL): The URL from which to download uv using the standalone installer and `self update` feature,
+  in lieu of the default GitHub Enterprise URL.
+- <a id="UV_INSTALL_DIR"></a> [`UV_INSTALL_DIR`](#UV_INSTALL_DIR): The directory in which to install uv using the standalone installer and `self update` feature.
+  Defaults to `~/.cargo/bin`.
+- <a id="UV_UNMANAGED_INSTALL"></a> [`UV_UNMANAGED_INSTALL`](#UV_UNMANAGED_INSTALL): Used ephemeral environments like CI to install uv to a specific path while preventing
+  the installer from modifying shell profiles or environment variables.
+- <a id="INSTALLER_NO_MODIFY_PATH"></a> [`INSTALLER_NO_MODIFY_PATH`](#INSTALLER_NO_MODIFY_PATH): Avoid modifying the `PATH` environment variable when installing uv using the standalone
+  installer and `self update` feature.
