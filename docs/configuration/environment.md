@@ -174,7 +174,6 @@ uv respects the following environment variables:
   For example:
   * `RUST_LOG=uv=debug` is the equivalent of adding `--verbose` to the command line
   * `RUST_LOG=trace` will enable trace-level logging.
-
   See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
   for more.
 - <a id="UV_ENV_FILE"></a> [`UV_ENV_FILE`](#UV_ENV_FILE): `.env` files from which to load environment variables when executing `uv run` commands.
