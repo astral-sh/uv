@@ -519,19 +519,16 @@ async fn init_project(
         (requires_python, python_request)
     };
 
-    project_kind
-        .init(
-            name,
-            path,
-            &requires_python,
-            python_request.as_ref(),
-            vcs,
-            build_backend,
-            author_from,
-            no_readme,
-            package,
-        )
-        .await?;
+    project_kind.init(
+        name,
+        path,
+        &requires_python,
+        vcs,
+        build_backend,
+        author_from,
+        no_readme,
+        package,
+    )?;
 
     if let Some(workspace) = workspace {
         if workspace.excludes(path)? {
@@ -570,6 +567,40 @@ async fn init_project(
                 name.cyan(),
                 workspace.install_path().simplified_display().cyan()
             )?;
+        }
+        // Write .python-version if it doesn't exist in the workspace or if the version differs
+        if let Some(python_request) = python_request {
+            if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
+                .await?
+                .filter(|file| {
+                    file.version()
+                        .is_some_and(|version| *version == python_request)
+                        && file.path().parent().is_some_and(|parent| {
+                            parent == workspace.install_path() || parent == path
+                        })
+                })
+                .is_none()
+            {
+                PythonVersionFile::new(path.join(".python-version"))
+                    .with_versions(vec![python_request.clone()])
+                    .write()
+                    .await?;
+            }
+        }
+    } else {
+        // Write .python-version if it doesn't exist in the project directory.
+        if let Some(python_request) = python_request {
+            if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
+                .await?
+                .filter(|file| file.version().is_some())
+                .filter(|file| file.path().parent().is_some_and(|parent| parent == path))
+                .is_none()
+            {
+                PythonVersionFile::new(path.join(".python-version"))
+                    .with_versions(vec![python_request.clone()])
+                    .write()
+                    .await?;
+            }
         }
     }
 
@@ -610,12 +641,11 @@ impl InitKind {
 
 impl InitProjectKind {
     /// Initialize this project kind at the target path.
-    async fn init(
+    fn init(
         self,
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
-        python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -623,44 +653,34 @@ impl InitProjectKind {
         package: bool,
     ) -> Result<()> {
         match self {
-            InitProjectKind::Application => {
-                self.init_application(
-                    name,
-                    path,
-                    requires_python,
-                    python_request,
-                    vcs,
-                    build_backend,
-                    author_from,
-                    no_readme,
-                    package,
-                )
-                .await
-            }
-            InitProjectKind::Library => {
-                self.init_library(
-                    name,
-                    path,
-                    requires_python,
-                    python_request,
-                    vcs,
-                    build_backend,
-                    author_from,
-                    no_readme,
-                    package,
-                )
-                .await
-            }
+            InitProjectKind::Application => InitProjectKind::init_application(
+                name,
+                path,
+                requires_python,
+                vcs,
+                build_backend,
+                author_from,
+                no_readme,
+                package,
+            ),
+            InitProjectKind::Library => InitProjectKind::init_library(
+                name,
+                path,
+                requires_python,
+                vcs,
+                build_backend,
+                author_from,
+                no_readme,
+                package,
+            ),
         }
     }
 
     /// Initialize a Python application at the target path.
-    async fn init_application(
-        self,
+    fn init_application(
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
-        python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -716,21 +736,6 @@ impl InitProjectKind {
         }
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-        // Write .python-version if it doesn't exist in the target or is empty.
-        if let Some(python_request) = python_request {
-            if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
-                .await?
-                .filter(|file| file.version().is_some())
-                .filter(|file| file.path().parent().is_some_and(|parent| parent == path))
-                .is_none()
-            {
-                PythonVersionFile::new(path.join(".python-version"))
-                    .with_versions(vec![python_request.clone()])
-                    .write()
-                    .await?;
-            }
-        }
-
         // Initialize the version control system.
         init_vcs(path, vcs)?;
 
@@ -738,12 +743,10 @@ impl InitProjectKind {
     }
 
     /// Initialize a library project at the target path.
-    async fn init_library(
-        self,
+    fn init_library(
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
-        python_request: Option<&PythonRequest>,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -771,19 +774,6 @@ impl InitProjectKind {
 
         // Generate `src` files
         generate_package_scripts(name, path, build_backend, true)?;
-
-        // Write .python-version if it doesn't exist.
-        if let Some(python_request) = python_request {
-            if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
-                .await?
-                .is_none()
-            {
-                PythonVersionFile::new(path.join(".python-version"))
-                    .with_versions(vec![python_request.clone()])
-                    .write()
-                    .await?;
-            }
-        }
 
         // Initialize the version control system.
         init_vcs(path, vcs)?;
