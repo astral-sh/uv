@@ -12,6 +12,7 @@ use tracing::{debug, trace};
 
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
+use uv_configuration::TrustedHost;
 use uv_fs::Simplified;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
@@ -112,6 +113,7 @@ pub(crate) async fn install(
     python_downloads: PythonDownloads,
     native_tls: bool,
     connectivity: Connectivity,
+    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     preview: PreviewMode,
     printer: Printer,
@@ -210,6 +212,7 @@ pub(crate) async fn install(
     let client = uv_client::BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec())
         .build();
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
     let mut tasks = FuturesUnordered::new();
