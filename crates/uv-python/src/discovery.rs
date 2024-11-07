@@ -133,6 +133,12 @@ pub enum EnvironmentPreference {
     Any,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct DiscoveryPreferences {
+    python_preference: PythonPreference,
+    environment_preference: EnvironmentPreference,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PythonVariant {
     #[default]
@@ -276,7 +282,7 @@ fn python_executables_from_environments<'a>(
 ///
 /// - Managed Python installations (e.g. `uv python install`)
 /// - The search path (i.e. `PATH`)
-/// - The `py` launcher (Windows only)
+/// - The registry (Windows only)
 ///
 /// The ordering and presence of each source is determined by the [`PythonPreference`].
 ///
@@ -753,6 +759,12 @@ pub fn find_python_installations<'a>(
     preference: PythonPreference,
     cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
+    let sources = DiscoveryPreferences {
+        python_preference: preference,
+        environment_preference: environments,
+    }
+    .sources(request);
+
     match request {
         PythonRequest::File(path) => Box::new(std::iter::once({
             if preference.allows(PythonSource::ProvidedPath) {
@@ -831,7 +843,7 @@ pub fn find_python_installations<'a>(
             }
         }
         PythonRequest::Any => Box::new({
-            debug!("Searching for any Python interpreter in {preference}");
+            debug!("Searching for any Python interpreter in {sources}");
             python_interpreters(&VersionRequest::Any, None, environments, preference, cache).map(
                 |result| {
                     result
@@ -841,7 +853,7 @@ pub fn find_python_installations<'a>(
             )
         }),
         PythonRequest::Default => Box::new({
-            debug!("Searching for default Python interpreter in {preference}");
+            debug!("Searching for default Python interpreter in {sources}");
             python_interpreters(
                 &VersionRequest::Default,
                 None,
@@ -860,7 +872,7 @@ pub fn find_python_installations<'a>(
                 return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
             };
             Box::new({
-                debug!("Searching for {request} in {preference}");
+                debug!("Searching for {request} in {sources}");
                 python_interpreters(version, None, environments, preference, cache).map(|result| {
                     result
                         .map(PythonInstallation::from_tuple)
@@ -869,7 +881,7 @@ pub fn find_python_installations<'a>(
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
-            debug!("Searching for a {request} interpreter in {preference}");
+            debug!("Searching for a {request} interpreter in {sources}");
             python_interpreters(
                 &VersionRequest::Default,
                 Some(implementation),
@@ -894,7 +906,7 @@ pub fn find_python_installations<'a>(
                 return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
             };
             Box::new({
-                debug!("Searching for {request} in {preference}");
+                debug!("Searching for {request} in {sources}");
                 python_interpreters(
                     version,
                     Some(implementation),
@@ -922,7 +934,7 @@ pub fn find_python_installations<'a>(
                 };
             };
             Box::new({
-                debug!("Searching for {request} in {preference}");
+                debug!("Searching for {request} in {sources}");
                 python_interpreters(
                     request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
@@ -2256,22 +2268,27 @@ impl fmt::Display for PythonSource {
 }
 
 impl PythonPreference {
-    /// Return the sources that are considered when searching for a Python interpreter.
-    fn sources(self) -> &'static [&'static str] {
+    /// Return the sources that are considered when searching for a Python interpreter with this
+    /// preference.
+    fn sources(self) -> &'static [PythonSource] {
         match self {
-            Self::OnlyManaged => &["managed installations"],
+            Self::OnlyManaged => &[PythonSource::Managed],
             Self::Managed | Self::System => {
                 if cfg!(windows) {
-                    &["managed installations", "system path", "`py` launcher"]
+                    &[
+                        PythonSource::Managed,
+                        PythonSource::SearchPath,
+                        PythonSource::Registry,
+                    ]
                 } else {
-                    &["managed installations", "system path"]
+                    &[PythonSource::Managed, PythonSource::SearchPath]
                 }
             }
             Self::OnlySystem => {
                 if cfg!(windows) {
-                    &["system path", "`py` launcher"]
+                    &[PythonSource::Registry, PythonSource::SearchPath]
                 } else {
-                    &["system path"]
+                    &[PythonSource::SearchPath]
                 }
             }
         }
@@ -2280,29 +2297,62 @@ impl PythonPreference {
 
 impl fmt::Display for PythonPreference {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", conjunction(self.sources()))
+        f.write_str(match self {
+            Self::OnlyManaged => "only managed",
+            Self::Managed => "prefer managed",
+            Self::System => "prefer system",
+            Self::OnlySystem => "only system",
+        })
+    }
+}
+
+impl DiscoveryPreferences {
+    /// Return a string describing the sources that are considered when searching for Python with
+    /// the given preferences.
+    fn sources(&self, request: &PythonRequest) -> String {
+        let python_sources = self
+            .python_preference
+            .sources()
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        match self.environment_preference {
+            EnvironmentPreference::Any => conjunction(
+                &["virtual environments"]
+                    .into_iter()
+                    .chain(python_sources.iter().map(String::as_str))
+                    .collect::<Vec<_>>(),
+            ),
+            EnvironmentPreference::ExplicitSystem => {
+                if request.is_explicit_system() {
+                    conjunction(
+                        &["virtual environments"]
+                            .into_iter()
+                            .chain(python_sources.iter().map(String::as_str))
+                            .collect::<Vec<_>>(),
+                    )
+                } else {
+                    conjunction(&["virtual environments"])
+                }
+            }
+            EnvironmentPreference::OnlySystem => conjunction(
+                &python_sources
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            ),
+            EnvironmentPreference::OnlyVirtual => conjunction(&["virtual environments"]),
+        }
     }
 }
 
 impl fmt::Display for PythonNotFound {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let sources = match self.environment_preference {
-            EnvironmentPreference::Any => conjunction(
-                &["virtual environments"]
-                    .into_iter()
-                    .chain(self.python_preference.sources().iter().copied())
-                    .collect::<Vec<_>>(),
-            ),
-            EnvironmentPreference::ExplicitSystem => {
-                if self.request.is_explicit_system() {
-                    conjunction(&["virtual", "system environment"])
-                } else {
-                    conjunction(&["virtual environment"])
-                }
-            }
-            EnvironmentPreference::OnlySystem => conjunction(self.python_preference.sources()),
-            EnvironmentPreference::OnlyVirtual => conjunction(&["virtual environments"]),
-        };
+        let sources = DiscoveryPreferences {
+            python_preference: self.python_preference,
+            environment_preference: self.environment_preference,
+        }
+        .sources(&self.request);
 
         match self.request {
             PythonRequest::Default | PythonRequest::Any => {

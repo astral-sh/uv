@@ -4142,7 +4142,7 @@ environment is not required, uv will then search for a Python interpreter. Pytho
 interpreters are found by searching for Python executables in the `PATH` environment
 variable.
 
-On Windows, the `py` launcher is also invoked to find Python executables.
+On Windows, the registry is also searched for Python executables.
 
 By default, uv will download Python if a version cannot be found. This behavior can be
 disabled with the `--no-python-downloads` flag or the `python-downloads` setting.

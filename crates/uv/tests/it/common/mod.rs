@@ -147,11 +147,11 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_python_sources(mut self) -> Self {
         self.filters.push((
-            "managed installations or system path".to_string(),
+            "managed installations or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
-            "managed installations, system path, or `py` launcher".to_string(),
+            "managed installations, search path, or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self
