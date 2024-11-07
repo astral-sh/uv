@@ -37,6 +37,9 @@ pub enum Error {
     /// [`GlobError`] is a wrapped io error.
     #[error(transparent)]
     Glob(#[from] GlobError),
+    /// [`globset::Error`] shows the glob that failed to parse.
+    #[error(transparent)]
+    GlobSet(#[from] globset::Error),
     #[error("Failed to walk source tree: `{}`", root.user_display())]
     WalkDir {
         root: PathBuf,
@@ -392,23 +395,23 @@ pub fn build_source_dist(
     let includes = ["src/**/*", "pyproject.toml"];
     let mut include_builder = GlobSetBuilder::new();
     for include in includes {
-        include_builder.add(Glob::new(include).expect("TODO"));
+        include_builder.add(Glob::new(include)?);
     }
-    let include_matcher = include_builder.build().expect("TODO");
+    let include_matcher = include_builder.build()?;
 
     let excludes = ["__pycache__", "*.pyc", "*.pyo"];
     let mut exclude_builder = GlobSetBuilder::new();
     for exclude in excludes {
-        exclude_builder.add(Glob::new(exclude).expect("TODO"));
+        exclude_builder.add(Glob::new(exclude)?);
     }
-    let exclude_matcher = exclude_builder.build().expect("TODO");
+    let exclude_matcher = exclude_builder.build()?;
 
     // TODO(konsti): Add files linked by pyproject.toml
 
-    for file in WalkDir::new(&source_tree).into_iter().filter_entry(|dir| {
+    for file in WalkDir::new(source_tree).into_iter().filter_entry(|dir| {
         let relative = dir
             .path()
-            .strip_prefix(&source_tree)
+            .strip_prefix(source_tree)
             .expect("walkdir starts with root");
         // TODO(konsti): Also check that we're matching at least a prefix of an include matcher.
         !exclude_matcher.is_match(relative)
@@ -419,7 +422,7 @@ pub fn build_source_dist(
         })?;
         let relative = entry
             .path()
-            .strip_prefix(&source_tree)
+            .strip_prefix(source_tree)
             .expect("walkdir starts with root");
         if !include_matcher.is_match(relative) {
             trace!("Excluding {}", relative.user_display());
@@ -442,7 +445,7 @@ pub fn build_source_dist(
             header.set_entry_type(EntryType::Directory);
             header
                 .set_path(Path::new(&top_level).join(relative))
-                .expect("TODO");
+                .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
             header.set_size(0);
             header.set_cksum();
             tar.append(&header, io::empty())
@@ -454,7 +457,7 @@ pub fn build_source_dist(
             tar.append_data(
                 &mut header,
                 Path::new(&top_level).join(relative),
-                BufReader::new(File::open(&entry.path())?),
+                BufReader::new(File::open(entry.path())?),
             )
             .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
         } else {
