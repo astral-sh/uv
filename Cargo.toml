@@ -39,6 +39,7 @@ uv-distribution-types = { path = "crates/uv-distribution-types" }
 uv-extract = { path = "crates/uv-extract" }
 uv-fs = { path = "crates/uv-fs" }
 uv-git = { path = "crates/uv-git" }
+uv-globfilter = { path = "crates/uv-globfilter" }
 uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }
 uv-macros = { path = "crates/uv-macros" }
@@ -80,6 +81,7 @@ backoff = { version = "0.4.0" }
 base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
 boxcar = { version = "0.2.5" }
+bstr = { version = "1.10.0", default-features = false, features = ["std"] }
 bytecheck = { version = "0.8.0" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.14" }
@@ -133,6 +135,7 @@ quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
+regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
 reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2"] }
 reqwest-middleware = { version = "0.4.0", features = ["multipart"] }
 reqwest-retry = { version = "0.7.0" }

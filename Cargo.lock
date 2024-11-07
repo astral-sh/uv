@@ -4505,7 +4505,6 @@ dependencies = [
  "csv",
  "flate2",
  "fs-err",
- "glob",
  "globset",
  "indoc",
  "insta",
@@ -4520,6 +4519,7 @@ dependencies = [
  "tracing",
  "uv-distribution-filename",
  "uv-fs",
+ "uv-globfilter",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
@@ -4955,6 +4955,21 @@ dependencies = [
  "uv-fs",
  "uv-static",
  "which",
+]
+
+[[package]]
+name = "uv-globfilter"
+version = "0.1.0"
+dependencies = [
+ "bstr",
+ "fs-err",
+ "globset",
+ "insta",
+ "regex-automata 0.4.8",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "walkdir",
 ]
 
 [[package]]

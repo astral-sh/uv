@@ -312,7 +312,9 @@ pub(crate) fn move_folder_recorded(
         let src = entry.path();
         // This is the base path for moving to the actual target for the data
         // e.g. for data it's without <..>.data/data/
-        let relative_to_data = src.strip_prefix(src_dir).expect("Prefix must no change");
+        let relative_to_data = src
+            .strip_prefix(src_dir)
+            .expect("Walkdir prefix must no change");
         // This is the path stored in RECORD
         // e.g. for data it's with .data/data/
         let relative_to_site_packages = src
