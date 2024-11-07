@@ -1751,6 +1751,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Build into a temporary directory, to prevent partial builds.
+        let build = self
+            .build_context
+            .cache()
+            .environment()
+            .map_err(Error::CacheWrite)?;
+
         // Build the wheel.
         fs::create_dir_all(&cache_shard)
             .await
@@ -1773,9 +1780,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await
             .map_err(Error::Build)?
-            .wheel(cache_shard)
+            .wheel(build.path())
             .await
             .map_err(Error::Build)?;
+
+        // Move the wheel to the cache.
+        rename_with_retry(
+            build.path().join(&disk_filename),
+            cache_shard.join(&disk_filename),
+        )
+        .await
+        .map_err(Error::CacheWrite)?;
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
