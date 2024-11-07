@@ -60,6 +60,8 @@ A `.python-version` file can be created in the current directory with the `uv py
 
 Discovery of `.python-version` files can be disabled with `--no-config`.
 
+uv will not search for `.python-version` files beyond project or workspace boundaries.
+
 ## Installing a Python version
 
 uv bundles a list of downloadable CPython and PyPy distributions for macOS, Linux, and Windows.
