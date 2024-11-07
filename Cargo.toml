@@ -103,6 +103,7 @@ fs-err = { version = "2.11.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
+globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
 goblin = { version = "0.9.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
 hex = { version = "0.4.3" }
@@ -126,7 +127,7 @@ path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
-procfs = { version = "0.17.0" , default-features = false, features = ["flate2"] }
+procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
 proc-macro2 = { version = "1.0.86" }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
@@ -153,6 +154,7 @@ smallvec = { version = "1.13.2" }
 spdx = { version = "0.10.6" }
 syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
+tar = { version = "0.4.43" }
 target-lexicon = { version = "0.12.16" }
 tempfile = { version = "3.12.0" }
 textwrap = { version = "0.16.1" }
