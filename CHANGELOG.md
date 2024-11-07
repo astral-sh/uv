@@ -48,7 +48,7 @@ Since the launch of Python version, project, and tool management capabilities ba
 
 - **Only write `.python-version` files during `uv init` for workspace members if the version differs** ([#8897](https://github.com/astral-sh/uv/pull/8897))
 
-  Previously, uv would create a `.python-version` file for workspace members on during `uv init`. Now, uv will only do so if the version differs from the `.python-version` file in the workspace root since uv will respect `.python-version` files in parent directories.
+  Previously, uv would create a `.python-version` file for workspace members during `uv init`. Now, uv will only do so if the version differs from the `.python-version` file in the workspace root since uv will respect `.python-version` files in parent directories.
 
 ### Enhancements
 
