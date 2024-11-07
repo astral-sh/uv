@@ -103,6 +103,24 @@ For example, to pull from git:
 $ uvx --from git+https://github.com/httpie/cli httpie
 ```
 
+You can also pull the latest commit from a specific named branch:
+
+```console
+$ uvx --from git+https://github.com/httpie/cli@master httpie
+```
+
+Or pull a specific tag:
+
+```console
+$ uvx --from git+https://github.com/httpie/cli@3.2.4 httpie
+```
+
+Or even a specific commit:
+
+```console
+$ uvx --from git+https://github.com/httpie/cli@2843b87 httpie
+```
+
 ## Commands with plugins
 
 Additional dependencies can be included, e.g., to include `mkdocs-material` when running `mkdocs`:
