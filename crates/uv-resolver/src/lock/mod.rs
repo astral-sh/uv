@@ -14,6 +14,7 @@ use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
+pub use crate::lock::map::PackageMap;
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::target::InstallTarget;
 pub use crate::lock::tree::TreeDisplay;
@@ -47,6 +48,7 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::Workspace;
 
+mod map;
 mod requirements_txt;
 mod target;
 mod tree;
@@ -2204,6 +2206,24 @@ impl Package {
     /// Return the fork markers for this package, if any.
     pub fn fork_markers(&self) -> &[MarkerTree] {
         self.fork_markers.as_slice()
+    }
+
+    /// Returns the [`IndexUrl`] for the package, if it is a registry source.
+    pub fn index(&self, root: &Path) -> Result<Option<IndexUrl>, LockError> {
+        match &self.id.source {
+            Source::Registry(RegistrySource::Url(url)) => {
+                let index = IndexUrl::from(VerbatimUrl::from_url(url.to_url()));
+                Ok(Some(index))
+            }
+            Source::Registry(RegistrySource::Path(path)) => {
+                let index = IndexUrl::from(
+                    VerbatimUrl::from_absolute_path(root.join(path))
+                        .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+                );
+                Ok(Some(index))
+            }
+            _ => Ok(None),
+        }
     }
 
     /// Returns all the hashes associated with this [`Package`].
