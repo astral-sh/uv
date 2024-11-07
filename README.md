@@ -50,23 +50,23 @@ Install uv with our standalone installers, or from [PyPI](https://pypi.org/proje
 
 ```bash
 # On macOS and Linux.
-$ curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ```bash
 # On Windows.
-$ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 ```bash
 # With pip.
-$ pip install uv
+pip install uv
 ```
 
 If installed via the standalone installer, uv can update itself to the latest version:
 
 ```bash
-$ uv self update
+uv self update
 ```
 
 See the [installation documentation](https://docs.astral.sh/uv/getting-started/installation/) for
@@ -85,7 +85,7 @@ Additionally, the command line reference documentation can be viewed with `uv he
 uv manages project dependencies and environments, with support for lockfiles, workspaces, and more,
 similar to `rye` or `poetry`:
 
-```bash
+```console
 $ uv init example
 Initialized project `example` at `/home/user/example`
 
@@ -115,7 +115,7 @@ uv executes and installs command-line tools provided by Python packages, similar
 
 Run a tool in an ephemeral environment using `uvx` (an alias for `uv tool run`):
 
-```bash
+```console
 $ uvx pycowsay 'hello world!'
 Resolved 1 package in 167ms
 Installed 1 package in 9ms
@@ -134,7 +134,7 @@ Installed 1 package in 9ms
 
 Install a tool with `uv tool install`:
 
-```bash
+```console
 $ uv tool install ruff
 Resolved 1 package in 6ms
 Installed 1 package in 2ms
@@ -153,7 +153,7 @@ uv installs Python and allows quickly switching between versions.
 
 Install multiple Python versions:
 
-```bash
+```console
 $ uv python install 3.10 3.11 3.12
 Searching for Python versions matching: Python 3.10
 Searching for Python versions matching: Python 3.11
@@ -166,7 +166,7 @@ Installed 3 versions in 3.42s
 
 Download Python versions as needed:
 
-```bash
+```console
 $ uv venv --python 3.12.0
 Using Python 3.12.0
 Creating virtual environment at: .venv
@@ -181,7 +181,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 
 Use a specific Python version in the current directory:
 
-```bash
+```console
 $ uv python pin pypy@3.11
 Pinned `.python-version` to `pypy@3.11`
 ```
@@ -195,7 +195,7 @@ uv manages dependencies and environments for single-file scripts.
 
 Create a new script and add inline metadata declaring its dependencies:
 
-```bash
+```console
 $ echo 'import requests; print(requests.get("https://astral.sh"))' > example.py
 
 $ uv add --script example.py requests
@@ -204,7 +204,7 @@ Updated `example.py`
 
 Then, run the script in an isolated virtual environment:
 
-```bash
+```console
 $ uv run example.py
 Reading inline script metadata from: example.py
 Installed 5 packages in 12ms
@@ -226,7 +226,7 @@ Migrate to uv without changing your existing workflows — and experience a 10-1
 
 Compile requirements into a platform-independent requirements file:
 
-```bash
+```console
 $ uv pip compile docs/requirements.in \
    --universal \
    --output-file docs/requirements.txt
@@ -235,7 +235,7 @@ Resolved 43 packages in 12ms
 
 Create a virtual environment:
 
-```bash
+```console
 $ uv venv
 Using Python 3.12.3
 Creating virtual environment at: .venv
@@ -244,7 +244,7 @@ Activate with: source .venv/bin/activate
 
 Install the locked requirements:
 
-```bash
+```console
 $ uv pip sync docs/requirements.txt
 Resolved 43 packages in 11ms
 Installed 43 packages in 208ms
