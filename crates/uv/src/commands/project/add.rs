@@ -15,6 +15,7 @@ use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClient
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DevMode, EditableMode,
     ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, SourceStrategy,
+    TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -74,6 +75,7 @@ pub(crate) async fn add(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -124,7 +126,8 @@ pub(crate) async fn add(
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
 
         // If we found a script, add to the existing metadata. Otherwise, create a new inline
         // metadata tag.
@@ -217,6 +220,7 @@ pub(crate) async fn add(
             python_downloads,
             connectivity,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -228,7 +232,8 @@ pub(crate) async fn add(
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
-        .keyring(settings.keyring_provider);
+        .keyring(settings.keyring_provider)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Read the requirements.
     let RequirementsSpecification { requirements, .. } =
@@ -636,6 +641,7 @@ pub(crate) async fn add(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -696,6 +702,7 @@ async fn lock_and_sync(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
@@ -715,6 +722,7 @@ async fn lock_and_sync(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -832,6 +840,7 @@ async fn lock_and_sync(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -895,6 +904,7 @@ async fn lock_and_sync(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )

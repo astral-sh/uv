@@ -7,7 +7,9 @@ use futures::{stream, StreamExt};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{Connectivity, RegistryClientBuilder};
-use uv_configuration::{Concurrency, DevGroupsSpecification, LowerBound, TargetTriple};
+use uv_configuration::{
+    Concurrency, DevGroupsSpecification, LowerBound, TargetTriple, TrustedHost,
+};
 use uv_distribution_types::IndexCapabilities;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -49,6 +51,7 @@ pub(crate) async fn tree(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -76,6 +79,7 @@ pub(crate) async fn tree(
                 python_downloads,
                 connectivity,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -107,6 +111,7 @@ pub(crate) async fn tree(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -128,7 +133,6 @@ pub(crate) async fn tree(
             index_locations: _,
             index_strategy: _,
             keyring_provider,
-            allow_insecure_host,
             resolution: _,
             prerelease: _,
             dependency_metadata: _,
@@ -150,7 +154,7 @@ pub(crate) async fn tree(
                 .native_tls(native_tls)
                 .connectivity(connectivity)
                 .keyring(*keyring_provider)
-                .allow_insecure_host(allow_insecure_host.clone())
+                .allow_insecure_host(allow_insecure_host.to_vec())
                 .build();
 
         // Initialize the client to fetch the latest version of each package.
