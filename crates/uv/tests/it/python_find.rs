@@ -20,7 +20,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found in virtual environments, managed installations, system path, or `py` launcher
+        error: No interpreter found in virtual environments, managed installations, search path, or registry
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r###"
@@ -29,7 +29,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found in virtual environments, managed installations, or system path
+        error: No interpreter found in virtual environments, managed installations, or search path
         "###);
     }
 
@@ -116,7 +116,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found for PyPy in virtual environments, managed installations, system path, or `py` launcher
+        error: No interpreter found for PyPy in virtual environments, managed installations, search path, or registry
         "###);
     } else {
         uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r###"
@@ -125,7 +125,7 @@ fn python_find() {
         ----- stdout -----
 
         ----- stderr -----
-        error: No interpreter found for PyPy in virtual environments, managed installations, or system path
+        error: No interpreter found for PyPy in virtual environments, managed installations, or search path
         "###);
     }
 
@@ -441,7 +441,7 @@ fn python_find_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python 4.2 in virtual environments, managed installations, or system path
+    error: No interpreter found for Python 4.2 in virtual environments, managed installations, or search path
     "###);
 
     // Request a low version with a range
@@ -451,7 +451,7 @@ fn python_find_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python <3.0 in virtual environments, managed installations, or system path
+    error: No interpreter found for Python <3.0 in virtual environments, managed installations, or search path
     "###);
 
     // Request free-threaded Python on unsupported version
