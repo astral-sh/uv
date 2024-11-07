@@ -13,6 +13,22 @@ build it by default. This means that your project may not be ready for distribut
 the effect of declaring a build system in the
 [project concept](../concepts/projects.md#build-systems) documentation.
 
+!!! note
+
+    If you have internal packages that you do not want to be published, you can mark them as
+    private:
+
+    ```toml
+    [project]
+    classifiers = ["Private :: Do Not Upload"]
+    ```
+
+    This setting makes PyPI reject your uploaded package from publishing. It does not affect
+    security or privacy settings on alternative registries.
+
+    We also recommend only generating per-project tokens: Without a PyPI token matching the project,
+    it can't be accidentally published.
+
 ## Building your package
 
 Build your package with `uv build`:
