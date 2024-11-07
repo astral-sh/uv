@@ -213,7 +213,7 @@ fn python_find_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `3.12` -> `3.11`
+    Pinned `.python-version` to `3.11`
 
     ----- stderr -----
     "###);
