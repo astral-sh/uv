@@ -132,8 +132,10 @@ pub(crate) async fn pin(
 
     new.write().await?;
 
+    // If we updated an existing version file to a new version
     if let Some(existing) = existing
         .as_ref()
+        .filter(|existing| existing.path() == new.path())
         .and_then(PythonVersionFile::version)
         .filter(|version| *version != new.version().unwrap())
     {
