@@ -14,7 +14,7 @@ use unicode_width::UnicodeWidthStr;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
-use uv_client::{Connectivity, RegistryClient, RegistryClientBuilder, VersionFiles};
+use uv_client::{Connectivity, RegistryClientBuilder};
 use uv_configuration::{IndexStrategy, KeyringProviderType, TrustedHost};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name};
@@ -22,12 +22,11 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::Tags;
+use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment};
-use uv_python::{Interpreter, PythonRequest};
-use uv_resolver::{ExcludeNewer, PrereleaseMode};
-use uv_warnings::warn_user_once;
+use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
 
+use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -98,6 +97,8 @@ pub(crate) async fn pip_list(
         // Determine the platform tags.
         let interpreter = environment.interpreter();
         let tags = interpreter.tags()?;
+        let requires_python =
+            RequiresPython::greater_than_equal_version(interpreter.python_full_version());
 
         // Initialize the client to fetch the latest version of each package.
         let client = LatestClient {
@@ -105,15 +106,15 @@ pub(crate) async fn pip_list(
             capabilities: &capabilities,
             prerelease,
             exclude_newer,
-            tags,
-            interpreter,
+            tags: Some(tags),
+            requires_python: &requires_python,
         };
 
         // Fetch the latest version for each package.
         results
             .iter()
             .map(|dist| async {
-                let latest = client.find_latest(dist.name()).await?;
+                let latest = client.find_latest(dist.name(), None).await?;
                 Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((dist.name(), latest))
             })
             .collect::<FuturesUnordered<_>>()
@@ -361,109 +362,5 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.iter_mut().map(Iterator::next).collect()
-    }
-}
-
-/// A client to fetch the latest version of a package from an index.
-///
-/// The returned distribution is guaranteed to be compatible with the current interpreter.
-#[derive(Debug)]
-struct LatestClient<'env> {
-    client: &'env RegistryClient,
-    capabilities: &'env IndexCapabilities,
-    prerelease: PrereleaseMode,
-    exclude_newer: Option<ExcludeNewer>,
-    tags: &'env Tags,
-    interpreter: &'env Interpreter,
-}
-
-impl<'env> LatestClient<'env> {
-    /// Find the latest version of a package from an index.
-    async fn find_latest(
-        &self,
-        package: &PackageName,
-    ) -> Result<Option<DistFilename>, uv_client::Error> {
-        let mut latest: Option<DistFilename> = None;
-        for (_, archive) in self.client.simple(package, None, self.capabilities).await? {
-            for datum in archive.iter().rev() {
-                // Find the first compatible distribution.
-                let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)
-                    .expect("archived version files always deserializes");
-
-                // Determine whether there's a compatible wheel and/or source distribution.
-                let mut best = None;
-
-                for (filename, file) in files.all() {
-                    // Skip distributions uploaded after the cutoff.
-                    if let Some(exclude_newer) = self.exclude_newer {
-                        match file.upload_time_utc_ms.as_ref() {
-                            Some(&upload_time)
-                                if upload_time >= exclude_newer.timestamp_millis() =>
-                            {
-                                continue;
-                            }
-                            None => {
-                                warn_user_once!(
-                                "{} is missing an upload date, but user provided: {exclude_newer}",
-                                file.filename,
-                            );
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    // Skip pre-release distributions.
-                    if !filename.version().is_stable() {
-                        if !matches!(self.prerelease, PrereleaseMode::Allow) {
-                            continue;
-                        }
-                    }
-
-                    // Skip distributions that are yanked.
-                    if file.yanked.is_some_and(|yanked| yanked.is_yanked()) {
-                        continue;
-                    }
-
-                    // Skip distributions that are incompatible with the current interpreter.
-                    if file.requires_python.is_some_and(|requires_python| {
-                        !requires_python.contains(self.interpreter.python_full_version())
-                    }) {
-                        continue;
-                    }
-
-                    // Skip distributions that are incompatible with the current platform.
-                    if let DistFilename::WheelFilename(filename) = &filename {
-                        if !filename.compatibility(self.tags).is_compatible() {
-                            continue;
-                        }
-                    }
-
-                    match filename {
-                        DistFilename::WheelFilename(_) => {
-                            best = Some(filename);
-                            break;
-                        }
-                        DistFilename::SourceDistFilename(_) => {
-                            if best.is_none() {
-                                best = Some(filename);
-                            }
-                        }
-                    }
-                }
-
-                match (latest.as_ref(), best) {
-                    (Some(current), Some(best)) => {
-                        if best.version() > current.version() {
-                            latest = Some(best);
-                        }
-                    }
-                    (None, Some(best)) => {
-                        latest = Some(best);
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok(latest)
     }
 }

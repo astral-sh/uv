@@ -4802,6 +4802,10 @@ pub struct DisplayTreeArgs {
     /// display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
+
+    /// Show the latest available version of each package in the tree.
+    #[arg(long)]
+    pub outdated: bool,
 }
 
 #[derive(Args, Debug)]

@@ -2618,6 +2618,8 @@ uv tree [OPTIONS]
 
 <p>The project itself will also be omitted.</p>
 
+</dd><dt><code>--outdated</code></dt><dd><p>Show the latest available version of each package in the tree</p>
+
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Display only the specified packages</p>
 
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
@@ -6829,6 +6831,8 @@ uv pip tree [OPTIONS]
 </dd><dt><code>--no-system</code></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+</dd><dt><code>--outdated</code></dt><dd><p>Show the latest available version of each package in the tree</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Display only the specified packages</p>
 
