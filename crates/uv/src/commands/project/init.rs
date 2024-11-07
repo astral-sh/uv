@@ -716,10 +716,12 @@ impl InitProjectKind {
         }
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
-        // Write .python-version if it doesn't exist.
+        // Write .python-version if it doesn't exist in the target or is empty.
         if let Some(python_request) = python_request {
             if PythonVersionFile::discover(path, &VersionFileDiscoveryOptions::default())
                 .await?
+                .filter(|file| file.version().is_some())
+                .filter(|file| file.path().parent().is_some_and(|parent| parent == path))
                 .is_none()
             {
                 PythonVersionFile::new(path.join(".python-version"))
