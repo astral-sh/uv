@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.1
+
+### Enhancements
+
+- Allow installation of manylinux wheels on `riscv64` ([#8934](https://github.com/astral-sh/uv/pull/8934))
+
+### Bug fixes
+
+- Build source distributions at top-level of cache ([#8905](https://github.com/astral-sh/uv/pull/8905))
+- Allow non-registry dependencies in `uv pip list --outdated` ([#8939](https://github.com/astral-sh/uv/pull/8939))
+- Compute superset of existing and required hashes when healing cache ([#8955](https://github.com/astral-sh/uv/pull/8955))
+- Enable uv to replace and delete itself on Windows ([#8914](https://github.com/astral-sh/uv/pull/8914))
+- Remove source distribution filename from cache ([#8907](https://github.com/astral-sh/uv/pull/8907))
+- Respect `--index-url` in `uv pip list` ([#8942](https://github.com/astral-sh/uv/pull/8942))
+- Respect comma-separated extras in `--with` ([#8946](https://github.com/astral-sh/uv/pull/8946))
+
+### Documentation
+
+- Add uninstall note for previous versions ([#8937](https://github.com/astral-sh/uv/pull/8937))
+- Remove some missed references to `~/.cargo/bin` ([#8936](https://github.com/astral-sh/uv/pull/8936))
+- Split README's install code block into 3 ([#8853](https://github.com/astral-sh/uv/pull/8853))
+
 ## 0.5.0
 
 Since the launch of Python version, project, and tool management capabilities back in August, we've seen extraordinary adoption of uv. We've been iterating rapidly since then: adding new features, fixing bugs, and improving the user experience. Despite moving quickly, stability and compatibility has been a major focus — we've made thirty releases since our last breaking change. Consequently, we've accumulated various changes that improve correctness and user experience, but could break some workflows. This release contains those changes; many have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
@@ -7,47 +29,37 @@ Since the launch of Python version, project, and tool management capabilities ba
 ### Breaking
 
 - **Use base executable to set virtualenv Python path** ([#8481](https://github.com/astral-sh/uv/pull/8481))
-
+  
   Previously, uv canonicalized the path to the Python executable when setting the Python path in created virtual environments. This behavior had several undesirable effects: it would bypass stabilized version directories (as constructed by Homebrew) and it was not consistent with the Python standard library's behavior. Now, uv uses the `sys._base_executable` path.
-
 - **Use XDG (i.e. `~/.local/bin`) instead of the Cargo home directory in the installer** ([#8420](https://github.com/astral-sh/uv/pull/8420))
-
+  
   Previously, uv's installer used `$CARGO_HOME` or `~/.cargo/bin` for its target install directory. It's been a longstanding complaint that uv uses this directory, as there's no relationship to Cargo. Now, uv will be installed into `$XDG_BIN_HOME`, `$XDG_DATA_HOME/../bin`, or `~/.local/bin` (in that order). Note that `$UV_INSTALL_DIR` can always be used to override the target directory.
-
 - **Discover and respect `.python-version` files in parent directories** ([#6370](https://github.com/astral-sh/uv/pull/6370))
-
+  
   Previously, uv only read `.python-version` files from the working directory. Now, uv will check parent directories for `.python-version` files; however uv will not search for `.python-version` files beyond project boundaries. The new behavior is better aligned with that of `pyenv` and Rye.
-
 - **Error when disallowed settings are defined in `uv.toml`** ([#8550](https://github.com/astral-sh/uv/pull/8550))
-
+  
   Some settings can only be defined in the `pyproject.toml`. Previously, uv would ignore these settings when present in the `uv.toml`. Now, uv will error to avoid confusion about why the settings are not respeced.
-
 - **Implement PEP 440-compliant local version semantics** ([#8797](https://github.com/astral-sh/uv/pull/8797))
-
+  
   Previously, uv's implementation of local versions (e.g. `2.0+cpu`) was not compliant with the specification due to the technical complexity of implementing the local version semantics in the PubGrub algorithm. Thanks to the work of @ericmarkmartin, uv now has a spec-compliant implementation. Namely, uv will now allow a request for `torch==2.1.0` to install `torch@2.1.0+cpu` regardless of whether `torch@2.1.0` (without a local tag) actually exists.
-
 - **Treat the base Conda environment as a system environment** ([#7691](https://github.com/astral-sh/uv/pull/7691))
-
+  
   Previously, uv would not distinguish between the base and other Conda environments. Now, uv uses `CONDA_DEFAULT_ENV` and the names `base` and `default` to determine if an environment active via `CONDA_PREFIX` is the base environment. If the base environment is active, the `--system` flag must be used to mutate it.
-
 - **Do not allow pre-releases when the `!=` operator is used** ([#7974](https://github.com/astral-sh/uv/pull/7974))
-
+  
   Previously, uv would use the presence of a pre-release specifier in a version specifier as an opt-in to allow pre-release versions during resolution. The new behavior does not allow pre-releases when an inequals operator is used, e.g., `!= 2.0a1`.
-
 - **Prefer `USERPROFILE` over `FOLDERID_Profile` when selecting a home directory on Windows** ([#8048](https://github.com/astral-sh/uv/pull/8048))
-
+  
   This change is a side-effect of switching from the `directories` crate to `etcetera` for determining canonical system paths. If `USERPROFILE` is not set, the behavior will be unchanged.
-
 - **Improve interactions between color environment variables and CLI options** ([#8215](https://github.com/astral-sh/uv/pull/8215))
-
+  
   Previously, uv would respect the `FORCE_COLOR` and `NO_COLOR` environment variables over the `--color` flag. Now, when the `--color` flag is explicitly provided, uv will respect it over the environment variables.
-
 - **Make `allow-insecure-host` a global option** ([#8476](https://github.com/astral-sh/uv/pull/8476))
-
+  
   Previously, this option was only available in some parts of uv. Now, `--allow-insecure-host` can be provided to any command. For consistency, the `allow-insecure-host` setting has been removed from the `[tool.uv.pip]` configuration in favor of `[tool.uv]`.
-
 - **Only write `.python-version` files during `uv init` for workspace members if the version differs** ([#8897](https://github.com/astral-sh/uv/pull/8897))
-
+  
   Previously, uv would create a `.python-version` file for workspace members during `uv init`. Now, uv will only do so if the version differs from the `.python-version` file in the workspace root since uv will respect `.python-version` files in parent directories.
 
 ### Enhancements

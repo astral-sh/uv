@@ -25,13 +25,13 @@ Request a specific version by including it in the URL:
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.5.0/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.5.1/install.sh | sh
     ```
 
 === "Windows"
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.0/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.1/install.ps1 | iex"
     ```
 
 !!! tip
@@ -207,7 +207,7 @@ If you need to remove uv from your system, just remove the `uv` and `uvx` binari
 
 !!! note
 
-    Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
+    Prior to 0.5.1, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
     uninstall. Upgrading from an older version will not automatically remove the binaries from
     `~/.cargo/bin`.
 
