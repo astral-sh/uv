@@ -27,12 +27,20 @@ impl<'env> LatestClient<'env> {
         package: &PackageName,
         index: Option<&IndexUrl>,
     ) -> anyhow::Result<Option<DistFilename>, uv_client::Error> {
+        let archives = match self.client.simple(package, index, self.capabilities).await {
+            Ok(archives) => archives,
+            Err(err) => {
+                return match err.into_kind() {
+                    uv_client::ErrorKind::PackageNotFound(_) => Ok(None),
+                    uv_client::ErrorKind::NoIndex(_) => Ok(None),
+                    uv_client::ErrorKind::Offline(_) => Ok(None),
+                    kind => Err(kind.into()),
+                }
+            }
+        };
+
         let mut latest: Option<DistFilename> = None;
-        for (_, archive) in self
-            .client
-            .simple(package, index, self.capabilities)
-            .await?
-        {
+        for (_, archive) in archives {
             for datum in archive.iter().rev() {
                 // Find the first compatible distribution.
                 let files = rkyv::deserialize::<VersionFiles, rkyv::rancor::Error>(&datum.files)

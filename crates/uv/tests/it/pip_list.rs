@@ -190,6 +190,48 @@ fn list_outdated_freeze() {
 }
 
 #[test]
+fn list_outdated_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+        uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==1.0.0
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###
+    );
+
+    uv_snapshot!(context.pip_list().arg("--outdated"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package   Version Latest Type
+    --------- ------- ------ -----
+    iniconfig 1.0.0   2.0.0  wheel
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn list_editable() {
     let context = TestContext::new("3.12");
 
