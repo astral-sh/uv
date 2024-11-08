@@ -1926,6 +1926,9 @@ pub struct PipListArgs {
     #[arg(long, overrides_with("strict"), hide = true)]
     pub no_strict: bool,
 
+    #[command(flatten)]
+    pub fetch: FetchArgs,
+
     /// The Python interpreter for which packages should be listed.
     ///
     /// By default, uv lists packages in a virtual environment but will show
@@ -4696,6 +4699,49 @@ pub struct ResolverInstallerArgs {
     /// sources.
     #[arg(long, help_heading = "Resolver options")]
     pub no_sources: bool,
+}
+
+/// Arguments that are used by commands that need to fetch from the Simple API.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct FetchArgs {
+    #[command(flatten)]
+    pub index_args: IndexArgs,
+
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, uv will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+    /// same name to an alternate index.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_INDEX_STRATEGY,
+        help_heading = "Index options"
+    )]
+    pub index_strategy: Option<IndexStrategy>,
+
+    /// Attempt to use `keyring` for authentication for index URLs.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+        help_heading = "Index options"
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewer>,
 }
 
 #[derive(Args)]

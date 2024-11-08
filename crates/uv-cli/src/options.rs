@@ -5,7 +5,7 @@ use uv_resolver::PrereleaseMode;
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
 
 use crate::{
-    BuildOptionsArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
+    BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
     ResolverInstallerArgs,
 };
 
@@ -158,6 +158,24 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
             no_sources: if no_sources { Some(true) } else { None },
+            ..PipOptions::from(index_args)
+        }
+    }
+}
+
+impl From<FetchArgs> for PipOptions {
+    fn from(args: FetchArgs) -> Self {
+        let FetchArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            exclude_newer,
+        } = args;
+
+        Self {
+            index_strategy,
+            keyring_provider,
+            exclude_newer,
             ..PipOptions::from(index_args)
         }
     }
