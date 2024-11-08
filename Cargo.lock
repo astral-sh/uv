@@ -4208,6 +4208,7 @@ dependencies = [
  "reqwest",
  "rkyv",
  "rustc-hash",
+ "self-replace",
  "serde",
  "serde_json",
  "similar",

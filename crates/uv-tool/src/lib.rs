@@ -184,6 +184,8 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
+        // TODO(charlie): On Windows, if the current executable is in the directory,
+        // we need to use `safe_delete`.
         fs_err::remove_dir_all(environment_path)?;
 
         Ok(())
