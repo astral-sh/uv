@@ -205,6 +205,12 @@ If you need to remove uv from your system, just remove the `uv` and `uvx` binari
     $ rm -r "$(uv tool dir)"
     ```
 
+!!! note
+
+    Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
+    uninstall. Upgrading from an older version will not automatically remove the binaries from
+    `~/.cargo/bin`.
+
 ## Next steps
 
 See the [first steps](./first-steps.md) or jump straight to the [guides](../guides/index.md) to
