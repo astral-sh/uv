@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use url::Url;
 use uv_cache::{CacheArgs, Refresh};
+use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ToolUpgradeArgs,
@@ -314,8 +315,14 @@ impl RunSettings {
                 dev, no_dev, only_dev, group, no_group, only_group,
             ),
             editable: EditableMode::from_args(no_editable),
-            with,
-            with_editable,
+            with: with
+                .into_iter()
+                .flat_map(CommaSeparatedRequirements::into_iter)
+                .collect(),
+            with_editable: with_editable
+                .into_iter()
+                .flat_map(CommaSeparatedRequirements::into_iter)
+                .collect(),
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -398,8 +405,14 @@ impl ToolRunSettings {
         Self {
             command,
             from,
-            with,
-            with_editable,
+            with: with
+                .into_iter()
+                .flat_map(CommaSeparatedRequirements::into_iter)
+                .collect(),
+            with_editable: with_editable
+                .into_iter()
+                .flat_map(CommaSeparatedRequirements::into_iter)
+                .collect(),
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -463,8 +476,14 @@ impl ToolInstallSettings {
         Self {
             package,
             from,
-            with,
-            with_editable,
+            with: with
+                .into_iter()
+                .flat_map(CommaSeparatedRequirements::into_iter)
+                .collect(),
+            with_editable: with_editable
+                .into_iter()
+                .flat_map(CommaSeparatedRequirements::into_iter)
+                .collect(),
             with_requirements: with_requirements
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -2635,7 +2654,7 @@ pub(crate) struct PublishSettings {
 }
 
 impl PublishSettings {
-    /// Resolve the [`crate::settings::PublishSettings`] from the CLI and filesystem configuration.
+    /// Resolve the [`PublishSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: PublishArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let Options {
             publish, top_level, ..

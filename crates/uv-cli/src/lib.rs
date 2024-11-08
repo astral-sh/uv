@@ -22,6 +22,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 
+pub mod comma;
 pub mod compat;
 pub mod options;
 pub mod version;
@@ -2674,16 +2675,16 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified by the project.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed as editables.
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified by the project.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     ///
@@ -3620,16 +3621,16 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed as editables
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the uv tool's environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
@@ -3681,10 +3682,6 @@ pub struct ToolInstallArgs {
     #[arg(short, long)]
     pub editable: bool,
 
-    /// Include the given packages as editables.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
-
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
@@ -3692,8 +3689,12 @@ pub struct ToolInstallArgs {
     pub from: Option<String>,
 
     /// Include the following extra requirements.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
+
+    /// Include the given packages as editables.
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
