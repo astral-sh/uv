@@ -29,7 +29,7 @@ use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
-    PathSourceUrl, RemoteSource, SourceDist, SourceUrl,
+    PathSourceUrl, SourceDist, SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
@@ -57,6 +57,9 @@ pub(crate) const LOCAL_REVISION: &str = "revision.rev";
 
 /// The name of the file that contains the cached distribution metadata, encoded via `MsgPack`.
 pub(crate) const METADATA: &str = "metadata.msgpack";
+
+/// The directory within each entry under which to store the unpacked source distribution.
+pub(crate) const SOURCE: &str = "src";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
@@ -125,7 +128,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url(
                     source,
-                    &dist.file.filename,
                     &url,
                     &cache_shard,
                     None,
@@ -138,8 +140,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
-                let filename = dist.filename().expect("Distribution must have a filename");
-
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
@@ -148,7 +148,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url(
                     source,
-                    &filename,
                     &dist.url,
                     &cache_shard,
                     dist.subdirectory.as_deref(),
@@ -186,11 +185,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
-                let filename = resource
-                    .url
-                    .filename()
-                    .expect("Distribution must have a filename");
-
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
@@ -199,7 +193,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url(
                     source,
-                    &filename,
                     resource.url,
                     &cache_shard,
                     resource.subdirectory,
@@ -281,22 +274,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .await;
                 }
 
-                self.url_metadata(
-                    source,
-                    &dist.file.filename,
-                    &url,
-                    &cache_shard,
-                    None,
-                    dist.ext,
-                    hashes,
-                    client,
-                )
-                .boxed_local()
-                .await?
+                self.url_metadata(source, &url, &cache_shard, None, dist.ext, hashes, client)
+                    .boxed_local()
+                    .await?
             }
             BuildableSource::Dist(SourceDist::DirectUrl(dist)) => {
-                let filename = dist.filename().expect("Distribution must have a filename");
-
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
@@ -305,7 +287,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url_metadata(
                     source,
-                    &filename,
                     &dist.url,
                     &cache_shard,
                     dist.subdirectory.as_deref(),
@@ -336,11 +317,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?
             }
             BuildableSource::Url(SourceUrl::Direct(resource)) => {
-                let filename = resource
-                    .url
-                    .filename()
-                    .expect("Distribution must have a filename");
-
                 // For direct URLs, cache directly under the hash of the URL itself.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
@@ -349,7 +325,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url_metadata(
                     source,
-                    &filename,
                     resource.url,
                     &cache_shard,
                     resource.subdirectory,
@@ -403,7 +378,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url<'data>(
         &self,
         source: &BuildableSource<'data>,
-        filename: &'data str,
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -416,7 +390,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Fetch the revision for the source distribution.
         let revision = self
-            .url_revision(source, filename, ext, url, cache_shard, hashes, client)
+            .url_revision(source, ext, url, cache_shard, hashes, client)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -431,7 +405,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
-        let source_dist_entry = cache_shard.entry(filename);
+        let source_dist_entry = cache_shard.entry(SOURCE);
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -452,7 +426,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         } else {
             self.heal_url_revision(
                 source,
-                filename,
                 ext,
                 url,
                 &source_dist_entry,
@@ -507,7 +480,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,
-        filename: &'data str,
         url: &'data Url,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -519,7 +491,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Fetch the revision for the source distribution.
         let revision = self
-            .url_revision(source, filename, ext, url, cache_shard, hashes, client)
+            .url_revision(source, ext, url, cache_shard, hashes, client)
             .await?;
 
         // Before running the build, check that the hashes match.
@@ -534,7 +506,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
-        let source_dist_entry = cache_shard.entry(filename);
+        let source_dist_entry = cache_shard.entry(SOURCE);
 
         // If the metadata is static, return it.
         if let Some(metadata) =
@@ -562,7 +534,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         } else {
             self.heal_url_revision(
                 source,
-                filename,
                 ext,
                 url,
                 &source_dist_entry,
@@ -644,7 +615,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url_revision(
         &self,
         source: &BuildableSource<'_>,
-        filename: &str,
         ext: SourceDistExtension,
         url: &Url,
         cache_shard: &CacheShard,
@@ -670,9 +640,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
-                let entry = cache_shard.shard(revision.id()).entry(filename);
+                let entry = cache_shard.shard(revision.id()).entry(SOURCE);
                 let hashes = self
-                    .download_archive(response, source, filename, ext, entry.path(), hashes)
+                    .download_archive(response, source, ext, entry.path(), hashes)
                     .await?;
 
                 Ok(revision.with_hashes(hashes))
@@ -743,7 +713,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
-        let source_entry = cache_shard.entry("source");
+        let source_entry = cache_shard.entry(SOURCE);
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -832,7 +802,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
-        let source_entry = cache_shard.entry("source");
+        let source_entry = cache_shard.entry(SOURCE);
 
         // If the metadata is static, return it.
         if let Some(metadata) =
@@ -957,7 +927,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Unzip the archive to a temporary directory.
         debug!("Unpacking source distribution: {source}");
-        let entry = cache_shard.shard(revision.id()).entry("source");
+        let entry = cache_shard.shard(revision.id()).entry(SOURCE);
         let hashes = self
             .persist_archive(&resource.path, resource.ext, entry.path(), hashes)
             .await?;
@@ -1568,7 +1538,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn heal_url_revision(
         &self,
         source: &BuildableSource<'_>,
-        filename: &str,
         ext: SourceDistExtension,
         url: &Url,
         entry: &CacheEntry,
@@ -1581,7 +1550,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let download = |response| {
             async {
                 let hashes = self
-                    .download_archive(response, source, filename, ext, entry.path(), hashes)
+                    .download_archive(response, source, ext, entry.path(), hashes)
                     .await?;
                 if hashes != revision.hashes() {
                     return Err(Error::CacheHeal(source.to_string()));
@@ -1610,7 +1579,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         response: Response,
         source: &BuildableSource<'_>,
-        filename: &str,
         ext: SourceDistExtension,
         target: &Path,
         hashes: HashPolicy<'_>,
@@ -1632,7 +1600,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
         // Download and unzip the source distribution into a temporary directory.
-        let span = info_span!("download_source_dist", filename = filename, source_dist = %source);
+        let span = info_span!("download_source_dist", source_dist = %source);
         uv_extract::stream::archive(&mut hasher, ext, temp_dir.path()).await?;
         drop(span);
 
