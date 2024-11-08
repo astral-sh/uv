@@ -406,6 +406,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
+        let source_dist_path = fs::read_link(&source_dist_entry.path())
+            .await
+            .map_err(Error::CacheRead)?;
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -420,21 +423,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(built_wheel.with_hashes(revision.into_hashes()));
         }
 
-        // Otherwise, we need to build a wheel. Before building, ensure that the source is present.
-        let revision = if source_dist_entry.path().is_dir() {
-            revision
-        } else {
-            self.heal_url_revision(
-                source,
-                ext,
-                url,
-                &source_dist_entry,
-                revision,
-                hashes,
-                client,
-            )
-            .await?
-        };
+        // // Otherwise, we need to build a wheel. Before building, ensure that the source is present.
+        // let revision = if source_dist_path.is_dir() {
+        //     revision
+        // } else {
+        //     self.heal_url_revision(
+        //         source,
+        //         ext,
+        //         url,
+        //         &source_dist_entry,
+        //         revision,
+        //         hashes,
+        //         client,
+        //     )
+        //     .await?
+        // };
 
         let task = self
             .reporter
@@ -445,7 +448,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (disk_filename, wheel_filename, metadata) = self
             .build_distribution(
                 source,
-                source_dist_entry.path(),
+                &source_dist_path,
                 subdirectory,
                 &cache_shard,
                 SourceStrategy::Disabled,
@@ -506,11 +509,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
-        let source_dist_entry = cache_shard.entry(SOURCE);
+        let source_dist_path = fs::read_link(cache_shard.entry(SOURCE).path())
+            .await
+            .map_err(Error::CacheRead)?;
 
         // If the metadata is static, return it.
         if let Some(metadata) =
-            Self::read_static_metadata(source, source_dist_entry.path(), subdirectory).await?
+            Self::read_static_metadata(source, &source_dist_path, subdirectory).await?
         {
             return Ok(ArchiveMetadata {
                 metadata: Metadata::from_metadata23(metadata),
@@ -528,21 +533,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
-        // Otherwise, we need a wheel.
-        let revision = if source_dist_entry.path().is_dir() {
-            revision
-        } else {
-            self.heal_url_revision(
-                source,
-                ext,
-                url,
-                &source_dist_entry,
-                revision,
-                hashes,
-                client,
-            )
-            .await?
-        };
+        // // Otherwise, we need a wheel.
+        // let revision = if source_dist_entry.path().is_dir() {
+        //     revision
+        // } else {
+        //     self.heal_url_revision(
+        //         source,
+        //         ext,
+        //         url,
+        //         &source_dist_entry,
+        //         revision,
+        //         hashes,
+        //         client,
+        //     )
+        //     .await?
+        // };
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -557,7 +562,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(metadata) = self
             .build_metadata(
                 source,
-                source_dist_entry.path(),
+                &source_dist_path,
                 subdirectory,
                 SourceStrategy::Disabled,
             )
@@ -587,7 +592,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let (_disk_filename, _wheel_filename, metadata) = self
             .build_distribution(
                 source,
-                source_dist_entry.path(),
+                &source_dist_path,
                 subdirectory,
                 &cache_shard,
                 SourceStrategy::Disabled,
@@ -1583,12 +1588,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         target: &Path,
         hashes: HashPolicy<'_>,
     ) -> Result<Vec<HashDigest>, Error> {
-        let temp_dir = tempfile::tempdir_in(
-            self.build_context
-                .cache()
-                .bucket(CacheBucket::SourceDistributions),
-        )
-        .map_err(Error::CacheWrite)?;
+        let temp_dir = self
+            .build_context
+            .cache()
+            .build_dir()
+            .map_err(Error::CacheWrite)?;
         let reader = response
             .bytes_stream()
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
@@ -1622,14 +1626,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs_err::tokio::create_dir_all(target.parent().expect("Cache entry to have parent"))
             .await
             .map_err(Error::CacheWrite)?;
-        if let Err(err) = rename_with_retry(extracted, target).await {
-            // If the directory already exists, accept it.
-            if target.is_dir() {
-                warn!("Directory already exists: {}", target.display());
-            } else {
-                return Err(Error::CacheWrite(err));
-            }
-        }
+        self.build_context
+            .cache()
+            .persist(extracted, target)
+            .await
+            .map_err(Error::CacheWrite)?;
 
         Ok(hashes)
     }
