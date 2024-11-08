@@ -1693,6 +1693,7 @@ impl PipListSettings {
             no_outdated,
             strict,
             no_strict,
+            fetch,
             python,
             system,
             no_system,
@@ -1709,7 +1710,7 @@ impl PipListSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     strict: flag(strict, no_strict),
-                    ..PipOptions::default()
+                    ..PipOptions::from(fetch)
                 },
                 filesystem,
             ),
