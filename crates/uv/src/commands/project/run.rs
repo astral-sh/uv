@@ -323,7 +323,7 @@ pub(crate) async fn run(
             Some(environment.into_interpreter())
         } else {
             // Create a virtual environment.
-            temp_dir = cache.environment()?;
+            temp_dir = cache.venv_dir()?;
             let environment = uv_virtualenv::create_venv(
                 temp_dir.path(),
                 interpreter,
@@ -538,7 +538,7 @@ pub(crate) async fn run(
                 }
 
                 // Create a virtual environment
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
                     interpreter,
@@ -741,7 +741,7 @@ pub(crate) async fn run(
                 debug!("Creating isolated virtual environment");
 
                 // If we're isolating the environment, use an ephemeral virtual environment.
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 let venv = uv_virtualenv::create_venv(
                     temp_dir.path(),
                     interpreter,
@@ -791,7 +791,7 @@ pub(crate) async fn run(
         Some(match spec.filter(|spec| !spec.is_empty()) {
             None => {
                 // Create a virtual environment
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
                     base_interpreter.clone(),
