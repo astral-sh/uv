@@ -218,14 +218,14 @@ def build_project_at_version(
 
 
 def wait_for_index(index_url: str, project_name: str, version: Version, uv: Path):
-    """Check that the index URL was updated, wait up to 10s if necessary.
+    """Check that the index URL was updated, wait up to 100s if necessary.
 
     Often enough the index takes a few seconds until the index is updated after an
     upload. We need to specifically run this through uv since to query the same cache
     (invalidation) as the registry client in skip existing in uv publish will later,
     just `get_filenames` fails non-deterministically.
     """
-    for _ in range(10):
+    for _ in range(50):
         output = check_output(
             [
                 uv,
@@ -248,9 +248,9 @@ def wait_for_index(index_url: str, project_name: str, version: Version, uv: Path
 
         print(
             f"uv pip compile not updated, missing 2 files for {version}: `{output.replace("\\\n    ", "")}`, "
-            f"sleeping for 1s: `{index_url}`"
+            f"sleeping for 2s: `{index_url}`"
         )
-        sleep(1)
+        sleep(2)
 
 
 def publish_project(target: str, uv: Path, client: httpx.Client):
