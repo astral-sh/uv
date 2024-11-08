@@ -7,10 +7,11 @@ use std::path::{Path, PathBuf};
 
 use anstream::eprint;
 use anyhow::{anyhow, bail, Context};
+use cfg_if::cfg_if;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tokio::process::Command;
+use tokio::process::{Child, Command};
 use tracing::{debug, warn};
 use url::Url;
 use uv_cache::Cache;
@@ -996,9 +997,27 @@ pub(crate) async fn run(
     // signal handlers after the command completes.
     let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
-    let status = handle.wait().await.context("Child process disappeared")?;
+    #[cfg(unix)]
+    {
+        use tokio::select;
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut term_signal = signal(SignalKind::terminate())?;
+        loop {
+            select! {
+                _ = handle.wait() => {
+                    break
+                },
+
+                // `SIGTERM`
+                _ = term_signal.recv() => {
+                    let _ = terminate_process(&mut handle);
+                }
+            };
+        }
+    }
 
     // Exit based on the result of the command
+    let status = handle.wait().await?;
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
@@ -1014,6 +1033,22 @@ pub(crate) async fn run(
             debug!("Command exited with signal: {:?}", status.signal());
         }
         Ok(ExitStatus::Failure)
+    }
+}
+
+#[allow(clippy::items_after_statements, dead_code)]
+fn terminate_process(_child: &mut Child) -> Result<(), anyhow::Error> {
+    cfg_if! {
+        if #[cfg(unix)] {
+            let pid = _child.id().context("Failed to get child process ID")?;
+            use nix::sys::signal::{self, Signal};
+            use nix::unistd::Pid;
+            signal::kill(Pid::from_raw(pid.try_into().unwrap()), Signal::SIGTERM)
+                .context("Failed to send SIGTERM")
+        } else if #[cfg(windows)] {
+            // On Windows, use winapi to terminate the process gracefully
+            todo!("Implement graceful termination on Windows");
+        }
     }
 }
 

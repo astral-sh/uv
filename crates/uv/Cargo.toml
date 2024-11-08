@@ -97,6 +97,7 @@ url = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
+cfg-if = "1.0"
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }
@@ -114,6 +115,9 @@ reqwest = { workspace = true, features = ["blocking"], default-features = false 
 similar = { version = "2.6.0" }
 tempfile = { workspace = true }
 zip = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.23"
 
 [package.metadata.cargo-shear]
 ignored = [
