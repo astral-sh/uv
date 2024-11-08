@@ -32,7 +32,7 @@ use crate::settings::ResolverSettings;
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
-    mut dev: DevGroupsSpecification,
+    dev: DevGroupsSpecification,
     locked: bool,
     frozen: bool,
     universal: bool,
@@ -58,12 +58,10 @@ pub(crate) async fn tree(
 ) -> Result<ExitStatus> {
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+    let target = DependencyGroupsTarget::Workspace(&workspace);
 
     // Validate that any referenced dependency groups are defined in the workspace.
     if !frozen {
-        let target = DependencyGroupsTarget::Workspace(&workspace);
-
-        dev.resolve(target.groups());
         target.validate(&dev)?;
     }
 

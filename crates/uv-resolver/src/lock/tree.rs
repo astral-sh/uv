@@ -134,7 +134,7 @@ impl<'env> TreeDisplay<'env> {
             }
 
             for (group, dependencies) in &package.dependency_groups {
-                if dev.iter().contains(group) {
+                if dev.contains(group) {
                     for dependency in dependencies {
                         if markers.is_some_and(|markers| {
                             !dependency.complexified_marker.evaluate(markers, &[])

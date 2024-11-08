@@ -78,7 +78,9 @@ uv run [OPTIONS] [COMMAND]
 
 <p>This option is only available when running in a project.</p>
 
-</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups</p>
+</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
+
+<p><code>--no-group</code> can be used to exclude specific groups.</p>
 
 </dd><dt><code>--all-packages</code></dt><dd><p>Run the command with all workspace members installed.</p>
 
@@ -1394,7 +1396,9 @@ uv sync [OPTIONS]
 
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
 
-</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups</p>
+</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
+
+<p><code>--no-group</code> can be used to exclude specific groups.</p>
 
 </dd><dt><code>--all-packages</code></dt><dd><p>Sync all packages in the workspace.</p>
 
@@ -2055,7 +2059,9 @@ uv export [OPTIONS]
 
 <dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies</p>
 
-</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups</p>
+</dd><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
+
+<p><code>--no-group</code> can be used to exclude specific groups.</p>
 
 </dd><dt><code>--all-packages</code></dt><dd><p>Export the entire workspace.</p>
 
@@ -2412,7 +2418,9 @@ uv tree [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups</p>
+<dl class="cli-reference"><dt><code>--all-groups</code></dt><dd><p>Include dependencies from all dependency groups.</p>
+
+<p><code>--no-group</code> can be used to exclude specific groups.</p>
 
 </dd><dt><code>--allow-insecure-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 

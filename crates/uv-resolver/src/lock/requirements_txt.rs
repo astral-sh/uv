@@ -86,33 +86,42 @@ impl<'lock> RequirementsTxtExport<'lock> {
             }
 
             // Add any development dependencies.
-            for group in dev.iter() {
-                for dep in dist.dependency_groups.get(group).into_iter().flatten() {
-                    let dep_dist = target.lock().find_by_id(&dep.package_id);
-
-                    // Add the dependency to the graph.
-                    if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                        entry.insert(petgraph.add_node(Node::Package(dep_dist)));
+            for dep in dist
+                .dependency_groups
+                .iter()
+                .filter_map(|(group, deps)| {
+                    if dev.contains(group) {
+                        Some(deps)
+                    } else {
+                        None
                     }
+                })
+                .flatten()
+            {
+                let dep_dist = target.lock().find_by_id(&dep.package_id);
 
-                    // Add an edge from the root. Development dependencies may be installed without
-                    // installing the workspace package itself (which can never have markers on it
-                    // anyway), so they're directly connected to the root.
-                    let dep_index = inverse[&dep.package_id];
-                    petgraph.add_edge(
-                        root,
-                        dep_index,
-                        dep.simplified_marker.as_simplified_marker_tree().clone(),
-                    );
+                // Add the dependency to the graph.
+                if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
+                    entry.insert(petgraph.add_node(Node::Package(dep_dist)));
+                }
 
-                    // Push its dependencies on the queue.
-                    if seen.insert((&dep.package_id, None)) {
-                        queue.push_back((dep_dist, None));
-                    }
-                    for extra in &dep.extra {
-                        if seen.insert((&dep.package_id, Some(extra))) {
-                            queue.push_back((dep_dist, Some(extra)));
-                        }
+                // Add an edge from the root. Development dependencies may be installed without
+                // installing the workspace package itself (which can never have markers on it
+                // anyway), so they're directly connected to the root.
+                let dep_index = inverse[&dep.package_id];
+                petgraph.add_edge(
+                    root,
+                    dep_index,
+                    dep.simplified_marker.as_simplified_marker_tree().clone(),
+                );
+
+                // Push its dependencies on the queue.
+                if seen.insert((&dep.package_id, None)) {
+                    queue.push_back((dep_dist, None));
+                }
+                for extra in &dep.extra {
+                    if seen.insert((&dep.package_id, Some(extra))) {
+                        queue.push_back((dep_dist, Some(extra)));
                     }
                 }
             }

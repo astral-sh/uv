@@ -70,7 +70,7 @@ pub(crate) async fn run(
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    mut dev: DevGroupsSpecification,
+    dev: DevGroupsSpecification,
     editable: EditableMode,
     python: Option<String>,
     settings: ResolverInstallerSettings,
@@ -578,21 +578,21 @@ pub(crate) async fn run(
                         .flatten();
                 }
             } else {
+                let target = match &project {
+                    VirtualProject::Project(project) => {
+                        if all_packages {
+                            DependencyGroupsTarget::Workspace(project.workspace())
+                        } else {
+                            DependencyGroupsTarget::Project(project)
+                        }
+                    }
+                    VirtualProject::NonProject(workspace) => {
+                        DependencyGroupsTarget::Workspace(workspace)
+                    }
+                };
+
                 // Validate that any referenced dependency groups are defined in the workspace.
                 if !frozen {
-                    let target = match &project {
-                        VirtualProject::Project(project) => {
-                            if all_packages {
-                                DependencyGroupsTarget::Workspace(project.workspace())
-                            } else {
-                                DependencyGroupsTarget::Project(project)
-                            }
-                        }
-                        VirtualProject::NonProject(workspace) => {
-                            DependencyGroupsTarget::Workspace(workspace)
-                        }
-                    };
-                    dev.resolve(target.groups());
                     target.validate(&dev)?;
                 }
 
