@@ -202,7 +202,7 @@ fn prune_unzipped() -> Result<()> {
 
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
-    Removed 171 files ([SIZE])
+    Removed 173 files ([SIZE])
     "###);
 
     context.venv().assert().success();
