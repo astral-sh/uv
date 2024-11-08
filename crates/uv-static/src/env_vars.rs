@@ -541,7 +541,7 @@ impl EnvVars {
     pub const UV_INSTALLER_GHE_BASE_URL: &'static str = "UV_INSTALLER_GHE_BASE_URL";
 
     /// The directory in which to install uv using the standalone installer and `self update` feature.
-    /// Defaults to `~/.cargo/bin`.
+    /// Defaults to `~/.local/bin`.
     pub const UV_INSTALL_DIR: &'static str = "UV_INSTALL_DIR";
 
     /// Used ephemeral environments like CI to install uv to a specific path while preventing
