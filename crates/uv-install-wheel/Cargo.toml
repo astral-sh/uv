@@ -52,6 +52,10 @@ tracing = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+same-file = { workspace = true }
+self-replace = { workspace = true }
+
 [dev-dependencies]
 anyhow = { version = "1.0.89" }
 assert_fs = { version = "1.1.2" }
