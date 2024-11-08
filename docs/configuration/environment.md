@@ -184,7 +184,7 @@ uv respects the following environment variables:
 - <a id="UV_INSTALLER_GHE_BASE_URL"></a> [`UV_INSTALLER_GHE_BASE_URL`](#UV_INSTALLER_GHE_BASE_URL): The URL from which to download uv using the standalone installer and `self update` feature,
   in lieu of the default GitHub Enterprise URL.
 - <a id="UV_INSTALL_DIR"></a> [`UV_INSTALL_DIR`](#UV_INSTALL_DIR): The directory in which to install uv using the standalone installer and `self update` feature.
-  Defaults to `~/.cargo/bin`.
+  Defaults to `~/.local/bin`.
 - <a id="UV_UNMANAGED_INSTALL"></a> [`UV_UNMANAGED_INSTALL`](#UV_UNMANAGED_INSTALL): Used ephemeral environments like CI to install uv to a specific path while preventing
   the installer from modifying shell profiles or environment variables.
 - <a id="INSTALLER_NO_MODIFY_PATH"></a> [`INSTALLER_NO_MODIFY_PATH`](#INSTALLER_NO_MODIFY_PATH): Avoid modifying the `PATH` environment variable when installing uv using the standalone
