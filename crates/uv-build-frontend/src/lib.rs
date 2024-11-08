@@ -261,7 +261,7 @@ impl SourceBuild {
         level: BuildOutput,
         concurrent_builds: usize,
     ) -> Result<Self, Error> {
-        let temp_dir = build_context.cache().environment()?;
+        let temp_dir = build_context.cache().venv_dir()?;
 
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)

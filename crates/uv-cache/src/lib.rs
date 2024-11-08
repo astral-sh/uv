@@ -188,8 +188,14 @@ impl Cache {
         self.bucket(CacheBucket::Archive).join(id)
     }
 
-    /// Create an ephemeral Python environment in the cache.
-    pub fn environment(&self) -> io::Result<tempfile::TempDir> {
+    /// Create a temporary directory to be used as a Python virtual environment.
+    pub fn venv_dir(&self) -> io::Result<tempfile::TempDir> {
+        fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
+        tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
+    }
+
+    /// Create a temporary directory to be used for executing PEP 517 source distribution builds.
+    pub fn build_dir(&self) -> io::Result<tempfile::TempDir> {
         fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
         tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
     }
