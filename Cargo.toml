@@ -282,10 +282,10 @@ strip = "debuginfo"
 [profile.dist]
 inherits = "release"
 
-# Config for 'cargo dist'
+# Config for 'dist'
 [workspace.metadata.dist]
-# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.25.1"
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.25.2-prerelease.3"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
@@ -315,13 +315,13 @@ targets = [
 ]
 # Whether to auto-include files like READMEs, LICENSEs, and CHANGELOGs (default true)
 auto-includes = false
-# Whether cargo-dist should create a Github Release or use an existing draft
+# Whether dist should create a Github Release or use an existing draft
 create-release = true
 # Which actions to run on pull requests
 pr-run-mode = "skip"
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
-# Which phase cargo-dist should use to create the GitHub release
+# Which phase dist should use to create the GitHub release
 github-release = "announce"
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
