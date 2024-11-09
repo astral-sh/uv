@@ -150,7 +150,7 @@ impl ResolverEnvironment {
 
     /// Returns `false` only when this environment is a fork and it is disjoint
     /// with the given marker.
-    pub(crate) fn included(&self, marker: &MarkerTree) -> bool {
+    pub(crate) fn included_by_marker(&self, marker: &MarkerTree) -> bool {
         match self.kind {
             Kind::Specific { .. } => true,
             Kind::Universal { ref markers, .. } => !markers.is_disjoint(marker),
@@ -332,7 +332,7 @@ impl<'d> ForkingPossibility<'d> {
         dep: &'d PubGrubDependency,
     ) -> ForkingPossibility<'d> {
         let marker = dep.package.marker().unwrap_or(&MarkerTree::TRUE);
-        if !env.included(marker) {
+        if !env.included_by_marker(marker) {
             ForkingPossibility::DependencyAlwaysExcluded
         } else if marker.is_true() {
             ForkingPossibility::NoForkingPossible
@@ -366,7 +366,7 @@ impl<'d> Forker<'d> {
         env: &ResolverEnvironment,
         _conflicting_groups: &ConflictingGroupList,
     ) -> Option<(Forker<'d>, Vec<ResolverEnvironment>)> {
-        if !env.included(&self.marker) {
+        if !env.included_by_marker(&self.marker) {
             return None;
         }
 
@@ -404,7 +404,7 @@ impl<'d> Forker<'d> {
     /// included in the given resolver environment.
     pub(crate) fn included(&self, env: &ResolverEnvironment) -> bool {
         let marker = self.package.marker().unwrap_or(&MarkerTree::TRUE);
-        env.included(marker)
+        env.included_by_marker(marker)
     }
 }
 

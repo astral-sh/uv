@@ -1542,7 +1542,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
-                if !env.included(&requirement.marker) {
+                if !env.included_by_marker(&requirement.marker) {
                     trace!("skipping {requirement} because of {env}");
                     return None;
                 }
@@ -1634,7 +1634,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                             // If we're in a fork in universal mode, ignore any dependency that isn't part of
                             // this fork (but will be part of another fork).
-                            if !env.included(&constraint.marker) {
+                            if !env.included_by_marker(&constraint.marker) {
                                 trace!("skipping {constraint} because of {env}");
                                 return None;
                             }
@@ -2779,7 +2779,7 @@ impl Forks {
                     let dep = deps.pop().unwrap();
                     let markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
                     for fork in &mut forks {
-                        if fork.env.included(&markers) {
+                        if fork.env.included_by_marker(&markers) {
                             fork.dependencies.push(dep.clone());
                         }
                     }
@@ -2827,7 +2827,7 @@ impl Forks {
                         }
                         // Filter out any forks we created that are disjoint with our
                         // Python requirement.
-                        if new_fork.env.included(&python_marker) {
+                        if new_fork.env.included_by_marker(&python_marker) {
                             new.push(new_fork);
                         }
                     }

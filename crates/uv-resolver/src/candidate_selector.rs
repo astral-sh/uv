@@ -137,10 +137,14 @@ impl CandidateSelector {
         // first has the matching half and then the mismatching half.
         let preferences_match = preferences.get(package_name).filter(|(marker, _version)| {
             // `.unwrap_or(true)` because the universal marker is considered matching.
-            marker.map(|marker| env.included(marker)).unwrap_or(true)
+            marker
+                .map(|marker| env.included_by_marker(marker))
+                .unwrap_or(true)
         });
         let preferences_mismatch = preferences.get(package_name).filter(|(marker, _version)| {
-            marker.map(|marker| !env.included(marker)).unwrap_or(false)
+            marker
+                .map(|marker| !env.included_by_marker(marker))
+                .unwrap_or(false)
         });
         self.get_preferred_from_iter(
             preferences_match.chain(preferences_mismatch),
