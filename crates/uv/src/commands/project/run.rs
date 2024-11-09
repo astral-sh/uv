@@ -10,7 +10,7 @@ use anyhow::{anyhow, bail, Context};
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use tracing::{debug, warn};
 use url::Url;
 use uv_cache::Cache;
@@ -996,16 +996,17 @@ pub(crate) async fn run(
     // signal handlers after the command completes.
     let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
+    // Exit based on the result of the command.
     #[cfg(unix)]
-    {
+    let status = {
         use tokio::select;
         use tokio::signal::unix::{signal, SignalKind};
 
         let mut term_signal = signal(SignalKind::terminate())?;
         loop {
             select! {
-                _ = handle.wait() => {
-                    break
+                result = handle.wait() => {
+                    break result;
                 },
 
                 // `SIGTERM`
@@ -1014,10 +1015,11 @@ pub(crate) async fn run(
                 }
             };
         }
-    }
+    }?;
 
-    // Exit based on the result of the command
+    #[cfg(not(unix))]
     let status = handle.wait().await?;
+
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
@@ -1037,7 +1039,7 @@ pub(crate) async fn run(
 }
 
 #[cfg(unix)]
-fn terminate_process(child: &mut Child) -> anyhow::Result<()> {
+fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
     use nix::sys::signal::{self, Signal};
     use nix::unistd::Pid;
 
