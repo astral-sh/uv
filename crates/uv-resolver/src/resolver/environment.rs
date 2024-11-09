@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
+use rustc_hash::{FxHashMap, FxHashSet};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::{ConflictingGroupList, ResolverMarkerEnvironment};
+use uv_pypi_types::{
+    ConflictingGroup, ConflictingGroupList, ConflictingGroupRef, ResolverMarkerEnvironment,
+};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
@@ -95,6 +98,8 @@ enum Kind {
         initial_forks: Arc<[MarkerTree]>,
         /// The markers associated with this resolver fork.
         markers: MarkerTree,
+        /// Conflicting group exclusions.
+        exclude: Arc<FxHashMap<PackageName, FxHashSet<ExtraName>>>,
     },
 }
 
@@ -132,6 +137,7 @@ impl ResolverEnvironment {
         let kind = Kind::Universal {
             initial_forks: initial_forks.into(),
             markers: MarkerTree::TRUE,
+            exclude: Arc::new(FxHashMap::default()),
         };
         ResolverEnvironment { kind }
     }
@@ -154,6 +160,18 @@ impl ResolverEnvironment {
         match self.kind {
             Kind::Specific { .. } => true,
             Kind::Universal { ref markers, .. } => !markers.is_disjoint(marker),
+        }
+    }
+
+    /// Returns true if the dependency represented by this forker may be
+    /// included in the given resolver environment.
+    pub(crate) fn included_by_group(&self, group: ConflictingGroupRef<'_>) -> bool {
+        match self.kind {
+            Kind::Specific { .. } => true,
+            Kind::Universal { ref exclude, .. } => !exclude
+                .get(group.package())
+                .map(|set| set.contains(group.extra()))
+                .unwrap_or(false),
         }
     }
 
@@ -183,12 +201,56 @@ impl ResolverEnvironment {
             Kind::Universal {
                 ref initial_forks,
                 markers: ref lhs,
+                ref exclude,
             } => {
                 let mut markers = lhs.clone();
                 markers.and(rhs);
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
                     markers,
+                    exclude: Arc::clone(exclude),
+                };
+                ResolverEnvironment { kind }
+            }
+        }
+    }
+
+    /// Returns a new resolver environment with the given groups excluded from
+    /// it.
+    ///
+    /// When a group is excluded from a resolver environment,
+    /// `ResolverEnvironment::included_by_group` will return false. The idea
+    /// is that a dependency with a corresponding group should be excluded by
+    /// forks in the resolver with this environment.
+    ///
+    /// # Panics
+    ///
+    /// This panics if the resolver environment corresponds to one and only one
+    /// specific marker environment. i.e., "pip"-style resolution.
+    pub(crate) fn exclude_by_group(
+        &self,
+        groups: impl IntoIterator<Item = ConflictingGroup>,
+    ) -> ResolverEnvironment {
+        match self.kind {
+            Kind::Specific { .. } => {
+                unreachable!("environment narrowing only happens in universal resolution")
+            }
+            Kind::Universal {
+                ref initial_forks,
+                ref markers,
+                ref exclude,
+            } => {
+                let mut exclude: FxHashMap<_, _> = (**exclude).clone();
+                for group in groups {
+                    exclude
+                        .entry(group.package().clone())
+                        .or_default()
+                        .insert(group.extra().clone());
+                }
+                let kind = Kind::Universal {
+                    initial_forks: Arc::clone(initial_forks),
+                    markers: markers.clone(),
+                    exclude: Arc::new(exclude),
                 };
                 ResolverEnvironment { kind }
             }
@@ -207,6 +269,7 @@ impl ResolverEnvironment {
         let Kind::Universal {
             ref initial_forks,
             markers: ref _markers,
+            exclude: ref _exclude,
         } = self.kind
         else {
             return vec![init];
