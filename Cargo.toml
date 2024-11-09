@@ -120,15 +120,15 @@ md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0" }
 nanoid = { version = "0.4.0" }
+nix = { version = "0.29.0" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
-procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
 proc-macro2 = { version = "1.0.86" }
+procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
-version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
@@ -172,6 +172,7 @@ unicode-width = { version = "0.1.13" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.2" }
 urlencoding = { version = "2.1.3" }
+version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "95e1390399cdddee986b658be19587eb1fdb2d79" }
 walkdir = { version = "2.5.0" }
 which = { version = "7.0.0", features = ["regex"] }
 windows-registry = { version = "0.3.0" }

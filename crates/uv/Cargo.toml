@@ -97,7 +97,6 @@ url = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
-cfg-if = "1.0"
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }
@@ -117,7 +116,7 @@ tempfile = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.23"
+nix = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = [

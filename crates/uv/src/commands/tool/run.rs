@@ -1,4 +1,3 @@
-use cfg_if::cfg_if;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::PathBuf;
@@ -242,6 +241,7 @@ pub(crate) async fn run(
     {
         use tokio::select;
         use tokio::signal::unix::{signal, SignalKind};
+
         let mut term_signal = signal(SignalKind::terminate())?;
         loop {
             select! {
@@ -277,21 +277,13 @@ pub(crate) async fn run(
     }
 }
 
-#[allow(clippy::items_after_statements, dead_code)]
-fn terminate_process(_child: &mut Child) -> Result<(), anyhow::Error> {
-    cfg_if! {
-        if #[cfg(unix)] {
-            let pid = _child.id().context("Failed to get child process ID")?;
-            // On Unix, send SIGTERM for a graceful shutdown
-            use nix::sys::signal::{self, Signal};
-            use nix::unistd::Pid;
-            signal::kill(Pid::from_raw(pid.try_into().unwrap()), Signal::SIGTERM)
-                .context("Failed to send SIGTERM")
-        } else if #[cfg(windows)] {
-            // On Windows, use winapi to terminate the process gracefully
-            todo!("Implement graceful termination on Windows");
-        }
-    }
+#[cfg(unix)]
+fn terminate_process(child: &mut Child) -> anyhow::Result<()> {
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+
+    let pid = child.id().context("Failed to get child process ID")?;
+    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
 }
 
 /// Return the entry points for the specified package.
