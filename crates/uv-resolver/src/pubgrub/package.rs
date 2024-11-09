@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, MarkerTreeContents};
+use uv_pypi_types::ConflictingGroupRef;
 
 use crate::python_requirement::PythonRequirement;
 
@@ -183,6 +184,16 @@ impl PubGrubPackage {
             }
             | PubGrubPackageInner::Extra { ref extra, .. } => Some(extra),
         }
+    }
+
+    /// Extracts a possible conflicting group from this package.
+    ///
+    /// If this package can't possibly be classified as a conflicting group,
+    /// then this returns `None`.
+    pub(crate) fn conflicting_group(&self) -> Option<ConflictingGroupRef<'_>> {
+        let package = self.name_no_root()?;
+        let extra = self.extra()?;
+        Some(ConflictingGroupRef::from((package, extra)))
     }
 
     /// Returns `true` if this PubGrub package is a proxy package.

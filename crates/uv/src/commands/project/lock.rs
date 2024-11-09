@@ -658,6 +658,7 @@ async fn do_lock(
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution_graph(&resolution, workspace.install_path())?
                 .with_manifest(manifest)
+                .with_conflicting_groups(workspace.conflicting_groups())
                 .with_supported_environments(
                     environments
                         .cloned()
@@ -797,6 +798,16 @@ impl ValidatedLock {
             debug!(
                 "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // If the conflicting group config has changed, we have to perform a clean resolution.
+        if &workspace.conflicting_groups() != lock.conflicting_groups() {
+            debug!(
+                "Ignoring existing lockfile due to change in conflicting groups: `{:?}` vs. `{:?}`",
+                workspace.conflicting_groups(),
+                lock.conflicting_groups(),
             );
             return Ok(Self::Versions(lock));
         }

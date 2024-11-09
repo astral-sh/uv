@@ -605,6 +605,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.index,
             &self.git,
             &self.python_requirement,
+            &self.conflicting_groups,
             self.selector.resolution_strategy(),
             self.options,
         )

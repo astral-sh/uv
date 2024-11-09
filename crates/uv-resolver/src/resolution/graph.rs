@@ -17,7 +17,9 @@ use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
-use uv_pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
+use uv_pypi_types::{
+    ConflictingGroupList, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
+};
 
 use crate::graph_ops::marker_reachability;
 use crate::pins::FilePins;
@@ -101,6 +103,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
+        conflicting_groups: &ConflictingGroupList,
         resolution_strategy: &ResolutionStrategy,
         options: Options,
     ) -> Result<Self, ResolveError> {
@@ -237,27 +240,40 @@ impl ResolutionGraph {
             fork_markers,
         };
 
-        #[allow(unused_mut, reason = "Used in debug_assertions below")]
-        let mut conflicting = graph.find_conflicting_distributions();
-        if !conflicting.is_empty() {
-            tracing::warn!(
-                "found {} conflicting distributions in resolution, \
+        // We only do conflicting distribution detection when no
+        // conflicting groups have been specified. The reason here
+        // is that when there are conflicting groups, then from the
+        // perspective of marker expressions only, it may look like
+        // one can install different versions of the same package for
+        // the same marker environment. However, the thing preventing
+        // this is that the only way this should be possible is if
+        // one tries to install two or more conflicting extras at
+        // the same time. At which point, uv will report an error,
+        // thereby sidestepping the possibility of installing different
+        // versions of the same package into the same virtualenv. ---AG
+        if conflicting_groups.is_empty() {
+            #[allow(unused_mut, reason = "Used in debug_assertions below")]
+            let mut conflicting = graph.find_conflicting_distributions();
+            if !conflicting.is_empty() {
+                tracing::warn!(
+                    "found {} conflicting distributions in resolution, \
                  please report this as a bug at \
                  https://github.com/astral-sh/uv/issues/new",
-                conflicting.len()
-            );
-        }
-        // When testing, we materialize any conflicting distributions as an
-        // error to ensure any relevant tests fail. Otherwise, we just leave
-        // it at the warning message above. The reason for not returning an
-        // error "in production" is that an incorrect resolution may only be
-        // incorrect in certain marker environments, but fine in most others.
-        // Returning an error in that case would make `uv` unusable whenever
-        // the bug occurs, but letting it through means `uv` *could* still be
-        // usable.
-        #[cfg(debug_assertions)]
-        if let Some(err) = conflicting.pop() {
-            return Err(ResolveError::ConflictingDistribution(err));
+                    conflicting.len()
+                );
+            }
+            // When testing, we materialize any conflicting distributions as an
+            // error to ensure any relevant tests fail. Otherwise, we just leave
+            // it at the warning message above. The reason for not returning an
+            // error "in production" is that an incorrect resolution may only be
+            // incorrect in certain marker environments, but fine in most others.
+            // Returning an error in that case would make `uv` unusable whenever
+            // the bug occurs, but letting it through means `uv` *could* still be
+            // usable.
+            #[cfg(debug_assertions)]
+            if let Some(err) = conflicting.pop() {
+                return Err(ResolveError::ConflictingDistribution(err));
+            }
         }
         Ok(graph)
     }
