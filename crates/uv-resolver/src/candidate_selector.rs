@@ -374,7 +374,11 @@ impl CandidateSelector {
     }
 
     /// Select the first-matching [`Candidate`] from a set of candidate versions and files,
-    /// preferring wheels over source distributions.
+    /// preferring wheels to source distributions.
+    ///
+    /// The returned [`Candidate`] _may not_ be compatible with the current platform; in such
+    /// cases, the resolver is responsible for tracking the incompatibility and re-running the
+    /// selection process with additional constraints.
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
@@ -382,8 +386,20 @@ impl CandidateSelector {
         allow_prerelease: bool,
     ) -> Option<Candidate<'a>> {
         let mut steps = 0usize;
+        let mut incompatible: Option<Candidate> = None;
         for (version, maybe_dist) in versions {
             steps += 1;
+
+            // If we have an incompatible candidate, and we've progressed past it, return it.
+            if incompatible
+                .as_ref()
+                .is_some_and(|incompatible| version != incompatible.version)
+            {
+                trace!(
+                    "Returning incompatible candidate for package {package_name} with range {range} after {steps} steps",
+                );
+                return incompatible;
+            }
 
             let candidate = {
                 if version.any_prerelease() && !allow_prerelease {
@@ -395,7 +411,7 @@ impl CandidateSelector {
                 let Some(dist) = maybe_dist.prioritized_dist() else {
                     continue;
                 };
-                trace!("found candidate for package {package_name:?} with range {range:?} after {steps} steps: {version:?} version");
+                trace!("Found candidate for package {package_name} with range {range} after {steps} steps: {version} version");
                 Candidate::new(package_name, version, dist, VersionChoiceKind::Compatible)
             };
 
@@ -415,8 +431,44 @@ impl CandidateSelector {
                 continue;
             }
 
+            // If the candidate isn't compatible, we store it as incompatible and continue
+            // searching. Typically, we want to return incompatible candidates so that PubGrub can
+            // track them (then continue searching, with additional constraints). However, we may
+            // see multiple entries for the same version (e.g., if the same version exists on
+            // multiple indexes and `--index-strategy unsafe-best-match` is enabled), and it's
+            // possible that one of them is compatible while the other is not.
+            //
+            // See, e.g., <https://github.com/astral-sh/uv/issues/8922>. At time of writing,
+            // markupsafe==3.0.2 exists on the PyTorch index, but there's only a single wheel:
+            //
+            //   MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+            //
+            // Meanwhile, there are a large number of wheels on PyPI for the same version. If the
+            // user is on Python 3.12, and we return the incompatible PyTorch wheel without
+            // considering the PyPI wheels, PubGrub will mark 3.0.2 as an incompatible version,
+            // even though there are compatible wheels on PyPI. Thus, we need to ensure that we
+            // return the first _compatible_ candidate across all indexes, if such a candidate
+            // exists.
+            if matches!(candidate.dist(), CandidateDist::Incompatible(_)) {
+                if incompatible.is_none() {
+                    incompatible = Some(candidate);
+                }
+                continue;
+            }
+
+            trace!(
+                "Returning candidate for package {package_name} with range {range} after {steps} steps",
+            );
             return Some(candidate);
         }
+
+        if incompatible.is_some() {
+            trace!(
+                "Returning incompatible candidate for package {package_name} with range {range} after {steps} steps",
+            );
+            return incompatible;
+        }
+
         trace!("Exhausted all candidates for package {package_name} with range {range} after {steps} steps");
         None
     }
