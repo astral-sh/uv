@@ -163,7 +163,7 @@ impl Diagnostic for ResolutionDiagnostic {
                 format!(
                     "The transitive dependency `{name}` is unpinned. \
                     Consider setting a lower bound with a constraint when using \
-                    `--resolution-strategy lowest` to avoid using outdated versions."
+                    `--resolution lowest` to avoid using outdated versions."
                 )
             }
         }
