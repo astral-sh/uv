@@ -355,7 +355,7 @@ code.
 
 Lower bounds are particularly critical when writing a library. It's important to declare the lowest
 version for each dependency that your library works with, and to validate that the bounds are
-correct — testing with [`--resolution lowest` or `resolution lowest-direct`](#resolution-strategy).
+correct — testing with [`--resolution lowest` or `--resolution lowest-direct`](#resolution-strategy).
 Otherwise, a user may receive an old, incompatible version of one of your library's dependencies and
 the library will fail with an unexpected error.
 
