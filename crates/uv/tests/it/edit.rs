@@ -3675,6 +3675,9 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
 fn add_frozen() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
@@ -3694,6 +3697,7 @@ fn add_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3719,6 +3723,7 @@ fn add_frozen() -> Result<()> {
     });
 
     assert!(!context.temp_dir.join("uv.lock").exists());
+    assert!(!context.venv.exists());
 
     Ok(())
 }
@@ -3727,6 +3732,9 @@ fn add_frozen() -> Result<()> {
 #[test]
 fn add_no_sync() -> Result<()> {
     let context = TestContext::new("3.12");
+
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3747,6 +3755,7 @@ fn add_no_sync() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     "###);
 
@@ -3773,6 +3782,7 @@ fn add_no_sync() -> Result<()> {
     });
 
     assert!(context.temp_dir.join("uv.lock").exists());
+    assert!(!context.venv.exists());
 
     Ok(())
 }
