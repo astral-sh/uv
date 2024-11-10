@@ -42,7 +42,6 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::resolution_environment;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
     init_script_python_requirement, validate_script_requires_python, ProjectError, ScriptPython,
@@ -249,13 +248,7 @@ pub(crate) async fn add(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let hasher = HashStrategy::default();
-    let python_platform = None;
-    let python_version = None;
     let sources = SourceStrategy::Enabled;
-
-    // Determine the environment for the resolution.
-    let (tags, markers) =
-        resolution_environment(python_version, python_platform, target.interpreter())?;
 
     // Add all authenticated sources to the cache.
     for index in settings.index_locations.allowed_indexes() {
@@ -268,7 +261,7 @@ pub(crate) async fn add(
     let client = RegistryClientBuilder::try_from(client_builder)?
         .index_urls(settings.index_locations.index_urls())
         .index_strategy(settings.index_strategy)
-        .markers(&markers)
+        .markers(target.interpreter().markers())
         .platform(target.interpreter().platform())
         .build();
 
@@ -293,7 +286,7 @@ pub(crate) async fn add(
         let entries = client
             .fetch(settings.index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &settings.build_options)
+        FlatIndex::from_entries(entries, None, &hasher, &settings.build_options)
     };
 
     // Create a build dispatch.
