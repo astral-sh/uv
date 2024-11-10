@@ -28,14 +28,6 @@ impl Resolution {
         }
     }
 
-    /// Return the remote distribution for the given package name, if it exists.
-    pub fn get_remote(&self, package_name: &PackageName) -> Option<&Dist> {
-        match self.packages.get(package_name)? {
-            ResolvedDist::Installable(dist) => Some(dist),
-            ResolvedDist::Installed(_) => None,
-        }
-    }
-
     /// Return the hashes for the given package name, if they exist.
     pub fn get_hashes(&self, package_name: &PackageName) -> &[HashDigest] {
         self.hashes.get(package_name).map_or(&[], Vec::as_slice)
@@ -59,11 +51,6 @@ impl Resolution {
     /// Return `true` if there are no pinned packages in this resolution.
     pub fn is_empty(&self) -> bool {
         self.packages.is_empty()
-    }
-
-    /// Return the set of [`Requirement`]s that this resolution represents.
-    pub fn requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.packages.values().map(Requirement::from)
     }
 
     /// Return the [`ResolutionDiagnostic`]s that were produced during resolution.

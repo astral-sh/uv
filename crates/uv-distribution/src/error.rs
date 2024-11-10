@@ -53,8 +53,6 @@ pub enum Error {
     // Build error
     #[error(transparent)]
     Build(anyhow::Error),
-    #[error("Failed to build editable: `{0}`")]
-    BuildEditable(String, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
