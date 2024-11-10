@@ -234,12 +234,14 @@ impl<'a> IndexLocations {
             self.indexes
                 .iter()
                 .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
-                .find(|index| index.default && !index.explicit)
+                .find(|index| index.default)
                 .or_else(|| Some(&DEFAULT_INDEX))
         }
     }
 
     /// Return an iterator over the implicit [`Index`] entries.
+    ///
+    /// Default and explicit indexes are excluded.
     pub fn implicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
             Either::Left(std::iter::empty())
@@ -249,22 +251,7 @@ impl<'a> IndexLocations {
                 self.indexes
                     .iter()
                     .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
-                    .filter(|index| !(index.default || index.explicit)),
-            )
-        }
-    }
-
-    /// Return an iterator over the explicit [`Index`] entries.
-    pub fn explicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        if self.no_index {
-            Either::Left(std::iter::empty())
-        } else {
-            let mut seen = FxHashSet::default();
-            Either::Right(
-                self.indexes
-                    .iter()
-                    .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
-                    .filter(|index| index.explicit),
+                    .filter(|index| !index.default && !index.explicit),
             )
         }
     }
@@ -278,7 +265,9 @@ impl<'a> IndexLocations {
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        self.implicit_indexes().chain(self.default_index())
+        self.implicit_indexes()
+            .chain(self.default_index())
+            .filter(|index| !index.explicit)
     }
 
     /// Return an iterator over the [`FlatIndexLocation`] entries.
@@ -319,7 +308,7 @@ impl<'a> IndexLocations {
                     .chain(self.flat_index.iter())
                     .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
             } {
-                if index.default && !index.explicit {
+                if index.default {
                     if default {
                         continue;
                     }
@@ -361,12 +350,14 @@ impl<'a> IndexUrls {
             self.indexes
                 .iter()
                 .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
-                .find(|index| index.default && !index.explicit)
+                .find(|index| index.default)
                 .or_else(|| Some(&DEFAULT_INDEX))
         }
     }
 
     /// Return an iterator over the implicit [`Index`] entries.
+    ///
+    /// Default and explicit indexes are excluded.
     fn implicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
             Either::Left(std::iter::empty())
@@ -376,7 +367,7 @@ impl<'a> IndexUrls {
                 self.indexes
                     .iter()
                     .filter(move |index| index.name.as_ref().map_or(true, |name| seen.insert(name)))
-                    .filter(|index| !(index.default || index.explicit)),
+                    .filter(|index| !index.default && !index.explicit),
             )
         }
     }
@@ -389,7 +380,9 @@ impl<'a> IndexUrls {
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        self.implicit_indexes().chain(self.default_index())
+        self.implicit_indexes()
+            .chain(self.default_index())
+            .filter(|index| !index.explicit)
     }
 }
 
