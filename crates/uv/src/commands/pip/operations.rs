@@ -36,8 +36,9 @@ use uv_requirements::{
     SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
+    DependencyMode, DerivationChainBuilder, Exclusions, FlatIndex, InMemoryIndex, Manifest,
+    Options, Preference, Preferences, PythonRequirement, Resolver, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -459,7 +460,37 @@ pub(crate) async fn install(
         )
         .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
 
-        let wheels = preparer.prepare(remote.clone(), in_flight).await?;
+        let wheels = preparer
+            .prepare(remote.clone(), in_flight)
+            .await
+            .map_err(Error::from)
+            .map_err(|err| match err {
+                // Attach resolution context to the error.
+                Error::Prepare(uv_installer::PrepareError::Download(dist, chain, err)) => {
+                    debug_assert!(chain.is_empty());
+                    let chain =
+                        DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                            .unwrap_or_default();
+                    Error::Prepare(uv_installer::PrepareError::Download(dist, chain, err))
+                }
+                Error::Prepare(uv_installer::PrepareError::Build(dist, chain, err)) => {
+                    debug_assert!(chain.is_empty());
+                    let chain =
+                        DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                            .unwrap_or_default();
+                    Error::Prepare(uv_installer::PrepareError::Build(dist, chain, err))
+                }
+                Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)) => {
+                    debug_assert!(chain.is_empty());
+                    let chain =
+                        DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                            .unwrap_or_default();
+                    Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
+                        dist, chain, err,
+                    ))
+                }
+                _ => err,
+            })?;
 
         logger.on_prepare(wheels.len(), start, printer)?;
 

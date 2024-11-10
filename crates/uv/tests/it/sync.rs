@@ -700,6 +700,8 @@ fn sync_build_isolation_package() -> Result<()> {
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
+
+      help: `source-distribution` was included because `project==0.1.0` depends on `source-distribution`
     "###);
 
     // Install `hatchling` for `source-distribution`.
@@ -789,6 +791,8 @@ fn sync_build_isolation_extra() -> Result<()> {
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
+
+      help: `source-distribution` was included because `project==0.1.0` depends on `source-distribution`
     "###);
 
     // Running `uv sync` with `--all-extras` should also fail.
@@ -806,6 +810,8 @@ fn sync_build_isolation_extra() -> Result<()> {
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
+
+      help: `source-distribution` was included because `project==0.1.0` depends on `source-distribution`
     "###);
 
     // Install the build dependencies.
@@ -4266,6 +4272,199 @@ fn sync_all_groups() -> Result<()> {
 
     ----- stderr -----
     error: Group `foo` is not defined in any project's `dependency-group` table
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_derivation_chain() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["wsgiref"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "wsgiref"
+        version = "0.1.2"
+        dependencies = []
+        "#,
+    )?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"/.*/src", "/[TMP]/src"),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.sync(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download and build `wsgiref==0.1.2`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 5, in <module>
+            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+              print "Setuptools version",version,"or greater has been installed."
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+
+      help: `wsgiref` was included because `project==0.1.0` depends on `wsgiref`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_derivation_chain_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        optional-dependencies = { wsgi = ["wsgiref"] }
+
+        [[tool.uv.dependency-metadata]]
+        name = "wsgiref"
+        version = "0.1.2"
+        dependencies = []
+        "#,
+    )?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"/.*/src", "/[TMP]/src"),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.sync().arg("--extra").arg("wsgi"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download and build `wsgiref==0.1.2`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 5, in <module>
+            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+              print "Setuptools version",version,"or greater has been installed."
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+
+      help: `wsgiref` was included because `project==0.1.0` depends on `wsgiref`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_derivation_chain_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        wsgi = ["wsgiref"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "wsgiref"
+        version = "0.1.2"
+        dependencies = []
+        "#,
+    )?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"/.*/src", "/[TMP]/src"),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.sync().arg("--group").arg("wsgi"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download and build `wsgiref==0.1.2`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 5, in <module>
+            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+              print "Setuptools version",version,"or greater has been installed."
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+
+      help: `wsgiref` was included because `project==0.1.0` depends on `wsgiref`
     "###);
 
     Ok(())

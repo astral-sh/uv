@@ -27,9 +27,9 @@ pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, Dist, DistributionMetadata, IncompatibleDist, IncompatibleSource,
-    IncompatibleWheel, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist,
-    PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistributionMetadata, IncompatibleDist,
+    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexUrl,
+    InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist,
     VersionOrUrlRef,
 };
 use uv_git::GitResolver;
@@ -62,6 +62,8 @@ pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
+pub use crate::resolver::derivation::DerivationChainBuilder;
+
 use crate::resolver::groups::Groups;
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
@@ -76,6 +78,7 @@ use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, ResolutionMo
 
 mod availability;
 mod batch_prefetch;
+mod derivation;
 mod environment;
 mod fork_map;
 mod groups;
@@ -387,6 +390,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     resolutions.push(resolution);
                     continue 'FORK;
                 };
+
                 state.next = highest_priority_pkg;
 
                 let url = state.next.name().and_then(|name| state.fork_urls.get(name));
@@ -520,9 +524,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &state.fork_urls,
                     &state.env,
                     &state.python_requirement,
+                    &state.pubgrub,
                 )?;
                 match forked_deps {
                     ForkedDependencies::Unavailable(reason) => {
+                        // Then here, if we get a reason that we consider unrecoverable, we should
+                        // show the derivation chain.
                         state
                             .pubgrub
                             .add_incompatibility(Incompatibility::custom_version(
@@ -945,25 +952,33 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 unreachable!("`requires-python` is only known upfront for registry distributions")
             }
             MetadataResponse::Error(dist, err) => {
+                // TODO(charlie): Add derivation chain for URL dependencies. In practice, this isn't
+                // critical since we fetch URL dependencies _prior_ to invoking the resolver.
+                let chain = DerivationChain::default();
                 return Err(match &**dist {
                     Dist::Built(built_dist @ BuiltDist::Path(_)) => {
-                        ResolveError::Read(Box::new(built_dist.clone()), (*err).clone())
+                        ResolveError::Read(Box::new(built_dist.clone()), chain, (*err).clone())
                     }
                     Dist::Source(source_dist @ SourceDist::Path(_)) => {
-                        ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                        ResolveError::Build(Box::new(source_dist.clone()), chain, (*err).clone())
                     }
                     Dist::Source(source_dist @ SourceDist::Directory(_)) => {
-                        ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                        ResolveError::Build(Box::new(source_dist.clone()), chain, (*err).clone())
                     }
                     Dist::Built(built_dist) => {
-                        ResolveError::Download(Box::new(built_dist.clone()), (*err).clone())
+                        ResolveError::Download(Box::new(built_dist.clone()), chain, (*err).clone())
                     }
                     Dist::Source(source_dist) => {
                         if source_dist.is_local() {
-                            ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                            ResolveError::Build(
+                                Box::new(source_dist.clone()),
+                                chain,
+                                (*err).clone(),
+                            )
                         } else {
                             ResolveError::DownloadAndBuild(
                                 Box::new(source_dist.clone()),
+                                chain,
                                 (*err).clone(),
                             )
                         }
@@ -1197,8 +1212,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        pubgrub: &State<UvDependencyProvider>,
     ) -> Result<ForkedDependencies, ResolveError> {
-        let result = self.get_dependencies(package, version, fork_urls, env, python_requirement);
+        let result = self.get_dependencies(
+            package,
+            version,
+            fork_urls,
+            env,
+            python_requirement,
+            pubgrub,
+        );
         if env.marker_environment().is_some() {
             result.map(|deps| match deps {
                 Dependencies::Available(deps) | Dependencies::Unforkable(deps) => {
@@ -1220,6 +1243,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
         let url = package.name().and_then(|name| fork_urls.get(name));
         let dependencies = match &**package {
@@ -1357,28 +1381,42 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ));
                     }
                     MetadataResponse::Error(dist, err) => {
+                        let chain = DerivationChainBuilder::from_state(package, version, pubgrub)
+                            .unwrap_or_default();
                         return Err(match &**dist {
-                            Dist::Built(built_dist @ BuiltDist::Path(_)) => {
-                                ResolveError::Read(Box::new(built_dist.clone()), (*err).clone())
-                            }
-                            Dist::Source(source_dist @ SourceDist::Path(_)) => {
-                                ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
-                            }
+                            Dist::Built(built_dist @ BuiltDist::Path(_)) => ResolveError::Read(
+                                Box::new(built_dist.clone()),
+                                chain,
+                                (*err).clone(),
+                            ),
+                            Dist::Source(source_dist @ SourceDist::Path(_)) => ResolveError::Build(
+                                Box::new(source_dist.clone()),
+                                chain,
+                                (*err).clone(),
+                            ),
                             Dist::Source(source_dist @ SourceDist::Directory(_)) => {
-                                ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                                ResolveError::Build(
+                                    Box::new(source_dist.clone()),
+                                    chain,
+                                    (*err).clone(),
+                                )
                             }
-                            Dist::Built(built_dist) => {
-                                ResolveError::Download(Box::new(built_dist.clone()), (*err).clone())
-                            }
+                            Dist::Built(built_dist) => ResolveError::Download(
+                                Box::new(built_dist.clone()),
+                                chain,
+                                (*err).clone(),
+                            ),
                             Dist::Source(source_dist) => {
                                 if source_dist.is_local() {
                                     ResolveError::Build(
                                         Box::new(source_dist.clone()),
+                                        chain,
                                         (*err).clone(),
                                     )
                                 } else {
                                     ResolveError::DownloadAndBuild(
                                         Box::new(source_dist.clone()),
+                                        chain,
                                         (*err).clone(),
                                     )
                                 }
@@ -1848,9 +1886,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             Request::Installed(dist) => {
-                let metadata = dist
-                    .metadata()
-                    .map_err(|err| ResolveError::ReadInstalled(Box::new(dist.clone()), err))?;
+                // TODO(charlie): This should be return a `MetadataResponse`.
+                let metadata = dist.metadata().map_err(|err| {
+                    ResolveError::ReadInstalled(
+                        Box::new(dist.clone()),
+                        DerivationChain::default(),
+                        err,
+                    )
+                })?;
                 Ok(Some(Response::Installed { dist, metadata }))
             }
 
@@ -1964,7 +2007,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                         ResolvedDist::Installed { dist } => {
                             let metadata = dist.metadata().map_err(|err| {
-                                ResolveError::ReadInstalled(Box::new(dist.clone()), err)
+                                ResolveError::ReadInstalled(
+                                    Box::new(dist.clone()),
+                                    DerivationChain::default(),
+                                    err,
+                                )
                             })?;
                             Response::Installed { dist, metadata }
                         }

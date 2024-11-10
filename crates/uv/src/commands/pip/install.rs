@@ -412,7 +412,7 @@ pub(crate) async fn pip_install(
     )
     .await
     {
-        Ok(resolution) => Resolution::from(resolution),
+        Ok(graph) => Resolution::from(graph),
         Err(err) => {
             return diagnostics::OperationDiagnostic::default()
                 .report(err)
