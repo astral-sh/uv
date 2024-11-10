@@ -219,6 +219,8 @@ def build_project_at_version(
 
     # Build the project
     check_call([uv, "build"], cwd=project_root)
+    # Test that we ignore unknown any file.
+    project_root.joinpath("dist").joinpath(".DS_Store").touch()
 
     return project_root
 

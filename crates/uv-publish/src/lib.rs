@@ -251,11 +251,10 @@ pub fn files_for_publishing(
             else {
                 continue;
             };
-            if filename == ".gitignore" {
+            let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
+                debug!("Not a distribution filename: `{filename}`");
                 continue;
-            }
-            let dist_filename = DistFilename::try_from_normalized_filename(&filename)
-                .ok_or_else(|| PublishError::InvalidFilename(dist.clone()))?;
+            };
             files.push((dist, filename, dist_filename));
         }
     }
