@@ -1875,7 +1875,7 @@ fn compile_git_mismatched_name() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `dask @ git+https://github.com/pallets/flask.git@3.0.0`
+    error: Failed to download and build `dask @ git+https://github.com/pallets/flask.git@3.0.0`
       Caused by: Package metadata name `flask` does not match given name `dask`
     "###
     );
@@ -5915,7 +5915,7 @@ fn offline_direct_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download: `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+    error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
     "###
     );
@@ -9961,7 +9961,7 @@ fn not_found_direct_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download: `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
+    error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
       Caused by: Failed to fetch: `https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
       Caused by: HTTP status client error (404 Not Found) for url (https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl)
     "###
@@ -12021,7 +12021,7 @@ fn git_source_missing_tag() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch tag `missing`

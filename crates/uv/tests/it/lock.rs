@@ -9439,7 +9439,7 @@ fn lock_mismatched_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Failed to parse entry: `uv-public-pypackage`
       Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
     "###);
@@ -13605,7 +13605,7 @@ fn lock_named_index_cli() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Failed to parse entry: `jinja2`
       Caused by: Package `jinja2` references an undeclared index: `pytorch`
     "###);
@@ -15671,7 +15671,7 @@ fn lock_invalid_project_table() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: Failed to build: `b @ file://[TEMP_DIR]/b`
+    error: Failed to build `b @ file://[TEMP_DIR]/b`
       Caused by: Failed to extract static metadata from `pyproject.toml`
       Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.
       Caused by: TOML parse error at line 2, column 10
@@ -17295,7 +17295,7 @@ fn lock_group_include_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Detected a cycle in `dependency-groups`: `bar` -> `foobar` -> `foo` -> `bar`
     "###);
 
@@ -17326,7 +17326,7 @@ fn lock_group_include_missing() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Failed to find group `bar` included by `foo`
     "###);
 
@@ -17357,7 +17357,7 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
     invalid!
@@ -17370,7 +17370,7 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
     invalid!
