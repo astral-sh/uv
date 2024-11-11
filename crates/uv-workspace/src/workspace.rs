@@ -1312,17 +1312,12 @@ fn is_excluded_from_workspace(
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(exclude_glob.as_str())
-        .to_string_lossy()
-        .to_string();
-        for excluded_root in glob(&absolute_glob)
-            .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
-        {
-            let excluded_root = excluded_root
-                .map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
-            if excluded_root == project_path.simplified() {
-                return Ok(true);
-            }
+        .join(exclude_glob.as_str());
+        let absolute_glob = absolute_glob.to_string_lossy();
+        let exclude_pattern = glob::Pattern::new(&absolute_glob)
+            .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
+        if exclude_pattern.matches_path(project_path) {
+            return Ok(true);
         }
     }
     Ok(false)
@@ -1338,17 +1333,12 @@ fn is_included_in_workspace(
         let absolute_glob = PathBuf::from(glob::Pattern::escape(
             workspace_root.simplified().to_string_lossy().as_ref(),
         ))
-        .join(member_glob.as_str())
-        .to_string_lossy()
-        .to_string();
-        for member_root in glob(&absolute_glob)
-            .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?
-        {
-            let member_root =
-                member_root.map_err(|err| WorkspaceError::Glob(absolute_glob.to_string(), err))?;
-            if member_root == project_path {
-                return Ok(true);
-            }
+        .join(member_glob.as_str());
+        let absolute_glob = absolute_glob.to_string_lossy();
+        let include_pattern = glob::Pattern::new(&absolute_glob)
+            .map_err(|err| WorkspaceError::Pattern(absolute_glob.to_string(), err))?;
+        if include_pattern.matches_path(project_path) {
+            return Ok(true);
         }
     }
     Ok(false)
