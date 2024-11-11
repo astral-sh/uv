@@ -624,7 +624,7 @@ fn frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/`
+    error: Failed to build `project @ file://[TEMP_DIR]/`
       Caused by: Failed to parse entry: `child`
       Caused by: Package is not included as workspace package in `tool.uv.workspace`
     "###);
