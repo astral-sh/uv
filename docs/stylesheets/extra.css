@@ -86,21 +86,9 @@
 }
 
 [data-md-color-scheme="astral-light"] img[src$="#only-light"],
-[data-md-color-scheme="astral-light"] img[src$="#gh-light-mode-only"] {
-  display: inline; /* Show light images in light mode */
-  height: 250px; /* Add size constraints here */
-  width: 500px;
-}
-
-[data-md-color-scheme="astral-dark"] img[src$="#only-light"],
-[data-md-color-scheme="astral-dark"] img[src$="#gh-light-mode-only"] {
-  display: none; /* Hide light images in dark mode */
-}
-
-[data-md-color-scheme="astral-dark"] img[src$="#only-dark"],
-[data-md-color-scheme="astral-dark"] img[src$="#gh-dark-mode-only"] {
-  display: inline; /* Show dark images in dark mode */
-  height: 250px; 
+[data-md-color-scheme="astral-dark"] img[src$="#only-dark"] {
+  display: inline;
+  height: 250px;
   width: 500px;
   margin-top: -3rem;
 }
