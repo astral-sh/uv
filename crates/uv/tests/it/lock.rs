@@ -2224,8 +2224,8 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project2" },
+              { extra = "project1" },
+              { extra = "project2" },
             ],
         ]
 
@@ -2423,9 +2423,9 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project2" },
-              { package = "project", extra = "project3" },
+              { extra = "project1" },
+              { extra = "project2" },
+              { extra = "project3" },
             ],
         ]
 
@@ -2549,12 +2549,12 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project2" },
+              { extra = "project1" },
+              { extra = "project2" },
             ],
             [
-              { package = "project", extra = "project3" },
-              { package = "project", extra = "project4" },
+              { extra = "project3" },
+              { extra = "project4" },
             ],
         ]
 
@@ -2721,12 +2721,12 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project2" },
+              { extra = "project1" },
+              { extra = "project2" },
             ],
             [
-              { package = "project", extra = "project3" },
-              { package = "project", extra = "project4" },
+              { extra = "project3" },
+              { extra = "project4" },
             ],
         ]
 
@@ -2768,20 +2768,20 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project2" },
+              { extra = "project1" },
+              { extra = "project2" },
             ],
             [
-              { package = "project", extra = "project3" },
-              { package = "project", extra = "project4" },
+              { extra = "project3" },
+              { extra = "project4" },
             ],
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project4" },
+              { extra = "project1" },
+              { extra = "project4" },
             ],
             [
-              { package = "project", extra = "project2" },
-              { package = "project", extra = "project3" },
+              { extra = "project2" },
+              { extra = "project3" },
             ],
         ]
 
@@ -2819,10 +2819,10 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project2" },
-              { package = "project", extra = "project3" },
-              { package = "project", extra = "project4" },
+              { extra = "project1" },
+              { extra = "project2" },
+              { extra = "project3" },
+              { extra = "project4" },
             ],
         ]
 
@@ -2902,8 +2902,8 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project3" },
-              { package = "project", extra = "project4" },
+              { extra = "project3" },
+              { extra = "project4" },
             ],
         ]
 
@@ -2942,12 +2942,12 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project2" },
+              { extra = "project1" },
+              { extra = "project2" },
             ],
             [
-              { package = "project", extra = "project3" },
-              { package = "project", extra = "project4" },
+              { extra = "project3" },
+              { extra = "project4" },
             ],
         ]
 
@@ -3113,8 +3113,8 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         [tool.uv]
         conflicting-groups = [
             [
-              { package = "project", extra = "project1" },
-              { package = "project", extra = "project2" },
+              { extra = "project1" },
+              { extra = "project2" },
             ],
         ]
 
@@ -3260,21 +3260,15 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
           "proxy1[project1,project2]"
         ]
 
-        [tool.uv]
-        conflicting-groups = [
-          [
-            { package = "proxy1", extra = "project1" },
-            { package = "proxy1", extra = "project2" },
-          ],
-        ]
+        [tool.uv.workspace]
+        members = ["proxy1"]
 
         [tool.uv.sources]
-        proxy1 = { path = "./proxy1" }
+        proxy1 = { workspace = true }
 
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
-
         "#,
     )?;
 
@@ -3290,6 +3284,14 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
         [project.optional-dependencies]
         project1 = ["anyio==4.1.0"]
         project2 = ["anyio==4.2.0"]
+
+        [tool.uv]
+        conflicting-groups = [
+          [
+            { extra = "project1" },
+            { extra = "project2" },
+          ],
+        ]
         "#,
     )?;
 
@@ -3313,21 +3315,15 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
           "proxy1[project1]"
         ]
 
-        [tool.uv]
-        conflicting-groups = [
-          [
-            { package = "proxy1", extra = "project1" },
-            { package = "proxy1", extra = "project2" },
-          ],
-        ]
+        [tool.uv.workspace]
+        members = ["proxy1"]
 
         [tool.uv.sources]
-        proxy1 = { path = "./proxy1" }
+        proxy1 = { workspace = true }
 
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
-
         "#,
     )?;
     uv_snapshot!(context.filters(), context.lock(), @r###"
@@ -3350,16 +3346,11 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
           "proxy1[project2]"
         ]
 
-        [tool.uv]
-        conflicting-groups = [
-          [
-            { package = "proxy1", extra = "project1" },
-            { package = "proxy1", extra = "project2" },
-          ],
-        ]
+        [tool.uv.workspace]
+        members = ["proxy1"]
 
         [tool.uv.sources]
-        proxy1 = { path = "./proxy1" }
+        proxy1 = { workspace = true }
 
         [build-system]
         requires = ["hatchling"]

@@ -392,14 +392,13 @@ impl Workspace {
             .and_then(|uv| uv.environments.as_ref())
     }
 
-    /// Returns the set of supported environments for the workspace.
+    /// Returns the set of conflicts for the workspace.
     pub fn conflicting_groups(&self) -> ConflictingGroupList {
-        self.pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.conflicting_groups.clone())
-            .unwrap_or_else(ConflictingGroupList::empty)
+        let mut conflicting = ConflictingGroupList::empty();
+        for member in self.packages.values() {
+            conflicting.append(&mut member.pyproject_toml.conflicting_groups());
+        }
+        conflicting
     }
 
     /// Returns the set of constraints for the workspace.

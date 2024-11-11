@@ -11,7 +11,7 @@ use uv_install_wheel::linker::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::Requirement;
-use uv_pypi_types::{ConflictingGroupList, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
@@ -97,12 +97,12 @@ pub struct Options {
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
 
-    #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub conflicting_groups: Option<ConflictingGroupList>,
-
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub conflicting_groups: Option<serde::de::IgnoredAny>,
+
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub workspace: Option<serde::de::IgnoredAny>,
 
@@ -1558,11 +1558,11 @@ pub struct OptionsWire {
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
-    conflicting_groups: Option<ConflictingGroupList>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
+    conflicting_groups: Option<serde::de::IgnoredAny>,
     workspace: Option<serde::de::IgnoredAny>,
     sources: Option<serde::de::IgnoredAny>,
     managed: Option<serde::de::IgnoredAny>,

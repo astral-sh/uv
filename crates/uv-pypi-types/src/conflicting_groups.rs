@@ -38,6 +38,12 @@ impl ConflictingGroupList {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Appends the given list to this one. This drains all elements
+    /// from the list given, such that after this call, it is empty.
+    pub fn append(&mut self, other: &mut ConflictingGroupList) {
+        self.0.append(&mut other.0);
+    }
 }
 
 /// A single set of package-extra pairs that conflict with one another.
@@ -192,4 +198,104 @@ pub enum ConflictingGroupError {
     /// An error for when there is one conflicting group.
     #[error("Each set of conflicting groups must have at least two entries, but found only one")]
     OneGroup,
+}
+
+/// Like [`ConflictingGroupList`], but for deserialization in `pyproject.toml`.
+///
+/// The schema format is different from the in-memory format. Specifically, the
+/// schema format does not allow specifying the package name (or will make it
+/// optional in the future), where as the in-memory format needs the package
+/// name.
+///
+/// N.B. `ConflictingGroupList` is still used for (de)serialization.
+/// Specifically, in the lock file, where the package name is required.
+#[derive(
+    Debug, Default, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize, schemars::JsonSchema,
+)]
+pub struct SchemaConflictingGroupList(Vec<SchemaConflictingGroups>);
+
+impl SchemaConflictingGroupList {
+    /// Convert the public schema "conflicting" type to our internal fully
+    /// resolved type. Effectively, this pairs the corresponding package name
+    /// with each conflict.
+    ///
+    /// If a conflict has an explicit package name (written by the end user),
+    /// then that takes precedence over the given package name, which is only
+    /// used when there is no explicit package name written.
+    pub fn to_conflicting_with_package_name(&self, package: &PackageName) -> ConflictingGroupList {
+        let mut conflicting = ConflictingGroupList::empty();
+        for tool_uv_set in &self.0 {
+            let mut set = vec![];
+            for item in &tool_uv_set.0 {
+                let package = item.package.clone().unwrap_or_else(|| package.clone());
+                set.push(ConflictingGroup::from((package, item.extra.clone())));
+            }
+            // OK because we guarantee that
+            // `SchemaConflictingGroupList` is valid and there aren't
+            // any new errors that can occur here.
+            let set = ConflictingGroups::try_from(set).unwrap();
+            conflicting.push(set);
+        }
+        conflicting
+    }
+}
+
+/// Like [`ConflictingGroups`], but for deserialization in `pyproject.toml`.
+///
+/// The schema format is different from the in-memory format. Specifically, the
+/// schema format does not allow specifying the package name (or will make it
+/// optional in the future), where as the in-memory format needs the package
+/// name.
+#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize, schemars::JsonSchema)]
+pub struct SchemaConflictingGroups(Vec<SchemaConflictingGroup>);
+
+/// Like [`ConflictingGroup`], but for deserialization in `pyproject.toml`.
+///
+/// The schema format is different from the in-memory format. Specifically, the
+/// schema format does not allow specifying the package name (or will make it
+/// optional in the future), where as the in-memory format needs the package
+/// name.
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Eq,
+    Hash,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    serde::Deserialize,
+    serde::Serialize,
+    schemars::JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct SchemaConflictingGroup {
+    #[serde(default)]
+    package: Option<PackageName>,
+    extra: ExtraName,
+}
+
+impl<'de> serde::Deserialize<'de> for SchemaConflictingGroups {
+    fn deserialize<D>(deserializer: D) -> Result<SchemaConflictingGroups, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let items = Vec::<SchemaConflictingGroup>::deserialize(deserializer)?;
+        Self::try_from(items).map_err(serde::de::Error::custom)
+    }
+}
+
+impl TryFrom<Vec<SchemaConflictingGroup>> for SchemaConflictingGroups {
+    type Error = ConflictingGroupError;
+
+    fn try_from(
+        items: Vec<SchemaConflictingGroup>,
+    ) -> Result<SchemaConflictingGroups, ConflictingGroupError> {
+        match items.len() {
+            0 => return Err(ConflictingGroupError::ZeroGroups),
+            1 => return Err(ConflictingGroupError::OneGroup),
+            _ => {}
+        }
+        Ok(SchemaConflictingGroups(items))
+    }
 }
