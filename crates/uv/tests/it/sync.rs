@@ -2857,6 +2857,8 @@ fn no_binary() -> Result<()> {
         "#,
     )?;
 
+    context.lock().assert().success();
+
     uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("iniconfig"), @r###"
     success: true
     exit_code: 0
@@ -2886,7 +2888,7 @@ fn no_binary_error() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["django_allauth==0.51.0"]
+        dependencies = ["odrive"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -2896,14 +2898,14 @@ fn no_binary_error() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("odrive"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 31 packages in [TIME]
+    error: Distribution `odrive==0.6.8 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-binary` but has no source distribution
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -2930,6 +2932,8 @@ fn no_build() -> Result<()> {
         "#,
     )?;
 
+    context.lock().assert().success();
+
     uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("iniconfig"), @r###"
     success: true
     exit_code: 0
@@ -2941,6 +2945,42 @@ fn no_build() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn no_build_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["django_allauth==0.51.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
