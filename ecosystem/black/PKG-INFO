@@ -285,7 +285,7 @@ And if you _really_ need to slap somebody, do it with a fish while dancing.
 
 ### Packaging
 
-- Packaging metadata updated: docs are explictly linked, the issue tracker is now also
+- Packaging metadata updated: docs are explicitly linked, the issue tracker is now also
   linked. This improves the PyPI listing for Black. (#4345)
 
 ### Parser
