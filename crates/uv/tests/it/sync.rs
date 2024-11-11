@@ -1997,20 +1997,18 @@ fn no_install_project_no_build() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to validate existing lockfile: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     Resolved 4 packages in [TIME]
     error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     "###);
 
     // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
     // we aren't building the project.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build").arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to validate existing lockfile: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
