@@ -39,7 +39,7 @@ Since the launch of Python version, project, and tool management capabilities ba
   Previously, uv only read `.python-version` files from the working directory. Now, uv will check parent directories for `.python-version` files; however uv will not search for `.python-version` files beyond project boundaries. The new behavior is better aligned with that of `pyenv` and Rye.
 - **Error when disallowed settings are defined in `uv.toml`** ([#8550](https://github.com/astral-sh/uv/pull/8550))
   
-  Some settings can only be defined in the `pyproject.toml`. Previously, uv would ignore these settings when present in the `uv.toml`. Now, uv will error to avoid confusion about why the settings are not respeced.
+  Some settings can only be defined in the `pyproject.toml`. Previously, uv would ignore these settings when present in the `uv.toml`. Now, uv will error to avoid confusion about why the settings are not respected.
 - **Implement PEP 440-compliant local version semantics** ([#8797](https://github.com/astral-sh/uv/pull/8797))
   
   Previously, uv's implementation of local versions (e.g. `2.0+cpu`) was not compliant with the specification due to the technical complexity of implementing the local version semantics in the PubGrub algorithm. Thanks to the work of @ericmarkmartin, uv now has a spec-compliant implementation. Namely, uv will now allow a request for `torch==2.1.0` to install `torch@2.1.0+cpu` regardless of whether `torch@2.1.0` (without a local tag) actually exists.
