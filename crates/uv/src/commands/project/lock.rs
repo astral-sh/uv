@@ -1009,6 +1009,17 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
     }
 }
 
+/// Read the lockfile from the workspace as bytes.
+///
+/// Returns `Ok(None)` if the lockfile does not exist.
+pub(crate) async fn read_bytes(workspace: &Workspace) -> Result<Option<Vec<u8>>, ProjectError> {
+    match fs_err::tokio::read(&workspace.install_path().join("uv.lock")).await {
+        Ok(encoded) => Ok(Some(encoded)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
 /// Reports on the versions that were upgraded in the new lockfile.
 ///
 /// Returns `true` if any upgrades were reported.
