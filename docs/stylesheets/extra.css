@@ -88,8 +88,8 @@
 [data-md-color-scheme="astral-light"] img[src$="#only-light"],
 [data-md-color-scheme="astral-light"] img[src$="#gh-light-mode-only"] {
   display: inline; /* Show light images in light mode */
-  height: 300px; /* Add size constraints here */
-  width: 600px;
+  height: 250px; /* Add size constraints here */
+  width: 500px;
 }
 
 [data-md-color-scheme="astral-dark"] img[src$="#only-light"],
@@ -100,15 +100,14 @@
 [data-md-color-scheme="astral-dark"] img[src$="#only-dark"],
 [data-md-color-scheme="astral-dark"] img[src$="#gh-dark-mode-only"] {
   display: inline; /* Show dark images in dark mode */
-  height: 300px; /* Add size constraints here */
-  width: 600px;
+  height: 250px; 
+  width: 500px;
+  margin-top: -3rem;
 }
 
-/* Just keep minimal container styling */
-p[align="center"] {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+p[align="center"] i {
+  display: block;
+  margin-top: -3rem;
 }
 
 /* See: https://github.com/squidfunk/mkdocs-material/issues/175#issuecomment-616694465 */
