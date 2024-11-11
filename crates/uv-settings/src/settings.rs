@@ -527,7 +527,7 @@ pub struct ResolverInstallerOptions {
     /// are already installed.
     #[option(
         default = "[]",
-        value_type = "Vec<PackageName>",
+        value_type = "list[str]",
         example = r#"
         no-build-isolation-package = ["package1", "package2"]
     "#
@@ -909,7 +909,7 @@ pub struct PipOptions {
     /// are already installed.
     #[option(
         default = "[]",
-        value_type = "Vec<PackageName>",
+        value_type = "list[str]",
         example = r#"
             no-build-isolation-package = ["package1", "package2"]
         "#

@@ -1001,7 +1001,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -2246,7 +2246,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
