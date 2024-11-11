@@ -974,7 +974,6 @@ impl Lock {
         overrides: &[Requirement],
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
-        build_options: &BuildOptions,
         tags: &Tags,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
@@ -1183,8 +1182,13 @@ impl Lock {
             // Get the metadata for the distribution.
             let dist = package.to_dist(
                 workspace.install_path(),
+                // When validating, it's okay to use wheels that don't match the current platform.
                 TagPolicy::Preferred(tags),
-                build_options,
+                // When validating, it's okay to use (e.g.) a source distribution with `--no-build`.
+                // We're just trying to determine whether the lockfile is up-to-date. If we end
+                // up needing to build a source distribution in order to do so, below, we'll error
+                // there.
+                &BuildOptions::default(),
             )?;
 
             // Fetch the metadata for the distribution.

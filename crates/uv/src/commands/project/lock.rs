@@ -11,8 +11,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall,
-    TrustedHost, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -531,7 +530,6 @@ async fn do_lock(
             interpreter,
             &requires_python,
             index_locations,
-            build_options,
             upgrade,
             &options,
             &hasher,
@@ -714,7 +712,6 @@ impl ValidatedLock {
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
-        build_options: &BuildOptions,
         upgrade: &Upgrade,
         options: &Options,
         hasher: &HashStrategy,
@@ -841,7 +838,6 @@ impl ValidatedLock {
                 overrides,
                 dependency_metadata,
                 indexes,
-                build_options,
                 interpreter.tags()?,
                 hasher,
                 index,
