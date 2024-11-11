@@ -543,6 +543,14 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<String>, PlatformError> {
             let os = os.to_string().to_lowercase();
             vec![format!("{}_{}_{}", os, release, arch)]
         }
+        (Os::Android { api_level }, _) => {
+            vec![format!(
+                "{}_{}_{}",
+                os.to_string().to_lowercase(),
+                api_level,
+                arch
+            )]
+        }
         _ => {
             return Err(PlatformError::OsVersionDetectionError(format!(
                 "Unsupported operating system and architecture combination: {os} {arch}"

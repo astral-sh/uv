@@ -462,22 +462,30 @@ def get_operating_system_and_architecture():
         from .packaging._musllinux import _get_musl_version
 
         musl_version = _get_musl_version(sys.executable)
-        glibc_version = _get_glibc_version()
+
         if musl_version:
             operating_system = {
                 "name": "musllinux",
                 "major": musl_version[0],
                 "minor": musl_version[1],
             }
-        elif glibc_version != (-1, -1):
-            operating_system = {
-                "name": "manylinux",
-                "major": glibc_version[0],
-                "minor": glibc_version[1],
-            }
         else:
-            print(json.dumps({"result": "error", "kind": "libc_not_found"}))
-            sys.exit(0)
+            glibc_version = _get_glibc_version()
+
+            if glibc_version != (0, 0):
+                operating_system = {
+                    "name": "manylinux",
+                    "major": glibc_version[0],
+                    "minor": glibc_version[1],
+                }
+            elif hasattr(sys, "getandroidapilevel"):
+                operating_system = {
+                    "name": "android",
+                    "api_level": sys.getandroidapilevel(),
+                }
+            else:
+                print(json.dumps({"result": "error", "kind": "libc_not_found"}))
+                sys.exit(0)
     elif operating_system == "win":
         operating_system = {
             "name": "windows",
@@ -542,9 +550,11 @@ def main() -> None:
         "python_version": ".".join(platform.python_version_tuple()[:2]),
         "sys_platform": sys.platform,
     }
+
     os_and_arch = get_operating_system_and_architecture()
 
-    manylinux_compatible = True
+    manylinux_compatible = False
+
     if os_and_arch["os"]["name"] == "manylinux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version, _is_compatible
@@ -552,6 +562,8 @@ def main() -> None:
         manylinux_compatible = _is_compatible(
             arch=os_and_arch["arch"], version=_get_glibc_version()
         )
+    elif os_and_arch["os"]["name"] == "musllinux":
+        manylinux_compatible = True
 
     interpreter_info = {
         "result": "success",
