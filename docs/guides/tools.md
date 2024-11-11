@@ -93,6 +93,20 @@ $ uvx --from 'ruff>0.2.0,<0.3.0' ruff check
 
 Note the `@` syntax cannot be used for anything other than an exact version.
 
+## Requesting extras
+
+The `--from` option can be used to run a tool with extras:
+
+```console
+$ uvx --from 'mypy[faster-cache,reports]' mypy --xml-report mypy_report
+```
+
+This can also be combined with version selection:
+
+```console
+$ uvx --from 'mypy[faster-cache,reports]==1.13.0' mypy --xml-report mypy_report
+```
+
 ## Requesting different sources
 
 The `--from` option can also be used to install from alternative sources.
