@@ -462,3 +462,14 @@ is.
 For example, `uv pip install foo bar` prioritizes newer versions of `foo` over `bar` and could
 result in a different resolution than `uv pip install bar foo`. Similarly, this behavior applies to
 the ordering of requirements in input files for `uv pip compile`.
+
+## Installing a package from a specified directory
+
+UV does not reinstall already installed packages by default.
+
+Consequently, it will not behave like `pip install <folder>`, reinstalling every time. This is
+expected behavior, as UV anticipates that you might want to update to a newer version.
+
+For packages under development, [editable installs](packages.md#editable-packages) are recommended.
+Alternatively, you can force a reinstall with the --reinstall flag or by setting the
+[configuration](../reference/settings.md#pip_reinstall).
