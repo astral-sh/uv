@@ -174,7 +174,7 @@ fn is_tilde_exact_without_patch() {
     ];
     for (version, expected) in test_cases {
         let version_specifiers = VersionSpecifiers::from_str(version).unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
         assert_eq!(requires_python.is_tilde_exact_without_patch(), expected);
     }
 }
