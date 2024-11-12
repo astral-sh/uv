@@ -5,10 +5,10 @@ use std::ops::{Bound, Deref};
 use std::str::FromStr;
 
 use itertools::Itertools;
-use pubgrub::Range;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
+use version_ranges::Ranges;
 
 use crate::cursor::Cursor;
 use crate::marker::parse;
@@ -1238,6 +1238,15 @@ impl MarkerTree {
         MarkerTreeDebugGraph { marker: self }
     }
 
+    /// Formats a [`MarkerTree`] in its "raw" representation.
+    ///
+    /// This is useful for debugging when one wants to look at a
+    /// representation of a `MarkerTree` that is precisely identical
+    /// to its internal representation.
+    pub fn debug_raw(&self) -> MarkerTreeDebugRaw<'_> {
+        MarkerTreeDebugRaw { marker: self }
+    }
+
     fn fmt_graph(&self, f: &mut fmt::Formatter<'_>, level: usize) -> fmt::Result {
         match self.kind() {
             MarkerTreeKind::True => return write!(f, "true"),
@@ -1341,6 +1350,24 @@ impl<'a> fmt::Debug for MarkerTreeDebugGraph<'a> {
     }
 }
 
+/// Formats a [`MarkerTree`] using its raw internals.
+///
+/// This is very verbose and likely only useful if you're working
+/// on the internals of this crate.
+///
+/// This type is created by the [`MarkerTree::debug_raw`] routine.
+#[derive(Clone)]
+pub struct MarkerTreeDebugRaw<'a> {
+    marker: &'a MarkerTree,
+}
+
+impl<'a> fmt::Debug for MarkerTreeDebugRaw<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let node = INTERNER.shared.node(self.marker.0);
+        f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
+    }
+}
+
 /// The underlying kind of an arbitrary node in a [`MarkerTree`].
 ///
 /// A marker tree is represented as an algebraic decision tree with two terminal nodes
@@ -1369,7 +1396,7 @@ pub enum MarkerTreeKind<'a> {
 pub struct VersionMarkerTree<'a> {
     id: NodeId,
     key: MarkerValueVersion,
-    map: &'a [(Range<Version>, NodeId)],
+    map: &'a [(Ranges<Version>, NodeId)],
 }
 
 impl VersionMarkerTree<'_> {
@@ -1379,7 +1406,7 @@ impl VersionMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Range<Version>, MarkerTree)> + '_ {
+    pub fn edges(&self) -> impl ExactSizeIterator<Item = (&Ranges<Version>, MarkerTree)> + '_ {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
@@ -1405,7 +1432,7 @@ impl Ord for VersionMarkerTree<'_> {
 pub struct StringMarkerTree<'a> {
     id: NodeId,
     key: MarkerValueString,
-    map: &'a [(Range<String>, NodeId)],
+    map: &'a [(Ranges<String>, NodeId)],
 }
 
 impl StringMarkerTree<'_> {
@@ -1415,7 +1442,7 @@ impl StringMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Range<String>, MarkerTree)> {
+    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<String>, MarkerTree)> {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
@@ -1910,59 +1937,66 @@ mod test {
 
     #[test]
     #[cfg(feature = "tracing")]
-    fn warnings() {
+    #[tracing_test::traced_test]
+    fn warnings1() {
         let env37 = env37();
-        testing_logger::setup();
         let compare_keys = MarkerTree::from_str("platform_version == sys_platform").unwrap();
         compare_keys.evaluate(&env37, &[]);
-        testing_logger::validate(|captured_logs| {
-            assert_eq!(
-                captured_logs[0].body,
-                "Comparing two markers with each other doesn't make any sense, will evaluate to false"
-            );
-            assert_eq!(captured_logs[0].level, log::Level::Warn);
-            assert_eq!(captured_logs.len(), 1);
-        });
+        logs_contain(
+            "Comparing two markers with each other doesn't make any sense, will evaluate to false",
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tracing")]
+    #[tracing_test::traced_test]
+    fn warnings2() {
+        let env37 = env37();
         let non_pep440 = MarkerTree::from_str("python_version >= '3.9.'").unwrap();
         non_pep440.evaluate(&env37, &[]);
-        testing_logger::validate(|captured_logs| {
-            assert_eq!(
-                captured_logs[0].body,
-                "Expected PEP 440 version to compare with python_version, found `3.9.`, \
-                 will evaluate to false: after parsing `3.9`, found `.`, which is \
-                 not part of a valid version"
-            );
-            assert_eq!(captured_logs[0].level, log::Level::Warn);
-            assert_eq!(captured_logs.len(), 1);
-        });
+        logs_contain(
+            "Expected PEP 440 version to compare with python_version, found `3.9.`, \
+             will evaluate to false: after parsing `3.9`, found `.`, which is \
+             not part of a valid version",
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tracing")]
+    #[tracing_test::traced_test]
+    fn warnings3() {
+        let env37 = env37();
         let string_string = MarkerTree::from_str("'b' >= 'a'").unwrap();
         string_string.evaluate(&env37, &[]);
-        testing_logger::validate(|captured_logs| {
-            assert_eq!(
-                captured_logs[0].body,
-                "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false"
-            );
-            assert_eq!(captured_logs[0].level, log::Level::Warn);
-            assert_eq!(captured_logs.len(), 1);
-        });
+        logs_contain(
+            "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tracing")]
+    #[tracing_test::traced_test]
+    fn warnings4() {
+        let env37 = env37();
         let string_string = MarkerTree::from_str(r"os.name == 'posix' and platform.machine == 'x86_64' and platform.python_implementation == 'CPython' and 'Ubuntu' in platform.version and sys.platform == 'linux'").unwrap();
         string_string.evaluate(&env37, &[]);
-        testing_logger::validate(|captured_logs| {
-            let messages: Vec<_> = captured_logs
+        logs_assert(|lines: &[&str]| {
+            let lines: Vec<_> = lines
                 .iter()
-                .map(|message| {
-                    assert_eq!(message.level, log::Level::Warn);
-                    &message.body
-                })
+                .map(|s| s.split_once("  ").unwrap().1)
                 .collect();
-            let expected = [
-                "os.name is deprecated in favor of os_name",
-                "platform.machine is deprecated in favor of platform_machine",
-                "platform.python_implementation is deprecated in favor of platform_python_implementation",
-                "platform.version is deprecated in favor of platform_version",
-                "sys.platform  is deprecated in favor of sys_platform"
+            let expected =  [
+                "WARN warnings4: uv_pep508: os.name is deprecated in favor of os_name",
+                "WARN warnings4: uv_pep508: platform.machine is deprecated in favor of platform_machine",
+                "WARN warnings4: uv_pep508: platform.python_implementation is deprecated in favor of",
+                "WARN warnings4: uv_pep508: sys.platform  is deprecated in favor of sys_platform",
+                "WARN warnings4: uv_pep508: Comparing linux and posix lexicographically"
             ];
-            assert_eq!(messages, &expected);
+            if lines == expected {
+                Ok(())
+            } else {
+                Err(format!("{lines:?}"))
+            }
         });
     }
 
@@ -2693,6 +2727,41 @@ mod test {
         assert!(!is_disjoint("'Windows' in os_name", "'Windows' in os_name"));
         assert!(!is_disjoint("'Linux' in os_name", "os_name not in 'Linux'"));
         assert!(!is_disjoint("'Linux' not in os_name", "os_name in 'Linux'"));
+
+        assert!(!is_disjoint(
+            "os_name == 'Linux' and os_name != 'OSX'",
+            "os_name == 'Linux'"
+        ));
+        assert!(is_disjoint(
+            "os_name == 'Linux' and os_name != 'OSX'",
+            "os_name == 'OSX'"
+        ));
+
+        assert!(!is_disjoint(
+            "extra == 'Linux' and extra != 'OSX'",
+            "extra == 'Linux'"
+        ));
+        assert!(is_disjoint(
+            "extra == 'Linux' and extra != 'OSX'",
+            "extra == 'OSX'"
+        ));
+
+        assert!(!is_disjoint(
+            "extra == 'x1' and extra != 'x2'",
+            "extra == 'x1'"
+        ));
+        assert!(is_disjoint(
+            "extra == 'x1' and extra != 'x2'",
+            "extra == 'x2'"
+        ));
+    }
+
+    #[test]
+    fn is_disjoint_commutative() {
+        let m1 = m("extra == 'Linux' and extra != 'OSX'");
+        let m2 = m("extra == 'Linux'");
+        assert!(!m2.is_disjoint(&m1));
+        assert!(!m1.is_disjoint(&m2));
     }
 
     #[test]

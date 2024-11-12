@@ -1,0 +1,11 @@
+# Run with Python 3.12.
+# As of 2024-10-14:
+# fastjsonschema==2.20.0
+# msgpack==1.1.0
+# python-rapidjson==1.8
+# pyyaml==6.0.2
+# sentry-kafka-schemas==0.1.113
+# typing-extensions==4.12.2
+
+python-rapidjson<=1.20,>=1.4
+sentry-kafka-schemas<=0.1.113,>=0.1.50

@@ -1,0 +1,22 @@
+[package]
+name = "uv-dirs"
+version = "0.0.1"
+description = "Resolution of directories for storage of uv state"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-static = { workspace = true }
+
+etcetera = { workspace = true }

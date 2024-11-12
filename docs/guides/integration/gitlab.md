@@ -7,19 +7,17 @@ Select a variant that is suitable for your workflow.
 
 ```yaml title="gitlab-ci.yml"
 variables:
-  UV_VERSION: 0.4
+  UV_VERSION: 0.5
   PYTHON_VERSION: 3.12
   BASE_LAYER: bookworm-slim
 
 stages:
   - analysis
 
-UV:
+uv:
   stage: analysis
-  image:
-    name: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
-  script: >
-    cd $CI_PROJECT_DIR
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
+  script:
     # your `uv` commands
 ```
 
@@ -28,18 +26,18 @@ UV:
 Persisting the uv cache between workflow runs can improve performance.
 
 ```yaml
-UV Install:
+uv-install:
   variables:
-    UV_CACHE_DIR: /tmp/.uv-cache
+    UV_CACHE_DIR: .uv-cache
   cache:
     - key:
         files:
           - uv.lock
       paths:
         - $UV_CACHE_DIR
-  steps: >
-    # Your uv commands
-    run: uv cache prune --ci
+  script:
+    # Your `uv` commands
+    - uv cache prune --ci
 ```
 
 See the [GitLab caching documentation](https://docs.gitlab.com/ee/ci/caching/) for more details on

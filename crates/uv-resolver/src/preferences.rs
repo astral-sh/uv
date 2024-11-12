@@ -10,7 +10,7 @@ use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{HashDigest, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
-use crate::ResolverMarkers;
+use crate::ResolverEnvironment;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
@@ -119,16 +119,16 @@ pub struct Preferences(FxHashMap<PackageName, Vec<(Option<MarkerTree>, Pin)>>);
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
     ///
-    /// The provided [`MarkerEnvironment`] will be used to filter the preferences
+    /// The provided [`ResolverEnvironment`] will be used to filter the preferences
     /// to an applicable subset.
     pub fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
         preferences: PreferenceIterator,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Self {
         let mut slf = Self::default();
         for preference in preferences {
             // Filter non-matching preferences when resolving for an environment.
-            if let Some(markers) = markers.marker_environment() {
+            if let Some(markers) = env.marker_environment() {
                 if !preference.marker.evaluate(markers, &[]) {
                     trace!("Excluding {preference} from preferences due to unmatched markers");
                     continue;

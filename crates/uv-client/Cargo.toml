@@ -3,6 +3,9 @@ name = "uv-client"
 version = "0.0.1"
 edition = "2021"
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
@@ -20,6 +23,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-static = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 

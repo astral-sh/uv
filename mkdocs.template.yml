@@ -106,6 +106,8 @@ nav:
       - Configuration files: configuration/files.md
       - Environment variables: configuration/environment.md
       - Authentication: configuration/authentication.md
+      - Package indexes: configuration/indexes.md
+      - Installer: configuration/installer.md
   - Integration guides:
       - guides/integration/index.md
       - Docker: guides/integration/docker.md
@@ -128,6 +130,7 @@ nav:
       - reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
+      - Build Failures: reference/build_failures.md
       - Resolver: reference/resolver-internals.md
       - Benchmarks: reference/benchmarks.md
       - Versioning: reference/versioning.md

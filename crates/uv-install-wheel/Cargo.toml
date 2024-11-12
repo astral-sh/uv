@@ -17,6 +17,7 @@ license = { workspace = true }
 workspace = true
 
 [lib]
+doctest = false
 name = "uv_install_wheel"
 
 [dependencies]
@@ -27,6 +28,7 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true, optional = true, features = ["derive"] }
@@ -49,6 +51,10 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+same-file = { workspace = true }
+self-replace = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.89" }

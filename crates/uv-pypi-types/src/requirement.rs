@@ -70,43 +70,6 @@ impl Requirement {
         self.source.is_editable()
     }
 
-    /// Remove any sensitive credentials from the requirement.
-    #[must_use]
-    pub fn redact(self) -> Requirement {
-        match self.source {
-            RequirementSource::Git {
-                mut repository,
-                reference,
-                precise,
-                subdirectory,
-                url,
-            } => {
-                // Redact the repository URL, but allow `git@`.
-                redact_git_credentials(&mut repository);
-
-                // Redact the PEP 508 URL.
-                let mut url = url.to_url();
-                redact_git_credentials(&mut url);
-                let url = VerbatimUrl::from_url(url);
-
-                Self {
-                    name: self.name,
-                    extras: self.extras,
-                    marker: self.marker,
-                    source: RequirementSource::Git {
-                        repository,
-                        reference,
-                        precise,
-                        subdirectory,
-                        url,
-                    },
-                    origin: self.origin,
-                }
-            }
-            _ => self,
-        }
-    }
-
     /// Convert the requirement to a [`Requirement`] relative to the given path.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         Ok(Self {
@@ -318,8 +281,8 @@ pub enum RequirementSource {
     /// The requirement has a version specifier, such as `foo >1,<2`.
     Registry {
         specifier: VersionSpecifiers,
-        /// Choose a version from the index with this name.
-        index: Option<String>,
+        /// Choose a version from the index at the given URL.
+        index: Option<Url>,
     },
     // TODO(konsti): Track and verify version specifier from `project.dependencies` matches the
     // version in remote location.
@@ -607,14 +570,22 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<String>,
+        index: Option<Url>,
     },
 }
 
 impl From<RequirementSource> for RequirementSourceWire {
     fn from(value: RequirementSource) -> Self {
         match value {
-            RequirementSource::Registry { specifier, index } => Self::Registry { specifier, index },
+            RequirementSource::Registry {
+                specifier,
+                mut index,
+            } => {
+                if let Some(index) = index.as_mut() {
+                    redact_credentials(index);
+                }
+                Self::Registry { specifier, index }
+            }
             RequirementSource::Url {
                 subdirectory,
                 location,
@@ -625,7 +596,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 subdirectory: subdirectory
                     .as_deref()
                     .and_then(Path::to_str)
-                    .map(str::to_string),
+                    .map(ToString::to_string),
             },
             RequirementSource::Git {
                 repository,
@@ -637,7 +608,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 let mut url = repository;
 
                 // Redact the credentials.
-                redact_git_credentials(&mut url);
+                redact_credentials(&mut url);
 
                 // Clear out any existing state.
                 url.set_fragment(None);
@@ -740,7 +711,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 repository.set_query(None);
 
                 // Redact the credentials.
-                redact_git_credentials(&mut repository);
+                redact_credentials(&mut repository);
 
                 // Create a PEP 508-compatible URL.
                 let mut url = Url::parse(&format!("git+{repository}"))?;
@@ -814,9 +785,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
     }
 }
 
-/// Remove the credentials from a Git URL, allowing the generic `git` username (without a password)
+/// Remove the credentials from a URL, allowing the generic `git` username (without a password)
 /// in SSH URLs, as in, `ssh://git@github.com/...`.
-pub fn redact_git_credentials(url: &mut Url) {
+pub fn redact_credentials(url: &mut Url) {
     // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
     // username.
     if url.scheme() == "ssh" && url.username() == "git" && url.password().is_none() {
@@ -827,50 +798,4 @@ pub fn redact_git_credentials(url: &mut Url) {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use uv_pep508::{MarkerTree, VerbatimUrl};
-
-    use crate::{Requirement, RequirementSource};
-
-    #[test]
-    fn roundtrip() {
-        let requirement = Requirement {
-            name: "foo".parse().unwrap(),
-            extras: vec![],
-            marker: MarkerTree::TRUE,
-            source: RequirementSource::Registry {
-                specifier: ">1,<2".parse().unwrap(),
-                index: None,
-            },
-            origin: None,
-        };
-
-        let raw = toml::to_string(&requirement).unwrap();
-        let deserialized: Requirement = toml::from_str(&raw).unwrap();
-        assert_eq!(requirement, deserialized);
-
-        let path = if cfg!(windows) {
-            "C:\\home\\ferris\\foo"
-        } else {
-            "/home/ferris/foo"
-        };
-        let requirement = Requirement {
-            name: "foo".parse().unwrap(),
-            extras: vec![],
-            marker: MarkerTree::TRUE,
-            source: RequirementSource::Directory {
-                install_path: PathBuf::from(path),
-                editable: false,
-                r#virtual: false,
-                url: VerbatimUrl::from_absolute_path(path).unwrap(),
-            },
-            origin: None,
-        };
-
-        let raw = toml::to_string(&requirement).unwrap();
-        let deserialized: Requirement = toml::from_str(&raw).unwrap();
-        assert_eq!(requirement, deserialized);
-    }
-}
+mod tests;

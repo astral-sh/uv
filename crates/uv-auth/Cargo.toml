@@ -3,6 +3,9 @@ name = "uv-auth"
 version = "0.0.1"
 edition = "2021"
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
@@ -22,6 +25,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
+
+uv-static = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

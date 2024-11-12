@@ -6,14 +6,17 @@ RequirementsTxtFileError {
     file: "<REQUIREMENTS_DIR>/semicolon.txt",
     error: Pep508 {
         source: Pep508Error {
-            message: String(
-                "Missing space before ';', the end of the URL is ambiguous",
+            message: UrlError(
+                MissingExtensionPath(
+                    "./editable;python_version >= \"3.9\" and os_name == \"posix\"",
+                    Dist,
+                ),
             ),
-            start: 10,
-            len: 1,
-            input: "./editable; python_version >= \"3.9\" and os_name == \"posix\"",
+            start: 0,
+            len: 57,
+            input: "./editable;python_version >= \"3.9\" and os_name == \"posix\"",
         },
         start: 50,
-        end: 108,
+        end: 107,
     },
 }

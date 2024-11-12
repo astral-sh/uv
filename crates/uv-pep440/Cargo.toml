@@ -14,19 +14,23 @@ authors = { workspace = true }
 [lib]
 name = "uv_pep440"
 crate-type = ["rlib", "cdylib"]
+doctest = false
 
 [lints]
 workspace = true
 
 [dependencies]
+rkyv = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
-rkyv = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 unscanny = { workspace = true }
+# Adds conversions from [`VersionSpecifiers`] to [`version_ranges::Ranges`]
+version-ranges = { workspace = true, optional = true }
 
 [dev-dependencies]
 indoc = { version = "2.0.5" }
+tracing = { workspace = true }
 
 [features]
 # Match the API of the published crate, for compatibility.

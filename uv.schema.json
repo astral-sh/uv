@@ -22,7 +22,7 @@
       ]
     },
     "cache-keys": {
-      "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nGlobs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, you can specify `cache-keys = [{ file = \"**/*.toml\" }]`. Note that the use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git tag, you can specify `cache-keys = [{ git = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`).\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace), and all paths and globs are interpreted as relative to the project directory.",
+      "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nGlobs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, you can specify `cache-keys = [{ file = \"**/*.toml\" }]`. Note that the use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace), and all paths and globs are interpreted as relative to the project directory.",
       "type": [
         "array",
         "null"
@@ -86,6 +86,16 @@
         "type": "string"
       }
     },
+    "default-groups": {
+      "description": "The list of `dependency-groups` to install by default.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/GroupName"
+      }
+    },
     "dependency-metadata": {
       "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When provided, enables the resolver to use the specified metadata instead of querying the registry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name`: The name of the package. - (Optional) `version`: The version of the package. If omitted, the metadata will be applied to all versions of the package. - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`). - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`). - (Optional) `provides-extras`: The extras provided by the package.",
       "type": [
@@ -128,7 +138,7 @@
       ]
     },
     "extra-index-url": {
-      "description": "Extra URLs of package indexes to use, in addition to `--index-url`.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nAll indexes provided via this flag take priority over the index specified by [`index_url`](#index-url). When multiple indexes are provided, earlier values take priority.\n\nTo control uv's resolution strategy when multiple indexes are present, see [`index_strategy`](#index-strategy).",
+      "description": "Extra URLs of package indexes to use, in addition to `--index-url`.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nAll indexes provided via this flag take priority over the index specified by [`index_url`](#index-url) or [`index`](#index) with `default = true`. When multiple indexes are provided, earlier values take priority.\n\nTo control uv's resolution strategy when multiple indexes are present, see [`index_strategy`](#index-strategy).\n\n(Deprecated: use `index` instead.)",
       "type": [
         "array",
         "null"
@@ -144,11 +154,21 @@
         "null"
       ],
       "items": {
-        "$ref": "#/definitions/FlatIndexLocation"
+        "$ref": "#/definitions/IndexUrl"
+      }
+    },
+    "index": {
+      "description": "The indexes to use when resolving dependencies.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nIndexes are considered in the order in which they're defined, such that the first-defined index has the highest priority. Further, the indexes provided by this setting are given higher priority than any indexes specified via [`index_url`](#index-url) or [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains a given package, unless an alternative [index strategy](#index-strategy) is specified.\n\nIf an index is marked as `explicit = true`, it will be used exclusively for those dependencies that select it explicitly via `[tool.uv.sources]`, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```\n\nIf an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is given the lowest priority when resolving packages. Additionally, marking an index as default will disable the PyPI default index.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/Index"
       }
     },
     "index-strategy": {
-      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attack can upload a malicious package under the same name to a secondary.",
+      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
       "anyOf": [
         {
           "$ref": "#/definitions/IndexStrategy"
@@ -159,7 +179,7 @@
       ]
     },
     "index-url": {
-      "description": "The URL of the Python package index (by default: <https://pypi.org/simple>).\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nThe index provided by this setting is given lower priority than any indexes specified via [`extra_index_url`](#extra-index-url).",
+      "description": "The URL of the Python package index (by default: <https://pypi.org/simple>).\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nThe index provided by this setting is given lower priority than any indexes specified via [`extra_index_url`](#extra-index-url) or [`index`](#index).\n\n(Deprecated: use `index` instead.)",
       "anyOf": [
         {
           "$ref": "#/definitions/IndexUrl"
@@ -388,7 +408,7 @@
       ]
     },
     "sources": {
-      "description": "The sources to use (e.g., workspace members, Git repositories, local paths) when resolving dependencies.",
+      "description": "The sources to use when resolving dependencies.\n\n`tool.uv.sources` enriches the dependency metadata with additional sources, incorporated during development. A dependency source can be a Git repository, a URL, a local path, or an alternative registry.\n\nSee [Dependencies](https://docs.astral.sh/uv/concepts/dependencies/) for more.",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvSources"
@@ -478,14 +498,14 @@
           "additionalProperties": false
         },
         {
-          "description": "Ex) `{ git = true }`",
+          "description": "Ex) `{ git = true }` or `{ git = { commit = true, tags = false } }`",
           "type": "object",
           "required": [
             "git"
           ],
           "properties": {
             "git": {
-              "type": "boolean"
+              "$ref": "#/definitions/GitPattern"
             }
           },
           "additionalProperties": false
@@ -541,8 +561,77 @@
       "description": "The normalized name of an extra dependency.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
     },
-    "FlatIndexLocation": {
-      "description": "The path to a directory of distributions, or a URL to an HTML file with a flat listing of distributions.",
+    "GitPattern": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/GitSet"
+        }
+      ]
+    },
+    "GitSet": {
+      "type": "object",
+      "properties": {
+        "commit": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tags": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "GroupName": {
+      "description": "The normalized name of a dependency group.\n\nSee: - <https://peps.python.org/pep-0735/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "type": "string"
+    },
+    "Index": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "default": {
+          "description": "Mark the index as the default index.\n\nBy default, uv uses PyPI as the default index, such that even if additional indexes are defined via `[[tool.uv.index]]`, PyPI will still be used as a fallback for packages that aren't found elsewhere. To disable the PyPI default, set `default = true` on at least one other index.\n\nMarking an index as default will move it to the front of the list of indexes, such that it is given the highest priority when resolving packages.",
+          "default": false,
+          "type": "boolean"
+        },
+        "explicit": {
+          "description": "Mark the index as explicit.\n\nExplicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]` definition, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "description": "The URL of the index.\n\nExpects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexUrl"
+            }
+          ]
+        }
+      }
+    },
+    "IndexName": {
+      "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
       "type": "string"
     },
     "IndexStrategy": {
@@ -656,16 +745,6 @@
             "null"
           ]
         },
-        "allow-insecure-host": {
-          "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/definitions/TrustedHost"
-          }
-        },
         "annotation-style": {
           "description": "The style of the annotation comments included in the output file, used to indicate the source of each package.",
           "anyOf": [
@@ -766,7 +845,7 @@
           ]
         },
         "extra": {
-          "description": "Include optional dependencies from the extra group name; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Include optional dependencies from the specified extra; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
           "type": [
             "array",
             "null"
@@ -792,7 +871,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/definitions/FlatIndexLocation"
+            "$ref": "#/definitions/IndexUrl"
           }
         },
         "generate-hashes": {
@@ -803,7 +882,7 @@
           ]
         },
         "index-strategy": {
-          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attack can upload a malicious package under the same name to a secondary.",
+          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
           "anyOf": [
             {
               "$ref": "#/definitions/IndexStrategy"
@@ -1332,7 +1411,7 @@
           ],
           "properties": {
             "index": {
-              "type": "string"
+              "$ref": "#/definitions/IndexName"
             },
             "marker": {
               "$ref": "#/definitions/MarkerTree"

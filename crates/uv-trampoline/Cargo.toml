@@ -5,6 +5,9 @@ authors = ["Nathaniel J. Smith <njs@pobox.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
 
+[lib]
+doctest = false
+
 # Need to optimize etc. or else build fails
 [profile.dev]
 lto = true
@@ -55,5 +58,5 @@ assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.1" }
 fs-err = { version = "2.11.0" }
 thiserror = { version = "1.0.56" }
-which = { version = "6.0.0" }
+which = { version = "7.0.0" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }

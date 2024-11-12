@@ -86,7 +86,8 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, LowerBound,
+        SourceStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -100,7 +101,7 @@ mod resolver {
     use uv_python::Interpreter;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
-        ResolutionGraph, Resolver, ResolverMarkers,
+        ResolutionGraph, Resolver, ResolverEnvironment,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -191,14 +192,15 @@ mod resolver {
             &build_options,
             &hashes,
             exclude_newer,
+            LowerBound::default(),
             sources,
             concurrency,
         );
 
         let markers = if universal {
-            ResolverMarkers::universal(vec![])
+            ResolverEnvironment::universal(vec![])
         } else {
-            ResolverMarkers::specific_environment(ResolverMarkerEnvironment::from(MARKERS.clone()))
+            ResolverEnvironment::specific(ResolverMarkerEnvironment::from(MARKERS.clone()))
         };
 
         let resolver = Resolver::new(

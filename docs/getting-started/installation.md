@@ -25,13 +25,13 @@ Request a specific version by including it in the URL:
 === "macOS and Linux"
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.4.6/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.5.1/install.sh | sh
     ```
 
 === "Windows"
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.1/install.ps1 | iex"
     ```
 
 !!! tip
@@ -52,36 +52,8 @@ Request a specific version by including it in the URL:
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-#### Configuring installation
-
-By default, uv is installed to `~/.cargo/bin`. To change the installation path, use
-`UV_INSTALL_DIR`:
-
-=== "macOS and Linux"
-
-    ```console
-    $ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/custom/path" sh
-    ```
-
-=== "Windows"
-
-    ```powershell
-    $env:UV_INSTALL_DIR = "C:\Custom\Path" powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-    ```
-
-The installer will also update your shell profiles to ensure the uv binary is on your `PATH`. To
-disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
-
-```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
-```
-
-Using environment variables is recommended because they are consistent across platforms. However,
-options can be passed directly to the install script. For example, to see the available options:
-
-```console
-$ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
-```
+See the documentation on [installer configuration](../configuration/installer.md) for details on
+customizing your uv installation.
 
 ### PyPI
 
@@ -210,9 +182,18 @@ Then restart the shell or source the shell config file.
 
 If you need to remove uv from your system, just remove the `uv` and `uvx` binaries:
 
-```console
-$ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
-```
+=== "macOS and Linux"
+
+    ```console
+    $ rm ~/.local/bin/uv ~/.local/bin/uvx
+    ```
+
+=== "Windows"
+
+    ```powershell
+    $ rm $HOME\.local\bin\uv.exe
+    $ rm $HOME\.local\bin\uvx.exe
+    ```
 
 !!! tip
 
@@ -223,6 +204,12 @@ $ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
     $ rm -r "$(uv python dir)"
     $ rm -r "$(uv tool dir)"
     ```
+
+!!! note
+
+    Prior to 0.5.1, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
+    uninstall. Upgrading from an older version will not automatically remove the binaries from
+    `~/.cargo/bin`.
 
 ## Next steps
 

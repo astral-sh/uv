@@ -74,35 +74,6 @@ and are instead focused on behavior for a _single_ version specifier. As such, t
 questions around the correct and intended behavior for pre-releases in the packaging ecosystem more
 broadly.
 
-## Local version identifiers
-
-uv does not implement spec-compliant handling of local version identifiers (e.g., `1.2.3+local`).
-This is considered a known limitation. Although local version identifiers are rare in published
-packages (and, e.g., disallowed on PyPI), they're common in the PyTorch ecosystem, and uv's approach
-to local versions _does_ support typical PyTorch workflows to succeed out-of-the-box.
-
-[PEP 440](https://peps.python.org/pep-0440/#version-specifiers) specifies that the local version
-segment should typically be ignored when evaluating version specifiers, with a few exceptions. For
-example, `foo==1.2.3` should accept `1.2.3+local`, but `foo==1.2.3+local` should _not_ accept
-`1.2.3`. These asymmetries are hard to model in a resolution algorithm. As such, uv treats `1.2.3`
-and `1.2.3+local` as entirely separate versions, but respects local versions provided as direct
-dependencies throughout the resolution, such that if you provide `foo==1.2.3+local` as a direct
-dependency, `1.2.3+local` _will_ be accepted for any transitive dependencies that request
-`foo==1.2.3`.
-
-To take an example from the PyTorch ecosystem, it's common to specify `torch==2.0.0+cu118` and
-`torchvision==0.15.1+cu118` as direct dependencies. `torchvision @ 0.15.1+cu118` declares a
-dependency on `torch==2.0.0`. In this case, uv would recognize that `torch==2.0.0+cu118` satisfies
-the specifier, since it was provided as a direct dependency.
-
-As compared to pip, the main differences in observed behavior are as follows:
-
-- In general, local versions must be provided as direct dependencies. Resolution may succeed for
-  transitive dependencies that request a non-local version, but this is not guaranteed.
-- If _only_ local versions exist for a package `foo` at a given version (e.g., `1.2.3+local` exists,
-  but `1.2.3` does not), `uv pip install foo==1.2.3` will fail, while `pip install foo==1.2.3` will
-  resolve to an arbitrary local version.
-
 ## Packages that exist on multiple indexes
 
 In both uv and `pip`, users can specify multiple package indexes from which to search for the
@@ -148,10 +119,9 @@ supports the following values:
 While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users to the risk of
 "dependency confusion" attacks.
 
-In the future, uv will support pinning packages to dedicated indexes (see:
-[#171](https://github.com/astral-sh/uv/issues/171)). Additionally,
-[PEP 708](https://peps.python.org/pep-0708/) is a provisional standard that aims to address the
-"dependency confusion" issue across package registries and installers.
+uv also supports pinning packages to dedicated indexes (see:
+[_Indexes_](../configuration/indexes.md#pinning-a-package-to-an-index)), such that a given package
+is _always_ installed from a specific index.
 
 ## PEP 517 build isolation
 
@@ -174,22 +144,25 @@ uv pip install wheel && uv pip install --no-build-isolation biopython==1.77
 For a list of packages that are known to fail under PEP 517 build isolation, see
 [#2252](https://github.com/astral-sh/uv/issues/2252).
 
-## Transitive direct URL dependencies for constraints and overrides
+## Transitive URL dependencies
 
-While uv does support URL dependencies (e.g., `black @ https://...`), it does not support
-_transitive_ (i.e., "nested") direct URL dependencies for constraints and overrides.
+While uv includes first-class support for URL dependencies (e.g., `ruff @ https://...`), it differs
+from pip in its handling of _transitive_ URL dependencies in two ways.
 
-Specifically, if a constraint or override is defined using a direct URL dependency, and the
-constrained package has a direct URL dependency of its own, uv _may_ reject that transitive direct
-URL dependency during resolution.
+First, uv makes the assumption that non-URL dependencies do not introduce URL dependencies into the
+resolution. In other words, it assumes that dependencies fetched from a registry do not themselves
+depend on URLs. If a non-URL dependency _does_ introduce a URL dependency, uv will reject the URL
+dependency during resolution. (Note that PyPI does not allow published packages to depend on URL
+dependencies; other registries may be more permissive.)
 
-uv also makes the assumption that non-URL dependencies won't introduce URL dependencies (i.e., that
-dependencies fetched from a registry will not themselves have direct URL dependencies). If a non-URL
-dependency _does_ introduce a URL dependency, uv will reject the URL dependency during resolution.
+Second, if a constraint (`--constraint`) or override (`--override`) is defined using a direct URL
+dependency, and the constrained package has a direct URL dependency of its own, uv _may_ reject that
+transitive direct URL dependency during resolution, if the URL isn't referenced elsewhere in the set
+of input requirements.
 
-If uv rejects a transitive URL dependency in either case, the best course of action is to provide
-the URL dependency as a direct dependency in the `requirements.in` file, rather than as a
-constraint, override, or transitive dependency.
+If uv rejects a transitive URL dependency, the best course of action is to provide the URL
+dependency as a direct dependency in the relevant `pyproject.toml` or `requirement.in` file, as the
+above constraints do not apply to direct dependencies.
 
 ## Virtual environments by default
 
@@ -384,8 +357,8 @@ installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync
 ## Strictness and spec enforcement
 
 uv tends to be stricter than `pip`, and will often reject packages that `pip` would install. For
-example, uv omits packages with invalid version specifiers in its metadata, which `pip` similarly
-plans to exclude in a [future release](https://github.com/pypa/pip/issues/12063).
+example, uv rejects HTML indexes with invalid URL fragments (see:
+[PEP 503](https://peps.python.org/pep-0503/)), while `pip` will ignore such fragments.
 
 In some cases, uv implements lenient behavior for popular packages that are known to have specific
 spec compliance issues.

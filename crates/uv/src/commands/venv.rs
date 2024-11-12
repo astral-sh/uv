@@ -9,31 +9,29 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, SourceStrategy, TrustedHost,
+    LowerBound, NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution_types::{DependencyMetadata, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVariant, PythonVersionFile, VersionRequest,
 };
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_shell::Shell;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::Changelog;
-use crate::commands::project::find_requires_python;
+use crate::commands::project::{validate_requires_python, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -51,7 +49,7 @@ pub(crate) async fn venv(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
+    allow_insecure_host: &[TrustedHost],
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -132,7 +130,7 @@ async fn venv_impl(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
+    allow_insecure_host: &[TrustedHost],
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     connectivity: Connectivity,
@@ -180,40 +178,27 @@ async fn venv_impl(
 
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    // (1) Explicit request from user
-    let mut interpreter_request = python_request.map(PythonRequest::parse);
-
-    // (2) Request from `.python-version`
-    if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(project_dir, no_config, false)
-            .await
-            .into_diagnostic()?
-            .and_then(PythonVersionFile::into_version);
-    }
-
-    // (3) `Requires-Python` in `pyproject.toml`
-    if interpreter_request.is_none() {
-        if let Some(project) = project {
-            interpreter_request = find_requires_python(project.workspace())
-                .into_diagnostic()?
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
-        }
-    }
+    let WorkspacePython {
+        source,
+        python_request,
+        requires_python,
+    } = WorkspacePython::from_request(
+        python_request.map(PythonRequest::parse),
+        project.as_ref().map(VirtualProject::workspace),
+        project_dir,
+        no_config,
+    )
+    .await
+    .into_diagnostic()?;
 
     // Locate the Python interpreter to use in the environment
     let python = PythonInstallation::find_or_download(
-        interpreter_request.as_ref(),
+        python_request.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -229,8 +214,10 @@ async fn venv_impl(
     let interpreter = python.into_interpreter();
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     if managed {
@@ -251,6 +238,21 @@ async fn venv_impl(
         )
         .into_diagnostic()?;
     }
+
+    // Check if the discovered Python version is incompatible with the current workspace
+    if let Some(requires_python) = requires_python {
+        match validate_requires_python(
+            &interpreter,
+            project.as_ref().map(VirtualProject::workspace),
+            &requires_python,
+            &source,
+        ) {
+            Ok(()) => {}
+            Err(err) => {
+                warn_user!("{err}");
+            }
+        }
+    };
 
     writeln!(
         printer.stderr(),
@@ -278,8 +280,10 @@ async fn venv_impl(
         let interpreter = venv.interpreter();
 
         // Add all authenticated sources to the cache.
-        for url in index_locations.urls() {
-            store_credentials_from_url(url);
+        for index in index_locations.allowed_indexes() {
+            if let Some(credentials) = index.credentials() {
+                uv_auth::store_credentials(index.raw_url(), credentials);
+            }
         }
 
         // Instantiate a client.
@@ -289,7 +293,7 @@ async fn venv_impl(
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
-            .allow_insecure_host(allow_insecure_host)
+            .allow_insecure_host(allow_insecure_host.to_vec())
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();
@@ -299,7 +303,7 @@ async fn venv_impl(
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
             let client = FlatIndexClient::new(&client, cache);
             let entries = client
-                .fetch(index_locations.flat_index())
+                .fetch(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(
@@ -342,6 +346,7 @@ async fn venv_impl(
             &build_options,
             &build_hasher,
             exclude_newer,
+            LowerBound::Allow,
             sources,
             concurrency,
         );

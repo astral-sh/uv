@@ -28,14 +28,6 @@ impl Resolution {
         }
     }
 
-    /// Return the remote distribution for the given package name, if it exists.
-    pub fn get_remote(&self, package_name: &PackageName) -> Option<&Dist> {
-        match self.packages.get(package_name)? {
-            ResolvedDist::Installable(dist) => Some(dist),
-            ResolvedDist::Installed(_) => None,
-        }
-    }
-
     /// Return the hashes for the given package name, if they exist.
     pub fn get_hashes(&self, package_name: &PackageName) -> &[HashDigest] {
         self.hashes.get(package_name).map_or(&[], Vec::as_slice)
@@ -59,11 +51,6 @@ impl Resolution {
     /// Return `true` if there are no pinned packages in this resolution.
     pub fn is_empty(&self) -> bool {
         self.packages.is_empty()
-    }
-
-    /// Return the set of [`Requirement`]s that this resolution represents.
-    pub fn requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
-        self.packages.values().map(Requirement::from)
     }
 
     /// Return the [`ResolutionDiagnostic`]s that were produced during resolution.
@@ -163,7 +150,7 @@ impl Diagnostic for ResolutionDiagnostic {
                 format!(
                     "The transitive dependency `{name}` is unpinned. \
                     Consider setting a lower bound with a constraint when using \
-                    `--resolution-strategy lowest` to avoid using outdated versions."
+                    `--resolution lowest` to avoid using outdated versions."
                 )
             }
         }
@@ -190,7 +177,7 @@ impl From<&ResolvedDist> for Requirement {
                             wheels.best_wheel().filename.version.clone(),
                         ),
                     ),
-                    index: None,
+                    index: Some(wheels.best_wheel().index.url().clone()),
                 },
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     let mut location = wheel.url.to_url();
@@ -211,7 +198,7 @@ impl From<&ResolvedDist> for Requirement {
                     specifier: uv_pep440::VersionSpecifiers::from(
                         uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
                     ),
-                    index: None,
+                    index: Some(sdist.index.url().clone()),
                 },
                 Dist::Source(SourceDist::DirectUrl(sdist)) => {
                     let mut location = sdist.url.to_url();

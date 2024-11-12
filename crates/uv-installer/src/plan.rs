@@ -121,6 +121,9 @@ impl<'a> Planner<'a> {
             match installable {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
                     if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
+                        if *entry.index.url() != wheel.best_wheel().index {
+                            return None;
+                        }
                         if entry.dist.filename.version != wheel.best_wheel().filename.version {
                             return None;
                         };
@@ -231,6 +234,9 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
                     if let Some(distribution) = registry_index.get(sdist.name()).find_map(|entry| {
+                        if *entry.index.url() != sdist.index {
+                            return None;
+                        }
                         if entry.dist.filename.version != sdist.version {
                             return None;
                         };

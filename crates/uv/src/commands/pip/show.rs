@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use anyhow::Result;
+use fs_err::File;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
@@ -8,6 +9,7 @@ use rustc_hash::FxHashMap;
 use uv_cache::Cache;
 use uv_distribution_types::{Diagnostic, Name};
 use uv_fs::Simplified;
+use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
@@ -22,6 +24,7 @@ pub(crate) fn pip_show(
     strict: bool,
     python: Option<&str>,
     system: bool,
+    files: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -51,7 +54,7 @@ pub(crate) fn pip_show(
     let site_packages = SitePackages::from_environment(&environment)?;
 
     // Determine the markers to use for resolution.
-    let markers = environment.interpreter().resolver_markers();
+    let markers = environment.interpreter().resolver_marker_environment();
 
     // Sort and deduplicate the packages, which are keyed by name.
     packages.sort_unstable();
@@ -182,6 +185,16 @@ pub(crate) fn pip_show(
                     "Required-by: {}",
                     required_by.into_iter().join(", "),
                 )?;
+            }
+        }
+
+        // If requests, show the list of installed files.
+        if files {
+            let path = distribution.path().join("RECORD");
+            let record = read_record_file(&mut File::open(path)?)?;
+            writeln!(printer.stdout(), "Files:")?;
+            for entry in record {
+                writeln!(printer.stdout(), "  {}", entry.path)?;
             }
         }
     }

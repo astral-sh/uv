@@ -4,23 +4,23 @@ pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use lock::{
-    Lock, LockError, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
+    InstallTarget, Lock, LockError, LockVersion, PackageMap, RequirementsTxtExport,
+    ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
 };
 pub use manifest::Manifest;
-pub use options::{Options, OptionsBuilder};
+pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
-pub use pubgrub::{PubGrubSpecifier, PubGrubSpecifierError};
 pub use python_requirement::PythonRequirement;
-pub use requires_python::{RequiresPython, RequiresPythonError, RequiresPythonRange};
+pub use requires_python::{RequiresPython, RequiresPythonRange};
 pub use resolution::{
     AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolutionGraph,
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
     BuildId, DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
-    Reporter as ResolverReporter, Resolver, ResolverMarkers, ResolverProvider, VersionsResponse,
-    WheelMetadataResult,
+    Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
+    VersionsResponse, WheelMetadataResult,
 };
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
@@ -34,6 +34,7 @@ mod error;
 mod exclude_newer;
 mod exclusions;
 mod flat_index;
+mod fork_indexes;
 mod fork_urls;
 mod graph_ops;
 mod lock;

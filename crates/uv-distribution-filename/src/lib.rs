@@ -68,6 +68,13 @@ impl DistFilename {
         }
     }
 
+    pub fn into_version(self) -> Version {
+        match self {
+            Self::SourceDistFilename(filename) => filename.version,
+            Self::WheelFilename(filename) => filename.version,
+        }
+    }
+
     /// Whether the file is a `bdist_wheel` or an `sdist`.
     pub fn filetype(&self) -> &'static str {
         match self {

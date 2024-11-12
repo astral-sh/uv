@@ -6,12 +6,13 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use url::Url;
-
+use uv_cache::Removal;
 use uv_distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
 use uv_python::PythonInstallationKey;
+use uv_static::EnvVars;
 
 use crate::printer::Printer;
 
@@ -55,7 +56,7 @@ impl BarState {
 
 impl ProgressReporter {
     fn new(root: ProgressBar, multi_progress: MultiProgress, printer: Printer) -> ProgressReporter {
-        let mode = if env::var("JPY_SESSION_NAME").is_ok() {
+        let mode = if env::var(EnvVars::JPY_SESSION_NAME).is_ok() {
             // Disable concurrent progress bars when running inside a Jupyter notebook
             // because the Jupyter terminal does not support clearing previous lines.
             // See: https://github.com/astral-sh/uv/issues/3887.
@@ -522,9 +523,68 @@ impl uv_publish::Reporter for PublishReporter {
         self.reporter.on_download_progress(id, inc);
     }
 
-    fn on_download_complete(&self) {
-        self.reporter.root.set_message("");
-        self.reporter.root.finish_and_clear();
+    fn on_download_complete(&self, id: usize) {
+        self.reporter.on_download_complete(id);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct CleaningDirectoryReporter {
+    bar: ProgressBar,
+}
+
+impl CleaningDirectoryReporter {
+    /// Initialize a [`CleaningDirectoryReporter`] for cleaning the cache directory.
+    pub(crate) fn new(printer: Printer, max: usize) -> Self {
+        let bar = ProgressBar::with_draw_target(Some(max as u64), printer.target());
+        bar.set_style(
+            ProgressStyle::with_template("{prefix} [{bar:20}] {percent}%")
+                .unwrap()
+                .progress_chars("=> "),
+        );
+        bar.set_prefix(format!("{}", "Cleaning".bold().cyan()));
+        Self { bar }
+    }
+}
+
+impl uv_cache::CleanReporter for CleaningDirectoryReporter {
+    fn on_clean(&self) {
+        self.bar.inc(1);
+    }
+
+    fn on_complete(&self) {
+        self.bar.finish_and_clear();
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct CleaningPackageReporter {
+    bar: ProgressBar,
+}
+
+impl CleaningPackageReporter {
+    /// Initialize a [`CleaningPackageReporter`] for cleaning packages from the cache.
+    pub(crate) fn new(printer: Printer, max: usize) -> Self {
+        let bar = ProgressBar::with_draw_target(Some(max as u64), printer.target());
+        bar.set_style(
+            ProgressStyle::with_template("{prefix} [{bar:20}] {pos}/{len}{msg}")
+                .unwrap()
+                .progress_chars("=> "),
+        );
+        bar.set_prefix(format!("{}", "Cleaning".bold().cyan()));
+        Self { bar }
+    }
+
+    pub(crate) fn on_clean(&self, package: &str, removal: &Removal) {
+        self.bar.inc(1);
+        self.bar.set_message(format!(
+            ": {}, {} files {} folders removed",
+            package, removal.num_files, removal.num_dirs,
+        ));
+    }
+
+    pub(crate) fn on_complete(&self) {
+        self.bar.finish_and_clear();
     }
 }
 

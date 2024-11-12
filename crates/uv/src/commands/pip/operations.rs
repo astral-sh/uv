@@ -37,7 +37,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverMarkers,
+    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverEnvironment,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -102,7 +102,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     tags: Option<&Tags>,
-    markers: ResolverMarkers,
+    resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
     client: &RegistryClient,
     flat_index: &FlatIndex,
@@ -134,13 +134,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !unnamed.is_empty() {
             requirements.extend(
                 NamedRequirementsResolver::new(
-                    unnamed,
                     hasher,
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
-                .resolve()
+                .resolve(unnamed.into_iter())
                 .await?,
             );
         }
@@ -148,14 +147,13 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         // Resolve any source trees into requirements.
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
-                source_trees,
                 extras,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve()
+            .resolve(source_trees.iter().map(PathBuf::as_path))
             .await?;
 
             // If we resolved a single project, use it for the project name.
@@ -219,13 +217,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !unnamed.is_empty() {
             overrides.extend(
                 NamedRequirementsResolver::new(
-                    unnamed,
                     hasher,
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
-                .resolve()
+                .resolve(unnamed.into_iter())
                 .await?,
             );
         }
@@ -241,7 +238,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let preferences = Preferences::from_iter(preferences, &markers);
+    let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -256,7 +253,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve(&markers)
+            .resolve(&resolver_env)
             .await?
         }
         DependencyMode::Direct => Vec::new(),
@@ -292,7 +289,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             manifest,
             options,
             &python_requirement,
-            markers,
+            resolver_env,
             tags,
             flat_index,
             index,
@@ -770,14 +767,8 @@ pub(crate) enum Error {
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
-    Lookahead(#[from] uv_requirements::LookaheadError),
-
-    #[error(transparent)]
-    Named(#[from] uv_requirements::NamedRequirementsError),
+    Requirements(#[from] uv_requirements::Error),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
-
-    #[error(transparent)]
-    PubGrubSpecifier(#[from] uv_resolver::PubGrubSpecifierError),
 }
