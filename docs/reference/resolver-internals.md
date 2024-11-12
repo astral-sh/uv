@@ -14,9 +14,9 @@ in the worst case you have to try all possible combinations of all versions of a
 there are no general, fast algorithms. In practice, this is misleading for a number of reasons:
 
 - The slowest part of resolution in uv is loading package and version metadata, even if it's cached.
-- There are many possible solutions, but some are preferable than others. For example we generally
+- There are many possible solutions, but some are preferable to others. For example, we generally
   prefer using the latest version of packages.
-- Package's dependencies are complex, e.g., there are contiguous versions ranges — not arbitrary
+- Package dependencies are complex, e.g., there are contiguous versions ranges — not arbitrary
   boolean inclusion/exclusions of versions, adjacent releases often have the same or similar
   requirements, etc.
 - For most resolutions, the resolver doesn't need to backtrack, picking versions iteratively is

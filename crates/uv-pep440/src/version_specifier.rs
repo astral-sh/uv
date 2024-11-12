@@ -51,7 +51,7 @@ impl VersionSpecifiers {
         self.iter().all(|specifier| specifier.contains(version))
     }
 
-    /// Returns `true` if the specifiers are empty is empty.
+    /// Returns `true` if there are no specifiers.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
