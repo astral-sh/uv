@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::fmt::Formatter;
+use std::ops::Bound;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
@@ -399,6 +400,52 @@ impl NoSolutionError {
     /// Initialize a [`NoSolutionHeader`] for this error.
     pub fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.env.clone())
+    }
+
+    pub fn find_largest_required_python_version(&self) -> Option<Version> {
+        fn find(derivation_tree: &ErrorTree, largest_version: &mut Option<Version>) {
+            match derivation_tree {
+                // For derived incompatibilities, recursively search each subtree to
+                // find the root cause
+                DerivationTree::Derived(derived) => {
+                    find(derived.cause1.as_ref(), largest_version);
+                    find(derived.cause2.as_ref(), largest_version);
+                }
+                // Base case — if a missing external dependency a Python package,
+                // update the largest one seen thus far
+                DerivationTree::External(External::FromDependencyOf(
+                    pkg_1,
+                    ver_1,
+                    pkg_2,
+                    ver_2,
+                )) => match (&**pkg_1, &**pkg_2) {
+                    (PubGrubPackageInner::Python(_), _) => {
+                        if let Some((Bound::Included(version), _)) = ver_1.iter().next() {
+                            *largest_version = match largest_version.take() {
+                                Some(ref v) if version > v => Some(version.clone()),
+                                Some(v) => Some(v),
+                                None => Some(version.clone()),
+                            };
+                        }
+                    }
+                    (_, PubGrubPackageInner::Python(_)) => {
+                        if let Some((Bound::Included(version), _)) = ver_2.iter().next() {
+                            *largest_version = match largest_version.take() {
+                                Some(ref v) if version > v => Some(version.clone()),
+                                Some(v) => Some(v),
+                                None => Some(version.clone()),
+                            };
+                        }
+                    }
+                    (_, _) => {}
+                },
+                DerivationTree::External(_) => {}
+            }
+        }
+
+        let mut largest_version: Option<Version> = None;
+        find(&self.error, &mut largest_version);
+        largest_version
     }
 }
 

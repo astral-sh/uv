@@ -25,12 +25,12 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
-    EnvironmentSpecification,
+    EnvironmentSpecification, ProjectError,
 };
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::tool::Target;
+use crate::commands::{pip, ExitStatus, SharedState};
 use crate::commands::{reporters::PythonDownloadReporter, tool::common::install_executables};
-use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -334,12 +334,13 @@ pub(crate) async fn install(
     }
 
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
+    let spec_requirements: Vec<UnresolvedRequirementSpecification> = requirements
+        .iter()
+        .cloned()
+        .map(UnresolvedRequirementSpecification::from)
+        .collect();
     let spec = RequirementsSpecification {
-        requirements: requirements
-            .iter()
-            .cloned()
-            .map(UnresolvedRequirementSpecification::from)
-            .collect(),
+        requirements: spec_requirements.clone(),
         ..spec
     };
 
@@ -388,7 +389,60 @@ pub(crate) async fn install(
             &cache,
             printer,
         )
-        .await?;
+        .await;
+
+        let resolution = match resolution {
+            Ok(resolution) => resolution,
+            Err(err) => match err {
+                ProjectError::Operation(pip::operations::Error::Resolve(
+                    uv_resolver::ResolveError::NoSolution(ref no_solution_err),
+                )) => {
+                    let (None, Some(version)) = (
+                        python_request,
+                        no_solution_err.find_largest_required_python_version(),
+                    ) else {
+                        return Err(err.into());
+                    };
+
+                    writeln!(
+                         printer.stderr(),
+                        "Couldn't find acceptable Python version for `{package}`, downloading Python {version} and re-attempting install."
+                    )?;
+
+                    let interpreter = PythonInstallation::find_or_download(
+                        Some(&PythonRequest::parse(version.to_string().as_str())),
+                        EnvironmentPreference::OnlySystem,
+                        python_preference,
+                        python_downloads,
+                        &client_builder,
+                        &cache,
+                        Some(&reporter),
+                    )
+                    .await?
+                    .into_interpreter();
+
+                    let new_spec = RequirementsSpecification {
+                        requirements: spec_requirements,
+                        ..RequirementsSpecification::default()
+                    };
+
+                    resolve_environment(
+                        EnvironmentSpecification::from(new_spec),
+                        &interpreter,
+                        settings.as_ref().into(),
+                        &state,
+                        Box::new(DefaultResolveLogger),
+                        connectivity,
+                        concurrency,
+                        native_tls,
+                        &cache,
+                        printer,
+                    )
+                    .await?
+                }
+                _ => return Err(err.into()),
+            },
+        };
 
         let environment = installed_tools.create_environment(&from.name, interpreter)?;
 
