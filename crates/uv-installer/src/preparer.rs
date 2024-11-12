@@ -23,11 +23,11 @@ pub enum Error {
     #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
     NoBinary(PackageName),
     #[error("Failed to download `{0}`")]
-    Download(Box<BuiltDist>, #[source] Box<uv_distribution::Error>),
+    Download(Box<BuiltDist>, #[source] uv_distribution::Error),
     #[error("Failed to download and build `{0}`")]
-    DownloadAndBuild(Box<SourceDist>, #[source] Box<uv_distribution::Error>),
+    DownloadAndBuild(Box<SourceDist>, #[source] uv_distribution::Error),
     #[error("Failed to build `{0}`")]
-    Build(Box<SourceDist>, #[source] Box<uv_distribution::Error>),
+    Build(Box<SourceDist>, #[source] uv_distribution::Error),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
@@ -146,12 +146,12 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed_local()
                 .map_err(|err| match dist.clone() {
-                    Dist::Built(dist) => Error::Download(Box::new(dist), Box::new(err)),
+                    Dist::Built(dist) => Error::Download(Box::new(dist), err),
                     Dist::Source(dist) => {
                         if dist.is_local() {
-                            Error::Build(Box::new(dist), Box::new(err))
+                            Error::Build(Box::new(dist), err)
                         } else {
-                            Error::DownloadAndBuild(Box::new(dist), Box::new(err))
+                            Error::DownloadAndBuild(Box::new(dist), err)
                         }
                     }
                 })
@@ -166,12 +166,12 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                             wheel.hashes(),
                         );
                         Err(match dist {
-                            Dist::Built(dist) => Error::Download(Box::new(dist), Box::new(err)),
+                            Dist::Built(dist) => Error::Download(Box::new(dist), err),
                             Dist::Source(dist) => {
                                 if dist.is_local() {
-                                    Error::Build(Box::new(dist), Box::new(err))
+                                    Error::Build(Box::new(dist), err)
                                 } else {
-                                    Error::DownloadAndBuild(Box::new(dist), Box::new(err))
+                                    Error::DownloadAndBuild(Box::new(dist), err)
                                 }
                             }
                         })

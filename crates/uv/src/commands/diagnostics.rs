@@ -2,7 +2,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use std::str::FromStr;
 use std::sync::LazyLock;
-use uv_distribution_types::{Name, SourceDist};
+use uv_distribution_types::{BuiltDist, Name, SourceDist};
 use uv_normalize::PackageName;
 
 /// Static map of common package name typos or misconfigurations to their correct package names.
@@ -27,6 +27,34 @@ pub(crate) fn download_and_build(sdist: Box<SourceDist>, cause: uv_distribution:
     #[diagnostic()]
     struct Error {
         sdist: Box<SourceDist>,
+        #[source]
+        cause: uv_distribution::Error,
+        #[help]
+        help: Option<String>,
+    }
+
+    let report = miette::Report::new(Error {
+        help: SUGGESTIONS.get(sdist.name()).map(|suggestion| {
+            format!(
+                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                sdist.name().cyan(),
+                suggestion.cyan(),
+                suggestion.cyan(),
+            )
+        }),
+        sdist,
+        cause,
+    });
+    anstream::eprint!("{report:?}");
+}
+
+/// Render a remote binary distribution download failure with a help message.
+pub(crate) fn download(sdist: Box<BuiltDist>, cause: uv_distribution::Error) {
+    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[error("Failed to download `{sdist}`")]
+    #[diagnostic()]
+    struct Error {
+        sdist: Box<BuiltDist>,
         #[source]
         cause: uv_distribution::Error,
         #[help]

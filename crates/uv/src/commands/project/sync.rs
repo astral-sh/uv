@@ -213,7 +213,7 @@ pub(crate) async fn sync(
     };
 
     // Perform the sync operation.
-    do_sync(
+    match do_sync(
         target,
         &venv,
         &extras,
@@ -230,7 +230,29 @@ pub(crate) async fn sync(
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(()) => {}
+        Err(ProjectError::Operation(operations::Error::Prepare(
+            uv_installer::PrepareError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Prepare(
+            uv_installer::PrepareError::DownloadAndBuild(dist, err),
+        ))) => {
+            diagnostics::download_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Prepare(
+            uv_installer::PrepareError::Download(dist, err),
+        ))) => {
+            diagnostics::download(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     Ok(ExitStatus::Success)
 }

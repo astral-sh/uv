@@ -697,7 +697,7 @@ pub(crate) async fn run(
 
                 let install_options = InstallOptions::default();
 
-                project::sync::do_sync(
+                match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
@@ -718,7 +718,29 @@ pub(crate) async fn run(
                     cache,
                     printer,
                 )
-                .await?;
+                .await
+                {
+                    Ok(()) => {}
+                    Err(ProjectError::Operation(operations::Error::Prepare(
+                        uv_installer::PrepareError::Build(dist, err),
+                    ))) => {
+                        diagnostics::build(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Prepare(
+                        uv_installer::PrepareError::DownloadAndBuild(dist, err),
+                    ))) => {
+                        diagnostics::download_and_build(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Prepare(
+                        uv_installer::PrepareError::Download(dist, err),
+                    ))) => {
+                        diagnostics::download(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(err) => return Err(err.into()),
+                }
 
                 lock = Some(result.into_lock());
             }

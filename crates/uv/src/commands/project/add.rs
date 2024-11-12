@@ -716,6 +716,24 @@ pub(crate) async fn add(
                     diagnostics::build(dist, err);
                     Ok(ExitStatus::Failure)
                 }
+                ProjectError::Operation(pip::operations::Error::Prepare(
+                    uv_installer::PrepareError::Build(dist, err),
+                )) => {
+                    diagnostics::build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Prepare(
+                    uv_installer::PrepareError::DownloadAndBuild(dist, err),
+                )) => {
+                    diagnostics::download_and_build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Prepare(
+                    uv_installer::PrepareError::Download(dist, err),
+                )) => {
+                    diagnostics::download(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
                 err => Err(err.into()),
             }
         }
