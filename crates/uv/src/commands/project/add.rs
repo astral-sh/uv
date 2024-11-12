@@ -1,5 +1,6 @@
 use std::collections::hash_map::Entry;
 use std::fmt::Write;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -44,7 +45,7 @@ use crate::commands::pip::loggers::{
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    init_script_python_requirement, validate_script_requires_python, ProjectError,
+    init_script_python_requirement, lock, validate_script_requires_python, ProjectError,
     ProjectInterpreter, ScriptPython,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
@@ -618,8 +619,10 @@ pub(crate) async fn add(
     }
 
     // Store the content prior to any modifications.
-    let existing = project.pyproject_toml().as_ref().to_vec();
-    let root = project.root().to_path_buf();
+    let project_root = project.root().to_path_buf();
+    let workspace_root = project.workspace().install_path().clone();
+    let existing_pyproject_toml = project.pyproject_toml().as_ref().to_vec();
+    let existing_uv_lock = lock::read_bytes(project.workspace()).await?;
 
     // Update the `pypackage.toml` in-memory.
     let project = project
@@ -628,12 +631,18 @@ pub(crate) async fn add(
 
     // Set the Ctrl-C handler to revert changes on exit.
     let _ = ctrlc::set_handler({
-        let root = root.clone();
-        let existing = existing.clone();
+        let project_root = project_root.clone();
+        let workspace_root = workspace_root.clone();
+        let existing_pyproject_toml = existing_pyproject_toml.clone();
+        let existing_uv_lock = existing_uv_lock.clone();
         move || {
-            // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
-                let _ = fs_err::write(root.join("pyproject.toml"), &existing);
+                let _ = revert(
+                    &project_root,
+                    &workspace_root,
+                    &existing_pyproject_toml,
+                    existing_uv_lock.as_deref(),
+                );
             }
 
             #[allow(clippy::exit, clippy::cast_possible_wrap)]
@@ -667,9 +676,13 @@ pub(crate) async fn add(
     {
         Ok(()) => Ok(ExitStatus::Success),
         Err(err) => {
-            // Revert the changes to the `pyproject.toml`, if necessary.
             if modified {
-                fs_err::write(root.join("pyproject.toml"), &existing)?;
+                let _ = revert(
+                    &project_root,
+                    &workspace_root,
+                    &existing_pyproject_toml,
+                    existing_uv_lock.as_deref(),
+                );
             }
 
             match err {
@@ -703,13 +716,7 @@ pub(crate) async fn add(
                     diagnostics::build(dist, err);
                     Ok(ExitStatus::Failure)
                 }
-                err => {
-                    // Revert the changes to the `pyproject.toml`, if necessary.
-                    if modified {
-                        fs_err::write(root.join("pyproject.toml"), &existing)?;
-                    }
-                    Err(err.into())
-                }
+                err => Err(err.into()),
             }
         }
     }
@@ -940,6 +947,25 @@ async fn lock_and_sync(
     )
     .await?;
 
+    Ok(())
+}
+
+/// Revert the changes to the `pyproject.toml` and `uv.lock`, if necessary.
+fn revert(
+    project_root: &Path,
+    workspace_root: &Path,
+    pyproject_toml: &[u8],
+    uv_lock: Option<&[u8]>,
+) -> Result<(), io::Error> {
+    debug!("Reverting changes to `pyproject.toml`");
+    let () = fs_err::write(project_root.join("pyproject.toml"), pyproject_toml)?;
+    if let Some(uv_lock) = uv_lock.as_ref() {
+        debug!("Reverting changes to `uv.lock`");
+        let () = fs_err::write(workspace_root.join("uv.lock"), uv_lock)?;
+    } else {
+        debug!("Removing `uv.lock`");
+        let () = fs_err::remove_file(workspace_root.join("uv.lock"))?;
+    }
     Ok(())
 }
 
