@@ -59,7 +59,7 @@ pub(crate) const LOCAL_REVISION: &str = "revision.rev";
 pub(crate) const METADATA: &str = "metadata.msgpack";
 
 /// The directory within each entry under which to store the unpacked source distribution.
-pub(crate) const SOURCE: &str = "src";
+pub(crate) const SOURCE: &str = "sdist";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
