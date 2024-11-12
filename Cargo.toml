@@ -73,7 +73,7 @@ anyhow = { version = "1.0.89" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12" }
 async-trait = { version = "0.1.82" }
-async_http_range_reader = { version = "0.9.0" }
+async_http_range_reader = { version = "0.9.1" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b24604fa7bc223daaad7712c0694bac8f0a87", features = ["deflate", "tokio"] }
 axoupdater = { version = "0.8.0", default-features = false }
 backoff = { version = "0.4.0" }
@@ -134,8 +134,8 @@ rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2"] }
-reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121", features = ["multipart"] }
-reqwest-retry = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121" }
+reqwest-middleware = { version = "0.4.0", features = ["multipart"] }
+reqwest-retry = { version = "0.7.0" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.2" }
@@ -186,9 +186,6 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
 ignored = ["flate2", "xz2"]
-
-[patch.crates-io]
-reqwest-middleware = { git = "https://github.com/TrueLayer/reqwest-middleware", rev = "d95ec5a99fcc9a4339e1850d40378bbfe55ab121" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"
