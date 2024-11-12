@@ -410,7 +410,7 @@ pub(crate) async fn pip_compile(
             diagnostics::no_solution(&err);
             return Ok(ExitStatus::Failure);
         }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::FetchAndBuild(dist, err))) => {
+        Err(operations::Error::Resolve(uv_resolver::ResolveError::DownloadAndBuild(dist, err))) => {
             diagnostics::fetch_and_build(dist, err);
             return Ok(ExitStatus::Failure);
         }

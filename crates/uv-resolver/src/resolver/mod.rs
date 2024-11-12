@@ -1783,12 +1783,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         Dist::Source(source_dist @ SourceDist::Directory(_)) => {
                             ResolveError::Build(Box::new(source_dist), err)
                         }
-                        Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
+                        Dist::Built(built_dist) => {
+                            ResolveError::Download(Box::new(built_dist), err)
+                        }
                         Dist::Source(source_dist) => {
                             if source_dist.is_local() {
                                 ResolveError::Build(Box::new(source_dist), err)
                             } else {
-                                ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                ResolveError::DownloadAndBuild(Box::new(source_dist), err)
                             }
                         }
                     })?;
@@ -1919,13 +1921,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         ResolveError::Build(Box::new(source_dist), err)
                                     }
                                     Dist::Built(built_dist) => {
-                                        ResolveError::Fetch(Box::new(built_dist), err)
+                                        ResolveError::Download(Box::new(built_dist), err)
                                     }
                                     Dist::Source(source_dist) => {
                                         if source_dist.is_local() {
                                             ResolveError::Build(Box::new(source_dist), err)
                                         } else {
-                                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                            ResolveError::DownloadAndBuild(
+                                                Box::new(source_dist),
+                                                err,
+                                            )
                                         }
                                     }
                                 })?;

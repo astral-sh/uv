@@ -23,9 +23,9 @@ pub enum Error {
     #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
     NoBinary(PackageName),
     #[error("Failed to download `{0}`")]
-    Fetch(Box<BuiltDist>, #[source] Box<uv_distribution::Error>),
+    Download(Box<BuiltDist>, #[source] Box<uv_distribution::Error>),
     #[error("Failed to download and build `{0}`")]
-    FetchAndBuild(Box<SourceDist>, #[source] Box<uv_distribution::Error>),
+    DownloadAndBuild(Box<SourceDist>, #[source] Box<uv_distribution::Error>),
     #[error("Failed to build `{0}`")]
     Build(Box<SourceDist>, #[source] Box<uv_distribution::Error>),
     #[error("Unzip failed in another thread: {0}")]
@@ -146,12 +146,12 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed_local()
                 .map_err(|err| match dist.clone() {
-                    Dist::Built(dist) => Error::Fetch(Box::new(dist), Box::new(err)),
+                    Dist::Built(dist) => Error::Download(Box::new(dist), Box::new(err)),
                     Dist::Source(dist) => {
                         if dist.is_local() {
                             Error::Build(Box::new(dist), Box::new(err))
                         } else {
-                            Error::FetchAndBuild(Box::new(dist), Box::new(err))
+                            Error::DownloadAndBuild(Box::new(dist), Box::new(err))
                         }
                     }
                 })
@@ -166,12 +166,12 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                             wheel.hashes(),
                         );
                         Err(match dist {
-                            Dist::Built(dist) => Error::Fetch(Box::new(dist), Box::new(err)),
+                            Dist::Built(dist) => Error::Download(Box::new(dist), Box::new(err)),
                             Dist::Source(dist) => {
                                 if dist.is_local() {
                                     Error::Build(Box::new(dist), Box::new(err))
                                 } else {
-                                    Error::FetchAndBuild(Box::new(dist), Box::new(err))
+                                    Error::DownloadAndBuild(Box::new(dist), Box::new(err))
                                 }
                             }
                         })

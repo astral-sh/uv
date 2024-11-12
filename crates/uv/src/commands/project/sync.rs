@@ -161,7 +161,7 @@ pub(crate) async fn sync(
             return Ok(ExitStatus::Failure);
         }
         Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
+            uv_resolver::ResolveError::DownloadAndBuild(dist, err),
         ))) => {
             diagnostics::fetch_and_build(dist, err);
             return Ok(ExitStatus::Failure);

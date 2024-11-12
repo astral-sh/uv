@@ -20,7 +20,7 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
         .collect()
 });
 
-/// Render a [`uv_resolver::ResolveError::FetchAndBuild`] with a help message.
+/// Render a [`uv_resolver::ResolveError::DownloadAndBuild`] with a help message.
 pub(crate) fn fetch_and_build(sdist: Box<SourceDist>, cause: uv_distribution::Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to download and build `{sdist}`")]

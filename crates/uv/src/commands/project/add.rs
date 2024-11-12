@@ -680,7 +680,7 @@ pub(crate) async fn add(
                     Ok(ExitStatus::Failure)
                 }
                 ProjectError::Operation(pip::operations::Error::Resolve(
-                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
+                    uv_resolver::ResolveError::DownloadAndBuild(dist, err),
                 )) => {
                     diagnostics::fetch_and_build(dist, err);
                     Ok(ExitStatus::Failure)
