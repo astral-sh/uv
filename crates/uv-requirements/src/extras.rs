@@ -100,13 +100,13 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                 let archive = database
                     .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
                     .await
-                    .map_err(|err| match &dist {
-                        Dist::Built(built) => Error::Download(built.clone(), err),
+                    .map_err(|err| match dist {
+                        Dist::Built(built) => Error::Download(Box::new(built), err),
                         Dist::Source(source) => {
                             if source.is_local() {
-                                Error::Build(source.clone(), err)
+                                Error::Build(Box::new(source), err)
                             } else {
-                                Error::DownloadAndBuild(source.clone(), err)
+                                Error::DownloadAndBuild(Box::new(source), err)
                             }
                         }
                     })?;
