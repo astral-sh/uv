@@ -21,7 +21,6 @@ use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{default_dependency_groups, ProjectError};
@@ -231,35 +230,10 @@ pub(crate) async fn remove(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::DownloadAndBuild(dist, err),
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Requirements(
-            uv_requirements::Error::DownloadAndBuild(dist, err),
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Requirements(
-            uv_requirements::Error::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     };
@@ -309,23 +283,10 @@ pub(crate) async fn remove(
     .await
     {
         Ok(()) => {}
-        Err(ProjectError::Operation(operations::Error::Prepare(
-            uv_installer::PrepareError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Prepare(
-            uv_installer::PrepareError::DownloadAndBuild(dist, err),
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Prepare(
-            uv_installer::PrepareError::Download(dist, err),
-        ))) => {
-            diagnostics::download(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     }

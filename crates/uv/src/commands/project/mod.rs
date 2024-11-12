@@ -1116,7 +1116,7 @@ pub(crate) async fn sync_environment(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<PythonEnvironment> {
+) -> Result<PythonEnvironment, ProjectError> {
     let InstallerSettingsRef {
         index_locations,
         index_strategy,
@@ -1269,7 +1269,7 @@ pub(crate) async fn update_environment(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<EnvironmentUpdate> {
+) -> Result<EnvironmentUpdate, ProjectError> {
     warn_on_requirements_txt_setting(&spec, settings.as_ref().into());
 
     let ResolverInstallerSettings {

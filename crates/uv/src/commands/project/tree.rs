@@ -20,11 +20,11 @@ use uv_workspace::{DiscoveryOptions, Workspace};
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, DependencyGroupsTarget, ProjectInterpreter,
+    default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
 };
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -104,7 +104,7 @@ pub(crate) async fn tree(
     let state = SharedState::default();
 
     // Update the lockfile, if necessary.
-    let lock = project::lock::do_safe_lock(
+    let lock = match do_safe_lock(
         mode,
         &workspace,
         settings.as_ref(),
@@ -118,8 +118,16 @@ pub(crate) async fn tree(
         cache,
         printer,
     )
-    .await?
-    .into_lock();
+    .await
+    {
+        Ok(result) => result.into_lock(),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     // Determine the markers to use for resolution.
     let markers = (!universal).then(|| {

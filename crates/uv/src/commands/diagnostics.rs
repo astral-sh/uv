@@ -1,9 +1,13 @@
-use owo_colors::OwoColorize;
-use rustc_hash::FxHashMap;
 use std::str::FromStr;
 use std::sync::LazyLock;
+
+use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
+
 use uv_distribution_types::{BuiltDist, Name, SourceDist};
 use uv_normalize::PackageName;
+
+use crate::commands::pip;
 
 /// Static map of common package name typos or misconfigurations to their correct package names.
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
@@ -19,6 +23,104 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
         })
         .collect()
 });
+
+/// A rich reporter for operational diagnostics, i.e., errors that occur during resolution and
+/// installation.
+#[derive(Debug, Default)]
+pub(crate) struct OperationDiagnostic {
+    /// The hint to display to the user upon resolution failure.
+    pub(crate) hint: Option<String>,
+    /// The context to display to the user upon resolution failure.
+    pub(crate) context: Option<&'static str>,
+}
+
+impl OperationDiagnostic {
+    /// Set the hint to display to the user upon resolution failure.
+    #[must_use]
+    pub(crate) fn with_hint(hint: String) -> Self {
+        Self {
+            hint: Some(hint),
+            context: None,
+        }
+    }
+
+    /// Set the context to display to the user upon resolution failure.
+    #[must_use]
+    pub(crate) fn with_context(context: &'static str) -> Self {
+        Self {
+            hint: None,
+            context: Some(context),
+        }
+    }
+
+    /// Attempt to report an error with rich diagnostic context.
+    ///
+    /// Returns `Some` if the error was not handled.
+    pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
+        match err {
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err)) => {
+                if let Some(context) = self.context {
+                    no_solution_context(&err, context);
+                } else if let Some(hint) = self.hint {
+                    // TODO(charlie): The `hint` should be shown on all diagnostics, not just
+                    // `NoSolutionError`.
+                    no_solution_hint(err, hint);
+                } else {
+                    no_solution(&err);
+                }
+                None
+            }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::DownloadAndBuild(
+                dist,
+                err,
+            )) => {
+                download_and_build(dist, err);
+                None
+            }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err)) => {
+                build(dist, err);
+                None
+            }
+            pip::operations::Error::Requirements(uv_requirements::Error::DownloadAndBuild(
+                dist,
+                err,
+            )) => {
+                download_and_build(dist, err);
+                None
+            }
+            pip::operations::Error::Requirements(uv_requirements::Error::Build(dist, err)) => {
+                build(dist, err);
+                None
+            }
+            pip::operations::Error::Prepare(uv_installer::PrepareError::Build(dist, err)) => {
+                build(dist, err);
+                None
+            }
+            pip::operations::Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
+                dist,
+                err,
+            )) => {
+                download_and_build(dist, err);
+                None
+            }
+            pip::operations::Error::Prepare(uv_installer::PrepareError::Download(dist, err)) => {
+                download(dist, err);
+                None
+            }
+            pip::operations::Error::Requirements(err) => {
+                if let Some(context) = self.context {
+                    let err = miette::Report::msg(format!("{err}"))
+                        .context(format!("Failed to resolve {context} requirement"));
+                    anstream::eprint!("{err:?}");
+                    None
+                } else {
+                    Some(pip::operations::Error::Requirements(err))
+                }
+            }
+            err => Some(err),
+        }
+    }
+}
 
 /// Render a remote source distribution build failure with a help message.
 pub(crate) fn download_and_build(sdist: Box<SourceDist>, cause: uv_distribution::Error) {

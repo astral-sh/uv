@@ -412,30 +412,11 @@ pub(crate) async fn pip_install(
     .await
     {
         Ok(resolution) => Resolution::from(resolution),
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::DownloadAndBuild(dist, err))) => {
-            diagnostics::download_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(operations::Error::Requirements(uv_requirements::Error::DownloadAndBuild(
-            dist,
-            err,
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(operations::Error::Requirements(uv_requirements::Error::Build(dist, err))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(err) => return Err(err.into()),
     };
 
     // Sync the environment.
@@ -464,22 +445,11 @@ pub(crate) async fn pip_install(
     .await
     {
         Ok(_) => {}
-        Err(operations::Error::Prepare(uv_installer::PrepareError::Build(dist, err))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
-        Err(operations::Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
-            dist,
-            err,
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(operations::Error::Prepare(uv_installer::PrepareError::Download(dist, err))) => {
-            diagnostics::download(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(err) => return Err(err.into()),
     }
 
     // Notify the user of any resolution diagnostics.

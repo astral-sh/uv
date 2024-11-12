@@ -9431,13 +9431,13 @@ fn lock_mismatched_sources() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to parse entry: `uv-public-pypackage`
-      Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `uv-public-pypackage`
+      ╰─▶ Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
     "###);
 
     Ok(())
@@ -13597,13 +13597,13 @@ fn lock_named_index_cli() -> Result<()> {
     // The package references a non-existent index.
     uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to parse entry: `jinja2`
-      Caused by: Package `jinja2` references an undeclared index: `pytorch`
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `jinja2`
+      ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
     "###);
 
     // But it's fine if it comes from the CLI.
@@ -17286,12 +17286,12 @@ fn lock_group_include_cycle() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `project @ file://[TEMP_DIR]/`
-      Caused by: Detected a cycle in `dependency-groups`: `bar` -> `foobar` -> `foo` -> `bar`
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ╰─▶ Detected a cycle in `dependency-groups`: `bar` -> `foobar` -> `foo` -> `bar`
     "###);
 
     Ok(())
@@ -17317,12 +17317,12 @@ fn lock_group_include_missing() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to find group `bar` included by `foo`
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ╰─▶ Failed to find group `bar` included by `foo`
     "###);
 
     Ok(())
@@ -17348,28 +17348,28 @@ fn lock_group_invalid_entry_package() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to parse entry in group `foo`: `invalid!`
-      Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-    invalid!
-           ^
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry in group `foo`: `invalid!`
+      ╰─▶ no such comparison operator "!", must be one of ~= == != <= >= < > ===
+          invalid!
+                 ^
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to parse entry in group `foo`: `invalid!`
-      Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-    invalid!
-           ^
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry in group `foo`: `invalid!`
+      ╰─▶ no such comparison operator "!", must be one of ~= == != <= >= < > ===
+          invalid!
+                 ^
     "###);
 
     Ok(())

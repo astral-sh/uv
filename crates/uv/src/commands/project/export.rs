@@ -21,7 +21,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
 };
-use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter, SharedState};
+use crate::commands::{diagnostics, ExitStatus, OutputWriter, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -142,35 +142,10 @@ pub(crate) async fn export(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::DownloadAndBuild(dist, err),
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Requirements(
-            uv_requirements::Error::DownloadAndBuild(dist, err),
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Requirements(
-            uv_requirements::Error::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     };
