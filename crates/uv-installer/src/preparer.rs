@@ -2,10 +2,8 @@ use std::cmp::Reverse;
 use std::sync::Arc;
 
 use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
-use tokio::task::JoinError;
 use tracing::{debug, instrument};
 use url::Url;
-use uv_pep508::PackageName;
 
 use uv_cache::Cache;
 use uv_configuration::BuildOptions;
@@ -14,6 +12,7 @@ use uv_distribution_types::{
     BuildableSource, BuiltDist, CachedDist, Dist, Hashed, Identifier, Name, RemoteSource,
     SourceDist,
 };
+use uv_pep508::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 
@@ -23,21 +22,12 @@ pub enum Error {
     NoBuild(PackageName),
     #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
     NoBinary(PackageName),
-    #[error("Failed to unzip wheel: {0}")]
-    Unzip(Dist, #[source] Box<uv_extract::Error>),
     #[error("Failed to download `{0}`")]
-    Fetch(BuiltDist, #[source] Box<uv_distribution::Error>),
+    Fetch(Box<BuiltDist>, #[source] Box<uv_distribution::Error>),
     #[error("Failed to download and build `{0}`")]
-    FetchAndBuild(SourceDist, #[source] Box<uv_distribution::Error>),
+    FetchAndBuild(Box<SourceDist>, #[source] Box<uv_distribution::Error>),
     #[error("Failed to build `{0}`")]
-    Build(SourceDist, #[source] Box<uv_distribution::Error>),
-    /// Should not occur; only seen when another task panicked.
-    #[error("The task executor is broken, did some other task panic?")]
-    Join(#[from] JoinError),
-    #[error(transparent)]
-    Editable(#[from] Box<uv_distribution::Error>),
-    #[error("Failed to write to the client cache")]
-    CacheWrite(#[source] std::io::Error),
+    Build(Box<SourceDist>, #[source] Box<uv_distribution::Error>),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
@@ -155,13 +145,13 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed_local()
-                .map_err(|err| match &dist {
-                    Dist::Built(dist) => Error::Fetch(dist.clone(), Box::new(err)),
+                .map_err(|err| match dist.clone() {
+                    Dist::Built(dist) => Error::Fetch(Box::new(dist), Box::new(err)),
                     Dist::Source(dist) => {
                         if dist.is_local() {
-                            Error::Build(dist.clone(), Box::new(err))
+                            Error::Build(Box::new(dist), Box::new(err))
                         } else {
-                            Error::FetchAndBuild(dist.clone(), Box::new(err))
+                            Error::FetchAndBuild(Box::new(dist), Box::new(err))
                         }
                     }
                 })
@@ -175,13 +165,13 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                             policy.digests(),
                             wheel.hashes(),
                         );
-                        Err(match &dist {
-                            Dist::Built(dist) => Error::Fetch(dist.clone(), Box::new(err)),
+                        Err(match dist {
+                            Dist::Built(dist) => Error::Fetch(Box::new(dist), Box::new(err)),
                             Dist::Source(dist) => {
                                 if dist.is_local() {
-                                    Error::Build(dist.clone(), Box::new(err))
+                                    Error::Build(Box::new(dist), Box::new(err))
                                 } else {
-                                    Error::FetchAndBuild(dist.clone(), Box::new(err))
+                                    Error::FetchAndBuild(Box::new(dist), Box::new(err))
                                 }
                             }
                         })
