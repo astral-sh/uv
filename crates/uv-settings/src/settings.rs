@@ -86,7 +86,8 @@ pub struct Options {
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're respected in both `pyproject.toml` and `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
@@ -95,6 +96,27 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub workspace: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub sources: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub dev_dependencies: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub default_groups: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub managed: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub r#package: Option<serde::de::IgnoredAny>,
 }
 
 impl Options {
@@ -224,6 +246,22 @@ pub struct GlobalOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
+    /// Allow insecure connections to host.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            allow-insecure-host = ["localhost:8080"]
+        "#
+    )]
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
 }
 
 /// Settings relevant to all installer operations.
@@ -236,7 +274,6 @@ pub struct InstallerOptions {
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -261,7 +298,6 @@ pub struct ResolverOptions {
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
@@ -413,22 +449,6 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-    /// Allow insecure connections to host.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            allow-insecure-host = ["localhost:8080"]
-        "#
-    )]
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -507,7 +527,7 @@ pub struct ResolverInstallerOptions {
     /// are already installed.
     #[option(
         default = "[]",
-        value_type = "Vec<PackageName>",
+        value_type = "list[str]",
         example = r#"
         no-build-isolation-package = ["package1", "package2"]
     "#
@@ -825,22 +845,6 @@ pub struct PipOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-    /// Allow insecure connections to host.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            allow-insecure-host = ["localhost:8080"]
-        "#
-    )]
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -905,7 +909,7 @@ pub struct PipOptions {
     /// are already installed.
     #[option(
         default = "[]",
-        value_type = "Vec<PackageName>",
+        value_type = "list[str]",
         example = r#"
             no-build-isolation-package = ["package1", "package2"]
         "#
@@ -921,7 +925,7 @@ pub struct PipOptions {
         "#
     )]
     pub strict: Option<bool>,
-    /// Include optional dependencies from the extra group name; may be provided more than once.
+    /// Include optional dependencies from the specified extra; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
     #[option(
@@ -1352,7 +1356,6 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             dependency_metadata: value.dependency_metadata,
@@ -1382,7 +1385,6 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             config_settings: value.config_settings,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
@@ -1416,7 +1418,6 @@ pub struct ToolOptions {
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
@@ -1443,7 +1444,6 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             dependency_metadata: value.dependency_metadata,
@@ -1472,7 +1472,6 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             dependency_metadata: value.dependency_metadata,
@@ -1551,23 +1550,21 @@ pub struct OptionsWire {
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`.
-    #[allow(dead_code)]
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
     workspace: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     sources: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
-    dev_dependencies: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     managed: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     r#package: Option<serde::de::IgnoredAny>,
+    default_groups: Option<serde::de::IgnoredAny>,
+    dev_dependencies: Option<serde::de::IgnoredAny>,
 }
 
 impl From<OptionsWire> for Options {
@@ -1616,11 +1613,12 @@ impl From<OptionsWire> for Options {
             environments,
             publish_url,
             trusted_publishing,
-            workspace: _,
-            sources: _,
-            dev_dependencies: _,
-            managed: _,
-            package: _,
+            workspace,
+            sources,
+            default_groups,
+            dev_dependencies,
+            managed,
+            package,
         } = value;
 
         Self {
@@ -1635,6 +1633,8 @@ impl From<OptionsWire> for Options {
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,
+                // Used twice for backwards compatibility
+                allow_insecure_host: allow_insecure_host.clone(),
             },
             top_level: ResolverInstallerOptions {
                 index,
@@ -1644,7 +1644,6 @@ impl From<OptionsWire> for Options {
                 find_links,
                 index_strategy,
                 keyring_provider,
-                allow_insecure_host,
                 resolution,
                 prerelease,
                 dependency_metadata,
@@ -1664,15 +1663,21 @@ impl From<OptionsWire> for Options {
                 no_binary,
                 no_binary_package,
             },
-            publish: PublishOptions {
-                publish_url,
-                trusted_publishing,
-            },
             pip,
             cache_keys,
             override_dependencies,
             constraint_dependencies,
             environments,
+            publish: PublishOptions {
+                publish_url,
+                trusted_publishing,
+            },
+            workspace,
+            sources,
+            dev_dependencies,
+            default_groups,
+            managed,
+            package,
         }
     }
 }

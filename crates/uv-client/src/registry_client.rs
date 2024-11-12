@@ -26,12 +26,12 @@ use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
 
-use crate::base_client::BaseClientBuilder;
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
 use crate::cached_client::CacheControl;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{CachedClient, CachedClientError, Error, ErrorKind};
+use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -111,6 +111,12 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
+    pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
+        self.base_client_builder = self.base_client_builder.extra_middleware(middleware);
+        self
+    }
+
+    #[must_use]
     pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.base_client_builder = self.base_client_builder.markers(markers);
         self
@@ -127,6 +133,27 @@ impl<'a> RegistryClientBuilder<'a> {
         let builder = self.base_client_builder;
 
         let client = builder.build();
+
+        let timeout = client.timeout();
+        let connectivity = client.connectivity();
+
+        // Wrap in the cache middleware.
+        let client = CachedClient::new(client);
+
+        RegistryClient {
+            index_urls: self.index_urls,
+            index_strategy: self.index_strategy,
+            cache: self.cache,
+            connectivity,
+            client,
+            timeout,
+        }
+    }
+
+    /// Share the underlying client between two different middleware configurations.
+    pub fn wrap_existing(self, existing: &BaseClient) -> RegistryClient {
+        // Wrap in any relevant middleware and handle connectivity.
+        let client = self.base_client_builder.wrap_existing(existing);
 
         let timeout = client.timeout();
         let connectivity = client.connectivity();
@@ -232,7 +259,7 @@ impl RegistryClient {
                 }
                 Err(err) => match err.into_kind() {
                     // The package could not be found in the remote index.
-                    ErrorKind::WrappedReqwestError(err) => match err.status() {
+                    ErrorKind::WrappedReqwestError(url, err) => match err.status() {
                         Some(StatusCode::NOT_FOUND) => {}
                         Some(StatusCode::UNAUTHORIZED) => {
                             capabilities.set_unauthorized(index.clone());
@@ -240,7 +267,7 @@ impl RegistryClient {
                         Some(StatusCode::FORBIDDEN) => {
                             capabilities.set_forbidden(index.clone());
                         }
-                        _ => return Err(ErrorKind::from(err).into()),
+                        _ => return Err(ErrorKind::WrappedReqwestError(url, err).into()),
                     },
 
                     // The package is unavailable due to a lack of connectivity.
@@ -323,7 +350,7 @@ impl RegistryClient {
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
             .build()
-            .map_err(ErrorKind::from)?;
+            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
@@ -347,14 +374,20 @@ impl RegistryClient {
 
                 let unarchived = match media_type {
                     MediaType::Json => {
-                        let bytes = response.bytes().await.map_err(ErrorKind::from)?;
+                        let bytes = response
+                            .bytes()
+                            .await
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
                         let data: SimpleJson = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
                         SimpleMetadata::from_files(data.files, package_name, &url)
                     }
                     MediaType::Html => {
-                        let text = response.text().await.map_err(ErrorKind::from)?;
+                        let text = response
+                            .text()
+                            .await
+                            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
                         SimpleMetadata::from_html(&text, package_name, &url)?
                     }
                 };
@@ -547,7 +580,10 @@ impl RegistryClient {
             };
 
             let response_callback = |response: Response| async {
-                let bytes = response.bytes().await.map_err(ErrorKind::from)?;
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
                 info_span!("parse_metadata21")
                     .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
@@ -563,7 +599,7 @@ impl RegistryClient {
                 .uncached_client(&url)
                 .get(url.clone())
                 .build()
-                .map_err(ErrorKind::from)?;
+                .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
             Ok(self
                 .cached_client()
                 .get_serde(req, &cache_entry, cache_control, response_callback)
@@ -616,7 +652,7 @@ impl RegistryClient {
                     http::HeaderValue::from_static("identity"),
                 )
                 .build()
-                .map_err(ErrorKind::from)?;
+                .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
             // Copy authorization headers from the HEAD request to subsequent requests
             let mut headers = HeaderMap::default();
@@ -635,7 +671,7 @@ impl RegistryClient {
                         headers,
                     )
                     .await
-                    .map_err(ErrorKind::AsyncHttpRangeReader)?;
+                    .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
                     let metadata =
@@ -694,7 +730,7 @@ impl RegistryClient {
                 reqwest::header::HeaderValue::from_static("identity"),
             )
             .build()
-            .map_err(ErrorKind::from)?;
+            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
         // Stream the file, searching for the METADATA.
         let read_metadata_stream = |response: Response| {

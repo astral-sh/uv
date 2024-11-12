@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::IndexStrategy;
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ErrorTree;
@@ -19,7 +19,7 @@ use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
-use crate::{Flexibility, Options, RequiresPython, ResolverMarkers};
+use crate::{Flexibility, Options, RequiresPython, ResolverEnvironment};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 
@@ -510,7 +510,7 @@ impl PubGrubReportFormatter<'_> {
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         workspace_members: &BTreeSet<PackageName>,
         options: Options,
         output_hints: &mut IndexSet<PubGrubHint>,
@@ -528,7 +528,7 @@ impl PubGrubReportFormatter<'_> {
                                 name,
                                 set,
                                 selector,
-                                markers,
+                                env,
                                 output_hints,
                             );
                         }
@@ -596,7 +596,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
-                    markers,
+                    env,
                     workspace_members,
                     options,
                     output_hints,
@@ -610,7 +610,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
-                    markers,
+                    env,
                     workspace_members,
                     options,
                     output_hints,
@@ -699,6 +699,14 @@ impl PubGrubReportFormatter<'_> {
                                 reason: reason.clone(),
                             });
                         }
+                        IncompletePackage::RequiresPython(requires_python, python_version) => {
+                            hints.insert(PubGrubHint::IncompatibleBuildRequirement {
+                                package: package.clone(),
+                                version: version.clone(),
+                                requires_python: requires_python.clone(),
+                                python_version: python_version.clone(),
+                            });
+                        }
                     }
                     break;
                 }
@@ -728,7 +736,7 @@ impl PubGrubReportFormatter<'_> {
         }
 
         // Add hints due to an index returning an unauthorized response.
-        for index in index_locations.indexes() {
+        for index in index_locations.allowed_indexes() {
             if index_capabilities.unauthorized(&index.url) {
                 hints.insert(PubGrubHint::UnauthorizedIndex {
                     index: index.url.clone(),
@@ -748,7 +756,7 @@ impl PubGrubReportFormatter<'_> {
         name: &PackageName,
         set: &Range<Version>,
         selector: &CandidateSelector,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let any_prerelease = set.iter().any(|(start, end)| {
@@ -767,7 +775,7 @@ impl PubGrubReportFormatter<'_> {
 
         if any_prerelease {
             // A pre-release marker appeared in the version requirements.
-            if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
+            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseRequested {
                     package: package.clone(),
                     range: self.simplify_set(set, package).into_owned(),
@@ -785,7 +793,7 @@ impl PubGrubReportFormatter<'_> {
             })
         {
             // There are pre-release versions available for the package.
-            if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
+            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseAvailable {
                     package: package.clone(),
                     version: version.clone(),
@@ -862,6 +870,17 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         reason: String,
     },
+    /// The source distribution has a `requires-python` requirement that is not met by the installed
+    /// Python version (and static metadata is not available).
+    IncompatibleBuildRequirement {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+        // excluded from `PartialEq` and `Hash`
+        requires_python: VersionSpecifiers,
+        // excluded from `PartialEq` and `Hash`
+        python_version: Version,
+    },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
         source: PythonRequirementSource,
@@ -932,6 +951,9 @@ enum PubGrubHintCore {
     InvalidVersionStructure {
         package: PubGrubPackage,
     },
+    IncompatibleBuildRequirement {
+        package: PubGrubPackage,
+    },
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
@@ -984,6 +1006,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             }
             PubGrubHint::InvalidVersionStructure { package, .. } => {
                 Self::InvalidVersionStructure { package }
+            }
+            PubGrubHint::IncompatibleBuildRequirement { package, .. } => {
+                Self::IncompatibleBuildRequirement { package }
             }
             PubGrubHint::RequiresPython {
                 source,
@@ -1185,6 +1210,23 @@ impl std::fmt::Display for PubGrubHint {
                     requires_python.bold(),
                     PackageRange::compatibility(package, package_set, None).bold(),
                     package_requires_python.bold(),
+                )
+            }
+            Self::IncompatibleBuildRequirement {
+                package,
+                version,
+                requires_python,
+                python_version,
+            } => {
+                write!(
+                    f,
+                    "{}{} The source distribution for {}=={} does not include static metadata. Generating metadata for this package requires Python {}, but Python {} is installed.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold(),
+                    version.bold(),
+                    requires_python.bold(),
+                    python_version.bold(),
                 )
             }
             Self::RequiresPython {

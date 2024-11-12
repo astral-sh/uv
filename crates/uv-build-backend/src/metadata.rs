@@ -11,9 +11,9 @@ use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
-use uv_pubgrub::PubGrubSpecifier;
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 use uv_warnings::warn_user_once;
+use version_ranges::Ranges;
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -135,9 +135,9 @@ impl PyProjectToml {
                     );
                     passed = false;
                 }
-                PubGrubSpecifier::from_pep440_specifiers(specifier)
-                    .ok()
-                    .and_then(|specifier| Some(specifier.bounding_range()?.1 != Bound::Unbounded))
+                Ranges::from(specifier.clone())
+                    .bounding_range()
+                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
                     .unwrap_or(false)
             }
         };
@@ -605,14 +605,19 @@ enum License {
 /// The entry is derived from the email format of `John Doe <john.doe@example.net>`. You need to
 /// provide at least name or email.
 #[derive(Deserialize, Debug, Clone)]
-#[serde(untagged, expecting = "a table with 'name' and/or 'email' keys")]
+// deny_unknown_fields prevents using the name field when the email is not a string.
+#[serde(
+    untagged,
+    deny_unknown_fields,
+    expecting = "a table with 'name' and/or 'email' keys"
+)]
 enum Contact {
+    /// TODO(konsti): RFC 822 validation.
+    NameEmail { name: String, email: String },
     /// TODO(konsti): RFC 822 validation.
     Name { name: String },
     /// TODO(konsti): RFC 822 validation.
     Email { email: String },
-    /// TODO(konsti): RFC 822 validation.
-    NameEmail { name: String, email: String },
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.

@@ -1206,7 +1206,7 @@ fn workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `--all` was provided, but no workspace was found
+    error: `--all-packages` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
@@ -1982,6 +1982,107 @@ fn git_boundary_in_dist_build() -> Result<()> {
     demo-0.1.0.dist-info/WHEEL
     demo/__init__.py
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn build_non_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"\\\.", ""),
+            (r"\[project\]", "[PKG]"),
+            (r"\[member\]", "[PKG]"),
+        ])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    project.child("src").child("__init__.py").touch()?;
+    project.child("README").touch()?;
+
+    let member = project.child("packages").child("member");
+    fs_err::create_dir_all(member.path())?;
+
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    member.child("src").child("__init__.py").touch()?;
+    member.child("README").touch()?;
+
+    // Build the member.
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `member` is missing a `build-system`. For example, to build with `setuptools`, add the following to `packages/member/pyproject.toml`:
+    ```toml
+    [build-system]
+    requires = ["setuptools"]
+    build-backend = "setuptools.build_meta"
+    ```
+    "###);
+
+    project
+        .child("dist")
+        .child("member-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("member-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+
+    // Build all packages.
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace does contain any buildable packages. For example, to build `member` with `setuptools`, add a `build-system` to `packages/member/pyproject.toml`:
+    ```toml
+    [build-system]
+    requires = ["setuptools"]
+    build-backend = "setuptools.build_meta"
+    ```
+    "###);
+
+    project
+        .child("dist")
+        .child("member-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("member-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
 
     Ok(())
 }

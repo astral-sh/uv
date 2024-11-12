@@ -191,10 +191,32 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `dev-dependencies`, `managed`, `package`
+      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
 
     Resolved in [TIME]
     Audited in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_uv_toml_option_disallowed() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r"
+        managed = true
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "###
     );
 
@@ -235,7 +257,7 @@ dependencies = ["flask==1.0.x"]
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
+    error: Failed to build `project @ file://[TEMP_DIR]/path_dep`
       Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
 
     [stdout]
@@ -1605,7 +1627,7 @@ fn install_git_public_https_missing_branch_or_tag() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch branch or tag `2.0.0`
@@ -1642,7 +1664,7 @@ fn install_git_public_https_missing_commit() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
       Caused by: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
@@ -1854,7 +1876,7 @@ fn install_git_private_https_pat_not_authorized() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage`
+    error: Failed to download and build `uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage`
       Caused by: Git operation failed
       Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
@@ -3993,7 +4015,7 @@ fn no_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+    error: Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
     [stderr]
@@ -4062,7 +4084,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+    error: Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
     [stderr]
@@ -7023,7 +7045,7 @@ fn install_build_isolation_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+    error: Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
     [stderr]

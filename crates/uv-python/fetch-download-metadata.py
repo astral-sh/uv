@@ -396,7 +396,7 @@ class CPythonFinder(Finder):
         # Prefer optimized builds
         return -1 * sum(
             (
-                "lgo" in build_options,
+                "lto" in build_options,
                 "pgo" in build_options,
             )
         )
@@ -612,6 +612,7 @@ def main() -> None:
     )
     # Silence httpx logging
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     asyncio.run(find())
 

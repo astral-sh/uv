@@ -23,7 +23,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
-    ResolutionMode, ResolverMarkers,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
@@ -48,7 +48,6 @@ pub(crate) async fn pip_sync(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
     allow_empty_requirements: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
@@ -67,6 +66,7 @@ pub(crate) async fn pip_sync(
     sources: SourceStrategy,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     dry_run: bool,
     printer: Printer,
@@ -75,7 +75,7 @@ pub(crate) async fn pip_sync(
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host);
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Initialize a few defaults.
     let overrides = &[];
@@ -182,7 +182,7 @@ pub(crate) async fn pip_sync(
     };
 
     // Determine the markers and tags to use for resolution.
-    let markers = resolution_markers(
+    let marker_env = resolution_markers(
         python_version.as_ref(),
         python_platform.as_ref(),
         interpreter,
@@ -202,7 +202,7 @@ pub(crate) async fn pip_sync(
             constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&markers),
+            Some(&marker_env),
             hash_checking,
         )?
     } else {
@@ -270,7 +270,7 @@ pub(crate) async fn pip_sync(
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&markers),
+            Some(&marker_env),
             HashCheckingMode::Verify,
         )?
     } else {
@@ -342,7 +342,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::specific_environment(markers.clone()),
+        ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -401,7 +401,7 @@ pub(crate) async fn pip_sync(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run {
-        operations::diagnose_environment(&resolution, &environment, &markers, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
     }
 
     Ok(ExitStatus::Success)

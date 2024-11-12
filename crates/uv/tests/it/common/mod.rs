@@ -32,7 +32,7 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.37";
+pub const PACKSE_VERSION: &str = "0.3.39";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -56,7 +56,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
     (r"\\([\w\d]|\.\.)", "/$1"),
-    (r"uv.exe", "uv"),
+    (r"uv\.exe", "uv"),
     // uv version display
     (
         r"uv(-.*)? \d+\.\d+\.\d+( \(.*\))?",
@@ -76,6 +76,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
 /// * Set a cutoff for versions used in the resolution so the snapshots don't change after a new release.
 /// * Set the venv to a fresh `.venv` in `temp_dir`
 pub struct TestContext {
+    pub root: ChildPath,
     pub temp_dir: ChildPath,
     pub cache_dir: ChildPath,
     pub python_dir: ChildPath,
@@ -146,11 +147,11 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_python_sources(mut self) -> Self {
         self.filters.push((
-            "managed installations or system path".to_string(),
+            "managed installations or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
-            "managed installations, system path, or `py` launcher".to_string(),
+            "managed installations, search path, or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self
@@ -209,6 +210,16 @@ impl TestContext {
     pub fn with_filtered_link_mode_warning(mut self) -> Self {
         let pattern = "warning: Failed to hardlink files; .*\n.*\n.*\n";
         self.filters.push((pattern.to_string(), String::new()));
+        self
+    }
+
+    /// Adds a filter that ignores platform information in a Python installation key.
+    pub fn with_filtered_python_keys(mut self) -> Self {
+        // Filter platform keys
+        self.filters.push((
+            r"((?:cpython|pypy)-\d+\.\d+(?:\.(?:\[X\]|\d+))?[a-z]?(?:\+[a-z]+)?)-.*".to_string(),
+            "$1-[PLATFORM]".to_string(),
+        ));
         self
     }
 
@@ -298,6 +309,12 @@ impl TestContext {
         }
 
         let mut filters = Vec::new();
+
+        // Exclude `link-mode` on Windows since we set it in the remote test suite
+        if cfg!(windows) {
+            filters.push(("--link-mode <LINK_MODE> ".to_string(), String::new()));
+            filters.push(((r#"link-mode = "copy"\n"#).to_string(), String::new()));
+        }
 
         filters.extend(
             Self::path_patterns(&cache_dir)
@@ -410,6 +427,7 @@ impl TestContext {
         ));
 
         Self {
+            root: ChildPath::new(root.path()),
             temp_dir,
             cache_dir,
             python_dir,
@@ -425,7 +443,7 @@ impl TestContext {
 
     /// Create a uv command for testing.
     pub fn command(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         self.add_shared_args(&mut command, true);
         command
     }
@@ -458,6 +476,11 @@ impl TestContext {
             command.env(EnvVars::VIRTUAL_ENV, self.venv.as_os_str());
         }
 
+        if cfg!(unix) {
+            // Avoid locale issues in tests
+            command.env(EnvVars::LC_ALL, "C");
+        }
+
         if cfg!(all(windows, debug_assertions)) {
             // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
             // default windows stack of 1MB
@@ -467,7 +490,7 @@ impl TestContext {
 
     /// Create a `pip compile` command for testing.
     pub fn pip_compile(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("compile");
         self.add_shared_args(&mut command, true);
         command
@@ -475,14 +498,14 @@ impl TestContext {
 
     /// Create a `pip compile` command for testing.
     pub fn pip_sync(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("sync");
         self.add_shared_args(&mut command, true);
         command
     }
 
     pub fn pip_show(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("show");
         self.add_shared_args(&mut command, true);
         command
@@ -490,7 +513,7 @@ impl TestContext {
 
     /// Create a `pip freeze` command with options shared across scenarios.
     pub fn pip_freeze(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("freeze");
         self.add_shared_args(&mut command, true);
         command
@@ -498,14 +521,14 @@ impl TestContext {
 
     /// Create a `pip check` command with options shared across scenarios.
     pub fn pip_check(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("check");
         self.add_shared_args(&mut command, true);
         command
     }
 
     pub fn pip_list(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("list");
         self.add_shared_args(&mut command, true);
         command
@@ -513,7 +536,7 @@ impl TestContext {
 
     /// Create a `uv venv` command
     pub fn venv(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("venv");
         self.add_shared_args(&mut command, false);
         command
@@ -521,7 +544,7 @@ impl TestContext {
 
     /// Create a `pip install` command with options shared across scenarios.
     pub fn pip_install(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("install");
         self.add_shared_args(&mut command, true);
         command
@@ -529,7 +552,7 @@ impl TestContext {
 
     /// Create a `pip uninstall` command with options shared across scenarios.
     pub fn pip_uninstall(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("uninstall");
         self.add_shared_args(&mut command, true);
         command
@@ -537,7 +560,7 @@ impl TestContext {
 
     /// Create a `pip tree` command for testing.
     pub fn pip_tree(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("pip").arg("tree");
         self.add_shared_args(&mut command, true);
         command
@@ -546,7 +569,7 @@ impl TestContext {
     /// Create a `uv help` command with options shared across scenarios.
     #[allow(clippy::unused_self)]
     pub fn help(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("help");
         command.env_remove(EnvVars::UV_CACHE_DIR);
 
@@ -559,9 +582,10 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv init` command with options shared across scenarios.
+    /// Create a `uv init` command with options shared across scenarios and
+    /// isolated from any git repository that may exist in a parent directory.
     pub fn init(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("init");
         self.add_shared_args(&mut command, false);
         command
@@ -569,7 +593,7 @@ impl TestContext {
 
     /// Create a `uv sync` command with options shared across scenarios.
     pub fn sync(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("sync");
         self.add_shared_args(&mut command, false);
         command
@@ -577,7 +601,7 @@ impl TestContext {
 
     /// Create a `uv lock` command with options shared across scenarios.
     pub fn lock(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("lock");
         self.add_shared_args(&mut command, false);
         command
@@ -585,7 +609,7 @@ impl TestContext {
 
     /// Create a `uv export` command with options shared across scenarios.
     pub fn export(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("export");
         self.add_shared_args(&mut command, false);
         command
@@ -593,16 +617,15 @@ impl TestContext {
 
     /// Create a `uv build` command with options shared across scenarios.
     pub fn build(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("build");
         self.add_shared_args(&mut command, false);
         command
     }
 
     /// Create a `uv publish` command with options shared across scenarios.
-    #[expect(clippy::unused_self)] // For consistency
     pub fn publish(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("publish");
 
         if cfg!(all(windows, debug_assertions)) {
@@ -616,7 +639,7 @@ impl TestContext {
 
     /// Create a `uv python find` command with options shared across scenarios.
     pub fn python_find(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command
             .arg("python")
             .arg("find")
@@ -627,22 +650,54 @@ impl TestContext {
         command
     }
 
-    /// Create a `uv python pin` command with options shared across scenarios.
-    pub fn python_pin(&self) -> Command {
-        let mut command = Command::new(get_bin());
+    /// Create a `uv python install` command with options shared across scenarios.
+    pub fn python_install(&self) -> Command {
+        let mut command = self.new_command();
+        let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
+        self.add_shared_args(&mut command, true);
         command
             .arg("python")
-            .arg("pin")
-            .env(EnvVars::UV_PREVIEW, "1")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
+            .arg("install")
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin.as_os_str())
+            .env(
+                EnvVars::PATH,
+                std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(
+                    &env::var(EnvVars::PATH).unwrap_or_default(),
+                )))
+                .unwrap(),
+            )
             .current_dir(&self.temp_dir);
+        command
+    }
+
+    /// Create a `uv python uninstall` command with options shared across scenarios.
+    pub fn python_uninstall(&self) -> Command {
+        let mut command = self.new_command();
+        let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
+        self.add_shared_args(&mut command, true);
+        command
+            .arg("python")
+            .arg("uninstall")
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin)
+            .current_dir(&self.temp_dir);
+        command
+    }
+
+    /// Create a `uv python pin` command with options shared across scenarios.
+    pub fn python_pin(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("python").arg("pin");
         self.add_shared_args(&mut command, true);
         command
     }
 
     /// Create a `uv python dir` command with options shared across scenarios.
     pub fn python_dir(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("python").arg("dir");
         self.add_shared_args(&mut command, true);
         command
@@ -650,7 +705,7 @@ impl TestContext {
 
     /// Create a `uv run` command with options shared across scenarios.
     pub fn run(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("run").env(EnvVars::UV_SHOW_RESOLUTION, "1");
         self.add_shared_args(&mut command, true);
         command
@@ -658,7 +713,7 @@ impl TestContext {
 
     /// Create a `uv tool run` command with options shared across scenarios.
     pub fn tool_run(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command
             .arg("tool")
             .arg("run")
@@ -669,7 +724,7 @@ impl TestContext {
 
     /// Create a `uv upgrade run` command with options shared across scenarios.
     pub fn tool_upgrade(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("tool").arg("upgrade");
         self.add_shared_args(&mut command, false);
         command
@@ -677,7 +732,7 @@ impl TestContext {
 
     /// Create a `uv tool install` command with options shared across scenarios.
     pub fn tool_install(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("tool").arg("install");
         self.add_shared_args(&mut command, false);
         command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
@@ -686,7 +741,7 @@ impl TestContext {
 
     /// Create a `uv tool list` command with options shared across scenarios.
     pub fn tool_list(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("tool").arg("list");
         self.add_shared_args(&mut command, false);
         command
@@ -694,7 +749,7 @@ impl TestContext {
 
     /// Create a `uv tool dir` command with options shared across scenarios.
     pub fn tool_dir(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("tool").arg("dir");
         self.add_shared_args(&mut command, false);
         command
@@ -702,7 +757,7 @@ impl TestContext {
 
     /// Create a `uv tool uninstall` command with options shared across scenarios.
     pub fn tool_uninstall(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("tool").arg("uninstall");
         self.add_shared_args(&mut command, false);
         command
@@ -710,7 +765,7 @@ impl TestContext {
 
     /// Create a `uv add` command for the given requirements.
     pub fn add(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("add");
         self.add_shared_args(&mut command, false);
         command
@@ -718,7 +773,7 @@ impl TestContext {
 
     /// Create a `uv remove` command for the given requirements.
     pub fn remove(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("remove");
         self.add_shared_args(&mut command, false);
         command
@@ -726,7 +781,7 @@ impl TestContext {
 
     /// Create a `uv tree` command with options shared across scenarios.
     pub fn tree(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("tree");
         self.add_shared_args(&mut command, false);
         command
@@ -734,7 +789,7 @@ impl TestContext {
 
     /// Create a `uv cache clean` command.
     pub fn clean(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("cache").arg("clean");
         self.add_shared_args(&mut command, false);
         command
@@ -742,7 +797,7 @@ impl TestContext {
 
     /// Create a `uv cache prune` command.
     pub fn prune(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("cache").arg("prune");
         self.add_shared_args(&mut command, false);
         command
@@ -752,7 +807,7 @@ impl TestContext {
     ///
     /// Note that this command is hidden and only invoking it through a build frontend is supported.
     pub fn build_backend(&self) -> Command {
-        let mut command = Command::new(get_bin());
+        let mut command = self.new_command();
         command.arg("build-backend");
         self.add_shared_args(&mut command, false);
         command
@@ -764,7 +819,7 @@ impl TestContext {
 
     /// Run the given python code and check whether it succeeds.
     pub fn assert_command(&self, command: &str) -> Assert {
-        Command::new(venv_to_interpreter(&self.venv))
+        self.new_command_with(&venv_to_interpreter(&self.venv))
             // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
             // https://github.com/python/cpython/issues/75953
             .arg("-B")
@@ -776,7 +831,7 @@ impl TestContext {
 
     /// Run the given python file and check whether it succeeds.
     pub fn assert_file(&self, file: impl AsRef<Path>) -> Assert {
-        Command::new(venv_to_interpreter(&self.venv))
+        self.new_command_with(&venv_to_interpreter(&self.venv))
             // Our tests change files in <1s, so we must disable CPython bytecode caching or we'll get stale files
             // https://github.com/python/cpython/issues/75953
             .arg("-B")
@@ -935,6 +990,33 @@ impl TestContext {
     pub fn read(&self, file: impl AsRef<Path>) -> String {
         fs_err::read_to_string(self.temp_dir.join(&file))
             .unwrap_or_else(|_| panic!("Missing file: `{}`", file.user_display()))
+    }
+
+    /// Creates a new `Command` that is intended to be suitable for use in
+    /// all tests.
+    fn new_command(&self) -> Command {
+        self.new_command_with(&get_bin())
+    }
+
+    /// Creates a new `Command` that is intended to be suitable for use in
+    /// all tests, but with the given binary.
+    fn new_command_with(&self, bin: &Path) -> Command {
+        let mut command = Command::new(bin);
+        // I believe the intent of all tests is that they are run outside the
+        // context of an existing git repository. And when they aren't, state
+        // from the parent git repository can bleed into the behavior of `uv
+        // init` in a way that makes it difficult to test consistently. By
+        // setting GIT_CEILING_DIRECTORIES, we specifically prevent git from
+        // climbing up past the root of our test directory to look for any
+        // other git repos.
+        //
+        // If one wants to write a test specifically targeting uv within a
+        // pre-existing git repository, then the test should make the parent
+        // git repo explicitly. The GIT_CEILING_DIRECTORIES here shouldn't
+        // impact it, since it only prevents git from discovering repositories
+        // at or above the root.
+        command.env(EnvVars::GIT_CEILING_DIRECTORIES, self.root.path());
+        command
     }
 }
 
@@ -1112,6 +1194,7 @@ pub fn run_and_format<T: AsRef<str>>(
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
+#[allow(clippy::print_stderr)]
 pub fn run_and_format_with_status<T: AsRef<str>>(
     mut command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,
@@ -1141,13 +1224,21 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         .output()
         .unwrap_or_else(|err| panic!("Failed to spawn {program}: {err}"));
 
+    eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Unfiltered output ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    eprintln!(
+        "----- stdout -----\n{}\n----- stderr -----\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    eprintln!("────────────────────────────────────────────────────────────────────────────────\n");
+
     let mut snapshot = apply_filters(
         format!(
             "success: {:?}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
             output.status.success(),
             output.status.code().unwrap_or(!0),
             String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            String::from_utf8_lossy(&output.stderr),
         ),
         filters,
     );

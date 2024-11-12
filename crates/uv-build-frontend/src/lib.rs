@@ -21,7 +21,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, iter};
-use tempfile::{tempdir_in, TempDir};
+use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
@@ -30,7 +30,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
 use uv_distribution::RequiresDist;
 use uv_distribution_types::{IndexLocations, Resolution};
-use uv_fs::{rename_with_retry, PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
@@ -261,7 +261,7 @@ impl SourceBuild {
         level: BuildOutput,
         concurrent_builds: usize,
     ) -> Result<Self, Error> {
-        let temp_dir = build_context.cache().environment()?;
+        let temp_dir = build_context.cache().venv_dir()?;
 
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
@@ -474,6 +474,7 @@ impl SourceBuild {
                                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                                     requires_dist,
                                     install_path,
+                                    None,
                                     locations,
                                     source_strategy,
                                     LowerBound::Allow,
@@ -655,16 +656,7 @@ impl SourceBuild {
     pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = std::path::absolute(wheel_dir)?;
-
-        // Prevent clashes from two uv processes building distributions in parallel.
-        let tmp_dir = tempdir_in(&wheel_dir)?;
-        let filename = self
-            .pep517_build(tmp_dir.path(), &self.pep517_backend)
-            .await?;
-
-        let from = tmp_dir.path().join(&filename);
-        let to = wheel_dir.join(&filename);
-        rename_with_retry(from, to).await?;
+        let filename = self.pep517_build(&wheel_dir, &self.pep517_backend).await?;
         Ok(filename)
     }
 
@@ -927,6 +919,7 @@ async fn create_pep517_build_environment(
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
                     install_path,
+                    None,
                     locations,
                     source_strategy,
                     LowerBound::Allow,

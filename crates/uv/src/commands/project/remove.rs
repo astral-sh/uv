@@ -6,19 +6,24 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    TrustedHost,
 };
 use uv_fs::Simplified;
+use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_resolver::InstallTarget;
 use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::default_dependency_groups;
+use crate::commands::project::lock::LockMode;
 use crate::commands::{project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -41,6 +46,8 @@ pub(crate) async fn remove(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -105,21 +112,44 @@ pub(crate) async fn remove(
                 }
             }
             DependencyType::Dev => {
-                let deps = toml.remove_dev_dependency(&package)?;
-                if deps.is_empty() {
+                let dev_deps = toml.remove_dev_dependency(&package)?;
+                let group_deps =
+                    toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
+                if dev_deps.is_empty() && group_deps.is_empty() {
                     warn_if_present(&package, &toml);
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dev-dependencies`"
+                        "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
                     );
                 }
             }
-            DependencyType::Optional(ref group) => {
-                let deps = toml.remove_optional_dependency(&package, group)?;
+            DependencyType::Optional(ref extra) => {
+                let deps = toml.remove_optional_dependency(&package, extra)?;
                 if deps.is_empty() {
                     warn_if_present(&package, &toml);
                     anyhow::bail!(
                         "The dependency `{package}` could not be found in `optional-dependencies`"
                     );
+                }
+            }
+            DependencyType::Group(ref group) => {
+                if group == &*DEV_DEPENDENCIES {
+                    let dev_deps = toml.remove_dev_dependency(&package)?;
+                    let group_deps =
+                        toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
+                    if dev_deps.is_empty() && group_deps.is_empty() {
+                        warn_if_present(&package, &toml);
+                        anyhow::bail!(
+                            "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
+                        );
+                    }
+                } else {
+                    let deps = toml.remove_dependency_group_requirement(&package, group)?;
+                    if deps.is_empty() {
+                        warn_if_present(&package, &toml);
+                        anyhow::bail!(
+                            "The dependency `{package}` could not be found in `dependency-groups`"
+                        );
+                    }
                 }
             }
         }
@@ -163,20 +193,29 @@ pub(crate) async fn remove(
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
+        no_config,
         cache,
         printer,
     )
     .await?;
+
+    // Determine the lock mode.
+    let mode = if frozen {
+        LockMode::Frozen
+    } else if locked {
+        LockMode::Locked(venv.interpreter())
+    } else {
+        LockMode::Write(venv.interpreter())
+    };
 
     // Initialize any shared state.
     let state = SharedState::default();
 
     // Lock and sync the environment, if necessary.
     let lock = project::lock::do_safe_lock(
-        locked,
-        frozen,
+        mode,
         project.workspace(),
-        venv.interpreter(),
         settings.as_ref().into(),
         LowerBound::Allow,
         &state,
@@ -184,6 +223,7 @@ pub(crate) async fn remove(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -196,16 +236,30 @@ pub(crate) async fn remove(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let dev = DevMode::Include;
     let extras = ExtrasSpecification::All;
     let install_options = InstallOptions::default();
 
+    // Determine the default groups to include.
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
+
+    // Identify the installation target.
+    let target = match &project {
+        VirtualProject::Project(project) => InstallTarget::Project {
+            workspace: project.workspace(),
+            name: project.project_name(),
+            lock: &lock,
+        },
+        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+            workspace,
+            lock: &lock,
+        },
+    };
+
     project::sync::do_sync(
-        InstallTarget::from(&project),
+        target,
         &venv,
-        &lock,
         &extras,
-        dev,
+        &DevGroupsManifest::from_defaults(defaults),
         EditableMode::Editable,
         install_options,
         Modifications::Exact,
@@ -214,6 +268,7 @@ pub(crate) async fn remove(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -247,6 +302,11 @@ fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
             DependencyType::Optional(group) => {
                 warn_user!(
                     "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
+                );
+            }
+            DependencyType::Group(group) => {
+                warn_user!(
+                    "`{name}` is in the `{group}` group; try calling `uv remove --group {group}`",
                 );
             }
         }

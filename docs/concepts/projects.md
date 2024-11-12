@@ -235,8 +235,8 @@ Hello from example-lib!
 
 !!! tip
 
-Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
-backends such as `maturin` and `scikit-build-core`.
+    Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
+    backends such as `maturin` and `scikit-build-core`.
 
 ### Packaged applications
 
@@ -481,7 +481,7 @@ same time.
 uv requires that all optional dependencies ("extras") declared by the project are compatible with
 each other and resolves all optional dependencies together when creating the lockfile.
 
-If optional dependencies declared in one group are not compatible with those in another group, uv
+If optional dependencies declared in one extra are not compatible with those in another extra, uv
 will fail to resolve the requirements of the project with an error.
 
 !!! note
@@ -727,8 +727,8 @@ no-build-isolation-package = ["cchardet"]
 
 Installing packages without build isolation requires that the package's build dependencies are
 installed in the project environment _prior_ to installing the package itself. This can be achieved
-by separating out the build dependencies and the packages that require them into distinct optional
-groups. For example:
+by separating out the build dependencies and the packages that require them into distinct extras.
+For example:
 
 ```toml title="pyproject.toml"
 [project]
@@ -855,3 +855,9 @@ You could run the following sequence of commands to sync `flash-attn`:
 $ uv sync --extra build
 $ uv sync --extra build --extra compile
 ```
+
+!!! note
+
+    The `version` field in `tool.uv.dependency-metadata` is optional for registry-based
+    dependencies (when omitted, uv will assume the metadata applies to all versions of the package),
+    but _required_ for direct URL dependencies (like Git dependencies).

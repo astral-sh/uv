@@ -1601,7 +1601,7 @@ fn init_virtual_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1609,14 +1609,7 @@ fn init_virtual_project() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        "#
         );
     });
 
@@ -1635,7 +1628,7 @@ fn init_virtual_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1644,16 +1637,9 @@ fn init_virtual_project() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
 
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
         [tool.uv.workspace]
         members = ["bar"]
-        "###
+        "#
         );
     });
 
@@ -1730,7 +1716,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1738,14 +1724,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        "#
         );
     });
 
@@ -2020,6 +1999,43 @@ fn init_requires_python_specifiers() -> Result<()> {
     }, {
         assert_snapshot!(
             python_version, @"3.8"
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, inferring the `requires-python` from the `.python-version` file.
+#[test]
+fn init_requires_python_version_file() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    context.temp_dir.child(".python-version").write_str("3.8")?;
+
+    let child = context.temp_dir.join("foo");
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
         );
     });
 
@@ -2437,7 +2453,7 @@ fn init_application_package_flit() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("foo"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2518,7 +2534,7 @@ fn init_library_flit() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2536,8 +2552,48 @@ fn init_library_flit() -> Result<()> {
     Ok(())
 }
 
+/// Run `uv init --build-backend flit` should be equivalent to `uv init --package --build-backend flit`.
+#[test]
+fn init_backend_implies_package() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("project").arg("--build-backend").arg("flit"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `project` at `[TEMP_DIR]/project`
+    "#);
+
+    let pyproject = context.read("project/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        project = "project:main"
+
+        [build-system]
+        requires = ["flit_core>=3.2,<4"]
+        build-backend = "flit_core.buildapi"
+        "#
+        );
+    });
+}
+
 /// Run `uv init --app --package --build-backend maturin` to create a packaged application project
 #[test]
+#[cfg(feature = "crates-io")]
 fn init_app_build_backend_maturin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2625,7 +2681,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
 
         #[pyfunction]
         fn hello_from_bin() -> String {
-            return "Hello from foo!".to_string();
+            "Hello from foo!".to_string()
         }
 
         /// A Python module implemented in Rust. The name of this function must match
@@ -2663,21 +2719,6 @@ fn init_app_build_backend_maturin() -> Result<()> {
         "###
         );
     });
-
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("foo"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Hello from foo!
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    "###);
 
     Ok(())
 }
@@ -2808,6 +2849,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
 
 /// Run `uv init --lib --build-backend maturin` to create a packaged application project
 #[test]
+#[cfg(feature = "crates-io")]
 fn init_lib_build_backend_maturin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2892,7 +2934,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
 
         #[pyfunction]
         fn hello_from_bin() -> String {
-            return "Hello from foo!".to_string();
+            "Hello from foo!".to_string()
         }
 
         /// A Python module implemented in Rust. The name of this function must match
@@ -2930,21 +2972,6 @@ fn init_lib_build_backend_maturin() -> Result<()> {
         "###
         );
     });
-
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove("VIRTUAL_ENV").arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Hello from foo!
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    "###);
 
     Ok(())
 }

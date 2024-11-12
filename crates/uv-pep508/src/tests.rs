@@ -117,6 +117,12 @@ fn basic_examples() {
 }
 
 #[test]
+fn leading_whitespace() {
+    let numpy = Requirement::<Url>::from_str(" numpy").unwrap();
+    assert_eq!(numpy.name.as_ref(), "numpy");
+}
+
+#[test]
 fn parenthesized_single() {
     let numpy = Requirement::<Url>::from_str("numpy ( >=1.19 )").unwrap();
     assert_eq!(numpy.name.as_ref(), "numpy");
@@ -540,18 +546,6 @@ fn error_extras_not_closed() {
 }
 
 #[test]
-fn error_no_space_after_url() {
-    assert_snapshot!(
-        parse_pep508_err(r"name @ https://example.com/; extra == 'example'"),
-        @r#"
-    Missing space before ';', the end of the URL is ambiguous
-    name @ https://example.com/; extra == 'example'
-                               ^
-    "#
-    );
-}
-
-#[test]
 fn error_name_at_nothing() {
     assert_snapshot!(
         parse_pep508_err(r"name @"),
@@ -706,6 +700,7 @@ fn error_invalid_extra_unnamed_url() {
 
 /// Check that the relative path support feature toggle works.
 #[test]
+#[cfg(feature = "non-pep508-extensions")]
 fn non_pep508_paths() {
     let requirements = &[
         "foo @ file://./foo",
@@ -742,6 +737,7 @@ fn no_space_after_operator() {
 }
 
 #[test]
+#[cfg(feature = "non-pep508-extensions")]
 fn path_with_fragment() {
     let requirements = if cfg!(windows) {
         &[

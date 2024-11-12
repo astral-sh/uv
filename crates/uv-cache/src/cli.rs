@@ -4,8 +4,6 @@ use uv_static::EnvVars;
 
 use crate::Cache;
 use clap::Parser;
-use directories::ProjectDirs;
-use etcetera::BaseStrategy;
 use tracing::{debug, warn};
 
 #[derive(Parser, Debug, Clone)]
@@ -25,8 +23,10 @@ pub struct CacheArgs {
 
     /// Path to the cache directory.
     ///
-    /// Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
-    /// Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
+    /// Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on macOS and Linux, and
+    /// `%LOCALAPPDATA%\uv\cache` on Windows.
+    ///
+    /// To view the location of the cache directory, run `uv cache dir`.
     #[arg(global = true, long, env = EnvVars::UV_CACHE_DIR)]
     pub cache_dir: Option<PathBuf>,
 }
@@ -45,18 +45,13 @@ impl Cache {
             Self::temp()
         } else if let Some(cache_dir) = cache_dir {
             Ok(Self::from_path(cache_dir))
-        } else if let Some(cache_dir) = ProjectDirs::from("", "", "uv")
-            .map(|dirs| dirs.cache_dir().to_path_buf())
-            .filter(|dir| dir.exists())
+        } else if let Some(cache_dir) = uv_dirs::legacy_user_cache_dir().filter(|dir| dir.exists())
         {
             // If the user has an existing directory at (e.g.) `/Users/user/Library/Caches/uv`,
             // respect it for backwards compatibility. Otherwise, prefer the XDG strategy, even on
             // macOS.
             Ok(Self::from_path(cache_dir))
-        } else if let Some(cache_dir) = etcetera::base_strategy::choose_base_strategy()
-            .ok()
-            .map(|dirs| dirs.cache_dir().join("uv"))
-        {
+        } else if let Some(cache_dir) = uv_dirs::user_cache_dir() {
             if cfg!(windows) {
                 // On Windows, we append `cache` to the LocalAppData directory, i.e., prefer
                 // `C:\Users\User\AppData\Local\uv\cache` over `C:\Users\User\AppData\Local\uv`.

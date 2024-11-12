@@ -66,10 +66,13 @@ mod publish;
 
 mod python_dir;
 
-#[cfg(all(feature = "python", feature = "pypi"))]
+#[cfg(feature = "python")]
 mod python_find;
 
-#[cfg(all(feature = "python", feature = "pypi"))]
+#[cfg(feature = "python-managed")]
+mod python_install;
+
+#[cfg(feature = "python")]
 mod python_pin;
 
 #[cfg(all(feature = "python", feature = "pypi"))]

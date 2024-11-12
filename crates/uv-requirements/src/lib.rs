@@ -19,13 +19,13 @@ pub mod upgrade;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Failed to download: `{0}`")]
+    #[error("Failed to download `{0}`")]
     Download(BuiltDist, #[source] uv_distribution::Error),
 
-    #[error("Failed to download and build: `{0}`")]
+    #[error("Failed to download and build `{0}`")]
     DownloadAndBuild(SourceDist, #[source] uv_distribution::Error),
 
-    #[error("Failed to build: `{0}`")]
+    #[error("Failed to build `{0}`")]
     Build(SourceDist, #[source] uv_distribution::Error),
 
     #[error(transparent)]

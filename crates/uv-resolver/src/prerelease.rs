@@ -1,9 +1,10 @@
 use uv_pypi_types::RequirementSource;
 
-use uv_normalize::PackageName;
-
 use crate::resolver::ForkSet;
-use crate::{DependencyMode, Manifest, ResolverMarkers};
+use crate::{DependencyMode, Manifest, ResolverEnvironment};
+
+use uv_normalize::PackageName;
+use uv_pep440::Operator;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -67,7 +68,7 @@ impl PrereleaseStrategy {
     pub(crate) fn from_mode(
         mode: PrereleaseMode,
         manifest: &Manifest,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         dependencies: DependencyMode,
     ) -> Self {
         let mut packages = ForkSet::default();
@@ -77,13 +78,16 @@ impl PrereleaseStrategy {
             PrereleaseMode::Allow => Self::Allow,
             PrereleaseMode::IfNecessary => Self::IfNecessary,
             _ => {
-                for requirement in manifest.requirements(markers, dependencies) {
+                for requirement in manifest.requirements(env, dependencies) {
                     let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                         continue;
                     };
 
                     if specifier
                         .iter()
+                        .filter(|spec| {
+                            !matches!(spec.operator(), Operator::NotEqual | Operator::NotEqualStar)
+                        })
                         .any(uv_pep440::VersionSpecifier::any_prerelease)
                     {
                         packages.add(&requirement, ());
@@ -103,21 +107,21 @@ impl PrereleaseStrategy {
     pub(crate) fn allows(
         &self,
         package_name: &PackageName,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> AllowPrerelease {
         match self {
             PrereleaseStrategy::Disallow => AllowPrerelease::No,
             PrereleaseStrategy::Allow => AllowPrerelease::Yes,
             PrereleaseStrategy::IfNecessary => AllowPrerelease::IfNecessary,
             PrereleaseStrategy::Explicit(packages) => {
-                if packages.contains(package_name, markers) {
+                if packages.contains(package_name, env) {
                     AllowPrerelease::Yes
                 } else {
                     AllowPrerelease::No
                 }
             }
             PrereleaseStrategy::IfNecessaryOrExplicit(packages) => {
-                if packages.contains(package_name, markers) {
+                if packages.contains(package_name, env) {
                     AllowPrerelease::Yes
                 } else {
                     AllowPrerelease::IfNecessary

@@ -505,8 +505,8 @@ async fn test_credentials_in_keyring_seed() -> Result<(), Error> {
     let base_url = Url::parse(&server.uri())?;
     let cache = CredentialsCache::new();
 
-    // Seed _just_ the username. This cache entry should be ignored and we should
-    // still find a password via the keyring.
+    // Seed _just_ the username. We should pull the username from the cache if not present on the
+    // URL.
     cache.insert(
         &base_url,
         Arc::new(Credentials::new(Some(username.to_string()), None)),
@@ -530,8 +530,8 @@ async fn test_credentials_in_keyring_seed() -> Result<(), Error> {
 
     assert_eq!(
         client.get(server.uri()).send().await?.status(),
-        401,
-        "Credentials are not pulled from the keyring without a username"
+        200,
+        "The username is pulled from the cache, and the password from the keyring"
     );
 
     let mut url = base_url.clone();

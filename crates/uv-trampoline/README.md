@@ -12,17 +12,20 @@ LLD and add the `rustup` targets:
 
 ```shell
 sudo apt install llvm clang lld
-rustup target add i686-pc-windows-msvc
-rustup target add x86_64-pc-windows-msvc
-rustup target add aarch64-pc-windows-msvc
+cargo install cargo-xwin
+rustup toolchain install nightly-2024-10-27
+rustup component add rust-src --toolchain nightly-2024-10-27-x86_64-unknown-linux-gnu
+rustup target add --toolchain nightly-2024-10-27 i686-pc-windows-msvc
+rustup target add --toolchain nightly-2024-10-27 x86_64-pc-windows-msvc
+rustup target add --toolchain nightly-2024-10-27 aarch64-pc-windows-msvc
 ```
 
-Then, build the trampolines for both supported architectures:
+Then, build the trampolines for all supported architectures:
 
 ```shell
-cargo +nightly-2024-06-08 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
-cargo +nightly-2024-06-08 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2024-06-08 xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2024-10-27 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+cargo +nightly-2024-10-27 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-10-27 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Cross-compiling from macOS
@@ -32,22 +35,25 @@ LLVM and add the `rustup` targets:
 
 ```shell
 brew install llvm
-rustup target add i686-pc-windows-msvc
-rustup target add x86_64-pc-windows-msvc
-rustup target add aarch64-pc-windows-msvc
+cargo install cargo-xwin
+rustup toolchain install nightly-2024-10-27
+rustup component add rust-src --toolchain nightly-2024-10-27-aarch64-apple-darwin
+rustup target add --toolchain nightly-2024-10-27 i686-pc-windows-msvc
+rustup target add --toolchain nightly-2024-10-27 x86_64-pc-windows-msvc
+rustup target add --toolchain nightly-2024-10-27 aarch64-pc-windows-msvc
 ```
 
-Then, build the trampolines for both supported architectures:
+Then, build the trampolines for all supported architectures:
 
 ```shell
-cargo +nightly-2024-06-08 xwin build --release --target i686-pc-windows-msvc
-cargo +nightly-2024-06-08 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2024-06-08 xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2024-10-27 xwin build --release --target i686-pc-windows-msvc
+cargo +nightly-2024-10-27 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2024-10-27 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Updating the prebuilt executables
 
-After building the trampolines for both supported architectures:
+After building the trampolines for all supported architectures:
 
 ```shell
 cp target/aarch64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-aarch64-console.exe

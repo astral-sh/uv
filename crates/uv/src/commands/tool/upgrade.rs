@@ -1,12 +1,13 @@
 use std::{collections::BTreeSet, fmt::Write};
 
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, TrustedHost};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
@@ -39,6 +40,7 @@ pub(crate) async fn upgrade(
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -67,7 +69,8 @@ pub(crate) async fn upgrade(
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let python_request = python.as_deref().map(PythonRequest::parse);
 
@@ -95,9 +98,7 @@ pub(crate) async fn upgrade(
     // Determine whether we applied any upgrades.
     let mut did_upgrade_environment = vec![];
 
-    // Determine whether any tool upgrade failed.
-    let mut failed_upgrade = false;
-
+    let mut errors = Vec::new();
     for name in &names {
         debug!("Upgrading tool: `{name}`");
         let result = upgrade_tool(
@@ -111,6 +112,7 @@ pub(crate) async fn upgrade(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
         )
         .await;
 
@@ -125,22 +127,31 @@ pub(crate) async fn upgrade(
                 debug!("Upgrading `{name}` was a no-op");
             }
             Err(err) => {
-                // If we have a single tool, return the error directly.
-                if names.len() > 1 {
-                    writeln!(
-                        printer.stderr(),
-                        "Failed to upgrade `{}`: {err}",
-                        name.cyan(),
-                    )?;
-                } else {
-                    writeln!(printer.stderr(), "{err}")?;
-                }
-                failed_upgrade = true;
+                errors.push((name, err));
             }
         }
     }
 
-    if failed_upgrade {
+    if !errors.is_empty() {
+        for (name, err) in errors
+            .into_iter()
+            .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
+        {
+            writeln!(
+                printer.stderr(),
+                "{}: Failed to upgrade {}",
+                "error".red().bold(),
+                name.green()
+            )?;
+            for err in err.chain() {
+                writeln!(
+                    printer.stderr(),
+                    "  {}: {}",
+                    "Caused by".red().bold(),
+                    err.to_string().trim()
+                )?;
+            }
+        }
         return Ok(ExitStatus::Failure);
     }
 
@@ -189,6 +200,7 @@ async fn upgrade_tool(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
 ) -> Result<UpgradeOutcome> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
@@ -260,6 +272,7 @@ async fn upgrade_tool(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -276,6 +289,7 @@ async fn upgrade_tool(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )
@@ -299,6 +313,7 @@ async fn upgrade_tool(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
         )

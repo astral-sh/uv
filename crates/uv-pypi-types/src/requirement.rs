@@ -70,43 +70,6 @@ impl Requirement {
         self.source.is_editable()
     }
 
-    /// Remove any sensitive credentials from the requirement.
-    #[must_use]
-    pub fn redact(self) -> Requirement {
-        match self.source {
-            RequirementSource::Git {
-                mut repository,
-                reference,
-                precise,
-                subdirectory,
-                url,
-            } => {
-                // Redact the repository URL, but allow `git@`.
-                redact_git_credentials(&mut repository);
-
-                // Redact the PEP 508 URL.
-                let mut url = url.to_url();
-                redact_git_credentials(&mut url);
-                let url = VerbatimUrl::from_url(url);
-
-                Self {
-                    name: self.name,
-                    extras: self.extras,
-                    marker: self.marker,
-                    source: RequirementSource::Git {
-                        repository,
-                        reference,
-                        precise,
-                        subdirectory,
-                        url,
-                    },
-                    origin: self.origin,
-                }
-            }
-            _ => self,
-        }
-    }
-
     /// Convert the requirement to a [`Requirement`] relative to the given path.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         Ok(Self {
@@ -614,7 +577,15 @@ enum RequirementSourceWire {
 impl From<RequirementSource> for RequirementSourceWire {
     fn from(value: RequirementSource) -> Self {
         match value {
-            RequirementSource::Registry { specifier, index } => Self::Registry { specifier, index },
+            RequirementSource::Registry {
+                specifier,
+                mut index,
+            } => {
+                if let Some(index) = index.as_mut() {
+                    redact_credentials(index);
+                }
+                Self::Registry { specifier, index }
+            }
             RequirementSource::Url {
                 subdirectory,
                 location,
@@ -625,7 +596,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 subdirectory: subdirectory
                     .as_deref()
                     .and_then(Path::to_str)
-                    .map(str::to_string),
+                    .map(ToString::to_string),
             },
             RequirementSource::Git {
                 repository,
@@ -637,7 +608,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 let mut url = repository;
 
                 // Redact the credentials.
-                redact_git_credentials(&mut url);
+                redact_credentials(&mut url);
 
                 // Clear out any existing state.
                 url.set_fragment(None);
@@ -740,7 +711,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 repository.set_query(None);
 
                 // Redact the credentials.
-                redact_git_credentials(&mut repository);
+                redact_credentials(&mut repository);
 
                 // Create a PEP 508-compatible URL.
                 let mut url = Url::parse(&format!("git+{repository}"))?;
@@ -814,9 +785,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
     }
 }
 
-/// Remove the credentials from a Git URL, allowing the generic `git` username (without a password)
+/// Remove the credentials from a URL, allowing the generic `git` username (without a password)
 /// in SSH URLs, as in, `ssh://git@github.com/...`.
-pub fn redact_git_credentials(url: &mut Url) {
+pub fn redact_credentials(url: &mut Url) {
     // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
     // username.
     if url.scheme() == "ssh" && url.username() == "git" && url.password().is_none() {

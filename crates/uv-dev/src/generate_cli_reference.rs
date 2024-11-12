@@ -31,7 +31,6 @@ const SHOW_HIDDEN_COMMANDS: &[&str] = &["generate-shell-completion"];
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
-    /// Write the generated output to stdout (rather than to `settings.md`).
     #[arg(long, default_value_t, value_enum)]
     pub(crate) mode: Mode,
 }
@@ -101,7 +100,14 @@ fn generate() -> String {
     generate_command(&mut output, &uv, &mut parents);
 
     for (value, replacement) in REPLACEMENTS {
-        output = output.replace(value, replacement);
+        assert_ne!(
+            value, replacement,
+            "`value` and `replacement` must be different, but both are `{value}`"
+        );
+        let before = &output;
+        let after = output.replace(value, replacement);
+        assert_ne!(*before, after, "Could not find `{value}` in the output");
+        output = after;
     }
 
     output

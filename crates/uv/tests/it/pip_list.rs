@@ -96,6 +96,184 @@ fn list_single_no_editable() -> Result<()> {
 }
 
 #[test]
+fn list_outdated_columns() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    uv_snapshot!(context.pip_list().arg("--outdated"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version Latest Type
+    ------- ------- ------ -----
+    anyio   3.0.0   4.3.0  wheel
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn list_outdated_json() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("json"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"name":"anyio","version":"3.0.0","latest_version":"4.3.0","latest_filetype":"wheel"}]
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn list_outdated_freeze() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--outdated` cannot be used with `--format freeze`
+    "###
+    );
+}
+
+#[test]
+fn list_outdated_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        iniconfig==1.0.0
+        uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@0.0.1
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==1.0.0
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###
+    );
+
+    uv_snapshot!(context.pip_list().arg("--outdated"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package   Version Latest Type
+    --------- ------- ------ -----
+    iniconfig 1.0.0   2.0.0  wheel
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn list_outdated_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    uv_snapshot!(context.pip_list()
+        .arg("--outdated")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version Latest Type
+    ------- ------- ------ -----
+    anyio   3.0.0   3.5.0  wheel
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn list_editable() {
     let context = TestContext::new("3.12");
 
@@ -207,7 +385,7 @@ fn list_editable_only() {
     ----- stderr -----
     error: the argument '--editable' cannot be used with '--exclude-editable'
 
-    Usage: uv pip list --cache-dir [CACHE_DIR] --editable
+    Usage: uv pip list --cache-dir [CACHE_DIR] --editable --exclude-newer <EXCLUDE_NEWER>
 
     For more information, try '--help'.
     "###
@@ -524,4 +702,78 @@ Version: 0.1-bulbasaur
     );
 
     Ok(())
+}
+
+#[test]
+fn list_ignores_quiet_flag_format_freeze() {
+    let context = TestContext::new("3.12");
+
+    // Install the editable package.
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("-e")
+        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + sniffio==1.3.1
+    "###
+    );
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_list()
+    .arg("--format=freeze")
+    .arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio==4.3.0
+    idna==3.6
+    poetry-editable==0.1.0
+    sniffio==1.3.1
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, context.pip_list()
+    .arg("--format=freeze")
+    .arg("--editable")
+    .arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    poetry-editable==0.1.0
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(filters, context.pip_list()
+    .arg("--format=freeze")
+    .arg("--exclude-editable")
+    .arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio==4.3.0
+    idna==3.6
+    sniffio==1.3.1
+
+    ----- stderr -----
+    "###
+    );
 }

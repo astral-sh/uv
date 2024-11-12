@@ -177,8 +177,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-aarch64-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
-    "sha256": "3b2f53f544d1cb81520bd45446b68f7d51b5bd65e6a2a1422450fd9472c18e6c",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-aarch64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+    "sha256": "59b50df9826475d24bb7eff781fa3949112b5e9c92adb29e96a09cdf1216d5bd",
     "variant": "freethreaded"
   },
   "cpython-3.13.0+freethreaded-linux-armv7-gnueabi": {
@@ -190,8 +190,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-armv7-unknown-linux-gnueabi-freethreaded%2Bdebug-full.tar.zst",
-    "sha256": "316cf6a946150ac6b42a1c43f18977966682b9d153c5891f717fba92f0cbe06f",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-armv7-unknown-linux-gnueabi-freethreaded%2Blto-full.tar.zst",
+    "sha256": "cafc0f10503e6ec0a62da9273aabb7b1d5c3f3619e80a08f9076665eb7e24b00",
     "variant": "freethreaded"
   },
   "cpython-3.13.0+freethreaded-linux-armv7-gnueabihf": {
@@ -203,8 +203,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-armv7-unknown-linux-gnueabihf-freethreaded%2Bdebug-full.tar.zst",
-    "sha256": "0b92de0f95fb304991749e5a7beb6778f961fbf0ce5057cc6e34d6754b0a0137",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-armv7-unknown-linux-gnueabihf-freethreaded%2Blto-full.tar.zst",
+    "sha256": "636fe5015ffefaa5588dbcb62c026bfd71e14e3fbfac92af0b969d9f88efc4a5",
     "variant": "freethreaded"
   },
   "cpython-3.13.0+freethreaded-linux-powerpc64le-gnu": {
@@ -216,8 +216,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-ppc64le-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
-    "sha256": "2adcf07d6dea3a83747e24cd70721a15fd2b10a31e78314bd6782d3992b1670d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-ppc64le-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+    "sha256": "1217efa5f4ce67fcc9f7eb64165b1bd0912b2a21bc25c1a7e2cb174a21a5df7e",
     "variant": "freethreaded"
   },
   "cpython-3.13.0+freethreaded-linux-s390x-gnu": {
@@ -229,8 +229,8 @@
     "minor": 13,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-s390x-unknown-linux-gnu-freethreaded%2Bdebug-full.tar.zst",
-    "sha256": "3b45d2be68ac66dde2d6cae55156806844f337063f475587c9fa023eea24460d",
+    "url": "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-s390x-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+    "sha256": "6c3e1e4f19d2b018b65a7e3ef4cd4225c5b9adfbc490218628466e636d5c4b8c",
     "variant": "freethreaded"
   },
   "cpython-3.13.0+freethreaded-linux-x86_64-gnu": {

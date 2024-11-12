@@ -11,7 +11,7 @@ use crate::RequiresPython;
 #[test]
 fn requires_python_included() {
     let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-    let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+    let requires_python = RequiresPython::from_specifiers(&version_specifiers);
     let wheel_names = &[
         "bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl",
         "black-24.4.2-cp310-cp310-win_amd64.whl",
@@ -30,7 +30,7 @@ fn requires_python_included() {
     }
 
     let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
-    let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+    let requires_python = RequiresPython::from_specifiers(&version_specifiers);
     let wheel_names = &["dearpygui-1.11.1-cp312-cp312-win_amd64.whl"];
     for wheel_name in wheel_names {
         assert!(
@@ -40,7 +40,7 @@ fn requires_python_included() {
     }
 
     let version_specifiers = VersionSpecifiers::from_str("==3.12.6").unwrap();
-    let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+    let requires_python = RequiresPython::from_specifiers(&version_specifiers);
     let wheel_names = &["lxml-5.3.0-cp312-cp312-musllinux_1_2_aarch64.whl"];
     for wheel_name in wheel_names {
         assert!(
@@ -50,7 +50,7 @@ fn requires_python_included() {
     }
 
     let version_specifiers = VersionSpecifiers::from_str("==3.12").unwrap();
-    let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+    let requires_python = RequiresPython::from_specifiers(&version_specifiers);
     let wheel_names = &["lxml-5.3.0-cp312-cp312-musllinux_1_2_x86_64.whl"];
     for wheel_name in wheel_names {
         assert!(
@@ -63,7 +63,7 @@ fn requires_python_included() {
 #[test]
 fn requires_python_dropped() {
     let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-    let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+    let requires_python = RequiresPython::from_specifiers(&version_specifiers);
     let wheel_names = &[
         "PySocks-1.7.1-py27-none-any.whl",
         "black-24.4.2-cp39-cp39-win_amd64.whl",
@@ -83,7 +83,7 @@ fn requires_python_dropped() {
     }
 
     let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
-    let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+    let requires_python = RequiresPython::from_specifiers(&version_specifiers);
     let wheel_names = &["dearpygui-1.11.1-cp310-cp310-win_amd64.whl"];
     for wheel_name in wheel_names {
         assert!(
@@ -152,7 +152,7 @@ fn is_exact_without_patch() {
     ];
     for (version, expected) in test_cases {
         let version_specifiers = VersionSpecifiers::from_str(version).unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers).unwrap();
+        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
         assert_eq!(requires_python.is_exact_without_patch(), expected);
     }
 }

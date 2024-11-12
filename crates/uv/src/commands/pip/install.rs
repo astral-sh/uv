@@ -27,7 +27,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
-    ResolutionMode, ResolverMarkers,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
@@ -56,7 +56,6 @@ pub(crate) async fn pip_install(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
@@ -79,6 +78,7 @@ pub(crate) async fn pip_install(
     prefix: Option<Prefix>,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     dry_run: bool,
     printer: Printer,
@@ -89,7 +89,7 @@ pub(crate) async fn pip_install(
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host);
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -191,7 +191,7 @@ pub(crate) async fn pip_install(
 
     // Determine the markers to use for the resolution.
     let interpreter = environment.interpreter();
-    let markers = resolution_markers(
+    let marker_env = resolution_markers(
         python_version.as_ref(),
         python_platform.as_ref(),
         interpreter,
@@ -209,7 +209,7 @@ pub(crate) async fn pip_install(
         && overrides.is_empty()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies(&requirements, &constraints, &markers)? {
+        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -260,7 +260,7 @@ pub(crate) async fn pip_install(
             constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&markers),
+            Some(&marker_env),
             hash_checking,
         )?
     } else {
@@ -334,7 +334,7 @@ pub(crate) async fn pip_install(
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&markers),
+            Some(&marker_env),
             HashCheckingMode::Verify,
         )?
     } else {
@@ -398,7 +398,7 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::specific_environment(markers.clone()),
+        ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         &client,
         &flat_index,
@@ -457,7 +457,7 @@ pub(crate) async fn pip_install(
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run {
-        operations::diagnose_environment(&resolution, &environment, &markers, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
     }
 
     Ok(ExitStatus::Success)

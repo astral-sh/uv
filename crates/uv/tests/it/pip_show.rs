@@ -458,3 +458,69 @@ fn show_required_by_multiple() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn show_files() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("requests==2.31.0")
+        .arg("--strict"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "#
+    );
+
+    // Windows has a different files order.
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.pip_show().arg("requests").arg("--files"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Name: requests
+    Version: 2.31.0
+    Location: [SITE_PACKAGES]/
+    Requires: certifi, charset-normalizer, idna, urllib3
+    Required-by:
+    Files:
+      requests-2.31.0.dist-info/INSTALLER
+      requests-2.31.0.dist-info/LICENSE
+      requests-2.31.0.dist-info/METADATA
+      requests-2.31.0.dist-info/RECORD
+      requests-2.31.0.dist-info/REQUESTED
+      requests-2.31.0.dist-info/WHEEL
+      requests-2.31.0.dist-info/top_level.txt
+      requests/__init__.py
+      requests/__version__.py
+      requests/_internal_utils.py
+      requests/adapters.py
+      requests/api.py
+      requests/auth.py
+      requests/certs.py
+      requests/compat.py
+      requests/cookies.py
+      requests/exceptions.py
+      requests/help.py
+      requests/hooks.py
+      requests/models.py
+      requests/packages.py
+      requests/sessions.py
+      requests/status_codes.py
+      requests/structures.py
+      requests/utils.py
+
+    ----- stderr -----
+    "#);
+}

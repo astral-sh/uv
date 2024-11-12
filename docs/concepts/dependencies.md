@@ -28,9 +28,10 @@ bird-feeder = { path = "./packages/bird-feeder" }
 ## Project dependencies
 
 The `project.dependencies` table represents the dependencies that are used when uploading to PyPI or
-building a wheel. Individual dependencies are specified using [PEP 508](#pep-508) syntax, and the
-table follows the [PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/)
-standard.
+building a wheel. Individual dependencies are specified using
+[dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)
+syntax, and the table follows the
+[PEP 621](https://packaging.python.org/en/latest/specifications/pyproject-toml/) standard.
 
 `project.dependencies` defines the list of packages that are required for the project, along with
 the version constraints that should be used when installing them. Each entry includes a dependency
@@ -135,16 +136,54 @@ dependencies = [
 httpx = { git = "https://github.com/encode/httpx" }
 ```
 
-A revision, tag, or branch may also be included:
+A revision (i.e., commit), tag, or branch may also be included:
 
 ```console
 $ uv add git+https://github.com/encode/httpx --tag 0.27.0
-$ uv add git+https://github.com/encode/httpx --branch main
-$ uv add git+https://github.com/encode/httpx --rev 326b943
+$ uv add git+https://github.com/encode/httpx --branch master
+$ uv add git+https://github.com/encode/httpx --rev 326b9431c761e1ef1e00b9f760d1f654c8db48c6
 ```
 
 Git dependencies can also be manually added or edited in the `pyproject.toml` with the
-`{ git = <url> }` syntax. A target revision may be specified with one of: `rev`, `tag`, or `branch`.
+`{ git = <url> }` syntax. A target revision may be specified with one of: `rev` (i.e., commit),
+`tag`, or `branch`.
+
+=== "tag"
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = [
+        "httpx",
+    ]
+
+    [tool.uv.sources]
+    httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
+    ```
+
+=== "branch"
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = [
+        "httpx",
+    ]
+
+    [tool.uv.sources]
+    httpx = { git = "https://github.com/encode/httpx", branch = "main" }
+    ```
+
+=== "rev"
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = [
+        "httpx",
+    ]
+
+    [tool.uv.sources]
+    httpx = { git = "https://github.com/encode/httpx", rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6" }
+    ```
+
 A `subdirectory` may be specified if the package isn't in the repository root.
 
 ### URL
@@ -220,8 +259,8 @@ $ uv add ~/projects/bar/
     $ uv add --editable ~/projects/bar/
     ```
 
-    However, it is recommended to use [_workspaces_](./workspaces.md) instead of manual path
-    dependencies.
+    For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better
+    fit.
 
 ### Workspace member
 
@@ -248,8 +287,8 @@ members = [
 ### Platform-specific sources
 
 You can limit a source to a given platform or Python version by providing
-[PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible environment markers for
-the source.
+[dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/)-compatible
+environment markers for the source.
 
 For example, to pull `httpx` from GitHub, but only on macOS, use the following:
 
@@ -320,7 +359,8 @@ installation of Excel parsers and `matplotlib` unless someone explicitly require
 requested with the `package[<extra>]` syntax, e.g., `pandas[plot, excel]`.
 
 Optional dependencies are specified in `[project.optional-dependencies]`, a TOML table that maps
-from extra name to its dependencies, following [PEP 508](#pep-508) syntax.
+from extra name to its dependencies, following
+[dependency specifiers](#dependency-specifiers-pep-508) syntax.
 
 Optional dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
@@ -353,22 +393,104 @@ $ uv add httpx --optional network
 
 Unlike optional dependencies, development dependencies are local-only and will _not_ be included in
 the project requirements when published to PyPI or other indexes. As such, development dependencies
-are included under `[tool.uv]` instead of `[project]`.
+are not included in the `[project]` table.
 
 Development dependencies can have entries in `tool.uv.sources` the same as normal dependencies.
 
+To add a development dependency, use the `--dev` flag:
+
+```console
+$ uv add --dev pytest
+```
+
+uv uses the `[dependency-groups]` table (as defined in [PEP 735](https://peps.python.org/pep-0735/))
+for declaration of development dependencies. The above command will create a `dev` group:
+
 ```toml title="pyproject.toml"
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
   "pytest >=8.1.1,<9"
 ]
 ```
 
-To add a development dependency, include the `--dev` flag:
+The `dev` group is special-cased; there are `--dev`, `--only-dev`, and `--no-dev` flags to toggle
+inclusion or exclusion of its dependencies. Additionally, the `dev` group is
+[synced by default](#default-groups).
+
+### Dependency groups
+
+Development dependencies can be divided into multiple groups, using the `--group` flag.
+
+For example, to add a development dependency in the `lint` group:
 
 ```console
-$ uv add ruff --dev
+$ uv add --group lint ruff
 ```
+
+Which results in the following `[dependency-groups]` definition:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+dev = [
+  "pytest"
+]
+lint = [
+  "ruff"
+]
+```
+
+Once groups are defined, the `--group`, `--only-group`, and `--no-group` options can be used to
+include or exclude their dependencies.
+
+!!! tip
+
+    The `--dev`, `--only-dev`, and `--no-dev` flags are equivalent to `--group dev`,
+    `--only-group dev`, and `--no-group dev` respectively.
+
+uv requires that all dependency groups are compatible with each other and resolves all groups
+together when creating the lockfile.
+
+If dependencies declared in one group are not compatible with those in another group, uv will fail
+to resolve the requirements of the project with an error.
+
+!!! note
+
+    There is currently no way to declare conflicting dependency groups. See
+    [astral.sh/uv#6981](https://github.com/astral-sh/uv/issues/6981) to track support.
+
+### Default groups
+
+By default, uv includes the `dev` dependency group in the environment (e.g., during `uv run` or
+`uv sync`). The default groups to include can be changed using the `tool.uv.default-groups` setting.
+
+```toml title="pyproject.toml"
+[tool.uv]
+default-groups = ["dev", "foo"]
+```
+
+!!! tip
+
+    To exclude a default group during `uv run` or `uv sync`, use `--no-group <name>`.
+
+### Legacy `dev-dependencies`
+
+Before `[dependency-groups]` was standardized, uv used the `tool.uv.dev-dependencies` field to
+specify development dependencies, e.g.:
+
+```toml title="pyproject.toml"
+[tool.uv]
+dev-dependencies = [
+  "pytest"
+]
+```
+
+Dependencies declared in this section will be combined with the contents in the
+`dependency-groups.dev`. Eventually, the `dev-dependencies` field will be deprecated and removed.
+
+!!! note
+
+    If a `tool.uv.dev-dependencies` field exists, `uv add --dev` will use the existing section
+    instead of adding a new `dependency-groups.dev` section.
 
 ## Build dependencies
 
@@ -437,10 +559,12 @@ Or, to opt-out of using an editable dependency in a workspace:
 $ uv add --no-editable ./path/foo
 ```
 
-## PEP 508
+## Dependency specifiers (PEP 508)
 
-[PEP 508](https://peps.python.org/pep-0508/) defines a syntax for dependency specification. It is
-composed of, in order:
+uv uses
+[dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/),
+previously known as [PEP 508](https://peps.python.org/pep-0508/). A dependency specifier is composed
+of, in order:
 
 - The dependency name
 - The extras you want (optional)

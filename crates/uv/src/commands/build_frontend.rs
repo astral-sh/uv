@@ -23,7 +23,8 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionRequest,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
@@ -43,7 +44,7 @@ pub(crate) async fn build_frontend(
     project_dir: &Path,
     src: Option<PathBuf>,
     package: Option<PackageName>,
-    all: bool,
+    all_packages: bool,
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
@@ -58,6 +59,7 @@ pub(crate) async fn build_frontend(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -65,7 +67,7 @@ pub(crate) async fn build_frontend(
         project_dir,
         src.as_deref(),
         package.as_ref(),
-        all,
+        all_packages,
         output_dir.as_deref(),
         sdist,
         wheel,
@@ -80,6 +82,7 @@ pub(crate) async fn build_frontend(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -105,7 +108,7 @@ async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
     package: Option<&PackageName>,
-    all: bool,
+    all_packages: bool,
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
@@ -120,6 +123,7 @@ async fn build_impl(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<BuildResult> {
@@ -128,7 +132,6 @@ async fn build_impl(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution: _,
         prerelease: _,
         dependency_metadata,
@@ -144,7 +147,8 @@ async fn build_impl(
 
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -171,7 +175,7 @@ async fn build_impl(
     // Attempt to discover the workspace; on failure, save the error for later.
     let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
 
-    // If a `--package` or `--all` was provided, adjust the source directory.
+    // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
@@ -187,19 +191,24 @@ async fn build_impl(
             }
         };
 
-        let project = workspace
+        let package = workspace
             .packages()
             .get(package)
-            .ok_or_else(|| anyhow::anyhow!("Package `{}` not found in workspace", package))?
-            .root();
+            .ok_or_else(|| anyhow::anyhow!("Package `{package}` not found in workspace"))?;
+
+        if !package.pyproject_toml().is_package() {
+            let name = &package.project().name;
+            let pyproject_toml = package.root().join("pyproject.toml");
+            return Err(anyhow::anyhow!("Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "build-system".green(), "setuptools".cyan(), pyproject_toml.user_display().cyan()));
+        }
 
         vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
-            project,
+            package.root(),
         )))]
-    } else if all {
+    } else if all_packages {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
-                "Cannot specify `--all` when building from a file"
+                "Cannot specify `--all-packages` when building from a file"
             ));
         }
 
@@ -207,9 +216,13 @@ async fn build_impl(
             Ok(ref workspace) => workspace,
             Err(err) => {
                 return Err(anyhow::Error::from(err)
-                    .context("`--all` was provided, but no workspace was found"));
+                    .context("`--all-packages` was provided, but no workspace was found"));
             }
         };
+
+        if workspace.packages().is_empty() {
+            return Err(anyhow::anyhow!("No packages found in workspace"));
+        }
 
         let packages: Vec<_> = workspace
             .packages()
@@ -222,7 +235,10 @@ async fn build_impl(
             .collect();
 
         if packages.is_empty() {
-            return Err(anyhow::anyhow!("No packages found in workspace"));
+            let member = workspace.packages().values().next().unwrap();
+            let name = &member.project().name;
+            let pyproject_toml = member.root().join("pyproject.toml");
+            return Err(anyhow::anyhow!("Workspace does contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "setuptools".cyan(), "build-system".green(), pyproject_toml.user_display().cyan()));
         }
 
         packages
@@ -299,11 +315,20 @@ async fn build_impl(
             Err(err) => {
                 let mut causes = err.chain();
 
-                let message = format!("{}: {}", "error".red().bold(), causes.next().unwrap());
+                let message = format!(
+                    "{}: {}",
+                    "error".red().bold(),
+                    causes.next().unwrap().to_string().trim()
+                );
                 writeln!(printer.stderr(), "{}", source.annotate(&message))?;
 
                 for err in causes {
-                    writeln!(printer.stderr(), "  {}: {}", "Caused by".red().bold(), err)?;
+                    writeln!(
+                        printer.stderr(),
+                        "  {}: {}",
+                        "Caused by".red().bold(),
+                        err.to_string().trim()
+                    )?;
                 }
             }
         }
@@ -367,15 +392,18 @@ async fn build_package(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(source.directory(), no_config, false)
-            .await?
-            .and_then(PythonVersionFile::into_version);
+        interpreter_request = PythonVersionFile::discover(
+            source.directory(),
+            &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+        )
+        .await?
+        .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
-            interpreter_request = find_requires_python(workspace)?
+            interpreter_request = find_requires_python(workspace)
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
@@ -417,7 +445,7 @@ async fn build_package(
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&interpreter.resolver_markers()),
+            Some(&interpreter.resolver_marker_environment()),
             hash_checking,
         )?
     } else {
