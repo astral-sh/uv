@@ -160,6 +160,18 @@ pub(crate) async fn export(
             diagnostics::build(dist, err);
             return Ok(ExitStatus::Failure);
         }
+        Err(ProjectError::Operation(pip::operations::Error::Requirements(
+            uv_requirements::Error::DownloadAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(pip::operations::Error::Requirements(
+            uv_requirements::Error::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
         Err(err) => return Err(err.into()),
     };
 

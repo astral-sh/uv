@@ -1871,12 +1871,12 @@ fn compile_git_mismatched_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `dask @ git+https://github.com/pallets/flask.git@3.0.0`
-      Caused by: Package metadata name `flask` does not match given name `dask`
+      × Failed to download and build `dask @ git+https://github.com/pallets/flask.git@3.0.0`
+      ╰─▶ Package metadata name `flask` does not match given name `dask`
     "###
     );
 
@@ -12017,18 +12017,17 @@ fn git_source_missing_tag() -> Result<()> {
     uv_snapshot!(filters, context.pip_compile()
         .arg("pyproject.toml"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
-      Caused by: Git operation failed
-      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      Caused by: failed to fetch tag `missing`
-      Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
-    --- stderr
-    fatal: couldn't find remote ref refs/tags/missing
-
+      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      ├─▶ failed to fetch tag `missing`
+      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
+          --- stderr
+          fatal: couldn't find remote ref refs/tags/missing
     "###);
 
     Ok(())
