@@ -87,10 +87,10 @@ pub enum ResolveError {
     ParsedUrl(#[from] uv_pypi_types::ParsedUrlError),
 
     #[error("Failed to download `{0}`")]
-    Fetch(Box<BuiltDist>, #[source] uv_distribution::Error),
+    Download(Box<BuiltDist>, #[source] uv_distribution::Error),
 
     #[error("Failed to download and build `{0}`")]
-    FetchAndBuild(Box<SourceDist>, #[source] uv_distribution::Error),
+    DownloadAndBuild(Box<SourceDist>, #[source] uv_distribution::Error),
 
     #[error("Failed to read `{0}`")]
     Read(Box<BuiltDist>, #[source] uv_distribution::Error),
