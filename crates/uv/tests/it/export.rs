@@ -620,13 +620,13 @@ fn frozen() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to parse entry: `child`
-      Caused by: Package is not included as workspace package in `tool.uv.workspace`
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `child`
+      ╰─▶ Package is not included as workspace package in `tool.uv.workspace`
     "###);
 
     uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r###"

@@ -163,36 +163,9 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::DownloadAndBuild(dist, err),
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Requirements(
-            uv_requirements::Error::DownloadAndBuild(dist, err),
-        ))) => {
-            diagnostics::download_and_build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Requirements(
-            uv_requirements::Error::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
 }
@@ -625,7 +598,8 @@ async fn do_lock(
                 ExtrasResolver::new(&hasher, &state.index, database)
                     .with_reporter(ResolverReporter::from(printer))
                     .resolve(workspace.members_requirements())
-                    .await?
+                    .await
+                    .map_err(|err| ProjectError::Operation(err.into()))?
                     .into_iter()
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)

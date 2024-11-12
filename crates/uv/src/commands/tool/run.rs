@@ -33,7 +33,6 @@ use uv_warnings::warn_user;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::pip::operations;
 use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
@@ -127,14 +126,14 @@ pub(crate) async fn run(
 
     let (from, environment) = match result {
         Ok(resolution) => resolution,
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution_context(&err, "tool");
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::with_context("tool")
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(ProjectError::Requirements(err)) => {
-            let err = miette::Report::msg(format!("{err}")).context("Invalid `--with` requirement");
+            let err = miette::Report::msg(format!("{err}"))
+                .context("Failed to resolve `--with` requirement");
             eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
         }

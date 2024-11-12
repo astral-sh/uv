@@ -5,7 +5,6 @@ use std::fmt::Write;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anstream::eprint;
 use anyhow::{anyhow, bail, Context};
 use futures::StreamExt;
 use itertools::Itertools;
@@ -13,6 +12,7 @@ use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
 use url::Url;
+
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -25,7 +25,6 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
-
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -40,7 +39,6 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::lock::LockMode;
@@ -299,35 +297,10 @@ pub(crate) async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    diagnostics::no_solution_context(&err, "script");
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::DownloadAndBuild(dist, err),
-                ))) => {
-                    diagnostics::download_and_build(dist, err);
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::Build(dist, err),
-                ))) => {
-                    diagnostics::build(dist, err);
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Requirements(
-                    uv_requirements::Error::DownloadAndBuild(dist, err),
-                ))) => {
-                    diagnostics::download_and_build(dist, err);
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Requirements(
-                    uv_requirements::Error::Build(dist, err),
-                ))) => {
-                    diagnostics::build(dist, err);
-                    return Ok(ExitStatus::Failure);
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -640,35 +613,10 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(result) => result,
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::NoSolution(err),
-                    ))) => {
-                        diagnostics::no_solution(&err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::DownloadAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::download_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Requirements(
-                        uv_requirements::Error::DownloadAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::download_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Requirements(
-                        uv_requirements::Error::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -721,23 +669,10 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(()) => {}
-                    Err(ProjectError::Operation(operations::Error::Prepare(
-                        uv_installer::PrepareError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Prepare(
-                        uv_installer::PrepareError::DownloadAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::download_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Prepare(
-                        uv_installer::PrepareError::Download(dist, err),
-                    ))) => {
-                        diagnostics::download(dist, err);
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -877,41 +812,10 @@ pub(crate) async fn run(
 
                 let environment = match result {
                     Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::NoSolution(err),
-                    ))) => {
-                        diagnostics::no_solution_context(&err, "`--with`");
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::DownloadAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::download_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Requirements(
-                        uv_requirements::Error::DownloadAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::download_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Requirements(
-                        uv_requirements::Error::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
-                        let err = miette::Report::msg(format!("{err}"))
-                            .context("Invalid `--with` requirement");
-                        eprint!("{err:?}");
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::with_context("`--with`")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 };

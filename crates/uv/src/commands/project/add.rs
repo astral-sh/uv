@@ -49,7 +49,7 @@ use crate::commands::project::{
     ProjectInterpreter, ScriptPython,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, pip, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
@@ -684,56 +684,10 @@ pub(crate) async fn add(
                     existing_uv_lock.as_deref(),
                 );
             }
-
             match err {
-                ProjectError::Operation(pip::operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                )) => {
-                    diagnostics::no_solution_hint(err, format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()));
-                    Ok(ExitStatus::Failure)
-                }
-                ProjectError::Operation(pip::operations::Error::Resolve(
-                    uv_resolver::ResolveError::DownloadAndBuild(dist, err),
-                )) => {
-                    diagnostics::download_and_build(dist, err);
-                    Ok(ExitStatus::Failure)
-                }
-                ProjectError::Operation(pip::operations::Error::Resolve(
-                    uv_resolver::ResolveError::Build(dist, err),
-                )) => {
-                    diagnostics::build(dist, err);
-                    Ok(ExitStatus::Failure)
-                }
-                ProjectError::Operation(pip::operations::Error::Requirements(
-                    uv_requirements::Error::DownloadAndBuild(dist, err),
-                )) => {
-                    diagnostics::download_and_build(dist, err);
-                    Ok(ExitStatus::Failure)
-                }
-                ProjectError::Operation(pip::operations::Error::Requirements(
-                    uv_requirements::Error::Build(dist, err),
-                )) => {
-                    diagnostics::build(dist, err);
-                    Ok(ExitStatus::Failure)
-                }
-                ProjectError::Operation(pip::operations::Error::Prepare(
-                    uv_installer::PrepareError::Build(dist, err),
-                )) => {
-                    diagnostics::build(dist, err);
-                    Ok(ExitStatus::Failure)
-                }
-                ProjectError::Operation(pip::operations::Error::Prepare(
-                    uv_installer::PrepareError::DownloadAndBuild(dist, err),
-                )) => {
-                    diagnostics::download_and_build(dist, err);
-                    Ok(ExitStatus::Failure)
-                }
-                ProjectError::Operation(pip::operations::Error::Prepare(
-                    uv_installer::PrepareError::Download(dist, err),
-                )) => {
-                    diagnostics::download(dist, err);
-                    Ok(ExitStatus::Failure)
-                }
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
             }
         }
