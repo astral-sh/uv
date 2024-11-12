@@ -5549,20 +5549,19 @@ fn lock_invalid_hash() -> Result<()> {
     // Install from the lockfile.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to prepare distributions
-      Caused by: Failed to download `idna==3.6`
-      Caused by: Hash mismatch for `idna==3.6`
+      × Failed to download `idna==3.6`
+      ╰─▶ Hash mismatch for `idna==3.6`
 
-    Expected:
-      sha256:aecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca
-      sha256:d05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+          Expected:
+            sha256:aecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca
+            sha256:d05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
 
-    Computed:
-      sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+          Computed:
+            sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
     "###);
 
     Ok(())
@@ -6394,27 +6393,25 @@ fn lock_redact_https() -> Result<()> {
     // when installing `iniconfig`, rather than when building `foo`.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to prepare distributions
-      Caused by: Failed to download `iniconfig==2.0.0`
-      Caused by: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      × Failed to download `iniconfig==2.0.0`
+      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     "###);
 
     // Installing from the lockfile should fail without an index.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to prepare distributions
-      Caused by: Failed to download `iniconfig==2.0.0`
-      Caused by: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      × Failed to download `iniconfig==2.0.0`
+      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     "###);
 
     // Installing from the lockfile should succeed when credentials are included on the command-line.
@@ -6447,14 +6444,13 @@ fn lock_redact_https() -> Result<()> {
     // Installing without credentials will fail without a cache.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").arg("--no-install-project"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to prepare distributions
-      Caused by: Failed to download `iniconfig==2.0.0`
-      Caused by: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      × Failed to download `iniconfig==2.0.0`
+      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     "###);
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.

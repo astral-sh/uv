@@ -2347,16 +2347,15 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::UV_EXCLUDE_NEWER, "2018-10-08"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to build `project @ file://[TEMP_DIR]/`
-      Caused by: Failed to resolve requirements from `setup.py` build
-      Caused by: No solution found when resolving: `setuptools>=40.8.0`
-      Caused by: Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -5741,21 +5740,20 @@ fn require_hashes_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -6226,21 +6224,20 @@ fn verify_hashes_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--verify-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 

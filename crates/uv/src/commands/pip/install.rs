@@ -439,7 +439,7 @@ pub(crate) async fn pip_install(
     };
 
     // Sync the environment.
-    operations::install(
+    match operations::install(
         &resolution,
         site_packages,
         modifications,
@@ -461,7 +461,26 @@ pub(crate) async fn pip_install(
         dry_run,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(_) => {}
+        Err(operations::Error::Prepare(uv_installer::PrepareError::Build(dist, err))) => {
+            diagnostics::build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(operations::Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
+            dist,
+            err,
+        ))) => {
+            diagnostics::download_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(operations::Error::Prepare(uv_installer::PrepareError::Download(dist, err))) => {
+            diagnostics::download(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;

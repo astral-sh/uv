@@ -21,10 +21,11 @@ use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::LockMode;
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::project::{default_dependency_groups, ProjectError};
+use crate::commands::{diagnostics, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -213,7 +214,7 @@ pub(crate) async fn remove(
     let state = SharedState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = project::lock::do_safe_lock(
+    let lock = match project::lock::do_safe_lock(
         mode,
         project.workspace(),
         settings.as_ref().into(),
@@ -227,8 +228,41 @@ pub(crate) async fn remove(
         cache,
         printer,
     )
-    .await?
-    .into_lock();
+    .await
+    {
+        Ok(result) => result.into_lock(),
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::NoSolution(err),
+        ))) => {
+            diagnostics::no_solution(&err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::DownloadAndBuild(dist, err),
+        ))) => {
+            diagnostics::download_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Resolve(
+            uv_resolver::ResolveError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Requirements(
+            uv_requirements::Error::DownloadAndBuild(dist, err),
+        ))) => {
+            diagnostics::download_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Requirements(
+            uv_requirements::Error::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     if no_sync {
         return Ok(ExitStatus::Success);
@@ -255,7 +289,7 @@ pub(crate) async fn remove(
         },
     };
 
-    project::sync::do_sync(
+    match project::sync::do_sync(
         target,
         &venv,
         &extras,
@@ -272,7 +306,29 @@ pub(crate) async fn remove(
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(()) => {}
+        Err(ProjectError::Operation(operations::Error::Prepare(
+            uv_installer::PrepareError::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Prepare(
+            uv_installer::PrepareError::DownloadAndBuild(dist, err),
+        ))) => {
+            diagnostics::download_and_build(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(ProjectError::Operation(operations::Error::Prepare(
+            uv_installer::PrepareError::Download(dist, err),
+        ))) => {
+            diagnostics::download(dist, err);
+            return Ok(ExitStatus::Failure);
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     Ok(ExitStatus::Success)
 }

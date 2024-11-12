@@ -5553,27 +5553,26 @@ fn fail_to_add_revert_project() -> Result<()> {
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.add().arg("./child"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
-      Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 1, in <module>
-    ZeroDivisionError: division by zero
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+          ZeroDivisionError: division by zero
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -5661,27 +5660,26 @@ fn fail_to_edit_revert_project() -> Result<()> {
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.add().arg("./child"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
-      Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 1, in <module>
-    ZeroDivisionError: division by zero
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+          ZeroDivisionError: division by zero
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
