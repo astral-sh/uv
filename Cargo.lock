@@ -5023,6 +5023,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-shell",
  "uv-trampoline-builder",
  "uv-warnings",
  "walkdir",

@@ -30,6 +30,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
+uv-shell = { workspace = true }
 
 clap = { workspace = true, optional = true, features = ["derive"] }
 configparser = { workspace = true }
