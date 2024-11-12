@@ -83,7 +83,9 @@ the `--env-file` flag to `uv run`.
 For example, to load environment variables from a `.env` file in the current working directory:
 
 ```console
-$ uv run --env-file .env -- echo $MY_ENV_VAR
+$ echo "MY_VAR='Hello, world!'" > .env
+$ uv run --env-file .env -- python -c 'import os; print(os.getenv("MY_VAR"))'
+Hello, world!
 ```
 
 The `--env-file` flag can be provided multiple times, with subsequent files overriding values
