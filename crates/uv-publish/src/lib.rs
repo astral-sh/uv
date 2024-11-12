@@ -253,6 +253,19 @@ pub fn files_for_publishing(
             };
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
                 debug!("Not a distribution filename: `{filename}`");
+                if filename.ends_with(".whl")
+                    || filename.ends_with(".zip")
+                    // Example: `tar.gz`
+                    || filename
+                        .split_once(".tar.")
+                        .is_some_and(|(_, ext)| ext.chars().all(|c| c.is_alphanumeric()))
+                {
+                    warn_user!(
+                        "Skipping file that looks like a distribution, \
+                        but is not a valid distribution filename: `{}`",
+                        dist.user_display()
+                    );
+                }
                 continue;
             };
             files.push((dist, filename, dist_filename));
