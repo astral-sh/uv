@@ -3243,6 +3243,142 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
     Ok(())
 }
 
+/// This tests that we report an error when a requirement unconditionally
+/// enables a conflicting extra.
+#[test]
+fn lock_conflicting_extra_unconditional() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = [
+          "proxy1[project1,project2]"
+        ]
+
+        [tool.uv]
+        conflicting-groups = [
+          [
+            { package = "proxy1", extra = "project1" },
+            { package = "proxy1", extra = "project2" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        proxy1 = { path = "./proxy1" }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        "#,
+    )?;
+
+    let proxy1_pyproject_toml = context.temp_dir.child("proxy1").child("pyproject.toml");
+    proxy1_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "proxy1"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = []
+
+        [project.optional-dependencies]
+        project1 = ["anyio==4.1.0"]
+        project2 = ["anyio==4.2.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extra `project1` unconditionally enabled in `proxy1[project1,project2] @ file://[TEMP_DIR]/proxy1`
+    "###);
+
+    // An error should occur even when only one conflicting extra is enabled.
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = [
+          "proxy1[project1]"
+        ]
+
+        [tool.uv]
+        conflicting-groups = [
+          [
+            { package = "proxy1", extra = "project1" },
+            { package = "proxy1", extra = "project2" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        proxy1 = { path = "./proxy1" }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extra `project1` unconditionally enabled in `proxy1[project1] @ file://[TEMP_DIR]/proxy1`
+    "###);
+
+    // And same thing for the other extra.
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = [
+          "proxy1[project2]"
+        ]
+
+        [tool.uv]
+        conflicting-groups = [
+          [
+            { package = "proxy1", extra = "project1" },
+            { package = "proxy1", extra = "project2" },
+          ],
+        ]
+
+        [tool.uv.sources]
+        proxy1 = { path = "./proxy1" }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extra `project2` unconditionally enabled in `proxy1[project2] @ file://[TEMP_DIR]/proxy1`
+    "###);
+
+    Ok(())
+}
+
 /// Show updated dependencies on `lock --upgrade`.
 #[test]
 fn lock_upgrade_log() -> Result<()> {
