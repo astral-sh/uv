@@ -19,8 +19,9 @@ If a `pyproject.toml` file is found, uv will read configuration from the `[tool.
 example, to set a persistent index URL, add the following to a `pyproject.toml`:
 
 ```toml title="pyproject.toml"
-[tool.uv]
-index-url = "https://test.pypi.org/simple"
+[[tool.uv.index]]
+url = "https://test.pypi.org/simple"
+default = true
 ```
 
 (If there is no such table, the `pyproject.toml` file will be ignored, and uv will continue
@@ -30,7 +31,9 @@ uv will also search for `uv.toml` files, which follow an identical structure, bu
 `[tool.uv]` prefix. For example:
 
 ```toml title="uv.toml"
-index-url = "https://test.pypi.org/simple"
+[[index]]
+url = "https://test.pypi.org/simple"
+default = true
 ```
 
 !!! note
