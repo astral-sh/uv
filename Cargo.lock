@@ -5575,6 +5575,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-python",
+ "uv-shell",
  "uv-version",
 ]
 
