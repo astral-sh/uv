@@ -317,6 +317,18 @@ pub(crate) async fn run(
                     diagnostics::build(dist, err);
                     return Ok(ExitStatus::Failure);
                 }
+                Err(ProjectError::Operation(operations::Error::Requirements(
+                    uv_requirements::Error::DownloadAndBuild(dist, err),
+                ))) => {
+                    diagnostics::fetch_and_build(dist, err);
+                    return Ok(ExitStatus::Failure);
+                }
+                Err(ProjectError::Operation(operations::Error::Requirements(
+                    uv_requirements::Error::Build(dist, err),
+                ))) => {
+                    diagnostics::build(dist, err);
+                    return Ok(ExitStatus::Failure);
+                }
                 Err(err) => return Err(err.into()),
             };
 
@@ -646,6 +658,18 @@ pub(crate) async fn run(
                         diagnostics::build(dist, err);
                         return Ok(ExitStatus::Failure);
                     }
+                    Err(ProjectError::Operation(operations::Error::Requirements(
+                        uv_requirements::Error::DownloadAndBuild(dist, err),
+                    ))) => {
+                        diagnostics::fetch_and_build(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Requirements(
+                        uv_requirements::Error::Build(dist, err),
+                    ))) => {
+                        diagnostics::build(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
                     Err(err) => return Err(err.into()),
                 };
 
@@ -845,6 +869,18 @@ pub(crate) async fn run(
                     }
                     Err(ProjectError::Operation(operations::Error::Resolve(
                         uv_resolver::ResolveError::Build(dist, err),
+                    ))) => {
+                        diagnostics::build(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Requirements(
+                        uv_requirements::Error::DownloadAndBuild(dist, err),
+                    ))) => {
+                        diagnostics::fetch_and_build(dist, err);
+                        return Ok(ExitStatus::Failure);
+                    }
+                    Err(ProjectError::Operation(operations::Error::Requirements(
+                        uv_requirements::Error::Build(dist, err),
                     ))) => {
                         diagnostics::build(dist, err);
                         return Ok(ExitStatus::Failure);

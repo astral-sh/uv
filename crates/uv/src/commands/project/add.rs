@@ -691,6 +691,18 @@ pub(crate) async fn add(
                     diagnostics::build(dist, err);
                     Ok(ExitStatus::Failure)
                 }
+                ProjectError::Operation(pip::operations::Error::Requirements(
+                    uv_requirements::Error::DownloadAndBuild(dist, err),
+                )) => {
+                    diagnostics::fetch_and_build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
+                ProjectError::Operation(pip::operations::Error::Requirements(
+                    uv_requirements::Error::Build(dist, err),
+                )) => {
+                    diagnostics::build(dist, err);
+                    Ok(ExitStatus::Failure)
+                }
                 err => {
                     // Revert the changes to the `pyproject.toml`, if necessary.
                     if modified {

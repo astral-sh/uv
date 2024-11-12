@@ -15666,20 +15666,19 @@ fn lock_invalid_project_table() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("a")), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: Failed to build `b @ file://[TEMP_DIR]/b`
-      Caused by: Failed to extract static metadata from `pyproject.toml`
-      Caused by: `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.
-      Caused by: TOML parse error at line 2, column 10
-      |
-    2 |         [project.urls]
-      |          ^^^^^^^
-    missing field `name`
-
+      × Failed to build `b @ file://[TEMP_DIR]/b`
+      ├─▶ Failed to extract static metadata from `pyproject.toml`
+      ├─▶ `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.
+      ╰─▶ TOML parse error at line 2, column 10
+            |
+          2 |         [project.urls]
+            |          ^^^^^^^
+          missing field `name`
     "###);
 
     Ok(())

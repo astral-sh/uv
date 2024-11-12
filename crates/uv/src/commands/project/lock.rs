@@ -181,7 +181,18 @@ pub(crate) async fn lock(
             diagnostics::build(dist, err);
             Ok(ExitStatus::Failure)
         }
-
+        Err(ProjectError::Operation(pip::operations::Error::Requirements(
+            uv_requirements::Error::DownloadAndBuild(dist, err),
+        ))) => {
+            diagnostics::fetch_and_build(dist, err);
+            Ok(ExitStatus::Failure)
+        }
+        Err(ProjectError::Operation(pip::operations::Error::Requirements(
+            uv_requirements::Error::Build(dist, err),
+        ))) => {
+            diagnostics::build(dist, err);
+            Ok(ExitStatus::Failure)
+        }
         Err(err) => Err(err.into()),
     }
 }
