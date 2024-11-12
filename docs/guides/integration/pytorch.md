@@ -1,6 +1,6 @@
 # Installing PyTorch with uv
 
-[PyTorch](https://pytorch.org/) is a popular open-source deep-learning learning framework that has first-class support for acceleration via GPUs. Installation, however, can be complex, as you won't find all the wheels for PyTorch on PyPI and you have to manage this through external indexes. This guide aims to help you set up a `pyproject.toml` file using `uv` [indexes features](../../configuration/indexes.md).
+[PyTorch](https://pytorch.org/) is a popular open-source deep learning framework that has first-class support for acceleration via GPUs. Installation, however, can be complex, as you won't find all the wheels for PyTorch on PyPI and you have to manage this through external indexes. This guide aims to help you set up a `pyproject.toml` file using `uv` [indexes features](../../configuration/indexes.md).
 
 !!! info "Available PyTorch indexes"
 
