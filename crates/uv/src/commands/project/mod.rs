@@ -83,7 +83,7 @@ pub(crate) enum ProjectError {
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
     RequestedPythonProjectIncompatibility(Version, RequiresPython),
 
-    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the project's Python requirement: `{2}`. Use `uv python pin`")]
+    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the project's Python requirement: `{2}`. Use `uv python pin` to update the `.python-version` file to a compatible version.")]
     DotPythonVersionProjectIncompatibility(String, Version, RequiresPython),
 
     #[error("The resolved Python interpreter (Python {0}) is incompatible with the project's Python requirement: `{1}`")]
