@@ -255,7 +255,7 @@ pub fn files_for_publishing(
                 debug!("Not a distribution filename: `{filename}`");
                 if filename.ends_with(".whl")
                     || filename.ends_with(".zip")
-                    // Example: `tar.gz`
+                    // Catch all compressed tar variants, e.g., `.tar.gz`
                     || filename
                         .split_once(".tar.")
                         .is_some_and(|(_, ext)| ext.chars().all(|c| c.is_alphanumeric()))
