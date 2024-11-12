@@ -253,12 +253,14 @@ pub fn files_for_publishing(
             };
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
                 debug!("Not a distribution filename: `{filename}`");
+                // I've never seen these in upper case
+                #[allow(clippy::case_sensitive_file_extension_comparisons)]
                 if filename.ends_with(".whl")
                     || filename.ends_with(".zip")
                     // Catch all compressed tar variants, e.g., `.tar.gz`
                     || filename
                         .split_once(".tar.")
-                        .is_some_and(|(_, ext)| ext.chars().all(|c| c.is_alphanumeric()))
+                        .is_some_and(|(_, ext)| ext.chars().all(char::is_alphanumeric))
                 {
                     warn_user!(
                         "Skipping file that looks like a distribution, \
