@@ -9,6 +9,8 @@ use uv_normalize::PackageName;
 
 use crate::commands::pip;
 
+type Error = Box<dyn std::error::Error + Send + Sync>;
+
 /// Static map of common package name typos or misconfigurations to their correct package names.
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
@@ -74,37 +76,37 @@ impl OperationDiagnostic {
                 dist,
                 err,
             )) => {
-                download_and_build(dist, err);
+                download_and_build(dist, Box::new(err));
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err)) => {
-                build(dist, err);
+                build(dist, Box::new(err));
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::DownloadAndBuild(
                 dist,
                 err,
             )) => {
-                download_and_build(dist, err);
+                download_and_build(dist, Box::new(err));
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Build(dist, err)) => {
-                build(dist, err);
+                build(dist, Box::new(err));
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Build(dist, err)) => {
-                build(dist, err);
+                build(dist, Box::new(err));
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
                 dist,
                 err,
             )) => {
-                download_and_build(dist, err);
+                download_and_build(dist, Box::new(err));
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Download(dist, err)) => {
-                download(dist, err);
+                download(dist, Box::new(err));
                 None
             }
             pip::operations::Error::Requirements(err) => {
@@ -123,19 +125,19 @@ impl OperationDiagnostic {
 }
 
 /// Render a remote source distribution build failure with a help message.
-pub(crate) fn download_and_build(sdist: Box<SourceDist>, cause: uv_distribution::Error) {
+pub(crate) fn download_and_build(sdist: Box<SourceDist>, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to download and build `{sdist}`")]
     #[diagnostic()]
-    struct Error {
+    struct Diagnostic {
         sdist: Box<SourceDist>,
         #[source]
-        cause: uv_distribution::Error,
+        cause: Error,
         #[help]
         help: Option<String>,
     }
 
-    let report = miette::Report::new(Error {
+    let report = miette::Report::new(Diagnostic {
         help: SUGGESTIONS.get(sdist.name()).map(|suggestion| {
             format!(
                 "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
@@ -151,19 +153,19 @@ pub(crate) fn download_and_build(sdist: Box<SourceDist>, cause: uv_distribution:
 }
 
 /// Render a remote binary distribution download failure with a help message.
-pub(crate) fn download(sdist: Box<BuiltDist>, cause: uv_distribution::Error) {
+pub(crate) fn download(sdist: Box<BuiltDist>, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to download `{sdist}`")]
     #[diagnostic()]
-    struct Error {
+    struct Diagnostic {
         sdist: Box<BuiltDist>,
         #[source]
-        cause: uv_distribution::Error,
+        cause: Error,
         #[help]
         help: Option<String>,
     }
 
-    let report = miette::Report::new(Error {
+    let report = miette::Report::new(Diagnostic {
         help: SUGGESTIONS.get(sdist.name()).map(|suggestion| {
             format!(
                 "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
@@ -179,19 +181,19 @@ pub(crate) fn download(sdist: Box<BuiltDist>, cause: uv_distribution::Error) {
 }
 
 /// Render a local source distribution build failure with a help message.
-pub(crate) fn build(sdist: Box<SourceDist>, cause: uv_distribution::Error) {
+pub(crate) fn build(sdist: Box<SourceDist>, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to build `{sdist}`")]
     #[diagnostic()]
-    struct Error {
+    struct Diagnostic {
         sdist: Box<SourceDist>,
         #[source]
-        cause: uv_distribution::Error,
+        cause: Error,
         #[help]
         help: Option<String>,
     }
 
-    let report = miette::Report::new(Error {
+    let report = miette::Report::new(Diagnostic {
         help: SUGGESTIONS.get(sdist.name()).map(|suggestion| {
             format!(
                 "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
