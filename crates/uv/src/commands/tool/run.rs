@@ -236,9 +236,30 @@ pub(crate) async fn run(
     // signal handlers after the command completes.
     let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
-    let status = handle.wait().await.context("Child process disappeared")?;
+    // Exit based on the result of the command.
+    #[cfg(unix)]
+    let status = {
+        use tokio::select;
+        use tokio::signal::unix::{signal, SignalKind};
 
-    // Exit based on the result of the command
+        let mut term_signal = signal(SignalKind::terminate())?;
+        loop {
+            select! {
+                result = handle.wait() => {
+                    break result;
+                },
+
+                // `SIGTERM`
+                _ = term_signal.recv() => {
+                    let _ = terminate_process(&mut handle);
+                }
+            };
+        }
+    }?;
+
+    #[cfg(not(unix))]
+    let status = handle.wait().await?;
+
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
@@ -255,6 +276,15 @@ pub(crate) async fn run(
         }
         Ok(ExitStatus::Failure)
     }
+}
+
+#[cfg(unix)]
+fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+
+    let pid = child.id().context("Failed to get child process ID")?;
+    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
 }
 
 /// Return the entry points for the specified package.

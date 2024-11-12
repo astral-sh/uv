@@ -4376,6 +4376,7 @@ dependencies = [
  "itertools 0.13.0",
  "jiff",
  "miette",
+ "nix",
  "owo-colors",
  "petgraph",
  "predicates",
@@ -5798,7 +5799,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
