@@ -411,7 +411,7 @@ pub(crate) async fn pip_compile(
             return Ok(ExitStatus::Failure);
         }
         Err(operations::Error::Resolve(uv_resolver::ResolveError::DownloadAndBuild(dist, err))) => {
-            diagnostics::fetch_and_build(dist, err);
+            diagnostics::download_and_build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
@@ -422,7 +422,7 @@ pub(crate) async fn pip_compile(
             dist,
             err,
         ))) => {
-            diagnostics::fetch_and_build(dist, err);
+            diagnostics::download_and_build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(operations::Error::Requirements(uv_requirements::Error::Build(dist, err))) => {

@@ -163,7 +163,7 @@ pub(crate) async fn sync(
         Err(ProjectError::Operation(operations::Error::Resolve(
             uv_resolver::ResolveError::DownloadAndBuild(dist, err),
         ))) => {
-            diagnostics::fetch_and_build(dist, err);
+            diagnostics::download_and_build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(ProjectError::Operation(operations::Error::Resolve(
@@ -175,7 +175,7 @@ pub(crate) async fn sync(
         Err(ProjectError::Operation(operations::Error::Requirements(
             uv_requirements::Error::DownloadAndBuild(dist, err),
         ))) => {
-            diagnostics::fetch_and_build(dist, err);
+            diagnostics::download_and_build(dist, err);
             return Ok(ExitStatus::Failure);
         }
         Err(ProjectError::Operation(operations::Error::Requirements(
