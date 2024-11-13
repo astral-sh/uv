@@ -659,7 +659,7 @@ async fn do_lock(
             .relative_to(workspace)?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution_graph(&resolution, workspace.install_path())?
+            let lock = Lock::from_resolution(&resolution, workspace.install_path())?
                 .with_manifest(manifest)
                 .with_conflicts(workspace.conflicts())
                 .with_supported_environments(

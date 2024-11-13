@@ -197,7 +197,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
-        let graph = resolver.resolve().await.with_context(|| {
+        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements
@@ -205,8 +205,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                     .map(|requirement| format!("`{requirement}`"))
                     .join(", ")
             )
-        })?;
-        Ok(Resolution::from(graph))
+        })?);
+        Ok(resolution)
     }
 
     #[instrument(

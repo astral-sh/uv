@@ -20,8 +20,8 @@ pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::{
-    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionGraph,
-    ResolutionMode,
+    ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionMode,
+    ResolverOutput,
 };
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
@@ -108,16 +108,16 @@ pub struct Lock {
 }
 
 impl Lock {
-    /// Initialize a [`Lock`] from a [`ResolutionGraph`].
-    pub fn from_resolution_graph(graph: &ResolutionGraph, root: &Path) -> Result<Self, LockError> {
+    /// Initialize a [`Lock`] from a [`ResolverOutput`].
+    pub fn from_resolution(resolution: &ResolverOutput, root: &Path) -> Result<Self, LockError> {
         let mut packages = BTreeMap::new();
-        let requires_python = graph.requires_python.clone();
+        let requires_python = resolution.requires_python.clone();
 
         // Determine the set of packages included at multiple versions.
         let mut seen = FxHashSet::default();
         let mut duplicates = FxHashSet::default();
-        for node_index in graph.petgraph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
+        for node_index in resolution.graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &resolution.graph[node_index] else {
                 continue;
             };
             if !dist.is_base() {
@@ -129,8 +129,8 @@ impl Lock {
         }
 
         // Lock all base packages.
-        for node_index in graph.petgraph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
+        for node_index in resolution.graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &resolution.graph[node_index] else {
                 continue;
             };
             if !dist.is_base() {
@@ -140,7 +140,7 @@ impl Lock {
             // If there are multiple distributions for the same package, include the markers of all
             // forks that included the current distribution.
             let fork_markers = if duplicates.contains(dist.name()) {
-                graph
+                resolution
                     .fork_markers
                     .iter()
                     .filter(|fork_markers| !fork_markers.is_disjoint(&dist.marker))
@@ -151,11 +151,11 @@ impl Lock {
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
-            Self::remove_unreachable_wheels(graph, &requires_python, node_index, &mut package);
+            Self::remove_unreachable_wheels(resolution, &requires_python, node_index, &mut package);
 
             // Add all dependencies
-            for edge in graph.petgraph.edges(node_index) {
-                let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
+            for edge in resolution.graph.edges(node_index) {
+                let ResolutionGraphNode::Dist(dependency_dist) = &resolution.graph[edge.target()]
                 else {
                     continue;
                 };
@@ -173,8 +173,8 @@ impl Lock {
         }
 
         // Lock all extras and development dependencies.
-        for node_index in graph.petgraph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &graph.petgraph[node_index] else {
+        for node_index in resolution.graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &resolution.graph[node_index] else {
                 continue;
             };
             if let Some(extra) = dist.extra.as_ref() {
@@ -186,8 +186,9 @@ impl Lock {
                     }
                     .into());
                 };
-                for edge in graph.petgraph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
+                for edge in resolution.graph.edges(node_index) {
+                    let ResolutionGraphNode::Dist(dependency_dist) =
+                        &resolution.graph[edge.target()]
                     else {
                         continue;
                     };
@@ -210,8 +211,9 @@ impl Lock {
                     }
                     .into());
                 };
-                for edge in graph.petgraph.edges(node_index) {
-                    let ResolutionGraphNode::Dist(dependency_dist) = &graph.petgraph[edge.target()]
+                for edge in resolution.graph.edges(node_index) {
+                    let ResolutionGraphNode::Dist(dependency_dist) =
+                        &resolution.graph[edge.target()]
                     else {
                         continue;
                     };
@@ -229,9 +231,9 @@ impl Lock {
 
         let packages = packages.into_values().collect();
         let options = ResolverOptions {
-            resolution_mode: graph.options.resolution_mode,
-            prerelease_mode: graph.options.prerelease_mode,
-            exclude_newer: graph.options.exclude_newer,
+            resolution_mode: resolution.options.resolution_mode,
+            prerelease_mode: resolution.options.prerelease_mode,
+            exclude_newer: resolution.options.exclude_newer,
         };
         let lock = Self::new(
             VERSION,
@@ -241,7 +243,7 @@ impl Lock {
             ResolverManifest::default(),
             Conflicts::empty(),
             vec![],
-            graph.fork_markers.clone(),
+            resolution.fork_markers.clone(),
         )?;
         Ok(lock)
     }
@@ -251,7 +253,7 @@ impl Lock {
     /// For example, a package included under `sys_platform == 'win32'` does not need Linux
     /// wheels.
     fn remove_unreachable_wheels(
-        graph: &ResolutionGraph,
+        graph: &ResolverOutput,
         requires_python: &RequiresPython,
         node_index: NodeIndex,
         locked_dist: &mut Package,
@@ -288,20 +290,16 @@ impl Lock {
                     tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
                 })
             }) {
-                !graph.petgraph[node_index]
-                    .marker()
-                    .is_disjoint(&LINUX_MARKERS)
+                !graph.graph[node_index].marker().is_disjoint(&LINUX_MARKERS)
             } else if platform_tags
                 .iter()
                 .all(|tag| windows_tags.contains(&&**tag))
             {
-                !graph.petgraph[node_index]
+                !graph.graph[node_index]
                     .marker()
                     .is_disjoint(&WINDOWS_MARKERS)
             } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
-                !graph.petgraph[node_index]
-                    .marker()
-                    .is_disjoint(&MAC_MARKERS)
+                !graph.graph[node_index].marker().is_disjoint(&MAC_MARKERS)
             } else {
                 true
             }

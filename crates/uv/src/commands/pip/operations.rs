@@ -37,7 +37,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverEnvironment,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -113,7 +113,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     options: Options,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
-) -> Result<ResolutionGraph, Error> {
+) -> Result<ResolverOutput, Error> {
     let start = std::time::Instant::now();
 
     // Resolve the requirements from the provided sources.

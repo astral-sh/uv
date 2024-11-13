@@ -56,7 +56,7 @@ use crate::pubgrub::{
     PubGrubPython,
 };
 use crate::python_requirement::PythonRequirement;
-use crate::resolution::ResolutionGraph;
+use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
     IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
@@ -251,7 +251,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     }
 
     /// Resolve a set of requirements into a set of pinned versions.
-    pub async fn resolve(self) -> Result<ResolutionGraph, ResolveError> {
+    pub async fn resolve(self) -> Result<ResolverOutput, ResolveError> {
         let state = Arc::new(self.state);
         let provider = Arc::new(self.provider);
 
@@ -291,7 +291,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn solve(
         self: Arc<Self>,
         request_sink: Sender<Request>,
-    ) -> Result<ResolutionGraph, ResolveError> {
+    ) -> Result<ResolverOutput, ResolveError> {
         debug!(
             "Solving with installed Python version: {}",
             self.python_requirement.exact()
@@ -598,7 +598,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         for resolution in &resolutions {
             Self::trace_resolution(resolution);
         }
-        ResolutionGraph::from_state(
+        ResolverOutput::from_state(
             &resolutions,
             &self.requirements,
             &self.constraints,
