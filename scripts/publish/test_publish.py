@@ -219,6 +219,8 @@ def build_project_at_version(
 
     # Build the project
     check_call([uv, "build"], cwd=project_root)
+    # Test that we ignore unknown any file.
+    project_root.joinpath("dist").joinpath(".DS_Store").touch()
 
     return project_root
 
@@ -290,6 +292,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     expected_filenames = [path.name for path in project_dir.joinpath("dist").iterdir()]
     # Ignore the gitignore file in dist
     expected_filenames.remove(".gitignore")
+    # Ignore our test file
+    expected_filenames.remove(".DS_Store")
 
     print(
         f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ==="
@@ -311,7 +315,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         ):
             raise RuntimeError(
                 f"PyPI re-upload of the same files failed: "
-                f"{output.count("Uploading")}, {output.count("already exists")}\n"
+                f"{output.count("Uploading")} != {len(expected_filenames)}, "
+                f"{output.count("already exists")} != 0\n"
                 f"---\n{output}\n---"
             )
 
@@ -335,7 +340,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     ):
         raise RuntimeError(
             f"Re-upload with check URL failed: "
-            f"{output.count("Uploading")}, {output.count("already exists")}\n"
+            f"{output.count("Uploading")} != 0, "
+            f"{output.count("already exists")} != {len(expected_filenames)}\n"
             f"---\n{output}\n---"
         )
 
