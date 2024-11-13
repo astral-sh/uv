@@ -23,6 +23,7 @@ use uv_python::{
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
+use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
@@ -46,6 +47,7 @@ pub(crate) async fn init(
     author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -65,6 +67,7 @@ pub(crate) async fn init(
             init_script(
                 path,
                 python,
+                install_mirrors,
                 connectivity,
                 python_preference,
                 python_downloads,
@@ -128,6 +131,7 @@ pub(crate) async fn init(
                 author_from,
                 no_pin_python,
                 python,
+                install_mirrors,
                 no_workspace,
                 python_preference,
                 python_downloads,
@@ -175,6 +179,7 @@ pub(crate) async fn init(
 async fn init_script(
     script_path: &Path,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     connectivity: Connectivity,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -233,6 +238,7 @@ async fn init_script(
 
     let requires_python = init_script_python_requirement(
         python.as_deref(),
+        install_mirrors,
         &CWD,
         no_pin_python,
         python_preference,
@@ -266,6 +272,7 @@ async fn init_project(
     author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -416,6 +423,8 @@ async fn init_project(
                         &client_builder,
                         cache,
                         Some(&reporter),
+                        install_mirrors.python_install_mirror,
+                        install_mirrors.pypy_install_mirror,
                     )
                     .await?
                     .into_interpreter();
@@ -438,6 +447,8 @@ async fn init_project(
                     &client_builder,
                     cache,
                     Some(&reporter),
+                    install_mirrors.python_install_mirror,
+                    install_mirrors.pypy_install_mirror,
                 )
                 .await?
                 .into_interpreter();
@@ -498,6 +509,8 @@ async fn init_project(
                 &client_builder,
                 cache,
                 Some(&reporter),
+                install_mirrors.python_install_mirror,
+                install_mirrors.pypy_install_mirror,
             )
             .await?
             .into_interpreter();
@@ -520,6 +533,8 @@ async fn init_project(
             &client_builder,
             cache,
             Some(&reporter),
+            install_mirrors.python_install_mirror,
+            install_mirrors.pypy_install_mirror,
         )
         .await?
         .into_interpreter();

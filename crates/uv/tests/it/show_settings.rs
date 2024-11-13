@@ -123,6 +123,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -270,6 +274,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -418,6 +426,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -598,6 +610,10 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -718,6 +734,10 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -876,6 +896,10 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1076,6 +1100,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1283,6 +1311,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1455,6 +1487,10 @@ fn resolve_find_links() -> anyhow::Result<()> {
                 no_index: true,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1597,6 +1633,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1789,6 +1829,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1964,6 +2008,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2106,6 +2154,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2231,6 +2283,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2356,6 +2412,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2483,6 +2543,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2687,6 +2751,10 @@ fn resolve_tool() -> anyhow::Result<()> {
         },
         force: false,
         editable: false,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+        },
     }
 
     ----- stderr -----
@@ -2786,6 +2854,10 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2968,6 +3040,10 @@ fn resolve_both() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3238,6 +3314,10 @@ fn resolve_config_file() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3325,7 +3405,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicting-groups`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
+    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicting-groups`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
     "###
     );
 
@@ -3457,6 +3537,10 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3585,6 +3669,10 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3732,6 +3820,10 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3930,6 +4022,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4107,6 +4203,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4290,6 +4390,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4468,6 +4572,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4653,6 +4761,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4831,6 +4943,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,

@@ -32,6 +32,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{InstallTarget, Lock};
 use uv_scripts::Pep723Item;
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
@@ -71,6 +72,7 @@ pub(crate) async fn run(
     dev: DevGroupsSpecification,
     editable: EditableMode,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -201,6 +203,8 @@ pub(crate) async fn run(
             &client_builder,
             cache,
             Some(&download_reporter),
+            install_mirrors.python_install_mirror.clone(),
+            install_mirrors.pypy_install_mirror.clone(),
         )
         .await?
         .into_interpreter();
@@ -509,6 +513,8 @@ pub(crate) async fn run(
                     &client_builder,
                     cache,
                     Some(&download_reporter),
+                    install_mirrors.python_install_mirror,
+                    install_mirrors.pypy_install_mirror,
                 )
                 .await?
                 .into_interpreter();
@@ -539,6 +545,7 @@ pub(crate) async fn run(
                 project::get_or_init_environment(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
+                    install_mirrors,
                     python_preference,
                     python_downloads,
                     connectivity,
@@ -712,6 +719,8 @@ pub(crate) async fn run(
                     &client_builder,
                     cache,
                     Some(&download_reporter),
+                    install_mirrors.python_install_mirror,
+                    install_mirrors.pypy_install_mirror,
                 )
                 .await?;
 

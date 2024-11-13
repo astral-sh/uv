@@ -4457,6 +4457,13 @@ uv python install [OPTIONS] [TARGETS]...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--mirror</code> <i>mirror</i></dt><dd><p>Set the URL to use as the source for downloading Python installations.</p>
+
+<p>The provided URL will replace <code>https://github.com/indygreg/python-build-standalone/releases/download</code> in, e.g., <code>https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz</code>.</p>
+
+<p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
+
+<p>May also be set with the <code>UV_PYTHON_INSTALL_MIRROR</code> environment variable.</p>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4493,6 +4500,13 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+</dd><dt><code>--pypy-mirror</code> <i>pypy-mirror</i></dt><dd><p>Set the URL to use as the source for downloading PyPy installations.</p>
+
+<p>The provided URL will replace <code>https://downloads.python.org/pypy</code> in, e.g., <code>https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2</code>.</p>
+
+<p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
+
+<p>May also be set with the <code>UV_PYPY_INSTALL_MIRROR</code> environment variable.</p>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python installations if a uv-managed Python is not installed. This option allows prioritizing or ignoring system Python installations.</p>

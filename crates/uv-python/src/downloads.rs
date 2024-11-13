@@ -466,9 +466,11 @@ impl ManagedPythonDownload {
         installation_dir: &Path,
         cache_dir: &Path,
         reinstall: bool,
+        python_install_mirror: Option<String>,
+        pypy_install_mirror: Option<String>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let url = self.download_url()?;
+        let url = self.download_url(python_install_mirror, pypy_install_mirror)?;
         let path = installation_dir.join(self.key().to_string());
 
         // If it is not a reinstall and the dir already exists, return it.
@@ -585,10 +587,14 @@ impl ManagedPythonDownload {
 
     /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the
     /// appropriate environment variable, use it instead.
-    fn download_url(&self) -> Result<Url, Error> {
+    fn download_url(
+        &self,
+        python_install_mirror: Option<String>,
+        pypy_install_mirror: Option<String>,
+    ) -> Result<Url, Error> {
         match self.key.implementation {
             LenientImplementationName::Known(ImplementationName::CPython) => {
-                if let Ok(mirror) = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR) {
+                if let Some(mirror) = python_install_mirror {
                     let Some(suffix) = self.url.strip_prefix(
                         "https://github.com/indygreg/python-build-standalone/releases/download/",
                     ) else {
@@ -601,7 +607,7 @@ impl ManagedPythonDownload {
             }
 
             LenientImplementationName::Known(ImplementationName::PyPy) => {
-                if let Ok(mirror) = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR) {
+                if let Some(mirror) = pypy_install_mirror {
                     let Some(suffix) = self.url.strip_prefix("https://downloads.python.org/pypy/")
                     else {
                         return Err(Error::Mirror(EnvVars::UV_PYPY_INSTALL_MIRROR, self.url));

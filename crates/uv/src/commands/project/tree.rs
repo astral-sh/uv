@@ -15,6 +15,7 @@ use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
+use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::latest::LatestClient;
@@ -45,6 +46,7 @@ pub(crate) async fn tree(
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -82,6 +84,7 @@ pub(crate) async fn tree(
                 connectivity,
                 native_tls,
                 allow_insecure_host,
+                install_mirrors,
                 no_config,
                 cache,
                 printer,

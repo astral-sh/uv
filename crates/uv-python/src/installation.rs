@@ -86,6 +86,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<String>,
+        pypy_install_mirror: Option<String>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or_else(|| &PythonRequest::Default);
 
@@ -100,7 +102,16 @@ impl PythonInstallation {
             {
                 if let Some(request) = PythonDownloadRequest::from_request(request) {
                     debug!("Requested Python not found, checking for available download...");
-                    match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
+                    match Self::fetch(
+                        request.fill()?,
+                        client_builder,
+                        cache,
+                        reporter,
+                        python_install_mirror,
+                        pypy_install_mirror,
+                    )
+                    .await
+                    {
                         Ok(installation) => Ok(installation),
                         Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
                             Err(Error::MissingPython(err))
@@ -121,6 +132,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<String>,
+        pypy_install_mirror: Option<String>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
@@ -132,7 +145,15 @@ impl PythonInstallation {
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(&client, installations_dir, &cache_dir, false, reporter)
+            .fetch(
+                &client,
+                installations_dir,
+                &cache_dir,
+                false,
+                python_install_mirror,
+                pypy_install_mirror,
+                reporter,
+            )
             .await?;
 
         let path = match result {
