@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::sync::Arc;
 
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -46,6 +47,8 @@ pub enum MetadataResponse {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers, Version),
+    /// The distribution could not be built or downloaded.
+    Error(Box<Dist>, Arc<uv_distribution::Error>),
 }
 
 pub trait ResolverProvider {
@@ -210,7 +213,10 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 uv_distribution::Error::RequiresPython(requires_python, version) => {
                     Ok(MetadataResponse::RequiresPython(requires_python, version))
                 }
-                err => Err(err),
+                err => Ok(MetadataResponse::Error(
+                    Box::new(dist.clone()),
+                    Arc::new(err),
+                )),
             },
         }
     }

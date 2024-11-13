@@ -1241,7 +1241,7 @@ enum TagPolicy<'tags> {
     /// Exclusively consider wheels that match the specified platform tags.
     Required(&'tags Tags),
     /// Prefer wheels that match the specified platform tags, but fall back to incompatible wheels
-    /// if  necessary.
+    /// if necessary.
     Preferred(&'tags Tags),
 }
 
