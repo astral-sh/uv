@@ -807,9 +807,8 @@ pub fn find_python_installations<'a>(
             }
         })),
         PythonRequest::Directory(path) => Box::new(std::iter::once({
-            debug!("Checking for Python interpreter in {request}");
             if preference.allows(PythonSource::ProvidedPath) {
-                debug!("Checking for Python interpreter at {request}");
+                debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(FindPythonResult::Ok(installation)),
                     Err(InterpreterError::NotFound(_)) => {
@@ -834,9 +833,8 @@ pub fn find_python_installations<'a>(
             }
         })),
         PythonRequest::ExecutableName(name) => {
-            debug!("Searching for Python interpreter with {request}");
             if preference.allows(PythonSource::SearchPath) {
-                debug!("Checking for Python interpreter at {request}");
+                debug!("Searching for Python interpreter with {request}");
                 Box::new(
                     python_interpreters_with_executable_name(name, cache)
                         .filter(move |result| {
