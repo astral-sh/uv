@@ -11,13 +11,13 @@ use std::fs::FileType;
 use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{io, mem};
-use tar::{EntryType, Header};
+use tar::{Builder, EntryType, Header};
 use thiserror::Error;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename, WheelFilename};
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter, PortableGlobError};
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 use zip::{CompressionMethod, ZipWriter};
 
 #[derive(Debug, Error)]
@@ -514,50 +514,62 @@ pub fn build_source_dist(
             continue;
         };
 
-        debug!("Including {}", relative.user_display());
-
-        let metadata = fs_err::metadata(entry.path())?;
-        let mut header = Header::new_gnu();
-        #[cfg(unix)]
-        {
-            header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
-        }
-        #[cfg(not(unix))]
-        {
-            header.set_mode(0o644);
-        }
-
-        if entry.file_type().is_dir() {
-            header.set_entry_type(EntryType::Directory);
-            header
-                .set_path(Path::new(&top_level).join(relative))
-                .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
-            header.set_size(0);
-            header.set_cksum();
-            tar.append(&header, io::empty())
-                .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
-            continue;
-        } else if entry.file_type().is_file() {
-            header.set_size(metadata.len());
-            header.set_cksum();
-            tar.append_data(
-                &mut header,
-                Path::new(&top_level).join(relative),
-                BufReader::new(File::open(entry.path())?),
-            )
-            .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
-        } else {
-            return Err(Error::UnsupportedFileType(
-                relative.clone(),
-                entry.file_type(),
-            ));
-        }
+        add_source_dist_entry(&mut tar, entry, &top_level, &source_dist_path, &relative)?;
     }
 
     tar.finish()
         .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
 
     Ok(filename)
+}
+
+/// Add a file or a directory to a source distribution.
+fn add_source_dist_entry(
+    tar: &mut Builder<GzEncoder<File>>,
+    entry: DirEntry,
+    top_level: &str,
+    source_dist_path: &Path,
+    relative: &Path,
+) -> Result<(), Error> {
+    debug!("Including {}", relative.user_display());
+
+    let metadata = fs_err::metadata(entry.path())?;
+    let mut header = Header::new_gnu();
+    #[cfg(unix)]
+    {
+        header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
+    }
+    #[cfg(not(unix))]
+    {
+        header.set_mode(0o644);
+    }
+
+    if entry.file_type().is_dir() {
+        header.set_entry_type(EntryType::Directory);
+        header
+            .set_path(Path::new(&top_level).join(relative))
+            .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
+        header.set_size(0);
+        header.set_cksum();
+        tar.append(&header, io::empty())
+            .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
+        Ok(())
+    } else if entry.file_type().is_file() {
+        header.set_size(metadata.len());
+        header.set_cksum();
+        tar.append_data(
+            &mut header,
+            Path::new(&top_level).join(relative),
+            BufReader::new(File::open(entry.path())?),
+        )
+        .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
+        Ok(())
+    } else {
+        Err(Error::UnsupportedFileType(
+            relative.to_path_buf(),
+            entry.file_type(),
+        ))
+    }
 }
 
 /// Write the dist-info directory to the output directory without building the wheel.
