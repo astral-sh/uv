@@ -1600,9 +1600,9 @@ impl EnvironmentPreference {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Default, Copy, PartialEq, Eq)]
 pub(crate) struct ExecutableName {
-    name: &'static str,
+    implementation: Option<ImplementationName>,
     major: Option<u8>,
     minor: Option<u8>,
     patch: Option<u8>,
@@ -1610,10 +1610,92 @@ pub(crate) struct ExecutableName {
     variant: PythonVariant,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ExecutableNameComparator<'a> {
+    name: ExecutableName,
+    request: &'a VersionRequest,
+    implementation: Option<&'a ImplementationName>,
+}
+
+impl Ord for ExecutableNameComparator<'_> {
+    /// Note the comparison returns a reverse priority ordering.
+    ///
+    /// Higher priority items are "Greater" than lower priority items.
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Prefer the default name over a specific implementation, unless an implementation was
+        // requested
+        let name_ordering = if self.implementation.is_some() {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Less
+        };
+        if self.name.implementation.is_none() && other.name.implementation.is_some() {
+            return name_ordering.reverse();
+        }
+        if self.name.implementation.is_some() && other.name.implementation.is_none() {
+            return name_ordering;
+        }
+        // Otherwise, use the names in supported order
+        let ordering = self.name.implementation.cmp(&other.name.implementation);
+        if ordering != std::cmp::Ordering::Equal {
+            return ordering;
+        }
+        let ordering = self.name.major.cmp(&other.name.major);
+        let is_default_request =
+            matches!(self.request, VersionRequest::Any | VersionRequest::Default);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        let ordering = self.name.minor.cmp(&other.name.minor);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        let ordering = self.name.patch.cmp(&other.name.patch);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        let ordering = self.name.prerelease.cmp(&other.name.prerelease);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        let ordering = self.name.variant.cmp(&other.name.variant);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        ordering
+    }
+}
+
+impl PartialOrd for ExecutableNameComparator<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl ExecutableName {
     #[must_use]
-    fn with_name(mut self, name: &'static str) -> Self {
-        self.name = name;
+    fn with_implementation(mut self, implementation: ImplementationName) -> Self {
+        self.implementation = Some(implementation);
         self
     }
 
@@ -1646,24 +1728,27 @@ impl ExecutableName {
         self.variant = variant;
         self
     }
-}
 
-impl Default for ExecutableName {
-    fn default() -> Self {
-        Self {
-            name: "python",
-            major: None,
-            minor: None,
-            patch: None,
-            prerelease: None,
-            variant: PythonVariant::Default,
+    fn into_comparator<'a>(
+        self,
+        request: &'a VersionRequest,
+        implementation: Option<&'a ImplementationName>,
+    ) -> ExecutableNameComparator<'a> {
+        ExecutableNameComparator {
+            name: self,
+            request,
+            implementation,
         }
     }
 }
 
 impl std::fmt::Display for ExecutableName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)?;
+        if let Some(implementation) = self.implementation {
+            write!(f, "{implementation}")?;
+        } else {
+            f.write_str("python")?;
+        }
         if let Some(major) = self.major {
             write!(f, "{major}")?;
             if let Some(minor) = self.minor {
@@ -1741,15 +1826,15 @@ impl VersionRequest {
         // Add all the implementation-specific names
         if let Some(implementation) = implementation {
             for i in 0..names.len() {
-                let name = names[i].with_name(implementation.into());
+                let name = names[i].with_implementation(*implementation);
                 names.push(name);
             }
         } else {
             // When looking for all implementations, include all possible names
             if matches!(self, Self::Any) {
                 for i in 0..names.len() {
-                    for implementation in ImplementationName::long_names() {
-                        let name = names[i].with_name(implementation);
+                    for implementation in ImplementationName::iter_all() {
+                        let name = names[i].with_implementation(implementation);
                         names.push(name);
                     }
                 }
@@ -1763,6 +1848,9 @@ impl VersionRequest {
                 names.push(name);
             }
         }
+
+        names.sort_unstable_by_key(|name| name.into_comparator(self, implementation));
+        names.reverse();
 
         names
     }
