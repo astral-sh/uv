@@ -2,7 +2,7 @@ use bstr::{ByteSlice, ByteVec};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex_automata::dfa;
 use regex_automata::dfa::Automaton;
-use std::path::{Path, MAIN_SEPARATOR};
+use std::path::{Path, MAIN_SEPARATOR, MAIN_SEPARATOR_STR};
 use tracing::warn;
 
 /// Chosen at a whim -Konsti
@@ -38,7 +38,7 @@ impl GlobDirFilter {
                     .strip_prefix("(?-u)")
                     .expect("a glob is a non-unicode byte regex")
                     // Match windows paths if applicable
-                    .replace("/", &MAIN_SEPARATOR.to_string());
+                    .replace('/', MAIN_SEPARATOR_STR);
                 regex
             })
             .collect();
