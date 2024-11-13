@@ -29,7 +29,7 @@ use uv_install_wheel::linker::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ConflictingGroupList, ResolverMarkerEnvironment};
+use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::PythonEnvironment;
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
@@ -104,7 +104,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     tags: Option<&Tags>,
     resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
-    conflicting_groups: ConflictingGroupList,
+    conflicting_groups: Conflicts,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,

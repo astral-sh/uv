@@ -25,8 +25,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{
-    ConflictingGroupList, RequirementSource, SchemaConflictingGroupList, SupportedEnvironments,
-    VerbatimParsedUrl,
+    Conflicts, RequirementSource, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
 
 #[derive(Error, Debug)]
@@ -103,8 +102,8 @@ impl PyProjectToml {
     }
 
     /// Returns the set of conflicts for the project.
-    pub fn conflicting_groups(&self) -> ConflictingGroupList {
-        let empty = ConflictingGroupList::empty();
+    pub fn conflicting_groups(&self) -> Conflicts {
+        let empty = Conflicts::empty();
         let Some(project) = self.project.as_ref() else {
             return empty;
         };
@@ -504,7 +503,7 @@ pub struct ToolUv {
         "#
     )]
     */
-    pub conflicting_groups: Option<SchemaConflictingGroupList>,
+    pub conflicting_groups: Option<SchemaConflicts>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
