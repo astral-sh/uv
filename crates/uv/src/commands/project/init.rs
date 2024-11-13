@@ -17,8 +17,9 @@ use uv_git::GIT;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionRequest,
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
@@ -409,7 +410,7 @@ async fn init_project(
                 } else {
                     let interpreter = PythonInstallation::find_or_download(
                         Some(python_request),
-                        EnvironmentPreference::Any,
+                        EnvironmentPreference::OnlySystem,
                         python_preference,
                         python_downloads,
                         &client_builder,
@@ -431,7 +432,7 @@ async fn init_project(
             python_request => {
                 let interpreter = PythonInstallation::find_or_download(
                     Some(&python_request),
-                    EnvironmentPreference::Any,
+                    EnvironmentPreference::OnlySystem,
                     python_preference,
                     python_downloads,
                     &client_builder,
@@ -457,8 +458,29 @@ async fn init_project(
                 (requires_python, python_request)
             }
         }
+    } else if let Ok(virtualenv) = PythonEnvironment::from_root(path.join(".venv"), cache) {
+        // (2) An existing Python environment in the target directory
+        debug!("Using Python version from existing virtual environment in project");
+        let interpreter = virtualenv.into_interpreter();
+
+        let requires_python =
+            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+
+        // Pin to the minor version.
+        let python_request = if no_pin_python {
+            None
+        } else {
+            Some(PythonRequest::Version(VersionRequest::MajorMinor(
+                interpreter.python_major(),
+                interpreter.python_minor(),
+                PythonVariant::Default,
+            )))
+        };
+
+        (requires_python, python_request)
     } else if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
-        // (2) `requires-python` from the workspace
+        // (3) `requires-python` from the workspace
+        debug!("Using Python version from project workspace");
         let python_request = PythonRequest::Version(VersionRequest::Range(
             requires_python.specifiers().clone(),
             PythonVariant::Default,
@@ -470,7 +492,7 @@ async fn init_project(
         } else {
             let interpreter = PythonInstallation::find_or_download(
                 Some(&python_request),
-                EnvironmentPreference::Any,
+                EnvironmentPreference::OnlySystem,
                 python_preference,
                 python_downloads,
                 &client_builder,
@@ -489,10 +511,10 @@ async fn init_project(
 
         (requires_python, python_request)
     } else {
-        // (3) Default to the system Python
+        // (4) Default to the system Python
         let interpreter = PythonInstallation::find_or_download(
             None,
-            EnvironmentPreference::Any,
+            EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
             &client_builder,
