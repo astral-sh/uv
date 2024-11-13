@@ -15,10 +15,11 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
-    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+    ConflictPackage, LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl,
+    VerbatimParsedUrl,
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, InstallTarget};
@@ -281,18 +282,36 @@ pub(super) async fn do_sync(
         ));
     }
 
-    // Validate that we aren't trying to install extras that are
-    // declared as conflicting.
+    // Validate that we aren't trying to install extras or groups that
+    // are declared as conflicting. Note that we need to collect all
+    // extras and groups that match in a particular set, since extras
+    // can be declared as conflicting with groups. So if extra `x` and
+    // group `g` are declared as conflicting, then enabling both of
+    // those should result in an error.
     let conflicts = target.lock().conflicts();
     for set in conflicts.iter() {
-        let conflicting = set
-            .iter()
-            .filter_map(|item| item.extra())
-            .filter(|extra| extras.contains(extra))
-            .map(|extra| extra.clone())
-            .collect::<Vec<ExtraName>>();
-        if conflicting.len() >= 2 {
-            return Err(ProjectError::ExtraIncompatibility(set.clone(), conflicting));
+        let mut conflicts: Vec<ConflictPackage> = vec![];
+        for item in set.iter() {
+            if item
+                .extra()
+                .map(|extra| extras.contains(extra))
+                .unwrap_or(false)
+            {
+                conflicts.push(item.conflict().clone());
+            }
+            if item
+                .group()
+                .map(|group1| dev.iter().any(|group2| group1 == group2))
+                .unwrap_or(false)
+            {
+                conflicts.push(item.conflict().clone());
+            }
+        }
+        if conflicts.len() >= 2 {
+            return Err(ProjectError::ConflictIncompatibility(
+                set.clone(),
+                conflicts,
+            ));
         }
     }
 

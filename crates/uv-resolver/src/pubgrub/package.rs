@@ -169,6 +169,8 @@ impl PubGrubPackage {
 
     /// Returns the extra name associated with this PubGrub package, if it has
     /// one.
+    ///
+    /// Note that if this returns `Some`, then `dev` must return `None`.
     pub(crate) fn extra(&self) -> Option<&ExtraName> {
         match &**self {
             // A root can never be a dependency of another package, and a `Python` pubgrub
@@ -186,14 +188,44 @@ impl PubGrubPackage {
         }
     }
 
+    /// Returns the dev (aka "group") name associated with this PubGrub
+    /// package, if it has one.
+    ///
+    /// Note that if this returns `Some`, then `extra` must return `None`.
+    pub(crate) fn dev(&self) -> Option<&GroupName> {
+        match &**self {
+            // A root can never be a dependency of another package, and a `Python` pubgrub
+            // package is never returned by `get_dependencies`. So these cases never occur.
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::Package { dev: None, .. }
+            | PubGrubPackageInner::Extra { .. }
+            | PubGrubPackageInner::Marker { .. } => None,
+            PubGrubPackageInner::Package {
+                dev: Some(ref dev), ..
+            }
+            | PubGrubPackageInner::Dev { ref dev, .. } => Some(dev),
+        }
+    }
+
     /// Extracts a possible conflicting group from this package.
     ///
     /// If this package can't possibly be classified as a conflicting group,
     /// then this returns `None`.
     pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
         let package = self.name_no_root()?;
-        let extra = self.extra()?;
-        Some(ConflictItemRef::from((package, extra)))
+        match (self.extra(), self.dev()) {
+            (None, None) => None,
+            (Some(extra), None) => Some(ConflictItemRef::from((package, extra))),
+            (None, Some(group)) => Some(ConflictItemRef::from((package, group))),
+            (Some(extra), Some(group)) => {
+                unreachable!(
+                    "PubGrub package cannot have both an extra and a group, \
+                     but found extra=`{extra}` and group=`{group}` for \
+                     package `{package}`",
+                )
+            }
+        }
     }
 
     /// Returns `true` if this PubGrub package is a proxy package.
