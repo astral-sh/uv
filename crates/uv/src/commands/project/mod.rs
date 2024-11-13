@@ -22,7 +22,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_pypi_types::{ConflictSet, Conflicts, Requirement};
+use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
@@ -86,7 +86,12 @@ pub(crate) enum ProjectError {
         _1.iter().map(|extra| format!("`{extra}`")).collect::<Vec<String>>().join(", "),
         _0
             .iter()
-            .map(|group| format!("`{}[{}]`", group.package(), group.extra()))
+            .map(|item| {
+                match item.conflict() {
+                    ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
+                    ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
+                }
+            })
             .collect::<Vec<String>>()
             .join(", "),
     )]

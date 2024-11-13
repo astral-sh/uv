@@ -23,6 +23,7 @@ uv-normalize = { workspace = true, features = ["schemars"] }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 
+hashbrown = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }

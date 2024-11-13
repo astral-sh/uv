@@ -287,8 +287,9 @@ pub(super) async fn do_sync(
     for set in conflicts.iter() {
         let conflicting = set
             .iter()
-            .filter(|item| extras.contains(item.extra()))
-            .map(|item| item.extra().clone())
+            .filter_map(|item| item.extra())
+            .filter(|extra| extras.contains(extra))
+            .map(|extra| extra.clone())
             .collect::<Vec<ExtraName>>();
         if conflicting.len() >= 2 {
             return Err(ProjectError::ExtraIncompatibility(set.clone(), conflicting));

@@ -25,6 +25,13 @@ pub use resolver::{
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 
+/// A custom `HashSet` using `hashbrown`.
+///
+/// We use `hashbrown` instead of `std` to get access to its `Equivalent`
+/// trait. This lets use store things like `ConflictItem`, but refer to it via
+/// `ConflictItemRef`. i.e., We can avoid allocs on lookups.
+type FxHashbrownSet<T> = hashbrown::HashSet<T, rustc_hash::FxBuildHasher>;
+
 mod bare;
 mod candidate_selector;
 
