@@ -19,7 +19,7 @@ use uv_distribution_types::{
 use uv_fs::{Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
@@ -82,8 +82,13 @@ pub(crate) enum ProjectError {
     LockedPlatformIncompatibility(String),
 
     #[error(
-        "The requested extras ({}) are incompatible with the declared conflicting extra: {{{}}}",
-        _1.iter().map(|extra| format!("`{extra}`")).collect::<Vec<String>>().join(", "),
+        "{} are incompatible with the declared conflicts: {{{}}}",
+        _1.iter().map(|conflict| {
+            match conflict {
+                ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
+                ConflictPackage::Group(ref group) => format!("group `{group}`"),
+            }
+        }).collect::<Vec<String>>().join(", "),
         _0
             .iter()
             .map(|item| {
@@ -95,7 +100,7 @@ pub(crate) enum ProjectError {
             .collect::<Vec<String>>()
             .join(", "),
     )]
-    ExtraIncompatibility(ConflictSet, Vec<ExtraName>),
+    ConflictIncompatibility(ConflictSet, Vec<ConflictPackage>),
 
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
     RequestedPythonProjectIncompatibility(Version, RequiresPython),

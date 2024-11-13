@@ -2361,7 +2361,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The requested extras (`project1`, `project2`) are incompatible with the declared conflicting extra: {`project[project1]`, `project[project2]`}
+    error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
     "###);
 
     Ok(())
@@ -2595,7 +2595,7 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The requested extras (`project1`, `project2`) are incompatible with the declared conflicting extra: {`project[project1]`, `project[project2]`}
+    error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
     "###);
     // project3/project4 conflict!
     uv_snapshot!(
@@ -2607,7 +2607,7 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The requested extras (`project3`, `project4`) are incompatible with the declared conflicting extra: {`project[project3]`, `project[project4]`}
+    error: extra `project3`, extra `project4` are incompatible with the declared conflicts: {`project[project3]`, `project[project4]`}
     "###);
     // ... but project1/project3 does not.
     uv_snapshot!(
