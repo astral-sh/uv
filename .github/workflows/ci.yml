@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       # Flag that is raised when any code is changed
-      code: ${{ steps.changed.outputs.code_any_changed }}`
+      code: ${{ steps.changed.outputs.code_any_changed }}
     steps:
       - uses: actions/checkout@v4
         with:
