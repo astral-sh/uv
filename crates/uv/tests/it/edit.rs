@@ -5842,6 +5842,63 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that sorting is based on the name, rather than the combined name-and-specifiers.
+#[test]
+fn sorted_dependencies_name_specifiers() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    description = "Add your description here"
+    requires-python = ">=3.12"
+    dependencies = [
+        "typing>=3",
+        "typing-extensions>=4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["anyio"]), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing==3.10.0.0
+     + typing-extensions==4.10.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=4.3.0",
+            "typing>=3",
+            "typing-extensions>=4",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Ensure that the custom ordering of the dependencies is preserved
 /// after adding a package.
 #[test]

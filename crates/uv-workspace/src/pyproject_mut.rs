@@ -920,14 +920,19 @@ pub fn add_dependency(
                 .all(Value::is_str)
                 .then(|| {
                     if deps.iter().tuple_windows().all(|(a, b)| {
-                        a.as_str().map(str::to_lowercase) <= b.as_str().map(str::to_lowercase)
+                        a.as_str()
+                            .map(str::to_lowercase)
+                            .as_deref()
+                            .map(split_specifiers)
+                            <= b.as_str()
+                                .map(str::to_lowercase)
+                                .as_deref()
+                                .map(split_specifiers)
                     }) {
                         Some(Sort::CaseInsensitive)
-                    } else if deps
-                        .iter()
-                        .tuple_windows()
-                        .all(|(a, b)| a.as_str() <= b.as_str())
-                    {
+                    } else if deps.iter().tuple_windows().all(|(a, b)| {
+                        a.as_str().map(split_specifiers) <= b.as_str().map(split_specifiers)
+                    }) {
                         Some(Sort::CaseSensitive)
                     } else {
                         None
@@ -1196,4 +1201,37 @@ fn reformat_array_multiline(deps: &mut Array) {
         rv
     });
     deps.set_trailing_comma(true);
+}
+
+/// Split a requirement into the package name and its dependency specifiers.
+///
+/// E.g., given `flask>=1.0`, this function returns `("flask", ">=1.0")`. But given
+/// `Flask>=1.0`, this function returns `("Flask", ">=1.0")`.
+///
+/// Extras are retained, such that `flask[dotenv]>=1.0` returns `("flask[dotenv]", ">=1.0")`.
+fn split_specifiers(req: &str) -> (&str, &str) {
+    let (name, specifiers) = req
+        .find(['>', '<', '=', '~', '!', '@'])
+        .map_or((req, ""), |pos| {
+            let (name, specifiers) = req.split_at(pos);
+            (name, specifiers)
+        });
+    (name.trim(), specifiers.trim())
+}
+
+#[cfg(test)]
+mod test {
+    use super::split_specifiers;
+
+    #[test]
+    fn split() {
+        assert_eq!(split_specifiers("flask>=1.0"), ("flask", ">=1.0"));
+        assert_eq!(split_specifiers("Flask>=1.0"), ("Flask", ">=1.0"));
+        assert_eq!(
+            split_specifiers("flask[dotenv]>=1.0"),
+            ("flask[dotenv]", ">=1.0")
+        );
+        assert_eq!(split_specifiers("flask[dotenv]",), ("flask[dotenv]", ""));
+        assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
+    }
 }
