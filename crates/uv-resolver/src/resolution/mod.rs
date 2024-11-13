@@ -49,8 +49,8 @@ impl AnnotatedDist {
     /// Returns the [`IndexUrl`] of the distribution, if it is from a registry.
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.dist {
-            ResolvedDist::Installed(_) => None,
-            ResolvedDist::Installable(dist) => match dist {
+            ResolvedDist::Installed { .. } => None,
+            ResolvedDist::Installable { dist, .. } => match dist {
                 Dist::Built(dist) => match dist {
                     BuiltDist::Registry(dist) => Some(&dist.best_wheel().index),
                     BuiltDist::DirectUrl(_) => None,

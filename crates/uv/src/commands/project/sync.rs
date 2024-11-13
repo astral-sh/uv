@@ -454,7 +454,7 @@ fn apply_no_virtual_project(
     resolution: uv_distribution_types::Resolution,
 ) -> uv_distribution_types::Resolution {
     resolution.filter(|dist| {
-        let ResolvedDist::Installable(dist) = dist else {
+        let ResolvedDist::Installable { dist, .. } = dist else {
             return true;
         };
 
@@ -481,26 +481,31 @@ fn apply_editable_mode(
 
         // Filter out any editable distributions.
         EditableMode::NonEditable => resolution.map(|dist| {
-            let ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
-                DirectorySourceDist {
-                    name,
-                    install_path,
-                    editable: true,
-                    r#virtual: false,
-                    url,
-                },
-            ))) = dist
+            let ResolvedDist::Installable {
+                dist:
+                    Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                        name,
+                        install_path,
+                        editable: true,
+                        r#virtual: false,
+                        url,
+                    })),
+                version,
+            } = dist
             else {
                 return dist;
             };
 
-            ResolvedDist::Installable(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: false,
-                r#virtual: false,
-                url,
-            })))
+            ResolvedDist::Installable {
+                dist: Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name,
+                    install_path,
+                    editable: false,
+                    r#virtual: false,
+                    url,
+                })),
+                version,
+            }
         }),
     }
 }

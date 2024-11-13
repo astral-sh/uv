@@ -107,18 +107,18 @@ impl<'a> Planner<'a> {
                 }
             }
 
-            let ResolvedDist::Installable(installable) = dist else {
+            let ResolvedDist::Installable { dist, .. } = dist else {
                 unreachable!("Installed distribution could not be found in site-packages: {dist}");
             };
 
             if cache.must_revalidate(dist.name()) {
                 debug!("Must revalidate requirement: {}", dist.name());
-                remote.push(installable.clone());
+                remote.push(dist.clone());
                 continue;
             }
 
             // Identify any cached distributions that satisfy the requirement.
-            match installable {
+            match dist {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
                     if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
                         if *entry.index.url() != wheel.best_wheel().index {
@@ -309,8 +309,8 @@ impl<'a> Planner<'a> {
                 }
             }
 
-            debug!("Identified uncached distribution: {installable}");
-            remote.push(installable.clone());
+            debug!("Identified uncached distribution: {dist}");
+            remote.push(dist.clone());
         }
 
         // Remove any unnecessary packages.

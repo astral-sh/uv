@@ -1151,7 +1151,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             ResolvedDistRef::InstallableRegistryBuiltDist { wheel, .. } => wheel
                 .filename()
                 .unwrap_or(Cow::Borrowed("unknown filename")),
-            ResolvedDistRef::Installed(_) => Cow::Borrowed("installed"),
+            ResolvedDistRef::Installed { .. } => Cow::Borrowed("installed"),
         };
 
         debug!(
@@ -1958,7 +1958,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let dist = dist.for_resolution().to_owned();
 
                     let response = match dist {
-                        ResolvedDist::Installable(dist) => {
+                        ResolvedDist::Installable { dist, .. } => {
                             let metadata = provider
                                 .get_or_build_wheel_metadata(&dist)
                                 .boxed_local()
@@ -1966,7 +1966,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                             Response::Dist { dist, metadata }
                         }
-                        ResolvedDist::Installed(dist) => {
+                        ResolvedDist::Installed { dist } => {
                             let metadata = dist.metadata().map_err(|err| {
                                 ResolveError::ReadInstalled(Box::new(dist.clone()), err)
                             })?;
@@ -2621,7 +2621,7 @@ impl<'a> From<ResolvedDistRef<'a>> for Request {
                 let built = prioritized.built_dist().expect("at least one wheel");
                 Request::Dist(Dist::Built(BuiltDist::Registry(built)))
             }
-            ResolvedDistRef::Installed(dist) => Request::Installed(dist.clone()),
+            ResolvedDistRef::Installed { dist } => Request::Installed(dist.clone()),
         }
     }
 }
