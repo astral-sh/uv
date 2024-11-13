@@ -140,7 +140,7 @@ A revision (i.e., commit), tag, or branch may also be included:
 
 ```console
 $ uv add git+https://github.com/encode/httpx --tag 0.27.0
-$ uv add git+https://github.com/encode/httpx --branch main
+$ uv add git+https://github.com/encode/httpx --branch master
 $ uv add git+https://github.com/encode/httpx --rev 326b9431c761e1ef1e00b9f760d1f654c8db48c6
 ```
 

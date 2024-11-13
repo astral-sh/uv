@@ -7,7 +7,7 @@ RequirementsTxtFileError {
     error: Pep508 {
         source: Pep508Error {
             message: String(
-                "Missing space before '#', the end of the URL is ambiguous",
+                "Expected end of input or `;`, found `#`; comments must be preceded by a leading space",
             ),
             start: 10,
             len: 1,

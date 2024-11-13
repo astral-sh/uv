@@ -11,7 +11,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -20,7 +20,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -28,8 +28,9 @@ use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, LockVersion, Options, OptionsBuilder, PythonRequirement,
-    RequiresPython, ResolverManifest, ResolverMarkers, SatisfiesResult, VERSION,
+    RequiresPython, ResolverEnvironment, ResolverManifest, SatisfiesResult, VERSION,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
@@ -76,42 +77,60 @@ pub(crate) async fn lock(
     frozen: bool,
     dry_run: bool,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
-    // Find an interpreter for the project
-    let interpreter = ProjectInterpreter::discover(
-        &workspace,
-        python.as_deref().map(PythonRequest::parse),
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
+    // Determine the lock mode.
+    let interpreter;
+    let mode = if frozen {
+        LockMode::Frozen
+    } else {
+        // Find an interpreter for the project
+        interpreter = ProjectInterpreter::discover(
+            &workspace,
+            project_dir,
+            python.as_deref().map(PythonRequest::parse),
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            install_mirrors,
+            no_config,
+            cache,
+            printer,
+        )
+        .await?
+        .into_interpreter();
+
+        if locked {
+            LockMode::Locked(&interpreter)
+        } else if dry_run {
+            LockMode::DryRun(&interpreter)
+        } else {
+            LockMode::Write(&interpreter)
+        }
+    };
 
     // Initialize any shared state.
     let state = SharedState::default();
 
     // Perform the lock operation.
     match do_safe_lock(
-        locked,
-        frozen,
-        dry_run,
+        mode,
         &workspace,
-        &interpreter,
         settings.as_ref(),
         LowerBound::Warn,
         &state,
@@ -119,6 +138,7 @@ pub(crate) async fn lock(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -146,37 +166,30 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
-        ))) => {
-            diagnostics::fetch_and_build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum LockMode<'env> {
+    /// Write the lockfile to disk.
+    Write(&'env Interpreter),
+    /// Perform a resolution, but don't write the lockfile to disk.
+    DryRun(&'env Interpreter),
+    /// Error if the lockfile is not up-to-date with the project requirements.
+    Locked(&'env Interpreter),
+    /// Use the existing lockfile without performing a resolution.
+    Frozen,
 }
 
 /// Perform a lock operation, respecting the `--locked` and `--frozen` parameters.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_safe_lock(
-    locked: bool,
-    frozen: bool,
-    dry_run: bool,
+    mode: LockMode<'_>,
     workspace: &Workspace,
-    interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
     bounds: LowerBound,
     state: &SharedState,
@@ -184,81 +197,90 @@ pub(super) async fn do_safe_lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
-    if frozen {
-        // Read the existing lockfile, but don't attempt to lock the project.
-        let existing = read(workspace)
-            .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)?;
-        Ok(LockResult::Unchanged(existing))
-    } else if locked {
-        // Read the existing lockfile.
-        let existing = read(workspace)
-            .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)?;
-
-        // Perform the lock operation, but don't write the lockfile to disk.
-        let result = do_lock(
-            workspace,
-            interpreter,
-            Some(existing),
-            settings,
-            bounds,
-            state,
-            logger,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
-
-        // If the lockfile changed, return an error.
-        if matches!(result, LockResult::Changed(_, _)) {
-            return Err(ProjectError::LockMismatch);
+    match mode {
+        LockMode::Frozen => {
+            // Read the existing lockfile, but don't attempt to lock the project.
+            let existing = read(workspace)
+                .await?
+                .ok_or_else(|| ProjectError::MissingLockfile)?;
+            Ok(LockResult::Unchanged(existing))
         }
+        LockMode::Locked(interpreter) => {
+            // Read the existing lockfile.
+            let existing = read(workspace)
+                .await?
+                .ok_or_else(|| ProjectError::MissingLockfile)?;
 
-        Ok(result)
-    } else {
-        // Read the existing lockfile.
-        let existing = match read(workspace).await {
-            Ok(Some(existing)) => Some(existing),
-            Ok(None) => None,
-            Err(ProjectError::Lock(err)) => {
-                warn_user!("Failed to read existing lockfile; ignoring locked requirements: {err}");
-                None
+            // Perform the lock operation, but don't write the lockfile to disk.
+            let result = do_lock(
+                workspace,
+                interpreter,
+                Some(existing),
+                settings,
+                bounds,
+                state,
+                logger,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+            )
+            .await?;
+
+            // If the lockfile changed, return an error.
+            if matches!(result, LockResult::Changed(_, _)) {
+                return Err(ProjectError::LockMismatch);
             }
-            Err(err) => return Err(err),
-        };
 
-        // Perform the lock operation.
-        let result = do_lock(
-            workspace,
-            interpreter,
-            existing,
-            settings,
-            bounds,
-            state,
-            logger,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
-
-        // If the lockfile changed, write it to disk.
-        if !dry_run {
-            if let LockResult::Changed(_, lock) = &result {
-                commit(lock, workspace).await?;
-            }
+            Ok(result)
         }
+        LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
+            // Read the existing lockfile.
+            let existing = match read(workspace).await {
+                Ok(Some(existing)) => Some(existing),
+                Ok(None) => None,
+                Err(ProjectError::Lock(err)) => {
+                    warn_user!(
+                        "Failed to read existing lockfile; ignoring locked requirements: {err}"
+                    );
+                    None
+                }
+                Err(err) => return Err(err),
+            };
 
-        Ok(result)
+            // Perform the lock operation.
+            let result = do_lock(
+                workspace,
+                interpreter,
+                existing,
+                settings,
+                bounds,
+                state,
+                logger,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+            )
+            .await?;
+
+            // If the lockfile changed, write it to disk.
+            if !matches!(mode, LockMode::DryRun(_)) {
+                if let LockResult::Changed(_, lock) = &result {
+                    commit(lock, workspace).await?;
+                }
+            }
+
+            Ok(result)
+        }
     }
 }
 
@@ -274,6 +296,7 @@ async fn do_lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
@@ -284,7 +307,6 @@ async fn do_lock(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         dependency_metadata,
@@ -302,13 +324,7 @@ async fn do_lock(
     let requirements = workspace.non_project_requirements()?;
     let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
     let constraints = workspace.constraints();
-    let dev: Vec<_> = workspace
-        .pyproject_toml()
-        .dependency_groups
-        .iter()
-        .flat_map(|groups| groups.keys().cloned())
-        .chain(std::iter::once(DEV_DEPENDENCIES.clone()))
-        .collect();
+    let dev = workspace.groups().into_iter().cloned().collect::<Vec<_>>();
     let source_trees = vec![];
 
     // Collect the list of members.
@@ -364,7 +380,7 @@ async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    let requires_python = find_requires_python(workspace)?;
+    let requires_python = find_requires_python(workspace);
 
     let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {
@@ -501,7 +517,6 @@ async fn do_lock(
             interpreter,
             &requires_python,
             index_locations,
-            build_options,
             upgrade,
             &options,
             &hasher,
@@ -570,7 +585,7 @@ async fn do_lock(
             // `preferences-dependent-forking` packse scenario). To avoid this, we store the forks in the
             // lockfile. We read those after all the lockfile filters, to allow the forks to change when
             // the environment changed, e.g. the python bound check above can lead to different forking.
-            let resolver_markers = ResolverMarkers::universal(
+            let resolver_env = ResolverEnvironment::universal(
                 forks_lock
                     .map(|lock| lock.fork_markers().to_vec())
                     .unwrap_or_else(|| {
@@ -586,7 +601,8 @@ async fn do_lock(
                 ExtrasResolver::new(&hasher, &state.index, database)
                     .with_reporter(ResolverReporter::from(printer))
                     .resolve(workspace.members_requirements())
-                    .await?
+                    .await
+                    .map_err(|err| ProjectError::Operation(err.into()))?
                     .into_iter()
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
@@ -613,8 +629,9 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                resolver_markers,
+                resolver_env,
                 python_requirement,
+                workspace.conflicting_groups(),
                 &client,
                 &flat_index,
                 &state.index,
@@ -644,6 +661,7 @@ async fn do_lock(
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution_graph(&resolution, workspace.install_path())?
                 .with_manifest(manifest)
+                .with_conflicting_groups(workspace.conflicting_groups())
                 .with_supported_environments(
                     environments
                         .cloned()
@@ -684,7 +702,6 @@ impl ValidatedLock {
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
-        build_options: &BuildOptions,
         upgrade: &Upgrade,
         options: &Options,
         hasher: &HashStrategy,
@@ -788,6 +805,16 @@ impl ValidatedLock {
             return Ok(Self::Versions(lock));
         }
 
+        // If the conflicting group config has changed, we have to perform a clean resolution.
+        if &workspace.conflicting_groups() != lock.conflicting_groups() {
+            debug!(
+                "Ignoring existing lockfile due to change in conflicting groups: `{:?}` vs. `{:?}`",
+                workspace.conflicting_groups(),
+                lock.conflicting_groups(),
+            );
+            return Ok(Self::Versions(lock));
+        }
+
         // If the user provided at least one index URL (from the command line, or from a configuration
         // file), don't use the existing lockfile if it references any registries that are no longer
         // included in the current configuration.
@@ -811,7 +838,6 @@ impl ValidatedLock {
                 overrides,
                 dependency_metadata,
                 indexes,
-                build_options,
                 interpreter.tags()?,
                 hasher,
                 index,
@@ -967,6 +993,17 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
                 }
             }
         }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+/// Read the lockfile from the workspace as bytes.
+///
+/// Returns `Ok(None)` if the lockfile does not exist.
+pub(crate) async fn read_bytes(workspace: &Workspace) -> Result<Option<Vec<u8>>, ProjectError> {
+    match fs_err::tokio::read(&workspace.install_path().join("uv.lock")).await {
+        Ok(encoded) => Ok(Some(encoded)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err.into()),
     }

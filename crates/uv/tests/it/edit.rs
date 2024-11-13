@@ -1074,14 +1074,14 @@ fn add_remove_dev() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
 
-        [package.dependency-groups]
+        [package.dev-dependencies]
         dev = [
             { name = "anyio" },
         ]
 
         [package.metadata]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = [{ name = "anyio", specifier = "==3.7.0" }]
 
         [[package]]
@@ -1177,7 +1177,7 @@ fn add_remove_dev() -> Result<()> {
 
         [package.metadata]
 
-        [package.metadata.dependency-groups]
+        [package.metadata.requires-dev]
         dev = []
         "###
         );
@@ -2936,15 +2936,11 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Uninstalled 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     - idna==3.6
-     + idna==2.7
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-     - urllib3==2.2.1
-     + urllib3==1.23
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -2979,7 +2975,7 @@ fn add_update_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3026,10 +3022,10 @@ fn add_update_marker() -> Result<()> {
     Installed 1 package in [TIME]
      - certifi==2024.2.2
      - charset-normalizer==3.3.2
-     - idna==2.7
+     - idna==3.6
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
      - requests==2.31.0
-     - urllib3==1.23
+     - urllib3==2.2.1
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3679,6 +3675,9 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
 fn add_frozen() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
@@ -3698,6 +3697,7 @@ fn add_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3723,6 +3723,7 @@ fn add_frozen() -> Result<()> {
     });
 
     assert!(!context.temp_dir.join("uv.lock").exists());
+    assert!(!context.venv.exists());
 
     Ok(())
 }
@@ -3731,6 +3732,9 @@ fn add_frozen() -> Result<()> {
 #[test]
 fn add_no_sync() -> Result<()> {
     let context = TestContext::new("3.12");
+
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3751,6 +3755,7 @@ fn add_no_sync() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     "###);
 
@@ -3777,6 +3782,7 @@ fn add_no_sync() -> Result<()> {
     });
 
     assert!(context.temp_dir.join("uv.lock").exists());
+    assert!(!context.venv.exists());
 
     Ok(())
 }
@@ -5500,57 +5506,76 @@ fn add_git_to_script() -> Result<()> {
     Ok(())
 }
 
-/// Revert changes to a `pyproject.toml` the `add` fails.
+/// Revert changes to the `pyproject.toml` and `uv.lock` when the `add` operation fails.
 #[test]
 fn fail_to_add_revert_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
         [project]
-        name = "project"
+        name = "parent"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+    "#})?;
+
+    // Add a dependency on a package that declares static metadata (so can always resolve), but
+    // can't be installed.
+    let pyproject_toml = context.temp_dir.child("child/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
 
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("child")
+        .child("setup.py")
+        .write_str("1/0")?;
 
-    // Adding `pytorch==1.0.2` should produce an error
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add().arg("pytorch==1.0.2"), @r###"
+    uv_snapshot!(filters, context.add().arg("./child"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `pytorch==1.0.2`
-      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+    Resolved 3 packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 11, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 410, in build_wheel
-        return self._build_with_temp_dir(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 395, in _build_with_temp_dir
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 15, in <module>
-    Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
-
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+          ZeroDivisionError: division by zero
     "###);
 
-    let pyproject_toml = context.read("pyproject.toml");
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5558,17 +5583,126 @@ fn fail_to_add_revert_project() -> Result<()> {
         assert_snapshot!(
             pyproject_toml, @r###"
         [project]
-        name = "project"
+        name = "parent"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+        "###
+        );
+    });
+
+    // The lockfile should not exist, even though resolution succeeded.
+    assert!(!context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Revert changes to the `pyproject.toml` and `uv.lock` when the `add` operation fails.
+///
+/// In this case, the project has an existing lockfile.
+#[test]
+fn fail_to_edit_revert_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let before = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    // Add a dependency on a package that declares static metadata (so can always resolve), but
+    // can't be installed.
+    let pyproject_toml = context.temp_dir.child("child/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
 
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
+    "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("child")
+        .child("setup.py")
+        .write_str("1/0")?;
+
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.add().arg("./child"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+          ZeroDivisionError: division by zero
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
         "###
         );
     });
+
+    // The lockfile should exist, but be unchanged.
+    let after = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(before, after);
 
     Ok(())
 }
@@ -6076,6 +6210,9 @@ fn add_index() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").arg("--index").arg("https://pypi.org/simple").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
@@ -6105,6 +6242,9 @@ fn add_index() -> Result<()> {
             "iniconfig==2.0.0",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         url = "https://pypi.org/simple"
         "###
@@ -6120,6 +6260,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6174,6 +6317,9 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [[tool.uv.index]]
         name = "pytorch"
         url = "https://download.pytorch.org/whl/cu121"
@@ -6196,6 +6342,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6275,6 +6424,9 @@ fn add_index() -> Result<()> {
             "jinja2>=3.1.3",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6297,6 +6449,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6385,6 +6540,9 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6407,6 +6565,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6504,6 +6665,9 @@ fn add_index() -> Result<()> {
             "typing-extensions>=4.12.2",
         ]
 
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+
         [tool.uv.sources]
         jinja2 = { index = "pytorch" }
 
@@ -6526,6 +6690,9 @@ fn add_index() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
+
+        [manifest]
+        constraints = [{ name = "markupsafe", specifier = "<3" }]
 
         [[package]]
         name = "iniconfig"
@@ -6790,7 +6957,7 @@ fn add_index_credentials() -> Result<()> {
     "#})?;
 
     // Provide credentials for the index via the environment variable.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env("UV_DEFAULT_INDEX", "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6884,7 +7051,7 @@ fn add_index_comments() -> Result<()> {
     "#})?;
 
     // Preserve the comment on the index URL, despite replacing it.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env("UV_DEFAULT_INDEX", "https://pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://pypi.org/simple"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

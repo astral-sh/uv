@@ -1,5 +1,5 @@
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_python::{Interpreter, PythonVersion};
 
 use crate::{RequiresPython, RequiresPythonRange};
@@ -38,14 +38,7 @@ impl PythonRequirement {
         interpreter: &Interpreter,
         requires_python: RequiresPython,
     ) -> Self {
-        let exact = interpreter.python_full_version().version.clone();
-        let installed = interpreter.python_full_version().version.only_release();
-        Self {
-            exact,
-            installed: RequiresPython::greater_than_equal_version(&installed),
-            target: requires_python,
-            source: PythonRequirementSource::RequiresPython,
-        }
+        Self::from_marker_environment(interpreter.markers(), requires_python)
     }
 
     /// Create a [`PythonRequirement`] to resolve against an [`Interpreter`].
@@ -60,6 +53,26 @@ impl PythonRequirement {
         }
     }
 
+    /// Create a [`PythonRequirement`] from a [`MarkerEnvironment`] and a
+    /// specific `Requires-Python` directive.
+    ///
+    /// This has the same "source" as
+    /// [`PythonRequirement::from_requires_python`], but is useful for
+    /// constructing a `PythonRequirement` without an [`Interpreter`].
+    pub fn from_marker_environment(
+        marker_env: &MarkerEnvironment,
+        requires_python: RequiresPython,
+    ) -> Self {
+        let exact = marker_env.python_full_version().version.clone();
+        let installed = marker_env.python_full_version().version.only_release();
+        Self {
+            exact,
+            installed: RequiresPython::greater_than_equal_version(&installed),
+            target: requires_python,
+            source: PythonRequirementSource::RequiresPython,
+        }
+    }
+
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
     /// than the current `Requires-Python` minimum.
     pub fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
@@ -69,6 +82,12 @@ impl PythonRequirement {
             target: self.target.narrow(target)?,
             source: self.source,
         })
+    }
+
+    /// Returns `true` if the minimum version of Python required by the target is greater than the
+    /// installed version.
+    pub fn raises(&self, target: &RequiresPythonRange) -> bool {
+        target.lower() > self.target.range().lower()
     }
 
     /// Return the exact version of Python.

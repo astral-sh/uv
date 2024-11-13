@@ -6,6 +6,7 @@ use crate::{
     version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
 };
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "tracing")]
 use tracing::warn;
 
 /// Sorted version specifiers, such as `>=2.1,<3`.
@@ -23,19 +24,12 @@ use tracing::warn;
 /// // VersionSpecifiers derefs into a list of specifiers
 /// assert_eq!(version_specifiers.iter().position(|specifier| *specifier.operator() == Operator::LessThan), Some(1));
 /// ```
-#[derive(
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Debug,
-    Clone,
-    Hash,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-#[rkyv(derive(Debug))]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VersionSpecifiers(Vec<VersionSpecifier>);
 
 impl std::ops::Deref for VersionSpecifiers {
@@ -57,7 +51,7 @@ impl VersionSpecifiers {
         self.iter().all(|specifier| specifier.contains(version))
     }
 
-    /// Returns `true` if the specifiers are empty is empty.
+    /// Returns `true` if there are no specifiers.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -97,6 +91,7 @@ impl VersionSpecifiers {
                     specifiers.push(VersionSpecifier::not_equals_star_version(prev.clone()));
                 }
                 _ => {
+                    #[cfg(feature = "tracing")]
                     warn!("Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}");
                 }
             }
@@ -114,6 +109,15 @@ impl VersionSpecifiers {
 impl FromIterator<VersionSpecifier> for VersionSpecifiers {
     fn from_iter<T: IntoIterator<Item = VersionSpecifier>>(iter: T) -> Self {
         Self::from_unsorted(iter.into_iter().collect())
+    }
+}
+
+impl IntoIterator for VersionSpecifiers {
+    type Item = VersionSpecifier;
+    type IntoIter = std::vec::IntoIter<VersionSpecifier>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -239,19 +243,12 @@ impl std::error::Error for VersionSpecifiersParseError {}
 /// let version_specifier = VersionSpecifier::from_str("== 1.*").unwrap();
 /// assert!(version_specifier.contains(&version));
 /// ```
-#[derive(
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Debug,
-    Clone,
-    Hash,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
+#[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-#[rkyv(derive(Debug))]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VersionSpecifier {
     /// ~=|==|!=|<=|>=|<|>|===, plus whether the version ended with a star
     pub(crate) operator: Operator,
@@ -655,12 +652,7 @@ impl std::fmt::Display for VersionSpecifierBuildError {
                 operator: ref op,
                 ref version,
             } => {
-                let local = version
-                    .local()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<String>>()
-                    .join(".");
+                let local = version.local();
                 write!(
                     f,
                     "Operator {op} is incompatible with versions \

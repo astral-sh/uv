@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, MarkerTreeContents};
+use uv_pypi_types::ConflictingGroupRef;
 
 use crate::python_requirement::PythonRequirement;
 
@@ -166,6 +167,35 @@ impl PubGrubPackage {
         }
     }
 
+    /// Returns the extra name associated with this PubGrub package, if it has
+    /// one.
+    pub(crate) fn extra(&self) -> Option<&ExtraName> {
+        match &**self {
+            // A root can never be a dependency of another package, and a `Python` pubgrub
+            // package is never returned by `get_dependencies`. So these cases never occur.
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::Package { extra: None, .. }
+            | PubGrubPackageInner::Dev { .. }
+            | PubGrubPackageInner::Marker { .. } => None,
+            PubGrubPackageInner::Package {
+                extra: Some(ref extra),
+                ..
+            }
+            | PubGrubPackageInner::Extra { ref extra, .. } => Some(extra),
+        }
+    }
+
+    /// Extracts a possible conflicting group from this package.
+    ///
+    /// If this package can't possibly be classified as a conflicting group,
+    /// then this returns `None`.
+    pub(crate) fn conflicting_group(&self) -> Option<ConflictingGroupRef<'_>> {
+        let package = self.name_no_root()?;
+        let extra = self.extra()?;
+        Some(ConflictingGroupRef::from((package, extra)))
+    }
+
     /// Returns `true` if this PubGrub package is a proxy package.
     pub(crate) fn is_proxy(&self) -> bool {
         matches!(
@@ -205,6 +235,7 @@ impl PubGrubPackage {
         }
     }
 
+    /// This isn't actually used anywhere, but can be useful for printf-debugging.
     #[allow(dead_code)]
     pub(crate) fn kind(&self) -> &'static str {
         match &**self {

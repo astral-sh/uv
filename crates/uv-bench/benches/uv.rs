@@ -97,11 +97,11 @@ mod resolver {
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, Tags};
-    use uv_pypi_types::ResolverMarkerEnvironment;
+    use uv_pypi_types::{ConflictingGroupList, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
-        ResolutionGraph, Resolver, ResolverMarkers,
+        ResolutionGraph, Resolver, ResolverEnvironment,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -163,6 +163,7 @@ mod resolver {
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
         let sources = SourceStrategy::default();
         let dependency_metadata = DependencyMetadata::default();
+        let conflicting_groups = ConflictingGroupList::empty();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -198,9 +199,9 @@ mod resolver {
         );
 
         let markers = if universal {
-            ResolverMarkers::universal(vec![])
+            ResolverEnvironment::universal(vec![])
         } else {
-            ResolverMarkers::specific_environment(ResolverMarkerEnvironment::from(MARKERS.clone()))
+            ResolverEnvironment::specific(ResolverMarkerEnvironment::from(MARKERS.clone()))
         };
 
         let resolver = Resolver::new(
@@ -208,6 +209,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
+            conflicting_groups,
             Some(&TAGS),
             &flat_index,
             &index,

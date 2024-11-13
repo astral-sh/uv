@@ -29,7 +29,7 @@ use uv_install_wheel::linker::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
-use uv_pypi_types::ResolverMarkerEnvironment;
+use uv_pypi_types::{ConflictingGroupList, ResolverMarkerEnvironment};
 use uv_python::PythonEnvironment;
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
@@ -37,7 +37,7 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverMarkers,
+    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverEnvironment,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -102,8 +102,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     tags: Option<&Tags>,
-    markers: ResolverMarkers,
+    resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    conflicting_groups: ConflictingGroupList,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
@@ -238,7 +239,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let preferences = Preferences::from_iter(preferences, &markers);
+    let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -253,7 +254,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve(&markers)
+            .resolve(&resolver_env)
             .await?
         }
         DependencyMode::Direct => Vec::new(),
@@ -289,7 +290,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             manifest,
             options,
             &python_requirement,
-            markers,
+            resolver_env,
+            conflicting_groups,
             tags,
             flat_index,
             index,
@@ -457,10 +459,7 @@ pub(crate) async fn install(
         )
         .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
 
-        let wheels = preparer
-            .prepare(remote.clone(), in_flight)
-            .await
-            .context("Failed to prepare distributions")?;
+        let wheels = preparer.prepare(remote.clone(), in_flight).await?;
 
         logger.on_prepare(wheels.len(), start, printer)?;
 
@@ -751,6 +750,9 @@ pub(crate) fn diagnose_environment(
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
+    #[error("Failed to prepare distributions")]
+    Prepare(#[from] uv_installer::PrepareError),
+
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
 
@@ -771,7 +773,4 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
-
-    #[error(transparent)]
-    PubGrubSpecifier(#[from] uv_resolver::PubGrubSpecifierError),
 }

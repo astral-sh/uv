@@ -94,6 +94,10 @@ Named indexes referenced via `tool.uv.sources` must be defined within the projec
 file; indexes provided via the command-line, environment variables, or user-level configuration will
 not be recognized.
 
+If an index is marked as both `default = true` and `explicit = true`, it will be treated as an
+explicit index (i.e., only usable via `tool.uv.sources`) while also removing PyPI as the default
+index.
+
 ## Searching across multiple indexes
 
 By default, uv will stop at the first index on which a given package is available, and limit
@@ -138,12 +142,12 @@ url = "https://example.com/simple"
 ```
 
 From there, you can set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and
-`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL` is the uppercase version
-of the index name, with non-alphanumeric characters replaced by underscores:
+`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL_PROXY` is the uppercase
+version of the index name, with non-alphanumeric characters replaced by underscores:
 
 ```sh
-export UV_INDEX_INTERNAL_USERNAME=public
-export UV_INDEX_INTERNAL_PASSWORD=koala
+export UV_INDEX_INTERNAL_PROXY_USERNAME=public
+export UV_INDEX_INTERNAL_PROXY_PASSWORD=koala
 ```
 
 By providing credentials via environment variables, you can avoid storing sensitive information in

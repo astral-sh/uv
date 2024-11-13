@@ -26,18 +26,20 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use crate::marker::MarkerValueExtra;
 use cursor::Cursor;
 pub use marker::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
-    StringMarkerTree, StringVersion, VersionMarkerTree,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
+    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
 pub use unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
 pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
+/// Version and version specifiers used in requirements (reexport).
+// https://github.com/konstin/pep508_rs/issues/19
+pub use uv_pep440;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 pub use verbatim_url::{
     expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,
@@ -707,18 +709,17 @@ fn parse_url<T: Pep508Url>(
             len += c.len_utf8();
 
             // If we see a top-level semicolon or hash followed by whitespace, we're done.
-            match c {
-                ';' if cursor.peek_char().is_some_and(char::is_whitespace) => {
+            if cursor.peek_char().is_some_and(|c| matches!(c, ';' | '#')) {
+                let mut cursor = cursor.clone();
+                cursor.next();
+                if cursor.peek_char().is_some_and(char::is_whitespace) {
                     break;
                 }
-                '#' if cursor.peek_char().is_some_and(char::is_whitespace) => {
-                    break;
-                }
-                _ => {}
             }
         }
         (start, len)
     };
+
     let url = cursor.slice(start, len);
     if url.is_empty() {
         return Err(Pep508Error {
@@ -925,8 +926,6 @@ fn parse_pep508_requirement<T: Pep508Url>(
         }
     };
 
-    let requirement_end = cursor.pos();
-
     // If the requirement consists solely of a package name, and that name appears to be an archive,
     // treat it as a URL requirement, for consistency and security. (E.g., `requests-2.26.0.tar.gz`
     // is a valid Python package name, but we should treat it as a reference to a file.)
@@ -957,25 +956,13 @@ fn parse_pep508_requirement<T: Pep508Url>(
 
     // wsp*
     cursor.eat_whitespace();
-    if let Some((pos, char)) = cursor.next() {
-        if marker.is_none() {
-            if let Some(VersionOrUrl::Url(url)) = requirement_kind {
-                let url = url.to_string();
-                for c in [';', '#'] {
-                    if url.ends_with(c) {
-                        return Err(Pep508Error {
-                            message: Pep508ErrorSource::String(format!(
-                                "Missing space before '{c}', the end of the URL is ambiguous"
-                            )),
-                            start: requirement_end - c.len_utf8(),
-                            len: c.len_utf8(),
-                            input: cursor.to_string(),
-                        });
-                    }
-                }
-            }
-        }
-        let message = if marker.is_none() {
+
+    if let Some((pos, char)) = cursor.next().filter(|(_, c)| *c != '#') {
+        let message = if char == '#' {
+            format!(
+                r#"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"#
+            )
+        } else if marker.is_none() {
             format!(r#"Expected end of input or `;`, found `{char}`"#)
         } else {
             format!(r#"Expected end of input, found `{char}`"#)

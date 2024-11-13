@@ -122,7 +122,7 @@ The documentation is divided into:
 
 ### Warnings
 
-1. `warn_user` and `warn_user_once` are shown without the `--verbose `flag.
+1. `warn_user` and `warn_user_once` are shown without the `--verbose` flag.
    - These methods should be preferred over tracing warnings when the warning is actionable.
    - Deprecation warnings should use these methods.
 1. Deprecation warnings must be actionable.

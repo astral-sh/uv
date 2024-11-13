@@ -22,6 +22,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 
+pub mod comma;
 pub mod compat;
 pub mod options;
 pub mod version;
@@ -179,7 +180,7 @@ pub struct GlobalArgs {
         conflicts_with = "no_color",
         value_name = "COLOR_CHOICE"
     )]
-    pub color: ColorChoice,
+    pub color: Option<ColorChoice>,
 
     /// Whether to load TLS certificates from the platform's native certificate store.
     ///
@@ -204,6 +205,26 @@ pub struct GlobalArgs {
 
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
     pub no_offline: bool,
+
+    /// Allow insecure connections to a host.
+    ///
+    /// Can be provided multiple times.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[arg(
+        global = true,
+        long,
+        alias = "trusted-host",
+        env = EnvVars::UV_INSECURE_HOST,
+        value_delimiter = ' ',
+        value_parser = parse_insecure_host,
+    )]
+    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Whether to enable experimental, preview features.
     ///
@@ -303,7 +324,7 @@ pub enum Commands {
     /// interpreters are found by searching for Python executables in the `PATH` environment
     /// variable.
     ///
-    /// On Windows, the `py` launcher is also invoked to find Python executables.
+    /// On Windows, the registry is also searched for Python executables.
     ///
     /// By default, uv will download Python if a version cannot be found. This behavior can be
     /// disabled with the `--no-python-downloads` flag or the `python-downloads` setting.
@@ -1768,25 +1789,6 @@ pub struct PipUninstallArgs {
     #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
-
     /// Use the system Python to uninstall packages.
     ///
     /// By default, uv uninstalls from the virtual environment in the current working directory or
@@ -1907,6 +1909,16 @@ pub struct PipListArgs {
     #[arg(long, value_enum, default_value_t = ListFormat::default())]
     pub format: ListFormat,
 
+    /// List outdated packages.
+    ///
+    /// The latest version of each package will be shown alongside the installed version. Up-to-date
+    /// packages will be omitted from the output.
+    #[arg(long, overrides_with("no_outdated"))]
+    pub outdated: bool,
+
+    #[arg(long, overrides_with("outdated"), hide = true)]
+    pub no_outdated: bool,
+
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]
@@ -1914,6 +1926,9 @@ pub struct PipListArgs {
 
     #[arg(long, overrides_with("strict"), hide = true)]
     pub no_strict: bool,
+
+    #[command(flatten)]
+    pub fetch: FetchArgs,
 
     /// The Python interpreter for which packages should be listed.
     ///
@@ -2096,7 +2111,7 @@ pub struct PipTreeArgs {
     )]
     pub system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
     #[command(flatten)]
@@ -2119,7 +2134,7 @@ pub struct BuildArgs {
     /// directory if no source directory is provided.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with("all"))]
+    #[arg(long, conflicts_with("all_packages"))]
     pub package: Option<PackageName>,
 
     /// Builds all packages in the workspace.
@@ -2128,8 +2143,8 @@ pub struct BuildArgs {
     /// directory if no source directory is provided.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with("package"))]
-    pub all: bool,
+    #[arg(long, alias = "all", conflicts_with("package"))]
+    pub all_packages: bool,
 
     /// The output directory to which distributions should be written.
     ///
@@ -2359,25 +2374,6 @@ pub struct VenvArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
     pub keyring_provider: Option<KeyringProviderType>,
-
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
@@ -2656,6 +2652,17 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_editable: bool,
 
+    /// Load environment variables from a `.env` file.
+    ///
+    /// Can be provided multiple times, with subsequent files overriding values defined in
+    /// previous files.
+    #[arg(long, env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<PathBuf>,
+
+    /// Avoid reading environment variables from a `.env` file.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    pub no_env_file: bool,
+
     /// The command to run.
     ///
     /// If the path to a Python script (i.e., ending in `.py`), it will be
@@ -2668,16 +2675,16 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified by the project.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed as editables.
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified by the project.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     ///
@@ -2740,10 +2747,20 @@ pub struct RunArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Run the command with all workspace members installed.
+    ///
+    /// The workspace's environment (`.venv`) is updated to include all workspace
+    /// members.
+    ///
+    /// Any extras or groups specified via `--extra`, `--group`, or related options
+    /// will be applied to all workspace members.
+    #[arg(long, conflicts_with = "package")]
+    pub all_packages: bool,
+
     /// Run the command in a specific package in the workspace.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// Avoid discovering the project or workspace.
@@ -2912,13 +2929,23 @@ pub struct SyncArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
+    /// Sync all packages in the workspace.
+    ///
+    /// The workspace's environment (`.venv`) is updated to include all workspace
+    /// members.
+    ///
+    /// Any extras or groups specified via `--extra`, `--group`, or related options
+    /// will be applied to all workspace members.
+    #[arg(long, conflicts_with = "package")]
+    pub all_packages: bool,
+
     /// Sync for a specific package in the workspace.
     ///
     /// The workspace's environment (`.venv`) is updated to reflect the subset
     /// of dependencies declared by the specified workspace member package.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// The Python interpreter to use for the project environment.
@@ -3323,10 +3350,20 @@ pub struct ExportArgs {
     #[arg(long, value_enum, default_value_t = ExportFormat::default())]
     pub format: ExportFormat,
 
+    /// Export the entire workspace.
+    ///
+    /// The dependencies for all workspace members will be included in the
+    /// exported requirements file.
+    ///
+    /// Any extras or groups specified via `--extra`, `--group`, or related options
+    /// will be applied to all workspace members.
+    #[arg(long, conflicts_with = "package")]
+    pub all_packages: bool,
+
     /// Export the dependencies for a specific package in the workspace.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
     /// Include optional dependencies from the specified extra name.
@@ -3584,16 +3621,16 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed as editables
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the uv tool's environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
@@ -3645,10 +3682,6 @@ pub struct ToolInstallArgs {
     #[arg(short, long)]
     pub editable: bool,
 
-    /// Include the given packages as editables.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
-
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
@@ -3656,8 +3689,12 @@ pub struct ToolInstallArgs {
     pub from: Option<String>,
 
     /// Include the following extra requirements.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
+
+    /// Include the given packages as editables.
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
@@ -3803,14 +3840,15 @@ pub enum PythonCommand {
     ///
     /// Multiple Python versions may be requested.
     ///
-    /// Supports CPython and PyPy.
+    /// Supports CPython and PyPy. CPython distributions are downloaded from the
+    /// `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
     ///
-    /// CPython distributions are downloaded from the `python-build-standalone` project.
+    /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
+    /// python dir`.
     ///
-    /// Python versions are installed into the uv Python directory, which can be
-    /// retrieved with `uv python dir`. A `python` executable is not made
-    /// globally available, managed Python versions are only used in uv
-    /// commands or in active virtual environments.
+    /// A `python` executable is not made globally available, managed Python versions are only used
+    /// in uv commands or in active virtual environments. There is experimental support for
+    /// adding Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
     ///
     /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
@@ -3838,7 +3876,10 @@ pub enum PythonCommand {
     /// `%APPDATA%\uv\data\python` on Windows.
     ///
     /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
-    Dir,
+    ///
+    /// To view the directory where uv installs Python executables instead, use the `--bin` flag.
+    /// Note that Python executables are only installed when preview mode is enabled.
+    Dir(PythonDirArgs),
 
     /// Uninstall Python versions.
     Uninstall(PythonUninstallArgs),
@@ -3868,6 +3909,24 @@ pub struct PythonListArgs {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
+pub struct PythonDirArgs {
+    /// Show the directory into which `uv python` will install Python executables.
+    ///
+    /// Note that this directory is only used when installing Python with preview mode enabled.
+    ///
+    /// The Python executable directory is determined according to the XDG standard and is derived
+    /// from the following environment variables, in order of preference:
+    ///
+    /// - `$UV_PYTHON_BIN_DIR`
+    /// - `$XDG_BIN_HOME`
+    /// - `$XDG_DATA_HOME/../bin`
+    /// - `$HOME/.local/bin`
+    #[arg(long, verbatim_doc_comment)]
+    pub bin: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct PythonInstallArgs {
     /// The Python version(s) to install.
     ///
@@ -3879,12 +3938,36 @@ pub struct PythonInstallArgs {
     /// See `uv help python` to view supported request formats.
     pub targets: Vec<String>,
 
+    /// Set the URL to use as the source for downloading Python installations.
+    ///
+    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    pub mirror: Option<String>,
+
+    /// Set the URL to use as the source for downloading PyPy installations.
+    ///
+    /// The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
+    pub pypy_mirror: Option<String>,
+
     /// Reinstall the requested Python version, if it's already installed.
     ///
     /// By default, uv will exit successfully if the version is already
     /// installed.
-    #[arg(long, short, alias = "force")]
+    #[arg(long, short)]
     pub reinstall: bool,
+
+    /// Replace existing Python executables during installation.
+    ///
+    /// By default, uv will refuse to replace executables that it does not manage.
+    ///
+    /// Implies `--reinstall`.
+    #[arg(long, short)]
+    pub force: bool,
 }
 
 #[derive(Args)]
@@ -4203,26 +4286,6 @@ pub struct InstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-        help_heading = "Index options"
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
-
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -4364,26 +4427,6 @@ pub struct ResolverArgs {
         help_heading = "Index options"
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-        help_heading = "Index options"
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
@@ -4557,26 +4600,6 @@ pub struct ResolverInstallerArgs {
     )]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// Allow insecure connections to a host.
-    ///
-    /// Can be provided multiple times.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-        help_heading = "Index options"
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
-
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -4695,6 +4718,49 @@ pub struct ResolverInstallerArgs {
     pub no_sources: bool,
 }
 
+/// Arguments that are used by commands that need to fetch from the Simple API.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct FetchArgs {
+    #[command(flatten)]
+    pub index_args: IndexArgs,
+
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, uv will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+    /// same name to an alternate index.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_INDEX_STRATEGY,
+        help_heading = "Index options"
+    )]
+    pub index_strategy: Option<IndexStrategy>,
+
+    /// Attempt to use `keyring` for authentication for index URLs.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+        help_heading = "Index options"
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewer>,
+}
+
 #[derive(Args)]
 pub struct DisplayTreeArgs {
     /// Maximum display depth of the dependency tree
@@ -4721,6 +4787,10 @@ pub struct DisplayTreeArgs {
     /// display the packages that depend on the given package.
     #[arg(long, alias = "reverse")]
     pub invert: bool,
+
+    /// Show the latest available version of each package in the tree.
+    #[arg(long)]
+    pub outdated: bool,
 }
 
 #[derive(Args, Debug)]
@@ -4779,24 +4849,24 @@ pub struct PublishArgs {
     #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
     pub keyring_provider: Option<KeyringProviderType>,
 
-    /// Allow insecure connections to a host.
+    /// Check an index URL for existing files to skip duplicate uploads.
     ///
-    /// Can be provided multiple times.
+    /// This option allows retrying publishing that failed after only some, but not all files have
+    /// been uploaded, and handles error due to parallel uploads of the same file.
     ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    /// Before uploading, the index is checked. If the exact same file already exists in the index,
+    /// the file will not be uploaded. If an error occurred during the upload, the index is checked
+    /// again, to handle cases where the identical file was uploaded twice in parallel.
     ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[arg(
-        long,
-        alias = "trusted-host",
-        env = EnvVars::UV_INSECURE_HOST,
-        value_delimiter = ' ',
-        value_parser = parse_insecure_host,
-    )]
-    pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
+    /// The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
+    /// file succeeds even without `--check-url`, while most other indexes error.
+    ///
+    /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
+    #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL)]
+    pub check_url: Option<IndexUrl>,
+
+    #[arg(long, hide = true)]
+    pub skip_existing: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

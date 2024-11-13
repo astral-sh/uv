@@ -19,8 +19,9 @@ If a `pyproject.toml` file is found, uv will read configuration from the `[tool.
 example, to set a persistent index URL, add the following to a `pyproject.toml`:
 
 ```toml title="pyproject.toml"
-[tool.uv]
-index-url = "https://test.pypi.org/simple"
+[[tool.uv.index]]
+url = "https://test.pypi.org/simple"
+default = true
 ```
 
 (If there is no such table, the `pyproject.toml` file will be ignored, and uv will continue
@@ -30,7 +31,9 @@ uv will also search for `uv.toml` files, which follow an identical structure, bu
 `[tool.uv]` prefix. For example:
 
 ```toml title="uv.toml"
-index-url = "https://test.pypi.org/simple"
+[[index]]
+url = "https://test.pypi.org/simple"
+default = true
 ```
 
 !!! note
@@ -71,6 +74,33 @@ configuration files (e.g., user-level configuration will be ignored).
 ## Settings
 
 See the [settings reference](../reference/settings.md) for an enumeration of the available settings.
+
+## `.env`
+
+`uv run` can load environment variables from dotenv files (e.g., `.env`, `.env.local`,
+`.env.development`), powered by the [`dotenvy`](https://github.com/allan2/dotenvy) crate.
+
+To load a `.env` file from a dedicated location, set the `UV_ENV_FILE` environment variable, or pass
+the `--env-file` flag to `uv run`.
+
+For example, to load environment variables from a `.env` file in the current working directory:
+
+```console
+$ echo "MY_VAR='Hello, world!'" > .env
+$ uv run --env-file .env -- python -c 'import os; print(os.getenv("MY_VAR"))'
+Hello, world!
+```
+
+The `--env-file` flag can be provided multiple times, with subsequent files overriding values
+defined in previous files. To provide multiple files via the `UV_ENV_FILE` environment variable,
+separate the paths with a space (e.g., `UV_ENV_FILE="/path/to/file1 /path/to/file2"`).
+
+To disable dotenv loading (e.g., to override `UV_ENV_FILE` or the `--env-file` command-line
+argument), set the `UV_NO_ENV_FILE` environment variable to `1`, or pass the`--no-env-file` flag to
+`uv run`.
+
+If the same variable is defined in the environment and in a `.env` file, the value from the
+environment will take precedence.
 
 ## Configuring the pip interface
 

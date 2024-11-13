@@ -1,4 +1,3 @@
-use either::Either;
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -14,7 +13,9 @@ use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
+pub use crate::lock::map::PackageMap;
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
+pub use crate::lock::target::InstallTarget;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
@@ -23,14 +24,14 @@ use crate::{
     ResolutionMode,
 };
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
+use uv_configuration::BuildOptions;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
     PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, Resolution, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
+    RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{GitReference, GitSha, RepositoryReference, ResolvedRepositoryReference};
@@ -39,14 +40,16 @@ use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{
-    redact_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement, RequirementSource,
-    ResolverMarkerEnvironment,
+    redact_credentials, ConflictingGroupList, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
+    Requirement, RequirementSource,
 };
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::{InstallTarget, Workspace};
+use uv_workspace::Workspace;
 
+mod map;
 mod requirements_txt;
+mod target;
 mod tree;
 
 /// The current version of the lockfile format.
@@ -78,6 +81,8 @@ pub struct Lock {
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<MarkerTree>,
+    /// The conflicting groups/extras specified by the user.
+    conflicting_groups: ConflictingGroupList,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
     /// The range of supported Python versions.
@@ -234,6 +239,7 @@ impl Lock {
             requires_python,
             options,
             ResolverManifest::default(),
+            ConflictingGroupList::empty(),
             vec![],
             graph.fork_markers.clone(),
         )?;
@@ -309,6 +315,7 @@ impl Lock {
         requires_python: RequiresPython,
         options: ResolverOptions,
         manifest: ResolverManifest,
+        conflicting_groups: ConflictingGroupList,
         supported_environments: Vec<MarkerTree>,
         fork_markers: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
@@ -458,6 +465,7 @@ impl Lock {
         let lock = Self {
             version,
             fork_markers,
+            conflicting_groups,
             supported_environments,
             requires_python,
             options,
@@ -472,6 +480,13 @@ impl Lock {
     #[must_use]
     pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
         self.manifest = manifest;
+        self
+    }
+
+    /// Record the conflicting groups that were used to generate this lock.
+    #[must_use]
+    pub fn with_conflicting_groups(mut self, conflicting_groups: ConflictingGroupList) -> Self {
+        self.conflicting_groups = conflicting_groups;
         self
     }
 
@@ -534,6 +549,11 @@ impl Lock {
         self.options.exclude_newer
     }
 
+    /// Returns the conflicting groups that were used to generate this lock.
+    pub fn conflicting_groups(&self) -> &ConflictingGroupList {
+        &self.conflicting_groups
+    }
+
     /// Returns the supported environments that were used to generate this lock.
     pub fn supported_environments(&self) -> &[MarkerTree] {
         &self.supported_environments
@@ -542,6 +562,16 @@ impl Lock {
     /// Returns the workspace members that were used to generate this lock.
     pub fn members(&self) -> &BTreeSet<PackageName> {
         &self.manifest.members
+    }
+
+    /// Return the workspace root used to generate this lock.
+    pub fn root(&self) -> Option<&Package> {
+        self.packages.iter().find(|package| {
+            let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source else {
+                return false;
+            };
+            path == Path::new("")
+        })
     }
 
     /// Returns the supported environments that were used to generate this
@@ -573,139 +603,6 @@ impl Lock {
         self.fork_markers.as_slice()
     }
 
-    /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
-    pub fn to_resolution(
-        &self,
-        project: InstallTarget<'_>,
-        marker_env: &ResolverMarkerEnvironment,
-        tags: &Tags,
-        extras: &ExtrasSpecification,
-        dev: &DevGroupsManifest,
-        build_options: &BuildOptions,
-        install_options: &InstallOptions,
-    ) -> Result<Resolution, LockError> {
-        let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
-        let mut seen = FxHashSet::default();
-
-        // Add the workspace packages to the queue.
-        for root_name in project.packages() {
-            let root = self
-                .find_by_name(root_name)
-                .map_err(|_| LockErrorKind::MultipleRootPackages {
-                    name: root_name.clone(),
-                })?
-                .ok_or_else(|| LockErrorKind::MissingRootPackage {
-                    name: root_name.clone(),
-                })?;
-
-            if dev.prod() {
-                // Add the base package.
-                queue.push_back((root, None));
-
-                // Add any extras.
-                match extras {
-                    ExtrasSpecification::None => {}
-                    ExtrasSpecification::All => {
-                        for extra in root.optional_dependencies.keys() {
-                            queue.push_back((root, Some(extra)));
-                        }
-                    }
-                    ExtrasSpecification::Some(extras) => {
-                        for extra in extras {
-                            queue.push_back((root, Some(extra)));
-                        }
-                    }
-                }
-            }
-
-            // Add any dev dependencies.
-            for group in dev.iter() {
-                for dep in root.dependency_groups.get(group).into_iter().flatten() {
-                    if dep.complexified_marker.evaluate(marker_env, &[]) {
-                        let dep_dist = self.find_by_id(&dep.package_id);
-                        if seen.insert((&dep.package_id, None)) {
-                            queue.push_back((dep_dist, None));
-                        }
-                        for extra in &dep.extra {
-                            if seen.insert((&dep.package_id, Some(extra))) {
-                                queue.push_back((dep_dist, Some(extra)));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add any dependency groups that are exclusive to the workspace root (e.g., dev
-        // dependencies in (legacy) non-project workspace roots).
-        let groups = project
-            .groups()
-            .map_err(|err| LockErrorKind::DependencyGroup { err })?;
-        for group in dev.iter() {
-            for dependency in groups.get(group).into_iter().flatten() {
-                if dependency.marker.evaluate(marker_env, &[]) {
-                    let root_name = &dependency.name;
-                    let root = self
-                        .find_by_markers(root_name, marker_env)
-                        .map_err(|_| LockErrorKind::MultipleRootPackages {
-                            name: root_name.clone(),
-                        })?
-                        .ok_or_else(|| LockErrorKind::MissingRootPackage {
-                            name: root_name.clone(),
-                        })?;
-
-                    // Add the base package.
-                    queue.push_back((root, None));
-
-                    // Add any extras.
-                    for extra in &dependency.extras {
-                        queue.push_back((root, Some(extra)));
-                    }
-                }
-            }
-        }
-
-        let mut map = BTreeMap::default();
-        let mut hashes = BTreeMap::default();
-        while let Some((dist, extra)) = queue.pop_front() {
-            let deps = if let Some(extra) = extra {
-                Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
-            } else {
-                Either::Right(dist.dependencies.iter())
-            };
-            for dep in deps {
-                if dep.complexified_marker.evaluate(marker_env, &[]) {
-                    let dep_dist = self.find_by_id(&dep.package_id);
-                    if seen.insert((&dep.package_id, None)) {
-                        queue.push_back((dep_dist, None));
-                    }
-                    for extra in &dep.extra {
-                        if seen.insert((&dep.package_id, Some(extra))) {
-                            queue.push_back((dep_dist, Some(extra)));
-                        }
-                    }
-                }
-            }
-            if install_options.include_package(
-                &dist.id.name,
-                project.project_name(),
-                &self.manifest.members,
-            ) {
-                map.insert(
-                    dist.id.name.clone(),
-                    ResolvedDist::Installable(dist.to_dist(
-                        project.workspace().install_path(),
-                        TagPolicy::Required(tags),
-                        build_options,
-                    )?),
-                );
-                hashes.insert(dist.id.name.clone(), dist.hashes());
-            }
-        }
-        let diagnostics = vec![];
-        Ok(Resolution::new(map, hashes, diagnostics))
-    }
-
     /// Returns the TOML representation of this lockfile.
     pub fn to_toml(&self) -> anyhow::Result<String> {
         // We construct a TOML document manually instead of going through Serde to enable
@@ -733,6 +630,19 @@ impl Lock {
                     .filter_map(|marker| marker.try_to_string()),
             );
             doc.insert("supported-markers", value(supported_environments));
+        }
+
+        if !self.conflicting_groups.is_empty() {
+            let mut list = Array::new();
+            for groups in self.conflicting_groups.iter() {
+                list.push(each_element_on_its_line_array(groups.iter().map(|group| {
+                    let mut table = InlineTable::new();
+                    table.insert("package", Value::from(group.package().to_string()));
+                    table.insert("extra", Value::from(group.extra().to_string()));
+                    table
+                })));
+            }
+            doc.insert("conflicting-groups", value(list));
         }
 
         // Write the settings that were used to generate the resolution.
@@ -960,7 +870,6 @@ impl Lock {
         overrides: &[Requirement],
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
-        build_options: &BuildOptions,
         tags: &Tags,
         hasher: &HashStrategy,
         index: &InMemoryIndex,
@@ -1169,8 +1078,13 @@ impl Lock {
             // Get the metadata for the distribution.
             let dist = package.to_dist(
                 workspace.install_path(),
+                // When validating, it's okay to use wheels that don't match the current platform.
                 TagPolicy::Preferred(tags),
-                build_options,
+                // When validating, it's okay to use (e.g.) a source distribution with `--no-build`.
+                // We're just trying to determine whether the lockfile is up-to-date. If we end
+                // up needing to build a source distribution in order to do so, below, we'll error
+                // there.
+                &BuildOptions::default(),
             )?;
 
             // Fetch the metadata for the distribution.
@@ -1211,6 +1125,15 @@ impl Lock {
                     metadata
                 }
             };
+
+            // Validate the `version` metadata.
+            if metadata.version != package.id.version {
+                return Ok(SatisfiesResult::MismatchedVersion(
+                    package.id.name.clone(),
+                    package.id.version.clone(),
+                    Some(metadata.version.clone()),
+                ));
+            }
 
             // Validate the `requires-dist` metadata.
             {
@@ -1460,6 +1383,8 @@ struct LockWire {
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
+    #[serde(rename = "conflicting-groups", default)]
+    conflicting_groups: Option<ConflictingGroupList>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
@@ -1511,6 +1436,8 @@ impl TryFrom<LockWire> for Lock {
             wire.requires_python,
             wire.options,
             wire.manifest,
+            wire.conflicting_groups
+                .unwrap_or_else(ConflictingGroupList::empty),
             supported_environments,
             fork_markers,
         )?;
@@ -2068,7 +1995,7 @@ impl Package {
                 }
             }
             if !dependency_groups.is_empty() {
-                table.insert("dependency-groups", Item::Table(dependency_groups));
+                table.insert("dev-dependencies", Item::Table(dependency_groups));
             }
         }
 
@@ -2131,7 +2058,7 @@ impl Package {
                     dependency_groups.insert(extra.as_ref(), value(deps));
                 }
                 if !dependency_groups.is_empty() {
-                    metadata_table.insert("dependency-groups", Item::Table(dependency_groups));
+                    metadata_table.insert("requires-dev", Item::Table(dependency_groups));
                 }
             }
 
@@ -2183,6 +2110,24 @@ impl Package {
     /// Return the fork markers for this package, if any.
     pub fn fork_markers(&self) -> &[MarkerTree] {
         self.fork_markers.as_slice()
+    }
+
+    /// Returns the [`IndexUrl`] for the package, if it is a registry source.
+    pub fn index(&self, root: &Path) -> Result<Option<IndexUrl>, LockError> {
+        match &self.id.source {
+            Source::Registry(RegistrySource::Url(url)) => {
+                let index = IndexUrl::from(VerbatimUrl::from_url(url.to_url()));
+                Ok(Some(index))
+            }
+            Source::Registry(RegistrySource::Path(path)) => {
+                let index = IndexUrl::from(
+                    VerbatimUrl::from_absolute_path(root.join(path))
+                        .map_err(LockErrorKind::RegistryVerbatimUrl)?,
+                );
+                Ok(Some(index))
+            }
+            _ => Ok(None),
+        }
     }
 
     /// Returns all the hashes associated with this [`Package`].
@@ -2241,7 +2186,7 @@ struct PackageWire {
     dependencies: Vec<DependencyWire>,
     #[serde(default)]
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
-    #[serde(default, alias = "dev-dependencies")]
+    #[serde(default, rename = "dev-dependencies", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
 }
 
@@ -2250,7 +2195,7 @@ struct PackageWire {
 struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
-    #[serde(default, alias = "requires-dev")]
+    #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
@@ -3152,9 +3097,15 @@ fn locked_git_url(git_dist: &GitSourceDist) -> Url {
     url.set_query(None);
 
     // Put the subdirectory in the query.
-    if let Some(subdirectory) = git_dist.subdirectory.as_deref().and_then(Path::to_str) {
+    if let Some(subdirectory) = git_dist
+        .subdirectory
+        .as_deref()
+        .map(PortablePath::from)
+        .as_ref()
+        .map(PortablePath::to_string)
+    {
         url.query_pairs_mut()
-            .append_pair("subdirectory", subdirectory);
+            .append_pair("subdirectory", &subdirectory);
     }
 
     // Put the requested reference in the query.

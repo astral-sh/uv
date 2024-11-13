@@ -1206,7 +1206,7 @@ fn workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `--all` was provided, but no workspace was found
+    error: `--all-packages` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
@@ -1552,7 +1552,6 @@ fn sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to install requirements from `build-system.requires`
-      Caused by: Failed to prepare distributions
       Caused by: Failed to download `setuptools==68.2.2`
       Caused by: Hash mismatch for `setuptools==68.2.2`
 

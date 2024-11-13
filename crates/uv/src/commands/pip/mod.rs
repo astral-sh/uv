@@ -9,6 +9,7 @@ pub(crate) mod check;
 pub(crate) mod compile;
 pub(crate) mod freeze;
 pub(crate) mod install;
+pub(crate) mod latest;
 pub(crate) mod list;
 pub(crate) mod loggers;
 pub(crate) mod operations;
@@ -32,7 +33,7 @@ pub(crate) fn resolution_markers(
         (None, Some(python_version)) => {
             ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers()))
         }
-        (None, None) => interpreter.resolver_markers(),
+        (None, None) => interpreter.resolver_marker_environment(),
     }
 }
 
@@ -115,7 +116,7 @@ pub(crate) fn resolution_environment(
         (None, Some(python_version)) => {
             ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers()))
         }
-        (None, None) => interpreter.resolver_markers(),
+        (None, None) => interpreter.resolver_marker_environment(),
     };
 
     Ok((tags, markers))

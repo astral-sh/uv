@@ -127,7 +127,7 @@ If an index is marked as `default = true`, it will be moved to the end of the pr
 given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
 PyPI default index.
 
-**Default value**: `"[]"`
+**Default value**: `[]`
 
 **Type**: `dict`
 
@@ -232,7 +232,7 @@ alternative registry.
 
 See [Dependencies](../concepts/dependencies.md) for more.
 
-**Default value**: `"[]"`
+**Default value**: `{}`
 
 **Type**: `dict`
 
@@ -1001,7 +1001,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -1226,6 +1226,37 @@ The URL for publishing packages to the Python package index (by default:
 
 ---
 
+### [`pypy-install-mirror`](#pypy-install-mirror) {: #pypy-install-mirror }
+
+Mirror URL to use for downloading managed PyPy installations.
+
+By default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).
+This variable can be set to a mirror URL to use a different source for PyPy installations.
+The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+
+Distributions can be read from a
+local directory by using the `file://` URL scheme.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    pypy-install-mirror = "https://downloads.python.org/pypy"
+    ```
+=== "uv.toml"
+
+    ```toml
+    pypy-install-mirror = "https://downloads.python.org/pypy"
+    ```
+
+---
+
 ### [`python-downloads`](#python-downloads) {: #python-downloads }
 
 Whether to allow Python downloads.
@@ -1250,6 +1281,36 @@ Whether to allow Python downloads.
 
     ```toml
     python-downloads = "manual"
+    ```
+
+---
+
+### [`python-install-mirror`](#python-install-mirror) {: #python-install-mirror }
+
+Mirror URL for downloading managed Python installations.
+
+By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
+This variable can be set to a mirror URL to use a different source for Python installations.
+The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+
+Distributions can be read from a local directory by using the `file://` URL scheme.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
+    ```
+=== "uv.toml"
+
+    ```toml
+    python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
     ```
 
 ---
@@ -1501,39 +1562,6 @@ packages.
     ```toml
     [pip]
     allow-empty-requirements = true
-    ```
-
----
-
-#### [`allow-insecure-host`](#pip_allow-insecure-host) {: #pip_allow-insecure-host }
-<span id="allow-insecure-host"></span>
-
-Allow insecure connections to host.
-
-Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-`localhost:8080`), or a URL (e.g., `https://localhost`).
-
-WARNING: Hosts included in this list will not be verified against the system's certificate
-store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-bypasses SSL verification and could expose you to MITM attacks.
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    allow-insecure-host = ["localhost:8080"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    allow-insecure-host = ["localhost:8080"]
     ```
 
 ---
@@ -2279,7 +2307,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 

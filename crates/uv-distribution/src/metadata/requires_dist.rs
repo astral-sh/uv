@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::metadata::{LoweredRequirement, MetadataError};
+use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 use crate::Metadata;
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
@@ -39,15 +39,27 @@ impl RequiresDist {
     pub async fn from_project_maybe_workspace(
         metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
+        git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
         lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
-        // TODO(konsti): Limit discovery for Git checkouts to Git root.
         // TODO(konsti): Cache workspace discovery.
+        let discovery_options = if let Some(git_member) = &git_member {
+            DiscoveryOptions {
+                stop_discovery_at: Some(
+                    git_member
+                        .fetch_root
+                        .parent()
+                        .expect("git checkout has a parent"),
+                ),
+                ..Default::default()
+            }
+        } else {
+            DiscoveryOptions::default()
+        };
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &DiscoveryOptions::default())
-                .await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery_options).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -55,6 +67,7 @@ impl RequiresDist {
         Self::from_project_workspace(
             metadata,
             &project_workspace,
+            git_member,
             locations,
             sources,
             lower_bound,
@@ -64,6 +77,7 @@ impl RequiresDist {
     fn from_project_workspace(
         metadata: uv_pypi_types::RequiresDist,
         project_workspace: &ProjectWorkspace,
+        git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         lower_bound: LowerBound,
@@ -142,6 +156,7 @@ impl RequiresDist {
                                         locations,
                                         project_workspace.workspace(),
                                         lower_bound,
+                                        git_member,
                                     )
                                     .map(move |requirement| {
                                         match requirement {
@@ -196,6 +211,7 @@ impl RequiresDist {
                         locations,
                         project_workspace.workspace(),
                         lower_bound,
+                        git_member,
                     )
                     .map(move |requirement| match requirement {
                         Ok(requirement) => Ok(requirement.into_inner()),
@@ -266,6 +282,7 @@ mod test {
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
+            None,
             &IndexLocations::default(),
             SourceStrategy::default(),
             LowerBound::default(),
@@ -445,8 +462,7 @@ mod test {
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |                ^^^^^^^^^^^^^^^^^
-        invalid value: string "§invalid#+#*Ä", expected relative URL without a base
-
+        relative URL without a base: "§invalid#+#*Ä"
         "###);
     }
 

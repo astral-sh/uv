@@ -17,7 +17,9 @@ use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
-use uv_pypi_types::{HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked};
+use uv_pypi_types::{
+    ConflictingGroupList, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
+};
 
 use crate::graph_ops::marker_reachability;
 use crate::pins::FilePins;
@@ -28,7 +30,7 @@ use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
-    ResolverMarkers, VersionsResponse,
+    VersionsResponse,
 };
 
 pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
@@ -101,6 +103,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
+        conflicting_groups: &ConflictingGroupList,
         resolution_strategy: &ResolutionStrategy,
         options: Options,
     ) -> Result<Self, ResolveError> {
@@ -124,7 +127,7 @@ impl ResolutionGraph {
                 if package.is_base() {
                     // For packages with diverging versions, store which version comes from which
                     // fork.
-                    if let Some(markers) = resolution.markers.fork_markers() {
+                    if let Some(markers) = resolution.env.try_markers() {
                         package_markers
                             .entry(package.name.clone())
                             .or_default()
@@ -152,11 +155,7 @@ impl ResolutionGraph {
 
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
-            let marker = resolution
-                .markers
-                .fork_markers()
-                .cloned()
-                .unwrap_or_default();
+            let marker = resolution.env.try_markers().cloned().unwrap_or_default();
 
             // Add every edge to the graph, propagating the marker for the current fork, if
             // necessary.
@@ -180,34 +179,33 @@ impl ResolutionGraph {
         let requires_python = python.target().clone();
 
         let fork_markers = if let [resolution] = resolutions {
-            match resolution.markers {
-                ResolverMarkers::Universal { .. } | ResolverMarkers::SpecificEnvironment(_) => {
-                    vec![]
-                }
-                ResolverMarkers::Fork(_) => {
+            resolution
+                .env
+                .try_markers()
+                .map(|_| {
                     resolutions
                         .iter()
                         .map(|resolution| {
                             resolution
-                                .markers
-                                .fork_markers()
+                                .env
+                                .try_markers()
                                 .expect("A non-forking resolution exists in forking mode")
                                 .clone()
                         })
                         // Any unsatisfiable forks were skipped.
                         .filter(|fork| !fork.is_false())
                         .collect()
-                }
-            }
+                })
+                .unwrap_or_else(Vec::new)
         } else {
             resolutions
                 .iter()
                 .map(|resolution| {
                     resolution
-                        .markers
-                        .fork_markers()
-                        .expect("A non-forking resolution exists in forking mode")
-                        .clone()
+                        .env
+                        .try_markers()
+                        .cloned()
+                        .unwrap_or(MarkerTree::TRUE)
                 })
                 // Any unsatisfiable forks were skipped.
                 .filter(|fork| !fork.is_false())
@@ -242,27 +240,40 @@ impl ResolutionGraph {
             fork_markers,
         };
 
-        #[allow(unused_mut, reason = "Used in debug_assertions below")]
-        let mut conflicting = graph.find_conflicting_distributions();
-        if !conflicting.is_empty() {
-            tracing::warn!(
-                "found {} conflicting distributions in resolution, \
+        // We only do conflicting distribution detection when no
+        // conflicting groups have been specified. The reason here
+        // is that when there are conflicting groups, then from the
+        // perspective of marker expressions only, it may look like
+        // one can install different versions of the same package for
+        // the same marker environment. However, the thing preventing
+        // this is that the only way this should be possible is if
+        // one tries to install two or more conflicting extras at
+        // the same time. At which point, uv will report an error,
+        // thereby sidestepping the possibility of installing different
+        // versions of the same package into the same virtualenv. ---AG
+        if conflicting_groups.is_empty() {
+            #[allow(unused_mut, reason = "Used in debug_assertions below")]
+            let mut conflicting = graph.find_conflicting_distributions();
+            if !conflicting.is_empty() {
+                tracing::warn!(
+                    "found {} conflicting distributions in resolution, \
                  please report this as a bug at \
                  https://github.com/astral-sh/uv/issues/new",
-                conflicting.len()
-            );
-        }
-        // When testing, we materialize any conflicting distributions as an
-        // error to ensure any relevant tests fail. Otherwise, we just leave
-        // it at the warning message above. The reason for not returning an
-        // error "in production" is that an incorrect resolution may only be
-        // incorrect in certain marker environments, but fine in most others.
-        // Returning an error in that case would make `uv` unusable whenever
-        // the bug occurs, but letting it through means `uv` *could* still be
-        // usable.
-        #[cfg(debug_assertions)]
-        if let Some(err) = conflicting.pop() {
-            return Err(ResolveError::ConflictingDistribution(err));
+                    conflicting.len()
+                );
+            }
+            // When testing, we materialize any conflicting distributions as an
+            // error to ensure any relevant tests fail. Otherwise, we just leave
+            // it at the warning message above. The reason for not returning an
+            // error "in production" is that an incorrect resolution may only be
+            // incorrect in certain marker environments, but fine in most others.
+            // Returning an error in that case would make `uv` unusable whenever
+            // the bug occurs, but letting it through means `uv` *could* still be
+            // usable.
+            #[cfg(debug_assertions)]
+            if let Some(err) = conflicting.pop() {
+                return Err(ResolveError::ConflictingDistribution(err));
+            }
         }
         Ok(graph)
     }
@@ -782,8 +793,8 @@ pub struct ConflictingDistributionError {
 
 impl std::error::Error for ConflictingDistributionError {}
 
-impl std::fmt::Display for ConflictingDistributionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for ConflictingDistributionError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         let ConflictingDistributionError {
             ref name,
             ref version1,

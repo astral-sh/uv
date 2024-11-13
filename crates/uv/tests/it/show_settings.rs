@@ -54,6 +54,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -122,6 +123,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -129,7 +134,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -201,6 +205,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -269,6 +274,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -276,7 +285,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -349,6 +357,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -417,6 +426,10 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -424,7 +437,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -529,6 +541,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -597,6 +610,10 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -604,7 +621,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -678,6 +694,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -717,6 +734,10 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -724,7 +745,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -807,6 +827,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -875,6 +896,10 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -882,7 +907,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -979,6 +1003,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1075,6 +1100,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1082,7 +1111,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1156,6 +1184,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1282,6 +1311,10 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1289,7 +1322,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1386,6 +1418,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1454,6 +1487,10 @@ fn resolve_find_links() -> anyhow::Result<()> {
                 no_index: true,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1461,7 +1498,6 @@ fn resolve_find_links() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1557,6 +1593,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1596,6 +1633,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1603,7 +1644,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1692,6 +1732,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1788,6 +1829,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1795,7 +1840,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1867,6 +1911,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1963,6 +2008,10 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -1970,7 +2019,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2066,6 +2114,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2105,6 +2154,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2112,7 +2165,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2191,6 +2243,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2230,6 +2283,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2237,7 +2294,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2316,6 +2372,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2355,6 +2412,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2362,7 +2423,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2443,6 +2503,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2482,6 +2543,10 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2489,7 +2554,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2589,6 +2653,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2624,7 +2689,6 @@ fn resolve_tool() -> anyhow::Result<()> {
             find_links: None,
             index_strategy: None,
             keyring_provider: None,
-            allow_insecure_host: None,
             resolution: Some(
                 LowestDirect,
             ),
@@ -2660,7 +2724,6 @@ fn resolve_tool() -> anyhow::Result<()> {
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
             dependency_metadata: DependencyMetadata(
@@ -2688,6 +2751,10 @@ fn resolve_tool() -> anyhow::Result<()> {
         },
         force: false,
         editable: false,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+        },
     }
 
     ----- stderr -----
@@ -2747,6 +2814,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2786,6 +2854,10 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2793,7 +2865,6 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2900,6 +2971,7 @@ fn resolve_both() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2968,6 +3040,10 @@ fn resolve_both() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -2975,7 +3051,6 @@ fn resolve_both() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3032,6 +3107,102 @@ fn resolve_both() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Tests that errors when parsing `conflicting-groups` are reported.
+#[test]
+fn invalid_conflicting_groups() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // Write in `pyproject.toml` schema and test the singleton case.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [{extra = "dev"}],
+        ]
+    "#})?;
+
+    // The file should be rejected for violating the schema.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 7, column 22
+      |
+    7 | conflicting-groups = [
+      |                      ^
+    Each set of conflicting groups must have at least two entries, but found only one
+    "###
+    );
+
+    // Now test the empty case.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [[]]
+    "#})?;
+
+    // The file should be rejected for violating the schema.
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 7, column 22
+      |
+    7 | conflicting-groups = [[]]
+      |                      ^^^^
+    Each set of conflicting groups must have at least two entries, but found none
+    "###
+    );
+
+    Ok(())
+}
+
+/// Tests that valid `conflicting-groups` are parsed okay.
+#[test]
+fn valid_conflicting_groups() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject = context.temp_dir.child("pyproject.toml");
+
+    // Write in `pyproject.toml` schema.
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [{extra = "x1"}, {extra = "x2"}],
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
 /// Read from a `--config-file` command line argument.
 #[test]
 #[cfg_attr(
@@ -3074,6 +3245,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3142,6 +3314,10 @@ fn resolve_config_file() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3149,7 +3325,6 @@ fn resolve_config_file() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3230,7 +3405,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
+    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicting-groups`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
     "###
     );
 
@@ -3322,6 +3497,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3361,6 +3537,10 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3368,7 +3548,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3450,6 +3629,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3489,6 +3669,10 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3496,7 +3680,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3586,6 +3769,18 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [
+            Host {
+                scheme: None,
+                host: "google.com",
+                port: None,
+            },
+            Host {
+                scheme: None,
+                host: "example.com",
+                port: None,
+            },
+        ],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3625,6 +3820,10 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3632,18 +3831,6 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [
-                Host {
-                    scheme: None,
-                    host: "google.com",
-                    port: None,
-                },
-                Host {
-                    scheme: None,
-                    host: "example.com",
-                    port: None,
-                },
-            ],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3736,6 +3923,7 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3834,6 +4022,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -3841,7 +4033,6 @@ fn index_priority() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3913,6 +4104,7 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4011,6 +4203,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4018,7 +4214,6 @@ fn index_priority() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4096,6 +4291,7 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4194,6 +4390,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4201,7 +4401,6 @@ fn index_priority() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4274,6 +4473,7 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4372,6 +4572,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4379,7 +4583,6 @@ fn index_priority() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4459,6 +4662,7 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4557,6 +4761,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4564,7 +4772,6 @@ fn index_priority() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4637,6 +4844,7 @@ fn index_priority() -> anyhow::Result<()> {
             installs: 8,
         },
         connectivity: Online,
+        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4735,6 +4943,10 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
             system: false,
             extras: None,
             break_system_packages: false,
@@ -4742,7 +4954,6 @@ fn index_priority() -> anyhow::Result<()> {
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
-            allow_insecure_host: [],
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
