@@ -460,7 +460,7 @@ pub struct ToolUv {
     )]
     pub environments: Option<SupportedEnvironments>,
 
-    /// Conflicting extras may be declared here.
+    /// Conflicting extras or groups may be declared here.
     ///
     /// It's useful to declare conflicting extras when the extras have mutually
     /// incompatible dependencies. For example, extra `foo` might depend on
@@ -481,12 +481,8 @@ pub struct ToolUv {
     /// fail.
     #[cfg_attr(
         feature = "schemars",
-        // Skipped for now while we iterate on this feature.
-        schemars(skip, description = "A list sets of conflicting groups or extras.")
+        schemars(description = "A list sets of conflicting groups or extras.")
     )]
-    /*
-    This is commented out temporarily while we finalize its
-    functionality and naming. This avoids it showing up in docs.
     #[option(
         default = r#"[]"#,
         value_type = "list[list[dict]]",
@@ -500,9 +496,16 @@ pub struct ToolUv {
                     { extra = "test2" },
                 ]
             ]
+
+            # Or, to declare conflicting groups:
+            conflicts = [
+                [
+                    { group = "test1" },
+                    { group = "test2" },
+                ]
+            ]
         "#
     )]
-    */
     pub conflicts: Option<SchemaConflicts>,
 }
 
