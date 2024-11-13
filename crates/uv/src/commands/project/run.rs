@@ -897,7 +897,11 @@ pub(crate) async fn run(
             .map(|entry| entry.path())
             .filter(|path| is_executable(path))
             .map(|path| {
-                if cfg!(windows) {
+                if cfg!(windows)
+                    && path
+                        .extension()
+                        .is_some_and(|exe| exe == std::env::consts::EXE_EXTENSION)
+                {
                     // Remove the extensions.
                     path.with_extension("")
                 } else {
