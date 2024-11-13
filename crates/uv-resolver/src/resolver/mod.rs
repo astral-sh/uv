@@ -2876,13 +2876,14 @@ impl Forks {
         // For example, if we have conflicting groups {x1, x2} and {x3,
         // x4}, we need to make sure the forks generated from one set
         // also account for the other set.
-        for groups in conflicts.iter() {
+        for set in conflicts.iter() {
             let mut new = vec![];
             for fork in std::mem::take(&mut forks) {
                 let mut has_conflicting_dependency = false;
-                for group in groups.iter() {
-                    if fork.contains_conflicting_item(group.as_ref()) {
+                for item in set.iter() {
+                    if fork.contains_conflicting_item(item.as_ref()) {
                         has_conflicting_dependency = true;
+                        diverging_packages.insert(item.package().clone());
                         break;
                     }
                 }
@@ -2893,7 +2894,7 @@ impl Forks {
 
                 // Create a fork that excludes ALL extras.
                 let mut fork_none = fork.clone();
-                for group in groups.iter() {
+                for group in set.iter() {
                     fork_none = fork_none.exclude([group.clone()]);
                 }
                 new.push(fork_none);
@@ -2905,10 +2906,9 @@ impl Forks {
                 // then this creates three forks: one that excludes
                 // {foo, bar}, one that excludes {foo, baz} and one
                 // that excludes {bar, baz}.
-                for (i, _) in groups.iter().enumerate() {
+                for (i, _) in set.iter().enumerate() {
                     let fork_allows_group = fork.clone().exclude(
-                        groups
-                            .iter()
+                        set.iter()
                             .enumerate()
                             .filter(|&(j, _)| i != j)
                             .map(|(_, group)| group.clone()),
