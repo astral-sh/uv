@@ -124,7 +124,7 @@ impl GlobDirFilter {
 mod tests {
     use crate::glob_dir_filter::GlobDirFilter;
     use crate::portable_glob::parse_portable_glob;
-    use std::path::Path;
+    use std::path::{Path, MAIN_SEPARATOR};
     use tempfile::tempdir;
     use walkdir::WalkDir;
 
@@ -153,11 +153,11 @@ mod tests {
     fn match_directory() {
         let patterns = PATTERNS.map(|pattern| parse_portable_glob(pattern).unwrap());
         let matcher = GlobDirFilter::from_globs(&patterns).unwrap();
-        assert!(matcher.match_directory(Path::new("path1/dir1")));
-        assert!(matcher.match_directory(Path::new("path2/dir2")));
-        assert!(matcher.match_directory(Path::new("path3/dir3")));
-        assert!(matcher.match_directory(Path::new("path4/dir4")));
-        assert!(!matcher.match_directory(Path::new("path5/dir5")));
+        assert!(matcher.match_directory(&Path::new("path1").join("dir1")));
+        assert!(matcher.match_directory(&Path::new("path2").join("dir2")));
+        assert!(matcher.match_directory(&Path::new("path3").join("dir3")));
+        assert!(matcher.match_directory(&Path::new("path4").join("dir4")));
+        assert!(!matcher.match_directory(&Path::new("path5").join("dir5")));
     }
 
     /// Check that we skip directories that can never match.
@@ -191,7 +191,8 @@ mod tests {
                     .to_str()
                     .unwrap()
                     .to_string();
-                relative
+                // Translate windows paths back to the unix fixture
+                relative.replace(MAIN_SEPARATOR, "/")
             })
             .collect();
         visited.sort();
@@ -252,7 +253,8 @@ mod tests {
                     .expect("walkdir starts with root")
                     .to_path_buf();
                 if include_matcher.match_path(&relative) {
-                    Some(relative.to_str().unwrap().to_string())
+                    // Translate windows paths back to the unix fixture
+                    Some(relative.to_str().unwrap().replace(MAIN_SEPARATOR, "/"))
                 } else {
                     None
                 }
