@@ -3356,6 +3356,209 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
     Ok(())
 }
 
+/// This tests how we deal with mutually conflicting extras that span multiple
+/// packages in a workspace.
+#[test]
+fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+
+        [project.optional-dependencies]
+        project1 = [
+          "proxy1[project1]",
+        ]
+        project2 = [
+          "proxy1[project2]"
+        ]
+
+        [tool.uv.sources]
+        proxy1 = { path = "./proxy1" }
+        dummysub =  { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["dummysub"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "project1" },
+            { extra = "project2" },
+          ],
+        ]
+        "#,
+    )?;
+
+    let sub_pyproject_toml = context.temp_dir.child("dummysub").child("pyproject.toml");
+    sub_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummysub"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+
+        [project.optional-dependencies]
+        project1 = [
+          "proxy1[project1]",
+        ]
+        project2 = [
+          "proxy1[project2]"
+        ]
+
+        [tool.uv.sources]
+        proxy1 = { path = "../proxy1" }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "project1" },
+            { extra = "project2" },
+          ],
+        ]
+        "#,
+    )?;
+
+    let proxy1_pyproject_toml = context.temp_dir.child("proxy1").child("pyproject.toml");
+    proxy1_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "proxy1"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = []
+
+        [project.optional-dependencies]
+        project1 = ["anyio==4.1.0"]
+        project2 = ["anyio==4.2.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // In the scheme above, we declare that `dummy[project1]` conflicts
+    // with `dummy[project2]`, and that `dummysub[project1]` conflicts
+    // with `dummysub[project2]`. But we don't account for the fact that
+    // `dummy[project1]` conflicts with `dummysub[project2]` and that
+    // `dummy[project2]` conflicts with `dummysub[project1]`. So we end
+    // up with a resolution failure.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because dummy[project2] depends on proxy1[project2] and only proxy1[project2]==0.1.0 is available, we can conclude that dummy[project2] depends on proxy1[project2]==0.1.0. (1)
+
+          Because proxy1[project1]==0.1.0 depends on anyio==4.1.0 and proxy1[project2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[project1]==0.1.0 and proxy1[project2]==0.1.0 are incompatible.
+          And because we know from (1) that dummy[project2] depends on proxy1[project2]==0.1.0, we can conclude that dummy[project2] and proxy1[project1]==0.1.0 are incompatible.
+          And because only proxy1[project1]==0.1.0 is available and dummysub[project1] depends on proxy1[project1], we can conclude that dummysub[project1] and dummy[project2] are incompatible.
+          And because your workspace requires dummy[project2] and dummysub[project1], we can conclude that your workspace's requirements are unsatisfiable.
+    "###);
+
+    // Now let's write out the full set of conflicts, taking
+    // advantage of the optional `package` key.
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+
+        [project.optional-dependencies]
+        project1 = [
+          "proxy1[project1]",
+        ]
+        project2 = [
+          "proxy1[project2]"
+        ]
+
+        [tool.uv.sources]
+        proxy1 = { path = "./proxy1" }
+        dummysub =  { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["dummysub"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "project1" },
+            { extra = "project2" },
+          ],
+          [
+            { package = "dummysub", extra = "project1" },
+            { package = "dummysub", extra = "project2" },
+          ],
+          [
+            { extra = "project1" },
+            { package = "dummysub", extra = "project2" },
+          ],
+          [
+            { package = "dummysub", extra = "project1" },
+            { extra = "project2" },
+          ],
+        ]
+        "#,
+    )?;
+    // And we can remove the conflicts from `dummysub` since
+    // there specified in `dummy`.
+    sub_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummysub"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+
+        [project.optional-dependencies]
+        project1 = [
+          "proxy1[project1]",
+        ]
+        project2 = [
+          "proxy1[project2]"
+        ]
+
+        [tool.uv.sources]
+        proxy1 = { path = "../proxy1" }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    // And now things should work.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// Show updated dependencies on `lock --upgrade`.
 #[test]
 fn lock_upgrade_log() -> Result<()> {
