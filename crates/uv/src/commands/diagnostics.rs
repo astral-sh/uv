@@ -79,6 +79,10 @@ impl OperationDiagnostic {
                 download_and_build(dist, Box::new(err));
                 None
             }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Download(dist, err)) => {
+                download(dist, Box::new(err));
+                None
+            }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err)) => {
                 build(dist, Box::new(err));
                 None
@@ -90,11 +94,11 @@ impl OperationDiagnostic {
                 download_and_build(dist, Box::new(err));
                 None
             }
-            pip::operations::Error::Requirements(uv_requirements::Error::Build(dist, err)) => {
-                build(dist, Box::new(err));
+            pip::operations::Error::Requirements(uv_requirements::Error::Download(dist, err)) => {
+                download(dist, Box::new(err));
                 None
             }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::Build(dist, err)) => {
+            pip::operations::Error::Requirements(uv_requirements::Error::Build(dist, err)) => {
                 build(dist, Box::new(err));
                 None
             }
@@ -107,6 +111,10 @@ impl OperationDiagnostic {
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Download(dist, err)) => {
                 download(dist, Box::new(err));
+                None
+            }
+            pip::operations::Error::Prepare(uv_installer::PrepareError::Build(dist, err)) => {
+                build(dist, Box::new(err));
                 None
             }
             pip::operations::Error::Requirements(err) => {
