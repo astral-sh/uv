@@ -2185,7 +2185,6 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
@@ -2218,7 +2217,6 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -2383,7 +2381,6 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
@@ -2417,7 +2414,6 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -2543,7 +2539,6 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -2680,7 +2675,6 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
@@ -2715,7 +2709,6 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -2762,7 +2755,6 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -2813,7 +2805,6 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -2863,7 +2854,6 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
@@ -2896,7 +2886,6 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -2936,7 +2925,6 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -3107,7 +3095,6 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [tool.uv]
@@ -3215,7 +3202,6 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
 
         [project.optional-dependencies]

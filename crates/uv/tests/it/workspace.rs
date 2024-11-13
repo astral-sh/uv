@@ -1883,8 +1883,6 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
         [project]
         name = "git-with-root"
         version = "0.1.0"
-        description = "Add your description here"
-        readme = "README.md"
         requires-python = ">=3.12"
         dependencies = [
             "workspace-member-in-subdir",
