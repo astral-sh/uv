@@ -63,7 +63,7 @@ $ uv python install 3.11 3.12
 To install an alternative Python implementation, e.g. PyPy:
 
 ```console
-$ uv python install pypy@3.12
+$ uv python install pypy@3.10
 ```
 
 See the [`python install`](../concepts/python-versions.md#installing-a-python-version) documentation

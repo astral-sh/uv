@@ -7,7 +7,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use anstream::eprintln;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
@@ -150,6 +150,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     *script,
                     settings.connectivity,
                     settings.native_tls,
+                    &settings.allow_insecure_host,
                 )
                 .await?,
             )
@@ -353,7 +354,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &globals.allow_insecure_host,
                 args.settings.config_setting,
                 globals.connectivity,
                 args.settings.no_build_isolation,
@@ -421,7 +422,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
                 args.settings.allow_empty_requirements,
                 globals.connectivity,
                 &args.settings.config_setting,
@@ -440,6 +440,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.sources,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 args.dry_run,
                 printer,
@@ -505,7 +506,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -528,6 +528,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.prefix,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 args.dry_run,
                 printer,
@@ -565,7 +566,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.native_tls,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &globals.allow_insecure_host,
                 printer,
             )
             .await
@@ -605,12 +606,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 &args.exclude,
                 &args.format,
+                args.outdated,
+                args.settings.prerelease,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
+                globals.allow_insecure_host,
+                globals.connectivity,
                 args.settings.strict,
+                args.settings.exclude_newer,
                 args.settings.python.as_deref(),
                 args.settings.system,
+                globals.native_tls,
                 &cache,
                 printer,
             )
+            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
@@ -729,6 +740,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -773,7 +785,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &globals.allow_insecure_host,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 globals.connectivity,
@@ -903,6 +915,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 printer,
             )
@@ -953,6 +966,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 printer,
             ))
@@ -997,6 +1011,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             ))
@@ -1065,6 +1080,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,
+                &globals.allow_insecure_host,
                 cli.top_level.no_config,
                 globals.preview,
                 printer,
@@ -1137,6 +1153,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 warn_user_once!("`uv publish` is experimental and may change without warning");
             }
 
+            if args.skip_existing {
+                bail!(
+                    "`uv publish` does not support `--skip-existing` because there is not a \
+                    reliable way to identify when an upload fails due to an existing \
+                    distribution. Instead, use `--check-url` to provide the URL to the simple \
+                    API for your index. uv will check the index for existing distributions before \
+                    attempting uploads."
+                );
+            }
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let PublishSettings {
                 files,
@@ -1145,7 +1171,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
-                allow_insecure_host,
                 check_url,
             } = PublishSettings::resolve(args, filesystem);
 
@@ -1154,7 +1179,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
-                allow_insecure_host,
+                &globals.allow_insecure_host,
                 username,
                 password,
                 check_url,
@@ -1260,6 +1285,8 @@ async fn run_project(
                 globals.python_downloads,
                 globals.connectivity,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1318,6 +1345,7 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
                 args.env_file,
@@ -1356,6 +1384,8 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1385,6 +1415,8 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1437,6 +1469,8 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             ))
@@ -1478,6 +1512,8 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1502,6 +1538,7 @@ async fn run_project(
                 args.package,
                 args.no_dedupe,
                 args.invert,
+                args.outdated,
                 args.python_version,
                 args.python_platform,
                 args.python,
@@ -1512,6 +1549,8 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1547,6 +1586,8 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 globals.quiet,
                 &cache,
                 printer,

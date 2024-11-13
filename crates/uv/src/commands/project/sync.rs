@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
-    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound,
+    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
@@ -60,6 +60,8 @@ pub(crate) async fn sync(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -119,6 +121,8 @@ pub(crate) async fn sync(
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
+        no_config,
         cache,
         printer,
     )
@@ -146,29 +150,17 @@ pub(crate) async fn sync(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
-        ))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     };
@@ -199,7 +191,7 @@ pub(crate) async fn sync(
     };
 
     // Perform the sync operation.
-    do_sync(
+    match do_sync(
         target,
         &venv,
         &extras,
@@ -212,10 +204,20 @@ pub(crate) async fn sync(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(()) => {}
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     Ok(ExitStatus::Success)
 }
@@ -235,6 +237,7 @@ pub(super) async fn do_sync(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
@@ -254,7 +257,6 @@ pub(super) async fn do_sync(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         dependency_metadata,
         config_setting,
         no_build_isolation,

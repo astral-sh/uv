@@ -8,6 +8,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    TrustedHost,
 };
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
@@ -22,9 +23,9 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::LockMode;
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::project::{default_dependency_groups, ProjectError};
+use crate::commands::{diagnostics, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -47,6 +48,8 @@ pub(crate) async fn remove(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -193,6 +196,8 @@ pub(crate) async fn remove(
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
+        no_config,
         cache,
         printer,
     )
@@ -211,7 +216,7 @@ pub(crate) async fn remove(
     let state = SharedState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = project::lock::do_safe_lock(
+    let lock = match project::lock::do_safe_lock(
         mode,
         project.workspace(),
         settings.as_ref().into(),
@@ -221,11 +226,20 @@ pub(crate) async fn remove(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
-    .await?
-    .into_lock();
+    .await
+    {
+        Ok(result) => result.into_lock(),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     if no_sync {
         return Ok(ExitStatus::Success);
@@ -252,7 +266,7 @@ pub(crate) async fn remove(
         },
     };
 
-    project::sync::do_sync(
+    match project::sync::do_sync(
         target,
         &venv,
         &extras,
@@ -265,10 +279,20 @@ pub(crate) async fn remove(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(()) => {}
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     Ok(ExitStatus::Success)
 }

@@ -1460,31 +1460,28 @@ fn tool_install_uninstallable() {
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `pyenv==0.0.1`
-      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      × Failed to download and build `pyenv==0.0.1`
+      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
-    [stdout]
-    running bdist_wheel
-    running build
-    installing to build/bdist.linux-x86_64/wheel
-    running install
+          [stdout]
+          running bdist_wheel
+          running build
+          installing to build/bdist.linux-x86_64/wheel
+          running install
 
-    [stderr]
-    # NOTE #
-    We are sorry, but this package is not installable with pip.
+          [stderr]
+          # NOTE #
+          We are sorry, but this package is not installable with pip.
 
-    Please read the installation instructions at:
+          Please read the installation instructions at:
      
-    https://github.com/pyenv/pyenv#installation
-    #
-
-
+          https://github.com/pyenv/pyenv#installation
+          #
     "###);
 
     // Ensure the tool environment is not created.
@@ -2439,12 +2436,13 @@ fn tool_install_preserve_environment() {
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
-    And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
+          And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
     "###);
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.

@@ -579,7 +579,8 @@ fn test_invalid_specifier() {
             ParseErrorKind::InvalidSpecifier(
                 BuildErrorKind::OperatorLocalCombo {
                     operator: Operator::TildeEqual,
-                    version: Version::new([1, 0]).with_local(vec![LocalSegment::Number(5)]),
+                    version: Version::new([1, 0])
+                        .with_local_segments(vec![LocalSegment::Number(5)]),
                 }
                 .into(),
             )
@@ -591,7 +592,7 @@ fn test_invalid_specifier() {
                 BuildErrorKind::OperatorLocalCombo {
                     operator: Operator::GreaterThanEqual,
                     version: Version::new([1, 0])
-                        .with_local(vec![LocalSegment::String("deadbeef".to_string())]),
+                        .with_local_segments(vec![LocalSegment::String("deadbeef".to_string())]),
                 }
                 .into(),
             )
@@ -603,7 +604,7 @@ fn test_invalid_specifier() {
                 BuildErrorKind::OperatorLocalCombo {
                     operator: Operator::LessThanEqual,
                     version: Version::new([1, 0])
-                        .with_local(vec![LocalSegment::String("abc123".to_string())]),
+                        .with_local_segments(vec![LocalSegment::String("abc123".to_string())]),
                 }
                 .into(),
             )
@@ -615,7 +616,7 @@ fn test_invalid_specifier() {
                 BuildErrorKind::OperatorLocalCombo {
                     operator: Operator::GreaterThan,
                     version: Version::new([1, 0])
-                        .with_local(vec![LocalSegment::String("watwat".to_string())]),
+                        .with_local_segments(vec![LocalSegment::String("watwat".to_string())]),
                 }
                 .into(),
             )
@@ -626,8 +627,10 @@ fn test_invalid_specifier() {
             ParseErrorKind::InvalidSpecifier(
                 BuildErrorKind::OperatorLocalCombo {
                     operator: Operator::LessThan,
-                    version: Version::new([1, 0])
-                        .with_local(vec![LocalSegment::Number(1), LocalSegment::Number(0)]),
+                    version: Version::new([1, 0]).with_local_segments(vec![
+                        LocalSegment::Number(1),
+                        LocalSegment::Number(0),
+                    ]),
                 }
                 .into(),
             )

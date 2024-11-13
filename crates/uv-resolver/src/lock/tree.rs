@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
@@ -9,10 +10,11 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_configuration::DevGroupsManifest;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::Version;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
 use crate::lock::{Dependency, PackageId};
-use crate::Lock;
+use crate::{Lock, PackageMap};
 
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
@@ -20,6 +22,8 @@ pub struct TreeDisplay<'env> {
     graph: petgraph::graph::Graph<&'env PackageId, Edge<'env>, petgraph::Directed>,
     /// The packages considered as roots of the dependency tree.
     roots: Vec<NodeIndex>,
+    /// The latest known version of each package.
+    latest: &'env PackageMap<Version>,
     /// Maximum display depth of the dependency tree.
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
@@ -31,6 +35,7 @@ impl<'env> TreeDisplay<'env> {
     pub fn new(
         lock: &'env Lock,
         markers: Option<&'env ResolverMarkerEnvironment>,
+        latest: &'env PackageMap<Version>,
         depth: usize,
         prune: &[PackageName],
         packages: &[PackageName],
@@ -242,6 +247,7 @@ impl<'env> TreeDisplay<'env> {
         Self {
             graph,
             roots,
+            latest,
             depth,
             no_dedupe,
         }
@@ -305,6 +311,13 @@ impl<'env> TreeDisplay<'env> {
                 };
             }
         }
+
+        // Incorporate the latest version of the package, if known.
+        let line = if let Some(version) = self.latest.get(package_id) {
+            format!("{line} {}", format!("(latest: v{version})").bold().cyan())
+        } else {
+            line
+        };
 
         let mut dependencies = self
             .graph

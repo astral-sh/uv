@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
-    InstallOptions, LowerBound,
+    InstallOptions, LowerBound, TrustedHost,
 };
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -22,7 +22,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
 };
-use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter, SharedState};
+use crate::commands::{diagnostics, ExitStatus, OutputWriter, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -50,6 +50,8 @@ pub(crate) async fn export(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     quiet: bool,
     cache: &Cache,
     printer: Printer,
@@ -100,14 +102,17 @@ pub(crate) async fn export(
         // Find an interpreter for the project
         interpreter = ProjectInterpreter::discover(
             project.workspace(),
+            project_dir,
             python.as_deref().map(PythonRequest::parse),
             python_preference,
             python_downloads,
             connectivity,
             native_tls,
+            allow_insecure_host,
+            install_mirrors,
+            no_config,
             cache,
             printer,
-            install_mirrors,
         )
         .await?
         .into_interpreter();
@@ -133,29 +138,17 @@ pub(crate) async fn export(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
-        ))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     };

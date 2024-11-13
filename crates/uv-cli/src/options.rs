@@ -5,7 +5,7 @@ use uv_resolver::PrereleaseMode;
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
 
 use crate::{
-    BuildOptionsArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
+    BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
     ResolverInstallerArgs,
 };
 
@@ -40,7 +40,6 @@ impl From<ResolverArgs> for PipOptions {
             upgrade_package,
             index_strategy,
             keyring_provider,
-            allow_insecure_host,
             resolution,
             prerelease,
             pre,
@@ -58,12 +57,6 @@ impl From<ResolverArgs> for PipOptions {
             upgrade_package: Some(upgrade_package),
             index_strategy,
             keyring_provider,
-            allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
-                allow_insecure_host
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
             resolution,
             prerelease: if pre {
                 Some(PrereleaseMode::Allow)
@@ -91,7 +84,6 @@ impl From<InstallerArgs> for PipOptions {
             reinstall_package,
             index_strategy,
             keyring_provider,
-            allow_insecure_host,
             config_setting,
             no_build_isolation,
             build_isolation,
@@ -107,12 +99,6 @@ impl From<InstallerArgs> for PipOptions {
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
-            allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
-                allow_insecure_host
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             no_build_isolation: flag(no_build_isolation, build_isolation),
@@ -137,7 +123,6 @@ impl From<ResolverInstallerArgs> for PipOptions {
             reinstall_package,
             index_strategy,
             keyring_provider,
-            allow_insecure_host,
             resolution,
             prerelease,
             pre,
@@ -159,12 +144,6 @@ impl From<ResolverInstallerArgs> for PipOptions {
             reinstall_package: Some(reinstall_package),
             index_strategy,
             keyring_provider,
-            allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
-                allow_insecure_host
-                    .into_iter()
-                    .filter_map(Maybe::into_option)
-                    .collect()
-            }),
             resolution,
             prerelease: if pre {
                 Some(PrereleaseMode::Allow)
@@ -179,6 +158,24 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode),
             no_sources: if no_sources { Some(true) } else { None },
+            ..PipOptions::from(index_args)
+        }
+    }
+}
+
+impl From<FetchArgs> for PipOptions {
+    fn from(args: FetchArgs) -> Self {
+        let FetchArgs {
+            index_args,
+            index_strategy,
+            keyring_provider,
+            exclude_newer,
+        } = args;
+
+        Self {
+            index_strategy,
+            keyring_provider,
+            exclude_newer,
             ..PipOptions::from(index_args)
         }
     }
@@ -235,7 +232,6 @@ pub fn resolver_options(
         upgrade_package,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         pre,
@@ -289,12 +285,6 @@ pub fn resolver_options(
         upgrade_package: Some(upgrade_package),
         index_strategy,
         keyring_provider,
-        allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
-            allow_insecure_host
-                .into_iter()
-                .filter_map(Maybe::into_option)
-                .collect()
-        }),
         resolution,
         prerelease: if pre {
             Some(PrereleaseMode::Allow)
@@ -331,7 +321,6 @@ pub fn resolver_installer_options(
         reinstall_package,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         pre,
@@ -397,12 +386,6 @@ pub fn resolver_installer_options(
         },
         index_strategy,
         keyring_provider,
-        allow_insecure_host: allow_insecure_host.map(|allow_insecure_host| {
-            allow_insecure_host
-                .into_iter()
-                .filter_map(Maybe::into_option)
-                .collect()
-        }),
         resolution,
         prerelease: if pre {
             Some(PrereleaseMode::Allow)

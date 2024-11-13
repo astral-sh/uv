@@ -5,14 +5,20 @@ use anyhow::Result;
 use std::env;
 use std::path::Path;
 
-pub(crate) fn build_sdist(_sdist_directory: &Path) -> Result<ExitStatus> {
-    todo!()
+pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
+    let filename = uv_build_backend::build_source_dist(
+        &env::current_dir()?,
+        sdist_directory,
+        uv_version::version(),
+    )?;
+    println!("{filename}");
+    Ok(ExitStatus::Success)
 }
 pub(crate) fn build_wheel(
     wheel_directory: &Path,
     metadata_directory: Option<&Path>,
 ) -> Result<ExitStatus> {
-    let filename = uv_build_backend::build(
+    let filename = uv_build_backend::build_wheel(
         &env::current_dir()?,
         wheel_directory,
         metadata_directory,

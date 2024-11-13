@@ -12,12 +12,16 @@ use tracing::{debug, trace};
 
 use uv_client::Connectivity;
 use uv_configuration::PreviewMode;
+use uv_configuration::TrustedHost;
 use uv_fs::Simplified;
 use uv_python::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
     python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
 };
-use uv_python::{PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile};
+use uv_python::{
+    PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionFilePreference,
+};
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
 use uv_warnings::warn_user;
@@ -114,6 +118,7 @@ pub(crate) async fn install(
     python_downloads: PythonDownloads,
     native_tls: bool,
     connectivity: Connectivity,
+    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     preview: PreviewMode,
     printer: Printer,
@@ -123,17 +128,22 @@ pub(crate) async fn install(
     // Resolve the requests
     let mut is_default_install = false;
     let requests: Vec<_> = if targets.is_empty() {
-        PythonVersionFile::discover(project_dir, no_config, true)
-            .await?
-            .map(PythonVersionFile::into_versions)
-            .unwrap_or_else(|| {
-                // If no version file is found and no requests were made
-                is_default_install = true;
-                vec![PythonRequest::Default]
-            })
-            .into_iter()
-            .map(InstallRequest::new)
-            .collect::<Result<Vec<_>>>()?
+        PythonVersionFile::discover(
+            project_dir,
+            &VersionFileDiscoveryOptions::default()
+                .with_no_config(no_config)
+                .with_preference(VersionFilePreference::Versions),
+        )
+        .await?
+        .map(PythonVersionFile::into_versions)
+        .unwrap_or_else(|| {
+            // If no version file is found and no requests were made
+            is_default_install = true;
+            vec![PythonRequest::Default]
+        })
+        .into_iter()
+        .map(InstallRequest::new)
+        .collect::<Result<Vec<_>>>()?
     } else {
         targets
             .iter()
@@ -212,6 +222,7 @@ pub(crate) async fn install(
     let client = uv_client::BaseClientBuilder::new()
         .connectivity(connectivity)
         .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec())
         .build();
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
     let mut tasks = FuturesUnordered::new();

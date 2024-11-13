@@ -11,7 +11,7 @@ use uv_distribution_filename::WheelFilenameError;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashDigest, ParsedUrlError};
+use uv_pypi_types::{HashAlgorithm, HashDigest, ParsedUrlError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -53,8 +53,6 @@ pub enum Error {
     // Build error
     #[error(transparent)]
     Build(anyhow::Error),
-    #[error("Failed to build editable: `{0}`")]
-    BuildEditable(String, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
@@ -94,8 +92,8 @@ pub enum Error {
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
     NotFound(Url),
-    #[error("Attempted to re-extract the source distribution for `{0}`, but the hashes didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
-    CacheHeal(String),
+    #[error("Attempted to re-extract the source distribution for `{0}`, but the {1} hash didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
+    CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]
     RequiresPython(VersionSpecifiers, Version),
 

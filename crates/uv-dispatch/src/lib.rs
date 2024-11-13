@@ -275,10 +275,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 remote.iter().map(ToString::to_string).join(", ")
             );
 
-            preparer
-                .prepare(remote, self.in_flight)
-                .await
-                .context("Failed to prepare distributions")?
+            preparer.prepare(remote, self.in_flight).await?
         };
 
         // Remove any unnecessary packages.

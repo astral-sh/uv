@@ -777,8 +777,8 @@ pub struct ConflictingDistributionError {
 
 impl std::error::Error for ConflictingDistributionError {}
 
-impl std::fmt::Display for ConflictingDistributionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for ConflictingDistributionError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         let ConflictingDistributionError {
             ref name,
             ref version1,

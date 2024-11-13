@@ -11,7 +11,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -84,6 +84,8 @@ pub(crate) async fn lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
@@ -98,14 +100,17 @@ pub(crate) async fn lock(
         // Find an interpreter for the project
         interpreter = ProjectInterpreter::discover(
             &workspace,
+            project_dir,
             python.as_deref().map(PythonRequest::parse),
             python_preference,
             python_downloads,
             connectivity,
             native_tls,
+            allow_insecure_host,
+            install_mirrors,
+            no_config,
             cache,
             printer,
-            install_mirrors,
         )
         .await?
         .into_interpreter();
@@ -133,6 +138,7 @@ pub(crate) async fn lock(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -160,25 +166,9 @@ pub(crate) async fn lock(
 
             Ok(ExitStatus::Success)
         }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
-        ))) => {
-            diagnostics::fetch_and_build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
 }
@@ -207,6 +197,7 @@ pub(super) async fn do_safe_lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
@@ -236,6 +227,7 @@ pub(super) async fn do_safe_lock(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -274,6 +266,7 @@ pub(super) async fn do_safe_lock(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -303,6 +296,7 @@ async fn do_lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<LockResult, ProjectError> {
@@ -313,7 +307,6 @@ async fn do_lock(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         dependency_metadata,
@@ -524,7 +517,6 @@ async fn do_lock(
             interpreter,
             &requires_python,
             index_locations,
-            build_options,
             upgrade,
             &options,
             &hasher,
@@ -609,7 +601,8 @@ async fn do_lock(
                 ExtrasResolver::new(&hasher, &state.index, database)
                     .with_reporter(ResolverReporter::from(printer))
                     .resolve(workspace.members_requirements())
-                    .await?
+                    .await
+                    .map_err(|err| ProjectError::Operation(err.into()))?
                     .into_iter()
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
@@ -707,7 +700,6 @@ impl ValidatedLock {
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
-        build_options: &BuildOptions,
         upgrade: &Upgrade,
         options: &Options,
         hasher: &HashStrategy,
@@ -834,7 +826,6 @@ impl ValidatedLock {
                 overrides,
                 dependency_metadata,
                 indexes,
-                build_options,
                 interpreter.tags()?,
                 hasher,
                 index,
@@ -990,6 +981,17 @@ pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectE
                 }
             }
         }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+/// Read the lockfile from the workspace as bytes.
+///
+/// Returns `Ok(None)` if the lockfile does not exist.
+pub(crate) async fn read_bytes(workspace: &Workspace) -> Result<Option<Vec<u8>>, ProjectError> {
+    match fs_err::tokio::read(&workspace.install_path().join("uv.lock")).await {
+        Ok(encoded) => Ok(Some(encoded)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err.into()),
     }

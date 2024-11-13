@@ -94,6 +94,10 @@ Named indexes referenced via `tool.uv.sources` must be defined within the projec
 file; indexes provided via the command-line, environment variables, or user-level configuration will
 not be recognized.
 
+If an index is marked as both `default = true` and `explicit = true`, it will be treated as an
+explicit index (i.e., only usable via `tool.uv.sources`) while also removing PyPI as the default
+index.
+
 ## Searching across multiple indexes
 
 By default, uv will stop at the first index on which a given package is available, and limit

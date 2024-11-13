@@ -24,7 +24,6 @@ use tracing::{debug, info, instrument, trace, warn, Level};
 
 pub use environment::ResolverEnvironment;
 pub(crate) use fork_map::{ForkMap, ForkSet};
-use locals::Locals;
 pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
@@ -72,7 +71,7 @@ pub use crate::resolver::provider::{
 use crate::resolver::reporter::Facade;
 pub use crate::resolver::reporter::{BuildId, Reporter};
 use crate::yanks::AllowedYanks;
-use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options};
+use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode};
 
 mod availability;
 mod batch_prefetch;
@@ -81,7 +80,6 @@ mod fork_map;
 mod groups;
 mod index;
 mod indexes;
-mod locals;
 mod provider;
 mod reporter;
 mod urls;
@@ -105,7 +103,6 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     locations: IndexLocations,
     exclusions: Exclusions,
     urls: Urls,
-    locals: Locals,
     indexes: Indexes,
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
@@ -211,7 +208,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             selector: CandidateSelector::for_resolution(options, &manifest, &env),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode)?,
-            locals: Locals::from_manifest(&manifest, &env, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
             groups: Groups::from_manifest(&manifest, &env),
             project: manifest.project,
@@ -364,12 +360,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // Walk over the selected versions, and mark them as preferences. We have to
                     // add forks back as to not override the preferences from the lockfile for
                     // the next fork
-                    for (package, version) in &resolution.nodes {
-                        preferences.insert(
-                            package.name.clone(),
-                            resolution.env.try_markers().cloned(),
-                            version.clone(),
-                        );
+                    //
+                    // If we're using a resolution mode that varies based on whether a dependency is
+                    // direct or transitive, skip preferences, as we risk adding a preference from
+                    // one fork (in which it's a transitive dependency) to another fork (in which
+                    // it's direct).
+                    if matches!(
+                        self.options.resolution_mode,
+                        ResolutionMode::Lowest | ResolutionMode::Highest
+                    ) {
+                        for (package, version) in &resolution.nodes {
+                            preferences.insert(
+                                package.name.clone(),
+                                resolution.env.try_markers().cloned(),
+                                version.clone(),
+                            );
+                        }
                     }
 
                     resolutions.push(resolution);
@@ -525,7 +531,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &version,
                             &self.urls,
                             &self.indexes,
-                            &self.locals,
                             dependencies.clone(),
                             &self.git,
                             self.selector.resolution_strategy(),
@@ -694,7 +699,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     version,
                     &self.urls,
                     &self.indexes,
-                    &self.locals,
                     fork.dependencies.clone(),
                     &self.git,
                     self.selector.resolution_strategy(),
@@ -1779,12 +1783,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         Dist::Source(source_dist @ SourceDist::Directory(_)) => {
                             ResolveError::Build(Box::new(source_dist), err)
                         }
-                        Dist::Built(built_dist) => ResolveError::Fetch(Box::new(built_dist), err),
+                        Dist::Built(built_dist) => {
+                            ResolveError::Download(Box::new(built_dist), err)
+                        }
                         Dist::Source(source_dist) => {
                             if source_dist.is_local() {
                                 ResolveError::Build(Box::new(source_dist), err)
                             } else {
-                                ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                ResolveError::DownloadAndBuild(Box::new(source_dist), err)
                             }
                         }
                     })?;
@@ -1832,6 +1838,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
+                // We don't have access to the fork state when prefetching, so assume that
+                // pre-release versions are allowed.
+                let env = ResolverEnvironment::universal(vec![]);
+
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
                 let Some(candidate) = self.selector.select(
@@ -1841,9 +1851,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.preferences,
                     &self.installed_packages,
                     &self.exclusions,
-                    // We don't have access to the fork state when prefetching, so assume that
-                    // pre-release versions are allowed.
-                    &ResolverEnvironment::universal(vec![]),
+                    &env,
                 ) else {
                     return Ok(None);
                 };
@@ -1857,7 +1865,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // often leads to failed attempts to build legacy versions of packages that are
                 // incompatible with modern build tools.
                 if dist.wheel().is_none() {
-                    if !self.selector.use_highest_version(&package_name) {
+                    if !self.selector.use_highest_version(&package_name, &env) {
                         if let Some((lower, _)) = range.iter().next() {
                             if lower == &Bound::Unbounded {
                                 debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
@@ -1913,13 +1921,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         ResolveError::Build(Box::new(source_dist), err)
                                     }
                                     Dist::Built(built_dist) => {
-                                        ResolveError::Fetch(Box::new(built_dist), err)
+                                        ResolveError::Download(Box::new(built_dist), err)
                                     }
                                     Dist::Source(source_dist) => {
                                         if source_dist.is_local() {
                                             ResolveError::Build(Box::new(source_dist), err)
                                         } else {
-                                            ResolveError::FetchAndBuild(Box::new(source_dist), err)
+                                            ResolveError::DownloadAndBuild(
+                                                Box::new(source_dist),
+                                                err,
+                                            )
                                         }
                                     }
                                 })?;
@@ -1952,7 +1963,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         index_locations: &IndexLocations,
         index_capabilities: &IndexCapabilities,
     ) -> ResolveError {
-        err = NoSolutionError::collapse_proxies(err);
+        err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
+            err,
+        ));
 
         let mut unavailable_packages = FxHashMap::default();
         for package in err.packages() {
@@ -2150,14 +2163,13 @@ impl ForkState {
     }
 
     /// Add the dependencies for the selected version of the current package, checking for
-    /// self-dependencies, and handling URLs and locals.
+    /// self-dependencies and handling URLs.
     fn add_package_version_dependencies(
         &mut self,
         for_package: Option<&str>,
         version: &Version,
         urls: &Urls,
         indexes: &Indexes,
-        locals: &Locals,
         mut dependencies: Vec<PubGrubDependency>,
         git: &GitResolver,
         resolution_strategy: &ResolutionStrategy,
@@ -2166,8 +2178,8 @@ impl ForkState {
             let PubGrubDependency {
                 package,
                 version,
-                specifier,
                 url,
+                ..
             } = dependency;
 
             let mut has_url = false;
@@ -2180,31 +2192,6 @@ impl ForkState {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
                 };
-
-                // If the specifier is an exact version and the user requested a local version for this
-                // fork that's more precise than the specifier, use the local version instead.
-                if let Some(specifier) = specifier {
-                    let locals = locals.get(name, &self.env);
-
-                    // It's possible that there are multiple matching local versions requested with
-                    // different marker expressions. All of these are potentially compatible until we
-                    // narrow to a specific fork.
-                    for local in locals {
-                        let local = specifier
-                            .iter()
-                            .map(|specifier| {
-                                Locals::map(local, specifier)
-                                    .map_err(ResolveError::InvalidVersion)
-                                    .map(Ranges::from)
-                            })
-                            .fold_ok(Range::full(), |range, specifier| {
-                                range.intersection(&specifier)
-                            })?;
-
-                        // Add the local version.
-                        *version = version.union(&local);
-                    }
-                }
 
                 // If the package is pinned to an exact index, add it to the fork.
                 for index in indexes.get(name, &self.env) {
@@ -2230,7 +2217,7 @@ impl ForkState {
                 if !has_url && missing_lower_bound && strategy_lowest {
                     warn_user_once!(
                         "The direct dependency `{package}` is unpinned. \
-                        Consider setting a lower bound when using `--resolution-strategy lowest` \
+                        Consider setting a lower bound when using `--resolution lowest` \
                         to avoid using outdated versions."
                     );
                 }

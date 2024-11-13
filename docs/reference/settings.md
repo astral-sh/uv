@@ -127,7 +127,7 @@ If an index is marked as `default = true`, it will be moved to the end of the pr
 given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
 PyPI default index.
 
-**Default value**: `"[]"`
+**Default value**: `[]`
 
 **Type**: `dict`
 
@@ -232,7 +232,7 @@ alternative registry.
 
 See [Dependencies](../concepts/dependencies.md) for more.
 
-**Default value**: `"[]"`
+**Default value**: `{}`
 
 **Type**: `dict`
 
@@ -1001,7 +1001,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -1562,39 +1562,6 @@ packages.
     ```toml
     [pip]
     allow-empty-requirements = true
-    ```
-
----
-
-#### [`allow-insecure-host`](#pip_allow-insecure-host) {: #pip_allow-insecure-host }
-<span id="allow-insecure-host"></span>
-
-Allow insecure connections to host.
-
-Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-`localhost:8080`), or a URL (e.g., `https://localhost`).
-
-WARNING: Hosts included in this list will not be verified against the system's certificate
-store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-bypasses SSL verification and could expose you to MITM attacks.
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    allow-insecure-host = ["localhost:8080"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    allow-insecure-host = ["localhost:8080"]
     ```
 
 ---
@@ -2340,7 +2307,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 

@@ -239,6 +239,38 @@ fn frozen() -> Result<()> {
 }
 
 #[test]
+fn outdated() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.0.0"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--outdated").arg("--universal"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── anyio v3.0.0 (latest: v4.3.0)
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn platform_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
 

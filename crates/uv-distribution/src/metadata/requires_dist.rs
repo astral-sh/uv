@@ -462,8 +462,7 @@ mod test {
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |                ^^^^^^^^^^^^^^^^^
-        invalid value: string "§invalid#+#*Ä", expected relative URL without a base
-
+        relative URL without a base: "§invalid#+#*Ä"
         "###);
     }
 

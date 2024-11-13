@@ -413,20 +413,12 @@ fn split_fragment(path: &Path) -> (Cow<Path>, Option<&str>) {
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scheme {
     /// `file://...`
     File,
-    /// `git+git://...`
-    GitGit,
-    /// `git+http://...`
-    GitHttp,
-    /// `git+file://...`
-    GitFile,
-    /// `git+ssh://...`
-    GitSsh,
-    /// `git+https://...`
-    GitHttps,
+    /// `git+{transport}://...` as git supports arbitrary transports through gitremote-helpers
+    Git(String),
     /// `bzr+http://...`
     BzrHttp,
     /// `bzr+https://...`
@@ -470,13 +462,11 @@ pub enum Scheme {
 impl Scheme {
     /// Determine the [`Scheme`] from the given string, if possible.
     pub fn parse(s: &str) -> Option<Self> {
+        if let Some(("git", transport)) = s.split_once('+') {
+            return Some(Self::Git(transport.into()));
+        }
         match s {
             "file" => Some(Self::File),
-            "git+git" => Some(Self::GitGit),
-            "git+http" => Some(Self::GitHttp),
-            "git+file" => Some(Self::GitFile),
-            "git+ssh" => Some(Self::GitSsh),
-            "git+https" => Some(Self::GitHttps),
             "bzr+http" => Some(Self::BzrHttp),
             "bzr+https" => Some(Self::BzrHttps),
             "bzr+ssh" => Some(Self::BzrSsh),
@@ -510,11 +500,7 @@ impl std::fmt::Display for Scheme {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::File => write!(f, "file"),
-            Self::GitGit => write!(f, "git+git"),
-            Self::GitHttp => write!(f, "git+http"),
-            Self::GitFile => write!(f, "git+file"),
-            Self::GitSsh => write!(f, "git+ssh"),
-            Self::GitHttps => write!(f, "git+https"),
+            Self::Git(transport) => write!(f, "git+{transport}"),
             Self::BzrHttp => write!(f, "bzr+http"),
             Self::BzrHttps => write!(f, "bzr+https"),
             Self::BzrSsh => write!(f, "bzr+ssh"),

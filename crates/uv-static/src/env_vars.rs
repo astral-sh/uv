@@ -337,6 +337,9 @@ impl EnvVars {
     /// Used to detect an activated Conda environment.
     pub const CONDA_PREFIX: &'static str = "CONDA_PREFIX";
 
+    /// Used to determine if an active Conda environment is the base environment or not.
+    pub const CONDA_DEFAULT_ENV: &'static str = "CONDA_DEFAULT_ENV";
+
     /// If set to `1` before a virtual environment is activated, then the
     /// virtual environment name will not be prepended to the terminal prompt.
     pub const VIRTUAL_ENV_DISABLE_PROMPT: &'static str = "VIRTUAL_ENV_DISABLE_PROMPT";
@@ -448,7 +451,7 @@ impl EnvVars {
     #[attr_hidden]
     pub const PYTHONUTF8: &'static str = "PYTHONUTF8";
 
-    /// Adds directories to Python module search path (e.g., PYTHONPATH=/path/to/modules).
+    /// Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
     pub const PYTHONPATH: &'static str = "PYTHONPATH";
 
     /// Used in tests to enforce a consistent locale setting.
@@ -481,7 +484,10 @@ impl EnvVars {
 
     /// If set, uv will use this value as the log level for its `--verbose` output. Accepts
     /// any filter compatible with the `tracing_subscriber` crate.
-    /// For example, `RUST_LOG=trace` will enable trace-level logging.
+    /// For example:
+    /// * `RUST_LOG=uv=debug` is the equivalent of adding `--verbose` to the command line
+    /// * `RUST_LOG=trace` will enable trace-level logging.
+    ///
     /// See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
     /// for more.
     pub const RUST_LOG: &'static str = "RUST_LOG";
@@ -525,4 +531,24 @@ impl EnvVars {
 
     /// Ignore `.env` files when executing `uv run` commands.
     pub const UV_NO_ENV_FILE: &'static str = "UV_NO_ENV_FILE";
+
+    /// The URL from which to download uv using the standalone installer and `self update` feature,
+    /// in lieu of the default GitHub URL.
+    pub const UV_INSTALLER_GITHUB_BASE_URL: &'static str = "UV_INSTALLER_GITHUB_BASE_URL";
+
+    /// The URL from which to download uv using the standalone installer and `self update` feature,
+    /// in lieu of the default GitHub Enterprise URL.
+    pub const UV_INSTALLER_GHE_BASE_URL: &'static str = "UV_INSTALLER_GHE_BASE_URL";
+
+    /// The directory in which to install uv using the standalone installer and `self update` feature.
+    /// Defaults to `~/.local/bin`.
+    pub const UV_INSTALL_DIR: &'static str = "UV_INSTALL_DIR";
+
+    /// Used ephemeral environments like CI to install uv to a specific path while preventing
+    /// the installer from modifying shell profiles or environment variables.
+    pub const UV_UNMANAGED_INSTALL: &'static str = "UV_UNMANAGED_INSTALL";
+
+    /// Avoid modifying the `PATH` environment variable when installing uv using the standalone
+    /// installer and `self update` feature.
+    pub const INSTALLER_NO_MODIFY_PATH: &'static str = "INSTALLER_NO_MODIFY_PATH";
 }

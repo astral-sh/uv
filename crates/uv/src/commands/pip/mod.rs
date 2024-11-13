@@ -9,6 +9,7 @@ pub(crate) mod check;
 pub(crate) mod compile;
 pub(crate) mod freeze;
 pub(crate) mod install;
+pub(crate) mod latest;
 pub(crate) mod list;
 pub(crate) mod loggers;
 pub(crate) mod operations;

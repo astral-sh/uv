@@ -5,7 +5,6 @@ use std::fmt::Write;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anstream::eprint;
 use anyhow::{anyhow, bail, Context};
 use futures::StreamExt;
 use itertools::Itertools;
@@ -13,22 +12,22 @@ use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
 use url::Url;
+
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
-    InstallOptions, LowerBound, SourceStrategy,
+    InstallOptions, LowerBound, SourceStrategy, TrustedHost,
 };
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
-
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{InstallTarget, Lock};
@@ -41,13 +40,12 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    default_dependency_groups, validate_requires_python, DependencyGroupsTarget,
-    EnvironmentSpecification, ProjectError, PythonRequestSource, WorkspacePython,
+    default_dependency_groups, validate_requires_python, validate_script_requires_python,
+    DependencyGroupsTarget, EnvironmentSpecification, ProjectError, ScriptPython, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{diagnostics, project, ExitStatus, SharedState};
@@ -81,6 +79,7 @@ pub(crate) async fn run(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     env_file: Vec<PathBuf>,
@@ -179,35 +178,22 @@ pub(crate) async fn run(
             }
         }
 
-        let (source, python_request) = if let Some(request) = python.as_deref() {
-            // (1) Explicit request from user
-            let source = PythonRequestSource::UserRequest;
-            let request = Some(PythonRequest::parse(request));
-            (source, request)
-        } else if let Some(file) = PythonVersionFile::discover(&project_dir, false, false).await? {
-            // (2) Request from `.python-version`
-            let source = PythonRequestSource::DotPythonVersion(file.file_name().to_string());
-            let request = file.into_version();
-            (source, request)
-        } else {
-            // (3) `Requires-Python` in the script
-            let request = script
-                .metadata()
-                .requires_python
-                .as_ref()
-                .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        requires_python.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
-            let source = PythonRequestSource::RequiresPython;
-            (source, request)
-        };
+        let ScriptPython {
+            source,
+            python_request,
+            requires_python,
+        } = ScriptPython::from_request(
+            python.as_deref().map(PythonRequest::parse),
+            None,
+            &script,
+            no_config,
+        )
+        .await?;
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
 
         let interpreter = PythonInstallation::find_or_download(
             python_request.as_ref(),
@@ -223,30 +209,18 @@ pub(crate) async fn run(
         .await?
         .into_interpreter();
 
-        if let Some(requires_python) = script.metadata().requires_python.as_ref() {
-            if !requires_python.contains(interpreter.python_version()) {
-                let err = match source {
-                    PythonRequestSource::UserRequest => {
-                        ProjectError::RequestedPythonScriptIncompatibility(
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                    PythonRequestSource::DotPythonVersion(file) => {
-                        ProjectError::DotPythonVersionScriptIncompatibility(
-                            file,
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                    PythonRequestSource::RequiresPython => {
-                        ProjectError::RequiresPythonScriptIncompatibility(
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                };
-                warn_user!("{err}");
+        if let Some((requires_python, requires_python_source)) = requires_python {
+            match validate_script_requires_python(
+                &interpreter,
+                None,
+                &requires_python,
+                &requires_python_source,
+                &source,
+            ) {
+                Ok(()) => {}
+                Err(err) => {
+                    warn_user!("{err}");
+                }
             }
         }
 
@@ -319,6 +293,7 @@ pub(crate) async fn run(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -326,23 +301,10 @@ pub(crate) async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    diagnostics::no_solution_context(&err, "script");
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                ))) => {
-                    diagnostics::fetch_and_build(dist, err);
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::Build(dist, err),
-                ))) => {
-                    diagnostics::build(dist, err);
-                    return Ok(ExitStatus::Failure);
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -350,7 +312,7 @@ pub(crate) async fn run(
             Some(environment.into_interpreter())
         } else {
             // Create a virtual environment.
-            temp_dir = cache.environment()?;
+            temp_dir = cache.venv_dir()?;
             let environment = uv_virtualenv::create_venv(
                 temp_dir.path(),
                 interpreter,
@@ -527,7 +489,8 @@ pub(crate) async fn run(
                 // base environment for the project.
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
-                    .native_tls(native_tls);
+                    .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec());
 
                 // Resolve the Python request and requirement for the workspace.
                 let WorkspacePython {
@@ -536,7 +499,9 @@ pub(crate) async fn run(
                     requires_python,
                 } = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
-                    project.workspace(),
+                    Some(project.workspace()),
+                    project_dir,
+                    no_config,
                 )
                 .await?;
 
@@ -557,14 +522,14 @@ pub(crate) async fn run(
                 if let Some(requires_python) = requires_python.as_ref() {
                     validate_requires_python(
                         &interpreter,
-                        project.workspace(),
+                        Some(project.workspace()),
                         requires_python,
                         &source,
                     )?;
                 }
 
                 // Create a virtual environment
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
                     interpreter,
@@ -585,6 +550,8 @@ pub(crate) async fn run(
                     python_downloads,
                     connectivity,
                     native_tls,
+                    allow_insecure_host,
+                    no_config,
                     cache,
                     printer,
                 )
@@ -646,29 +613,17 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
                 .await
                 {
                     Ok(result) => result,
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::NoSolution(err),
-                    ))) => {
-                        diagnostics::no_solution(&err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::fetch_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -697,7 +652,7 @@ pub(crate) async fn run(
 
                 let install_options = InstallOptions::default();
 
-                project::sync::do_sync(
+                match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
@@ -714,10 +669,20 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
-                .await?;
+                .await
+                {
+                    Ok(()) => {}
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    }
+                    Err(err) => return Err(err.into()),
+                }
 
                 lock = Some(result.into_lock());
             }
@@ -729,16 +694,20 @@ pub(crate) async fn run(
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
-                    .native_tls(native_tls);
+                    .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec());
 
                 // (1) Explicit request from user
                 let python_request = if let Some(request) = python.as_deref() {
                     Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
                 } else {
-                    PythonVersionFile::discover(&project_dir, no_config, false)
-                        .await?
-                        .and_then(PythonVersionFile::into_version)
+                    PythonVersionFile::discover(
+                        &project_dir,
+                        &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+                    )
+                    .await?
+                    .and_then(PythonVersionFile::into_version)
                 };
 
                 let python = PythonInstallation::find_or_download(
@@ -762,7 +731,7 @@ pub(crate) async fn run(
                 debug!("Creating isolated virtual environment");
 
                 // If we're isolating the environment, use an ephemeral virtual environment.
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 let venv = uv_virtualenv::create_venv(
                     temp_dir.path(),
                     interpreter,
@@ -793,7 +762,8 @@ pub(crate) async fn run(
     } else {
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
 
         let spec =
             RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
@@ -811,7 +781,7 @@ pub(crate) async fn run(
         Some(match spec.filter(|spec| !spec.is_empty()) {
             None => {
                 // Create a virtual environment
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
                     base_interpreter.clone(),
@@ -843,6 +813,7 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
@@ -850,29 +821,10 @@ pub(crate) async fn run(
 
                 let environment = match result {
                     Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::NoSolution(err),
-                    ))) => {
-                        diagnostics::no_solution_context(&err, "`--with`");
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::fetch_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
-                        let err = miette::Report::msg(format!("{err}"))
-                            .context("Invalid `--with` requirement");
-                        eprint!("{err:?}");
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::with_context("`--with`")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -1015,9 +967,30 @@ pub(crate) async fn run(
     // signal handlers after the command completes.
     let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
-    let status = handle.wait().await.context("Child process disappeared")?;
+    // Exit based on the result of the command.
+    #[cfg(unix)]
+    let status = {
+        use tokio::select;
+        use tokio::signal::unix::{signal, SignalKind};
 
-    // Exit based on the result of the command
+        let mut term_signal = signal(SignalKind::terminate())?;
+        loop {
+            select! {
+                result = handle.wait() => {
+                    break result;
+                },
+
+                // `SIGTERM`
+                _ = term_signal.recv() => {
+                    let _ = terminate_process(&mut handle);
+                }
+            };
+        }
+    }?;
+
+    #[cfg(not(unix))]
+    let status = handle.wait().await?;
+
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
@@ -1034,6 +1007,15 @@ pub(crate) async fn run(
         }
         Ok(ExitStatus::Failure)
     }
+}
+
+#[cfg(unix)]
+fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+
+    let pid = child.id().context("Failed to get child process ID")?;
+    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
@@ -1267,6 +1249,7 @@ impl RunCommand {
         script: bool,
         connectivity: Connectivity,
         native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
     ) -> anyhow::Result<Self> {
         let (target, args) = command.split();
         let Some(target) = target else {
@@ -1297,6 +1280,7 @@ impl RunCommand {
                 let client = BaseClientBuilder::new()
                     .connectivity(connectivity)
                     .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec())
                     .build();
                 let response = client.for_host(&url).get(url.clone()).send().await?;
 

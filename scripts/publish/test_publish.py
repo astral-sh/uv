@@ -69,6 +69,7 @@ from packaging.utils import (
 from packaging.version import Version
 
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
+PYTHON_VERSION = os.environ.get("UV_TEST_PUBLISH_PYTHON_VERSION", "3.12")
 
 cwd = Path(__file__).parent
 
@@ -124,8 +125,8 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
 }
 
 
-def get_new_version(project_name: str, client: httpx.Client) -> Version:
-    """Return the next free patch version on all indexes of the package."""
+def get_latest_version(project_name: str, client: httpx.Client) -> Version:
+    """Return the latest version on all indexes of the package."""
     # To keep the number of packages small we reuse them across targets, so we have to
     # pick a version that doesn't exist on any target yet
     versions = set()
@@ -151,10 +152,12 @@ def get_new_version(project_name: str, client: httpx.Client) -> Version:
                 time.sleep(1)
         else:
             raise RuntimeError(f"Failed to fetch {url}") from error
-    max_version = max(versions)
+    return max(versions)
 
-    # Bump the path version to obtain an empty version
-    release = list(max_version.release)
+
+def get_new_version(latest_version: Version) -> Version:
+    """Bump the path version to obtain an empty version."""
+    release = list(latest_version.release)
     release[-1] += 1
     return Version(".".join(str(i) for i in release))
 
@@ -193,7 +196,10 @@ def build_project_at_version(
 
     if project_root.exists():
         rmtree(project_root)
-    check_call([uv, "init", "--lib", "--name", project_name, dir_name], cwd=cwd)
+    check_call(
+        [uv, "init", "-p", PYTHON_VERSION, "--lib", "--name", project_name, dir_name],
+        cwd=cwd,
+    )
     pyproject_toml = project_root.joinpath("pyproject.toml")
 
     # Set to an unclaimed version
@@ -213,24 +219,33 @@ def build_project_at_version(
 
     # Build the project
     check_call([uv, "build"], cwd=project_root)
+    # Test that we ignore unknown any file.
+    project_root.joinpath("dist").joinpath(".DS_Store").touch()
 
     return project_root
 
 
-def wait_for_index(index_url: str, project_name: str, version: Version, uv: Path):
-    """Check that the index URL was updated, wait up to 10s if necessary.
+def wait_for_index(
+    index_url: str,
+    project_name: str,
+    version: Version,
+    uv: Path,
+):
+    """Check that the index URL was updated, wait up to 100s if necessary.
 
     Often enough the index takes a few seconds until the index is updated after an
     upload. We need to specifically run this through uv since to query the same cache
     (invalidation) as the registry client in skip existing in uv publish will later,
     just `get_filenames` fails non-deterministically.
     """
-    for _ in range(10):
+    for _ in range(50):
         output = check_output(
             [
                 uv,
                 "pip",
                 "compile",
+                "-p",
+                PYTHON_VERSION,
                 "--index",
                 index_url,
                 "--quiet",
@@ -241,16 +256,16 @@ def wait_for_index(index_url: str, project_name: str, version: Version, uv: Path
                 "-",
             ],
             text=True,
-            input=project_name,
+            input=f"{project_name}",
         )
         if f"{project_name}=={version}" in output and output.count("--hash") == 2:
             break
 
         print(
             f"uv pip compile not updated, missing 2 files for {version}: `{output.replace("\\\n    ", "")}`, "
-            f"sleeping for 1s: `{index_url}`"
+            f"sleeping for 2s: `{index_url}`"
         )
-        sleep(1)
+        sleep(2)
 
 
 def publish_project(target: str, uv: Path, client: httpx.Client):
@@ -265,7 +280,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     print(f"\nPublish {project_name} for {target}")
 
     # The distributions are build to the dist directory of the project.
-    version = get_new_version(project_name, client)
+    previous_version = get_latest_version(project_name, client)
+    version = get_new_version(previous_version)
     project_dir = build_project_at_version(project_name, version, uv)
 
     # Upload configuration
@@ -276,6 +292,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     expected_filenames = [path.name for path in project_dir.joinpath("dist").iterdir()]
     # Ignore the gitignore file in dist
     expected_filenames.remove(".gitignore")
+    # Ignore our test file
+    expected_filenames.remove(".DS_Store")
 
     print(
         f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ==="
@@ -297,7 +315,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         ):
             raise RuntimeError(
                 f"PyPI re-upload of the same files failed: "
-                f"{output.count("Uploading")}, {output.count("already exists")}\n"
+                f"{output.count("Uploading")} != {len(expected_filenames)}, "
+                f"{output.count("already exists")} != 0\n"
                 f"---\n{output}\n---"
             )
 
@@ -321,7 +340,8 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     ):
         raise RuntimeError(
             f"Re-upload with check URL failed: "
-            f"{output.count("Uploading")}, {output.count("already exists")}\n"
+            f"{output.count("Uploading")} != 0, "
+            f"{output.count("already exists")} != {len(expected_filenames)}\n"
             f"---\n{output}\n---"
         )
 

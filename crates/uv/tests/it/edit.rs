@@ -3675,6 +3675,9 @@ fn add_puts_default_indentation_in_pyproject_toml_if_not_observed() -> Result<()
 fn add_frozen() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
@@ -3694,6 +3697,7 @@ fn add_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     "###);
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -3719,6 +3723,7 @@ fn add_frozen() -> Result<()> {
     });
 
     assert!(!context.temp_dir.join("uv.lock").exists());
+    assert!(!context.venv.exists());
 
     Ok(())
 }
@@ -3727,6 +3732,9 @@ fn add_frozen() -> Result<()> {
 #[test]
 fn add_no_sync() -> Result<()> {
     let context = TestContext::new("3.12");
+
+    // Remove the virtual environment.
+    fs_err::remove_dir_all(&context.venv)?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -3747,6 +3755,7 @@ fn add_no_sync() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
     "###);
 
@@ -3773,6 +3782,7 @@ fn add_no_sync() -> Result<()> {
     });
 
     assert!(context.temp_dir.join("uv.lock").exists());
+    assert!(!context.venv.exists());
 
     Ok(())
 }
@@ -5496,57 +5506,76 @@ fn add_git_to_script() -> Result<()> {
     Ok(())
 }
 
-/// Revert changes to a `pyproject.toml` the `add` fails.
+/// Revert changes to the `pyproject.toml` and `uv.lock` when the `add` operation fails.
 #[test]
 fn fail_to_add_revert_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
         [project]
-        name = "project"
+        name = "parent"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+    "#})?;
+
+    // Add a dependency on a package that declares static metadata (so can always resolve), but
+    // can't be installed.
+    let pyproject_toml = context.temp_dir.child("child/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
 
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
     "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("child")
+        .child("setup.py")
+        .write_str("1/0")?;
 
-    // Adding `pytorch==1.0.2` should produce an error
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.add().arg("pytorch==1.0.2"), @r###"
+    uv_snapshot!(filters, context.add().arg("./child"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `pytorch==1.0.2`
-      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+    Resolved 3 packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 11, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 410, in build_wheel
-        return self._build_with_temp_dir(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 395, in _build_with_temp_dir
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 15, in <module>
-    Exception: You tried to install "pytorch". The package named for PyTorch is "torch"
-
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+          ZeroDivisionError: division by zero
     "###);
 
-    let pyproject_toml = context.read("pyproject.toml");
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
 
     insta::with_settings!({
         filters => context.filters(),
@@ -5554,17 +5583,126 @@ fn fail_to_add_revert_project() -> Result<()> {
         assert_snapshot!(
             pyproject_toml, @r###"
         [project]
-        name = "project"
+        name = "parent"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+        "###
+        );
+    });
+
+    // The lockfile should not exist, even though resolution succeeded.
+    assert!(!context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Revert changes to the `pyproject.toml` and `uv.lock` when the `add` operation fails.
+///
+/// In this case, the project has an existing lockfile.
+#[test]
+fn fail_to_edit_revert_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let before = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+
+    // Add a dependency on a package that declares static metadata (so can always resolve), but
+    // can't be installed.
+    let pyproject_toml = context.temp_dir.child("child/pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
 
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
+    "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+    context
+        .temp_dir
+        .child("child")
+        .child("setup.py")
+        .write_str("1/0")?;
+
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.add().arg("./child"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+          ZeroDivisionError: division by zero
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
         "###
         );
     });
+
+    // The lockfile should exist, but be unchanged.
+    let after = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert_eq!(before, after);
 
     Ok(())
 }

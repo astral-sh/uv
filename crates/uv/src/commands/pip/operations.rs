@@ -457,10 +457,7 @@ pub(crate) async fn install(
         )
         .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
 
-        let wheels = preparer
-            .prepare(remote.clone(), in_flight)
-            .await
-            .context("Failed to prepare distributions")?;
+        let wheels = preparer.prepare(remote.clone(), in_flight).await?;
 
         logger.on_prepare(wheels.len(), start, printer)?;
 
@@ -751,6 +748,9 @@ pub(crate) fn diagnose_environment(
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
+    #[error("Failed to prepare distributions")]
+    Prepare(#[from] uv_installer::PrepareError),
+
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
 

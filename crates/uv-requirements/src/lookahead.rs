@@ -18,7 +18,7 @@ use crate::{required_dist, Error};
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///
 /// The resolver extends certain privileges to "first-party" requirements. For example, first-party
-/// requirements are allowed to contain direct URL references, local version specifiers, and more.
+/// requirements are allowed to contain direct URL references.
 ///
 /// The lookahead resolver resolves requirements recursively for direct URLs, so that the resolver
 /// can treat them as first-party dependencies for the purpose of analyzing their specifiers.
@@ -143,6 +143,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             return Ok(None);
         };
 
+        // Consider the dependencies to be "direct" if the requirement is a local source tree.
+        let direct = if let Dist::Source(source_dist) = &dist {
+            source_dist.as_path().is_some_and(std::path::Path::is_dir)
+        } else {
+            false
+        };
+
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.version_id();
@@ -167,13 +174,13 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .database
                     .get_or_build_wheel_metadata(&dist, self.hasher.get(&dist))
                     .await
-                    .map_err(|err| match &dist {
-                        Dist::Built(built) => Error::Download(built.clone(), err),
+                    .map_err(|err| match dist {
+                        Dist::Built(built) => Error::Download(Box::new(built), err),
                         Dist::Source(source) => {
                             if source.is_local() {
-                                Error::Build(source.clone(), err)
+                                Error::Build(Box::new(source), err)
                             } else {
-                                Error::DownloadAndBuild(source.clone(), err)
+                                Error::DownloadAndBuild(Box::new(source), err)
                             }
                         }
                     })?;
@@ -217,13 +224,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 }
             })
             .collect();
-
-        // Consider the dependencies to be "direct" if the requirement is a local source tree.
-        let direct = if let Dist::Source(source_dist) = &dist {
-            source_dist.as_path().is_some_and(std::path::Path::is_dir)
-        } else {
-            false
-        };
 
         // Return the requirements from the metadata.
         Ok(Some(RequestedRequirements::new(

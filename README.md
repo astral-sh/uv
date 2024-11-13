@@ -46,23 +46,34 @@ uv is backed by [Astral](https://astral.sh), the creators of
 
 ## Installation
 
-Install uv with our standalone installers, or from [PyPI](https://pypi.org/project/uv/):
+Install uv with our standalone installers:
 
-```console
+```bash
 # On macOS and Linux.
-$ curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
+```bash
 # On Windows.
-$ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
+Or, from [PyPI](https://pypi.org/project/uv/):
+
+```bash
 # With pip.
-$ pip install uv
+pip install uv
+```
+
+```bash
+# Or pipx.
+pipx install uv
 ```
 
 If installed via the standalone installer, uv can update itself to the latest version:
 
-```console
-$ uv self update
+```bash
+uv self update
 ```
 
 See the [installation documentation](https://docs.astral.sh/uv/getting-started/installation/) for

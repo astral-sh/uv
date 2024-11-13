@@ -3,17 +3,21 @@ mod pep639_glob;
 
 use crate::metadata::{PyProjectToml, ValidationError};
 use crate::pep639_glob::Pep639GlobError;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use fs_err::File;
 use glob::{GlobError, PatternError};
+use globset::{Glob, GlobSetBuilder};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use std::fs::FileType;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{io, mem};
+use tar::{EntryType, Header};
 use thiserror::Error;
 use tracing::{debug, trace};
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{SourceDistExtension, SourceDistFilename, WheelFilename};
 use uv_fs::Simplified;
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
@@ -33,6 +37,9 @@ pub enum Error {
     /// [`GlobError`] is a wrapped io error.
     #[error(transparent)]
     Glob(#[from] GlobError),
+    /// [`globset::Error`] shows the glob that failed to parse.
+    #[error(transparent)]
+    GlobSet(#[from] globset::Error),
     #[error("Failed to walk source tree: `{}`", root.user_display())]
     WalkDir {
         root: PathBuf,
@@ -43,8 +50,8 @@ pub enum Error {
     NotUtf8Path(PathBuf),
     #[error("Failed to walk source tree")]
     StripPrefix(#[from] StripPrefixError),
-    #[error("Unsupported file type: {0:?}")]
-    UnsupportedFileType(FileType),
+    #[error("Unsupported file type {1:?}: `{}`", _0.user_display())]
+    UnsupportedFileType(PathBuf, FileType),
     #[error("Failed to write wheel zip archive")]
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
@@ -53,6 +60,8 @@ pub enum Error {
     MissingModule(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
     InconsistentSteps(&'static str),
+    #[error("Failed to write to {}", _0.user_display())]
+    TarWrite(PathBuf, #[source] io::Error),
 }
 
 /// Allow dispatching between writing to a directory, writing to zip and writing to a `.tar.gz`.
@@ -276,7 +285,7 @@ fn write_hashed(
 }
 
 /// Build a wheel from the source tree and place it in the output directory.
-pub fn build(
+pub fn build_wheel(
     source_tree: &Path,
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
@@ -323,7 +332,10 @@ pub fn build(
             wheel_writer.write_file(relative_path_str, entry.path())?;
         } else {
             // TODO(konsti): We may want to support symlinks, there is support for installing them.
-            return Err(Error::UnsupportedFileType(entry.file_type()));
+            return Err(Error::UnsupportedFileType(
+                entry.path().to_path_buf(),
+                entry.file_type(),
+            ));
         }
 
         entry.path();
@@ -342,6 +354,126 @@ pub fn build(
     Ok(filename)
 }
 
+/// Build a source distribution from the source tree and place it in the output directory.
+pub fn build_source_dist(
+    source_tree: &Path,
+    source_dist_directory: &Path,
+    uv_version: &str,
+) -> Result<SourceDistFilename, Error> {
+    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
+    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    pyproject_toml.check_build_system(uv_version);
+
+    let filename = SourceDistFilename {
+        name: pyproject_toml.name().clone(),
+        version: pyproject_toml.version().clone(),
+        extension: SourceDistExtension::TarGz,
+    };
+
+    let top_level = format!("{}-{}", pyproject_toml.name(), pyproject_toml.version());
+
+    let source_dist_path = source_dist_directory.join(filename.to_string());
+    let tar_gz = File::create(&source_dist_path)?;
+    let enc = GzEncoder::new(tar_gz, Compression::default());
+    let mut tar = tar::Builder::new(enc);
+
+    let metadata = pyproject_toml
+        .to_metadata(source_tree)?
+        .core_metadata_format();
+
+    let mut header = Header::new_gnu();
+    header.set_size(metadata.bytes().len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(
+        &mut header,
+        Path::new(&top_level).join("PKG-INFO"),
+        Cursor::new(metadata),
+    )
+    .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+
+    let includes = ["src/**/*", "pyproject.toml"];
+    let mut include_builder = GlobSetBuilder::new();
+    for include in includes {
+        include_builder.add(Glob::new(include)?);
+    }
+    let include_matcher = include_builder.build()?;
+
+    let excludes = ["__pycache__", "*.pyc", "*.pyo"];
+    let mut exclude_builder = GlobSetBuilder::new();
+    for exclude in excludes {
+        exclude_builder.add(Glob::new(exclude)?);
+    }
+    let exclude_matcher = exclude_builder.build()?;
+
+    // TODO(konsti): Add files linked by pyproject.toml
+
+    for file in WalkDir::new(source_tree).into_iter().filter_entry(|dir| {
+        let relative = dir
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+        // TODO(konsti): Also check that we're matching at least a prefix of an include matcher.
+        !exclude_matcher.is_match(relative)
+    }) {
+        let entry = file.map_err(|err| Error::WalkDir {
+            root: source_tree.to_path_buf(),
+            err,
+        })?;
+        let relative = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+        if !include_matcher.is_match(relative) {
+            trace!("Excluding {}", relative.user_display());
+            continue;
+        }
+        debug!("Including {}", relative.user_display());
+
+        let metadata = fs_err::metadata(entry.path())?;
+        let mut header = Header::new_gnu();
+        #[cfg(unix)]
+        {
+            header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
+        }
+        #[cfg(not(unix))]
+        {
+            header.set_mode(0o644);
+        }
+
+        if entry.file_type().is_dir() {
+            header.set_entry_type(EntryType::Directory);
+            header
+                .set_path(Path::new(&top_level).join(relative))
+                .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+            header.set_size(0);
+            header.set_cksum();
+            tar.append(&header, io::empty())
+                .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+            continue;
+        } else if entry.file_type().is_file() {
+            header.set_size(metadata.len());
+            header.set_cksum();
+            tar.append_data(
+                &mut header,
+                Path::new(&top_level).join(relative),
+                BufReader::new(File::open(entry.path())?),
+            )
+            .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+        } else {
+            return Err(Error::UnsupportedFileType(
+                relative.to_path_buf(),
+                entry.file_type(),
+            ));
+        }
+    }
+
+    tar.finish()
+        .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+
+    Ok(filename)
+}
+
 /// Write the dist-info directory to the output directory without building the wheel.
 pub fn metadata(
     source_tree: &Path,
@@ -350,7 +482,7 @@ pub fn metadata(
 ) -> Result<String, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system("1.0.0+test");
+    pyproject_toml.check_build_system(uv_version);
 
     let filename = WheelFilename {
         name: pyproject_toml.name().clone(),

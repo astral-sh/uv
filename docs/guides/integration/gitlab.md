@@ -7,7 +7,7 @@ Select a variant that is suitable for your workflow.
 
 ```yaml title="gitlab-ci.yml"
 variables:
-  UV_VERSION: 0.4
+  UV_VERSION: 0.5
   PYTHON_VERSION: 3.12
   BASE_LAYER: bookworm-slim
 
@@ -66,5 +66,5 @@ variables:
 
 To opt-out again, the `--no-system` flag can be used in any uv invocation.
 
-When persisting the cache, you may want to use `requirement.txt` or `pyproject.toml` as
+When persisting the cache, you may want to use `requirements.txt` or `pyproject.toml` as
 your cache key files instead of `uv.lock`.

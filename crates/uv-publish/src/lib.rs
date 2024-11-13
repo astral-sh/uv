@@ -251,11 +251,25 @@ pub fn files_for_publishing(
             else {
                 continue;
             };
-            if filename == ".gitignore" {
+            let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
+                debug!("Not a distribution filename: `{filename}`");
+                // I've never seen these in upper case
+                #[allow(clippy::case_sensitive_file_extension_comparisons)]
+                if filename.ends_with(".whl")
+                    || filename.ends_with(".zip")
+                    // Catch all compressed tar variants, e.g., `.tar.gz`
+                    || filename
+                        .split_once(".tar.")
+                        .is_some_and(|(_, ext)| ext.chars().all(char::is_alphanumeric))
+                {
+                    warn_user!(
+                        "Skipping file that looks like a distribution, \
+                        but is not a valid distribution filename: `{}`",
+                        dist.user_display()
+                    );
+                }
                 continue;
-            }
-            let dist_filename = DistFilename::try_from_normalized_filename(&filename)
-                .ok_or_else(|| PublishError::InvalidFilename(dist.clone()))?;
+            };
             files.push((dist, filename, dist_filename));
         }
     }

@@ -51,7 +51,7 @@ impl VersionSpecifiers {
         self.iter().all(|specifier| specifier.contains(version))
     }
 
-    /// Returns `true` if the specifiers are empty is empty.
+    /// Returns `true` if there are no specifiers.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -652,12 +652,7 @@ impl std::fmt::Display for VersionSpecifierBuildError {
                 operator: ref op,
                 ref version,
             } => {
-                let local = version
-                    .local()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<String>>()
-                    .join(".");
+                let local = version.local();
                 write!(
                     f,
                     "Operator {op} is incompatible with versions \

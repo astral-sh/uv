@@ -2,6 +2,7 @@
 
 use anyhow::bail;
 use pretty_assertions::StrComparison;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use uv_static::EnvVars;
@@ -71,29 +72,31 @@ fn generate() -> String {
     let mut output = String::new();
 
     output.push_str("# Environment variables\n\n");
-    output.push_str("uv respects the following environment variables:\n\n");
 
-    for (var, doc) in EnvVars::metadata() {
-        // Remove empty lines and ddd two spaces to the beginning from the second line.
-        let doc = doc
-            .lines()
-            .enumerate()
-            .filter(|(_, line)| !line.trim().is_empty())
-            .map(|(i, line)| {
-                if i == 0 {
-                    line.to_string()
-                } else {
-                    format!("  {line}")
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        output.push_str(&format!(
-            "- <a id=\"{var}\"></a> [`{var}`](#{var}): {doc}\n"
-        ));
+    // Partition and sort environment variables into UV_ and external variables.
+    let (uv_vars, external_vars): (BTreeSet<_>, BTreeSet<_>) = EnvVars::metadata()
+        .iter()
+        .partition(|(var, _)| var.starts_with("UV_"));
+
+    output.push_str("uv defines and respects the following environment variables:\n\n");
+
+    for (var, doc) in uv_vars {
+        output.push_str(&render(var, doc));
+    }
+
+    output.push_str("\n\n## Externally defined variables\n\n");
+    output.push_str("uv also reads the following externally defined environment variables:\n\n");
+
+    for (var, doc) in external_vars {
+        output.push_str(&render(var, doc));
     }
 
     output
+}
+
+/// Render an environment variable and its documentation.
+fn render(var: &str, doc: &str) -> String {
+    format!("### `{var}`\n\n{doc}\n\n")
 }
 
 #[cfg(test)]
