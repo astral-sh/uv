@@ -4789,6 +4789,7 @@ dependencies = [
  "fs-err",
  "globset",
  "insta",
+ "regex",
  "regex-automata 0.4.8",
  "tempfile",
  "thiserror",

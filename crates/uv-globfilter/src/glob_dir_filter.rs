@@ -32,13 +32,14 @@ impl GlobDirFilter {
         let regexes: Vec<_> = globs
             .iter()
             .map(|glob| {
+                let main_separator = regex::escape(MAIN_SEPARATOR_STR);
                 let regex = glob
                     .regex()
                     // We are using a custom DFA builder
                     .strip_prefix("(?-u)")
                     .expect("a glob is a non-unicode byte regex")
                     // Match windows paths if applicable
-                    .replace('/', MAIN_SEPARATOR_STR);
+                    .replace('/', &main_separator);
                 regex
             })
             .collect();
