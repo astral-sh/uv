@@ -13,7 +13,7 @@ use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
 use uv_pypi_types::{Requirement, RequirementSource, SupportedEnvironments};
 use uv_static::EnvVars;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user_once;
 
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use crate::pyproject::{
@@ -26,7 +26,8 @@ pub enum WorkspaceError {
     // Workspace structure errors.
     #[error("No `pyproject.toml` found in current directory or any parent directory")]
     MissingPyprojectToml,
-    #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{1}`)", _0.simplified_display())]
+    #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{1}`)", _0.simplified_display()
+    )]
     MissingPyprojectTomlMember(PathBuf, String),
     #[error("No `project` table found in: `{}`", _0.simplified_display())]
     MissingProject(PathBuf),
@@ -34,6 +35,15 @@ pub enum WorkspaceError {
     MissingWorkspace(PathBuf),
     #[error("The project is marked as unmanaged: `{}`", _0.simplified_display())]
     NonWorkspace(PathBuf),
+    #[error("Nested workspaces are not supported, but workspace member (`{}`) has a `uv.workspace` table", _0.simplified_display()
+    )]
+    NestedWorkspace(PathBuf),
+    #[error("Two workspace members are both named: `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
+    DuplicatePackage {
+        name: PackageName,
+        first: PathBuf,
+        second: PathBuf,
+    },
     #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
     DynamicNotAllowed(&'static str),
     #[error("Failed to find directories for glob: `{0}`")]
@@ -184,8 +194,6 @@ impl Workspace {
             "Found workspace root: `{}`",
             workspace_root.simplified_display()
         );
-
-        check_nested_workspaces(&workspace_root, options);
 
         // Unlike in `ProjectWorkspace` discovery, we might be in a legacy non-project root without
         // being in any specific project.
@@ -626,14 +634,20 @@ impl Workspace {
                 );
 
                 seen.insert(workspace_root.clone());
-                workspace_members.insert(
+                if let Some(existing) = workspace_members.insert(
                     project.name.clone(),
                     WorkspaceMember {
                         root: workspace_root.clone(),
                         project: project.clone(),
                         pyproject_toml,
                     },
-                );
+                ) {
+                    return Err(WorkspaceError::DuplicatePackage {
+                        name: project.name.clone(),
+                        first: existing.root.clone(),
+                        second: workspace_root,
+                    });
+                }
             };
         }
 
@@ -757,16 +771,39 @@ impl Workspace {
                     "Adding discovered workspace member: `{}`",
                     member_root.simplified_display()
                 );
-                workspace_members.insert(
+
+                if let Some(existing) = workspace_members.insert(
                     project.name.clone(),
                     WorkspaceMember {
                         root: member_root.clone(),
                         project,
                         pyproject_toml,
                     },
-                );
+                ) {
+                    return Err(WorkspaceError::DuplicatePackage {
+                        name: existing.project.name,
+                        first: existing.root.clone(),
+                        second: member_root,
+                    });
+                }
             }
         }
+
+        // Test for nested workspaces.
+        for member in workspace_members.values() {
+            if member.root() != &workspace_root
+                && member
+                    .pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.workspace.as_ref())
+                    .is_some()
+            {
+                return Err(WorkspaceError::NestedWorkspace(member.root.clone()));
+            }
+        }
+
         let workspace_sources = workspace_pyproject_toml
             .tool
             .clone()
@@ -774,6 +811,7 @@ impl Workspace {
             .and_then(|uv| uv.sources)
             .map(ToolUvSources::into_inner)
             .unwrap_or_default();
+
         let workspace_indexes = workspace_pyproject_toml
             .tool
             .clone()
@@ -1213,95 +1251,6 @@ async fn find_workspace(
     Ok(None)
 }
 
-/// Warn when the valid workspace is included in another workspace.
-pub fn check_nested_workspaces(inner_workspace_root: &Path, options: &DiscoveryOptions) {
-    for outer_workspace_root in inner_workspace_root
-        .ancestors()
-        .take_while(|path| {
-            // Only walk up the given directory, if any.
-            options
-                .stop_discovery_at
-                .and_then(Path::parent)
-                .map(|stop_discovery_at| stop_discovery_at != *path)
-                .unwrap_or(true)
-        })
-        .skip(1)
-    {
-        let pyproject_toml_path = outer_workspace_root.join("pyproject.toml");
-        if !pyproject_toml_path.is_file() {
-            continue;
-        }
-        let contents = match fs_err::read_to_string(&pyproject_toml_path) {
-            Ok(contents) => contents,
-            Err(err) => {
-                warn!(
-                    "Unreadable pyproject.toml `{}`: {err}",
-                    pyproject_toml_path.simplified_display()
-                );
-                return;
-            }
-        };
-        let pyproject_toml: PyProjectToml = match toml::from_str(&contents) {
-            Ok(contents) => contents,
-            Err(err) => {
-                warn!(
-                    "Invalid pyproject.toml `{}`: {err}",
-                    pyproject_toml_path.simplified_display()
-                );
-                return;
-            }
-        };
-
-        if let Some(workspace) = pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.workspace.as_ref())
-        {
-            let is_included = match is_included_in_workspace(
-                inner_workspace_root,
-                outer_workspace_root,
-                workspace,
-            ) {
-                Ok(contents) => contents,
-                Err(err) => {
-                    warn!(
-                        "Invalid pyproject.toml `{}`: {err}",
-                        pyproject_toml_path.simplified_display()
-                    );
-                    return;
-                }
-            };
-
-            let is_excluded = match is_excluded_from_workspace(
-                inner_workspace_root,
-                outer_workspace_root,
-                workspace,
-            ) {
-                Ok(contents) => contents,
-                Err(err) => {
-                    warn!(
-                        "Invalid pyproject.toml `{}`: {err}",
-                        pyproject_toml_path.simplified_display()
-                    );
-                    return;
-                }
-            };
-
-            if is_included && !is_excluded {
-                warn_user!(
-                    "Nested workspaces are not supported, but outer workspace (`{}`) includes `{}`",
-                    outer_workspace_root.simplified_display().cyan(),
-                    inner_workspace_root.simplified_display().cyan()
-                );
-            }
-        }
-
-        // We're in the examples or tests of another project (not a workspace), this is fine.
-        return;
-    }
-}
-
 /// Check if we're in the `tool.uv.workspace.excluded` of a workspace.
 fn is_excluded_from_workspace(
     project_path: &Path,
@@ -1413,8 +1362,6 @@ impl VirtualProject {
             let project_path = std::path::absolute(project_root)
                 .map_err(WorkspaceError::Normalize)?
                 .clone();
-
-            check_nested_workspaces(&project_path, options);
 
             let workspace = Workspace::collect_members(
                 project_path,
