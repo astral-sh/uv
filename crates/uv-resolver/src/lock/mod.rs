@@ -82,7 +82,7 @@ pub struct Lock {
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<MarkerTree>,
     /// The conflicting groups/extras specified by the user.
-    conflicting_groups: Conflicts,
+    conflicts: Conflicts,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
     /// The range of supported Python versions.
@@ -315,7 +315,7 @@ impl Lock {
         requires_python: RequiresPython,
         options: ResolverOptions,
         manifest: ResolverManifest,
-        conflicting_groups: Conflicts,
+        conflicts: Conflicts,
         supported_environments: Vec<MarkerTree>,
         fork_markers: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
@@ -465,7 +465,7 @@ impl Lock {
         let lock = Self {
             version,
             fork_markers,
-            conflicting_groups,
+            conflicts,
             supported_environments,
             requires_python,
             options,
@@ -485,8 +485,8 @@ impl Lock {
 
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
-    pub fn with_conflicting_groups(mut self, conflicting_groups: Conflicts) -> Self {
-        self.conflicting_groups = conflicting_groups;
+    pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
+        self.conflicts = conflicts;
         self
     }
 
@@ -550,8 +550,8 @@ impl Lock {
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
-    pub fn conflicting_groups(&self) -> &Conflicts {
-        &self.conflicting_groups
+    pub fn conflicts(&self) -> &Conflicts {
+        &self.conflicts
     }
 
     /// Returns the supported environments that were used to generate this lock.
@@ -632,9 +632,9 @@ impl Lock {
             doc.insert("supported-markers", value(supported_environments));
         }
 
-        if !self.conflicting_groups.is_empty() {
+        if !self.conflicts.is_empty() {
             let mut list = Array::new();
-            for groups in self.conflicting_groups.iter() {
+            for groups in self.conflicts.iter() {
                 list.push(each_element_on_its_line_array(groups.iter().map(|group| {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(group.package().to_string()));
@@ -642,7 +642,7 @@ impl Lock {
                     table
                 })));
             }
-            doc.insert("conflicting-groups", value(list));
+            doc.insert("conflicts", value(list));
         }
 
         // Write the settings that were used to generate the resolution.
@@ -1383,8 +1383,8 @@ struct LockWire {
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
-    #[serde(rename = "conflicting-groups", default)]
-    conflicting_groups: Option<Conflicts>,
+    #[serde(rename = "conflicts", default)]
+    conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
@@ -1436,7 +1436,7 @@ impl TryFrom<LockWire> for Lock {
             wire.requires_python,
             wire.options,
             wire.manifest,
-            wire.conflicting_groups.unwrap_or_else(Conflicts::empty),
+            wire.conflicts.unwrap_or_else(Conflicts::empty),
             supported_environments,
             fork_markers,
         )?;

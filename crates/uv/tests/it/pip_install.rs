@@ -191,7 +191,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicting-groups`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
+      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
 
     Resolved in [TIME]
     Audited in [TIME]
@@ -7289,7 +7289,7 @@ fn sklearn() {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r#"
+    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7316,6 +7316,6 @@ fn sklearn() {
           https://github.com/scikit-learn/sklearn-pypi-package
 
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
-    "#
+    "###
     );
 }

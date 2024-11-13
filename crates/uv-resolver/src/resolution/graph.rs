@@ -103,7 +103,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
-        conflicting_groups: &Conflicts,
+        conflicts: &Conflicts,
         resolution_strategy: &ResolutionStrategy,
         options: Options,
     ) -> Result<Self, ResolveError> {
@@ -251,7 +251,7 @@ impl ResolutionGraph {
         // the same time. At which point, uv will report an error,
         // thereby sidestepping the possibility of installing different
         // versions of the same package into the same virtualenv. ---AG
-        if conflicting_groups.is_empty() {
+        if conflicts.is_empty() {
             #[allow(unused_mut, reason = "Used in debug_assertions below")]
             let mut conflicting = graph.find_conflicting_distributions();
             if !conflicting.is_empty() {

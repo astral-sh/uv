@@ -1,6 +1,6 @@
 use uv_normalize::{ExtraName, PackageName};
 
-/// A list of conflicting groups pre-defined by an end user.
+/// A list of conflicting sets of extras/groups pre-defined by an end user.
 ///
 /// This is useful to force the resolver to fork according to extras that have
 /// unavoidable conflicts with each other. (The alternative is that resolution
@@ -11,7 +11,7 @@ use uv_normalize::{ExtraName, PackageName};
 pub struct Conflicts(Vec<ConflictSet>);
 
 impl Conflicts {
-    /// Returns no conflicting groups.
+    /// Returns no conflicts.
     ///
     /// This results in no effect on resolution.
     pub fn empty() -> Conflicts {
@@ -31,7 +31,7 @@ impl Conflicts {
     /// Returns true if these conflicts contain any set that contains the given
     /// package and extra name pair.
     pub fn contains(&self, package: &PackageName, extra: &ExtraName) -> bool {
-        self.iter().any(|groups| groups.contains(package, extra))
+        self.iter().any(|set| set.contains(package, extra))
     }
 
     /// Returns true if there are no conflicts.
@@ -78,7 +78,7 @@ impl ConflictSet {
     /// extra name pair.
     pub fn contains(&self, package: &PackageName, extra: &ExtraName) -> bool {
         self.iter()
-            .any(|group| group.package() == package && group.extra() == extra)
+            .any(|set| set.package() == package && set.extra() == extra)
     }
 }
 
@@ -87,8 +87,8 @@ impl<'de> serde::Deserialize<'de> for ConflictSet {
     where
         D: serde::Deserializer<'de>,
     {
-        let groups = Vec::<ConflictItem>::deserialize(deserializer)?;
-        Self::try_from(groups).map_err(serde::de::Error::custom)
+        let set = Vec::<ConflictItem>::deserialize(deserializer)?;
+        Self::try_from(set).map_err(serde::de::Error::custom)
     }
 }
 
@@ -193,10 +193,10 @@ impl<'a> From<(&'a PackageName, &'a ExtraName)> for ConflictItemRef<'a> {
 #[derive(Debug, thiserror::Error)]
 pub enum ConflictError {
     /// An error for when there are zero conflicting items.
-    #[error("Each set of conflicting groups must have at least two entries, but found none")]
+    #[error("Each set of conflicts must have at least two entries, but found none")]
     ZeroItems,
     /// An error for when there is one conflicting items.
-    #[error("Each set of conflicting groups must have at least two entries, but found only one")]
+    #[error("Each set of conflicts must have at least two entries, but found only one")]
     OneItem,
 }
 
@@ -222,7 +222,7 @@ impl SchemaConflicts {
     /// If a conflict has an explicit package name (written by the end user),
     /// then that takes precedence over the given package name, which is only
     /// used when there is no explicit package name written.
-    pub fn to_conflicting_with_package_name(&self, package: &PackageName) -> Conflicts {
+    pub fn to_conflicts_with_package_name(&self, package: &PackageName) -> Conflicts {
         let mut conflicting = Conflicts::empty();
         for tool_uv_set in &self.0 {
             let mut set = vec![];

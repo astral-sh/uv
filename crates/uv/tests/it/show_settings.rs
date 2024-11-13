@@ -3107,9 +3107,9 @@ fn resolve_both() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Tests that errors when parsing `conflicting-groups` are reported.
+/// Tests that errors when parsing `conflicts` are reported.
 #[test]
-fn invalid_conflicting_groups() -> anyhow::Result<()> {
+fn invalid_conflicts() -> anyhow::Result<()> {
     let context = TestContext::new("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
@@ -3121,7 +3121,7 @@ fn invalid_conflicting_groups() -> anyhow::Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [{extra = "dev"}],
         ]
     "#})?;
@@ -3134,11 +3134,11 @@ fn invalid_conflicting_groups() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 7, column 22
+      Caused by: TOML parse error at line 7, column 13
       |
-    7 | conflicting-groups = [
-      |                      ^
-    Each set of conflicting groups must have at least two entries, but found only one
+    7 | conflicts = [
+      |             ^
+    Each set of conflicts must have at least two entries, but found only one
     "###
     );
 
@@ -3150,7 +3150,7 @@ fn invalid_conflicting_groups() -> anyhow::Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [[]]
+        conflicts = [[]]
     "#})?;
 
     // The file should be rejected for violating the schema.
@@ -3161,20 +3161,20 @@ fn invalid_conflicting_groups() -> anyhow::Result<()> {
 
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 7, column 22
+      Caused by: TOML parse error at line 7, column 13
       |
-    7 | conflicting-groups = [[]]
-      |                      ^^^^
-    Each set of conflicting groups must have at least two entries, but found none
+    7 | conflicts = [[]]
+      |             ^^^^
+    Each set of conflicts must have at least two entries, but found none
     "###
     );
 
     Ok(())
 }
 
-/// Tests that valid `conflicting-groups` are parsed okay.
+/// Tests that valid `conflicts` are parsed okay.
 #[test]
-fn valid_conflicting_groups() -> anyhow::Result<()> {
+fn valid_conflicts() -> anyhow::Result<()> {
     let context = TestContext::new("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
@@ -3186,7 +3186,7 @@ fn valid_conflicting_groups() -> anyhow::Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [{extra = "x1"}, {extra = "x2"}],
         ]
     "#})?;
@@ -3405,7 +3405,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicting-groups`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
+    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`
     "###
     );
 

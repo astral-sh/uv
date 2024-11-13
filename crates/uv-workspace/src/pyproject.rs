@@ -102,7 +102,7 @@ impl PyProjectToml {
     }
 
     /// Returns the set of conflicts for the project.
-    pub fn conflicting_groups(&self) -> Conflicts {
+    pub fn conflicts(&self) -> Conflicts {
         let empty = Conflicts::empty();
         let Some(project) = self.project.as_ref() else {
             return empty;
@@ -113,10 +113,10 @@ impl PyProjectToml {
         let Some(tooluv) = tool.uv.as_ref() else {
             return empty;
         };
-        let Some(conflicting) = tooluv.conflicting_groups.as_ref() else {
+        let Some(conflicting) = tooluv.conflicts.as_ref() else {
             return empty;
         };
-        conflicting.to_conflicting_with_package_name(&project.name)
+        conflicting.to_conflicts_with_package_name(&project.name)
     }
 }
 
@@ -494,7 +494,7 @@ pub struct ToolUv {
             # Require that `package[test1]` and `package[test2]`
             # requirements are resolved in different forks so that they
             # cannot conflict with one another.
-            conflicting-groups = [
+            conflicts = [
                 [
                     { extra = "test1" },
                     { extra = "test2" },
@@ -503,7 +503,7 @@ pub struct ToolUv {
         "#
     )]
     */
-    pub conflicting_groups: Option<SchemaConflicts>,
+    pub conflicts: Option<SchemaConflicts>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]

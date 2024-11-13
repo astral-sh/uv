@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rustc_hash::{FxHashMap, FxHashSet};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, ResolverMarkerEnvironment};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
@@ -425,7 +425,6 @@ impl<'d> Forker<'d> {
     pub(crate) fn fork(
         &self,
         env: &ResolverEnvironment,
-        _conflicting_groups: &Conflicts,
     ) -> Option<(Forker<'d>, Vec<ResolverEnvironment>)> {
         if !env.included_by_marker(&self.marker) {
             return None;

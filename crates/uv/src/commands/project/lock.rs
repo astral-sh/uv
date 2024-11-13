@@ -631,7 +631,7 @@ async fn do_lock(
                 None,
                 resolver_env,
                 python_requirement,
-                workspace.conflicting_groups(),
+                workspace.conflicts(),
                 &client,
                 &flat_index,
                 &state.index,
@@ -661,7 +661,7 @@ async fn do_lock(
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution_graph(&resolution, workspace.install_path())?
                 .with_manifest(manifest)
-                .with_conflicting_groups(workspace.conflicting_groups())
+                .with_conflicts(workspace.conflicts())
                 .with_supported_environments(
                     environments
                         .cloned()
@@ -806,11 +806,11 @@ impl ValidatedLock {
         }
 
         // If the conflicting group config has changed, we have to perform a clean resolution.
-        if &workspace.conflicting_groups() != lock.conflicting_groups() {
+        if &workspace.conflicts() != lock.conflicts() {
             debug!(
                 "Ignoring existing lockfile due to change in conflicting groups: `{:?}` vs. `{:?}`",
-                workspace.conflicting_groups(),
-                lock.conflicting_groups(),
+                workspace.conflicts(),
+                lock.conflicts(),
             );
             return Ok(Self::Versions(lock));
         }

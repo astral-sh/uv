@@ -190,7 +190,7 @@ impl PubGrubPackage {
     ///
     /// If this package can't possibly be classified as a conflicting group,
     /// then this returns `None`.
-    pub(crate) fn conflicting_group(&self) -> Option<ConflictItemRef<'_>> {
+    pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
         let package = self.name_no_root()?;
         let extra = self.extra()?;
         Some(ConflictItemRef::from((package, extra)))

@@ -393,10 +393,10 @@ impl Workspace {
     }
 
     /// Returns the set of conflicts for the workspace.
-    pub fn conflicting_groups(&self) -> Conflicts {
+    pub fn conflicts(&self) -> Conflicts {
         let mut conflicting = Conflicts::empty();
         for member in self.packages.values() {
-            conflicting.append(&mut member.pyproject_toml.conflicting_groups());
+            conflicting.append(&mut member.pyproject_toml.conflicts());
         }
         conflicting
     }
