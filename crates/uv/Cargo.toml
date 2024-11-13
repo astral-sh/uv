@@ -105,6 +105,7 @@ base64 = { version = "0.22.1" }
 byteorder = { version = "1.5.0" }
 etcetera = { workspace = true }
 filetime = { version = "0.2.25" }
+flate2 = { workspace = true }
 ignore = { version = "0.4.23" }
 indoc = { version = "2.0.5" }
 insta = { version = "1.40.0", features = ["filters", "json"] }
@@ -112,6 +113,7 @@ predicates = { version = "3.1.2" }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 similar = { version = "2.6.0" }
+tar = { workspace = true }
 tempfile = { workspace = true }
 zip = { workspace = true }
 

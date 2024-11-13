@@ -4407,6 +4407,7 @@ dependencies = [
  "serde",
  "serde_json",
  "similar",
+ "tar",
  "tempfile",
  "textwrap",
  "thiserror",

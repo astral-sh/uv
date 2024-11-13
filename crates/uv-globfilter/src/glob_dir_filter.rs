@@ -238,10 +238,9 @@ mod tests {
                 let relative = entry
                     .path()
                     .strip_prefix(walkdir_root)
-                    .expect("walkdir starts with root")
-                    .to_path_buf();
+                    .expect("walkdir starts with root");
 
-                include_matcher.match_directory(&relative)
+                include_matcher.match_directory(relative)
             })
             .filter_map(|entry| {
                 let entry = entry.as_ref().unwrap();
@@ -249,9 +248,8 @@ mod tests {
                 let relative = entry
                     .path()
                     .strip_prefix(walkdir_root)
-                    .expect("walkdir starts with root")
-                    .to_path_buf();
-                if include_matcher.match_path(&relative) {
+                    .expect("walkdir starts with root");
+                if include_matcher.match_path(relative) {
                     // Translate windows paths back to the unix fixture
                     Some(relative.to_str().unwrap().replace(MAIN_SEPARATOR, "/"))
                 } else {

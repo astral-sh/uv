@@ -513,8 +513,7 @@ pub fn build_source_dist(
         let relative = entry
             .path()
             .strip_prefix(source_tree)
-            .expect("walkdir starts with root")
-            .to_path_buf();
+            .expect("walkdir starts with root");
 
         // Fast path: Don't descend into a directory that can't be included. This is the most
         // important performance optimization, it avoids descending into directories such as
@@ -522,7 +521,7 @@ pub fn build_source_dist(
         // directories that often exist on the top level of a project. This is especially noticeable
         // on network file systems with high latencies per operation (while contiguous reading may
         // still be fast).
-        include_matcher.match_directory(&relative) && !exclude_matcher.is_match(&relative)
+        include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
     }) {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
@@ -532,15 +531,14 @@ pub fn build_source_dist(
         let relative = entry
             .path()
             .strip_prefix(source_tree)
-            .expect("walkdir starts with root")
-            .to_path_buf();
+            .expect("walkdir starts with root");
 
-        if !include_matcher.match_path(&relative) || exclude_matcher.is_match(&relative) {
+        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
             trace!("Excluding {}", relative.user_display());
             continue;
         };
 
-        add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, &relative)?;
+        add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, relative)?;
     }
 
     tar.finish()
