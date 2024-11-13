@@ -991,7 +991,7 @@ fn tool_install_already_installed() {
 
 /// Test installing a tool when its entry point already exists
 #[test]
-fn tool_install_entry_point_exists() {
+fn tool_install_force() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -1140,6 +1140,10 @@ fn tool_install_entry_point_exists() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ black==24.3.0
     Installed 2 executables: black, blackd
     "###);
 
