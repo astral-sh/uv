@@ -241,7 +241,8 @@ async fn albatross_root_workspace() {
                   "dev-dependencies": null,
                   "override-dependencies": null,
                   "constraint-dependencies": null,
-                  "environments": null
+                  "environments": null,
+                  "conflicting-groups": null
                 }
               },
               "dependency-groups": null
@@ -332,7 +333,8 @@ async fn albatross_virtual_workspace() {
                   "dev-dependencies": null,
                   "override-dependencies": null,
                   "constraint-dependencies": null,
-                  "environments": null
+                  "environments": null,
+                  "conflicting-groups": null
                 }
               },
               "dependency-groups": null
@@ -537,7 +539,8 @@ async fn exclude_package() -> Result<()> {
                   "dev-dependencies": null,
                   "override-dependencies": null,
                   "constraint-dependencies": null,
-                  "environments": null
+                  "environments": null,
+                  "conflicting-groups": null
                 }
               },
               "dependency-groups": null
@@ -640,7 +643,8 @@ async fn exclude_package() -> Result<()> {
                   "dev-dependencies": null,
                   "override-dependencies": null,
                   "constraint-dependencies": null,
-                  "environments": null
+                  "environments": null,
+                  "conflicting-groups": null
                 }
               },
               "dependency-groups": null
@@ -756,7 +760,8 @@ async fn exclude_package() -> Result<()> {
                   "dev-dependencies": null,
                   "override-dependencies": null,
                   "constraint-dependencies": null,
-                  "environments": null
+                  "environments": null,
+                  "conflicting-groups": null
                 }
               },
               "dependency-groups": null
@@ -846,7 +851,8 @@ async fn exclude_package() -> Result<()> {
                   "dev-dependencies": null,
                   "override-dependencies": null,
                   "constraint-dependencies": null,
-                  "environments": null
+                  "environments": null,
+                  "conflicting-groups": null
                 }
               },
               "dependency-groups": null

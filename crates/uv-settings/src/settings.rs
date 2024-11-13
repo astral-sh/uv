@@ -101,6 +101,9 @@ pub struct Options {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub conflicting_groups: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
     pub workspace: Option<serde::de::IgnoredAny>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
@@ -1559,6 +1562,7 @@ pub struct OptionsWire {
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
+    conflicting_groups: Option<serde::de::IgnoredAny>,
     workspace: Option<serde::de::IgnoredAny>,
     sources: Option<serde::de::IgnoredAny>,
     managed: Option<serde::de::IgnoredAny>,
@@ -1611,6 +1615,7 @@ impl From<OptionsWire> for Options {
             override_dependencies,
             constraint_dependencies,
             environments,
+            conflicting_groups,
             publish_url,
             trusted_publishing,
             workspace,
@@ -1668,6 +1673,7 @@ impl From<OptionsWire> for Options {
             override_dependencies,
             constraint_dependencies,
             environments,
+            conflicting_groups,
             publish: PublishOptions {
                 publish_url,
                 trusted_publishing,
