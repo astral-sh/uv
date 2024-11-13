@@ -46,7 +46,14 @@ fn test_record() {
 fn test_determinism() {
     let temp1 = TempDir::new().unwrap();
     let uv_backend = Path::new("../../scripts/packages/uv_backend");
-    build_wheel(uv_backend, temp1.path(), None, "1.0.0+test").unwrap();
+    build_wheel(
+        uv_backend,
+        temp1.path(),
+        None,
+        WheelSettings::default(),
+        "1.0.0+test",
+    )
+    .unwrap();
 
     // Touch the file to check that we don't serialize the last modified date.
     fs_err::write(
@@ -56,7 +63,14 @@ fn test_determinism() {
     .unwrap();
 
     let temp2 = TempDir::new().unwrap();
-    build_wheel(uv_backend, temp2.path(), None, "1.0.0+test").unwrap();
+    build_wheel(
+        uv_backend,
+        temp2.path(),
+        None,
+        WheelSettings::default(),
+        "1.0.0+test",
+    )
+    .unwrap();
 
     let wheel_filename = "uv_backend-0.1.0-py3-none-any.whl";
     assert_eq!(

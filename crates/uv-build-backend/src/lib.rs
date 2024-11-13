@@ -66,6 +66,8 @@ pub enum Error {
     Csv(#[from] csv::Error),
     #[error("Expected a Python module with an `__init__.py` at: `{}`", _0.user_display())]
     MissingModule(PathBuf),
+    #[error("Absolute module root is not allowed: `{}`", _0.display())]
+    AbsoluteModuleRoot(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]
@@ -292,11 +294,29 @@ fn write_hashed(
     })
 }
 
+/// TODO(konsti): Wire this up with actual settings and remove this struct.
+///
+/// Which files to include in the wheel
+pub struct WheelSettings {
+    /// The directory that contains the module directory, usually `src`, or an empty path when
+    /// using the flat layout over the src layout.
+    module_root: PathBuf,
+}
+
+impl Default for WheelSettings {
+    fn default() -> Self {
+        Self {
+            module_root: PathBuf::from("src"),
+        }
+    }
+}
+
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
     source_tree: &Path,
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
+    wheel_settings: WheelSettings,
     uv_version: &str,
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
@@ -319,7 +339,10 @@ pub fn build_wheel(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding content files to {}", wheel_path.user_display());
-    let strip_root = source_tree.join("src");
+    if wheel_settings.module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(wheel_settings.module_root));
+    }
+    let strip_root = source_tree.join(wheel_settings.module_root);
     let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
@@ -337,6 +360,9 @@ pub fn build_wheel(
         let relative_path_str = relative_path
             .to_str()
             .ok_or_else(|| Error::NotUtf8Path(relative_path.to_path_buf()))?;
+
+        debug!("Adding to wheel: `{relative_path_str}`");
+
         if entry.file_type().is_dir() {
             wheel_writer.write_directory(relative_path_str)?;
         } else if entry.file_type().is_file() {
@@ -514,7 +540,7 @@ pub fn build_source_dist(
             continue;
         };
 
-        add_source_dist_entry(&mut tar, entry, &top_level, &source_dist_path, &relative)?;
+        add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, &relative)?;
     }
 
     tar.finish()
@@ -526,7 +552,7 @@ pub fn build_source_dist(
 /// Add a file or a directory to a source distribution.
 fn add_source_dist_entry(
     tar: &mut Builder<GzEncoder<File>>,
-    entry: DirEntry,
+    entry: &DirEntry,
     top_level: &str,
     source_dist_path: &Path,
     relative: &Path,
