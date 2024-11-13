@@ -30,8 +30,13 @@ impl Conflicts {
 
     /// Returns true if these conflicts contain any set that contains the given
     /// package and extra name pair.
-    pub fn contains(&self, package: &PackageName, extra: &ExtraName) -> bool {
-        self.iter().any(|set| set.contains(package, extra))
+    pub fn contains<'a>(
+        &self,
+        package: &PackageName,
+        conflict: impl Into<ConflictPackageRef<'a>>,
+    ) -> bool {
+        let conflict = conflict.into();
+        self.iter().any(|set| set.contains(package, conflict))
     }
 
     /// Returns true if there are no conflicts.
@@ -76,9 +81,14 @@ impl ConflictSet {
 
     /// Returns true if this conflicting item contains the given package and
     /// extra name pair.
-    pub fn contains(&self, package: &PackageName, extra: &ExtraName) -> bool {
+    pub fn contains<'a>(
+        &self,
+        package: &PackageName,
+        conflict: impl Into<ConflictPackageRef<'a>>,
+    ) -> bool {
+        let conflict = conflict.into();
         self.iter()
-            .any(|set| set.package() == package && set.extra() == Some(extra))
+            .any(|set| set.package() == package && *set.conflict() == conflict)
     }
 }
 
@@ -310,6 +320,30 @@ impl<'a> ConflictPackageRef<'a> {
             ConflictPackageRef::Extra(extra) => ConflictPackage::Extra(extra.clone()),
             ConflictPackageRef::Group(group) => ConflictPackage::Group(group.clone()),
         }
+    }
+}
+
+impl<'a> From<&'a ExtraName> for ConflictPackageRef<'a> {
+    fn from(extra: &'a ExtraName) -> ConflictPackageRef<'a> {
+        ConflictPackageRef::Extra(extra)
+    }
+}
+
+impl<'a> From<&'a GroupName> for ConflictPackageRef<'a> {
+    fn from(group: &'a GroupName) -> ConflictPackageRef<'a> {
+        ConflictPackageRef::Group(group)
+    }
+}
+
+impl<'a> PartialEq<ConflictPackage> for ConflictPackageRef<'a> {
+    fn eq(&self, other: &ConflictPackage) -> bool {
+        other.as_ref() == *self
+    }
+}
+
+impl<'a> PartialEq<ConflictPackageRef<'a>> for ConflictPackage {
+    fn eq(&self, other: &ConflictPackageRef<'a>) -> bool {
+        self.as_ref() == *other
     }
 }
 
