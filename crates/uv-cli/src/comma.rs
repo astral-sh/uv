@@ -31,6 +31,17 @@ impl FromStr for CommaSeparatedRequirements {
                     depth = depth.saturating_sub(1);
                 }
                 ',' if depth == 0 => {
+                    // If the next character is a version identifier, skip the comma, as in:
+                    // `requests>=2.1,<3`.
+                    if let Some(c) = input
+                        .get(i + ','.len_utf8()..)
+                        .and_then(|s| s.chars().find(|c| !c.is_whitespace()))
+                    {
+                        if matches!(c, '!' | '=' | '<' | '>' | '~') {
+                            continue;
+                        }
+                    }
+
                     let requirement = input[start..i].trim().to_string();
                     if !requirement.is_empty() {
                         requirements.push(requirement);
