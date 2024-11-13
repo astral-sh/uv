@@ -104,6 +104,7 @@ glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
 goblin = { version = "0.9.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
+hashbrown = { version = "0.15.1" }
 hex = { version = "0.4.3" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }

@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use rustc_hash::{FxHashMap, FxHashSet};
-use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
 
@@ -97,7 +95,7 @@ enum Kind {
         /// The markers associated with this resolver fork.
         markers: MarkerTree,
         /// Conflicting group exclusions.
-        exclude: Arc<FxHashMap<PackageName, FxHashSet<ExtraName>>>,
+        exclude: Arc<crate::FxHashbrownSet<ConflictItem>>,
     },
 }
 
@@ -135,7 +133,7 @@ impl ResolverEnvironment {
         let kind = Kind::Universal {
             initial_forks: initial_forks.into(),
             markers: MarkerTree::TRUE,
-            exclude: Arc::new(FxHashMap::default()),
+            exclude: Arc::new(crate::FxHashbrownSet::default()),
         };
         ResolverEnvironment { kind }
     }
@@ -166,10 +164,7 @@ impl ResolverEnvironment {
     pub(crate) fn included_by_group(&self, group: ConflictItemRef<'_>) -> bool {
         match self.kind {
             Kind::Specific { .. } => true,
-            Kind::Universal { ref exclude, .. } => !exclude
-                .get(group.package())
-                .map(|set| set.contains(group.extra()))
-                .unwrap_or(false),
+            Kind::Universal { ref exclude, .. } => !exclude.contains(&group),
         }
     }
 
@@ -227,7 +222,7 @@ impl ResolverEnvironment {
     /// specific marker environment. i.e., "pip"-style resolution.
     pub(crate) fn exclude_by_group(
         &self,
-        groups: impl IntoIterator<Item = ConflictItem>,
+        items: impl IntoIterator<Item = ConflictItem>,
     ) -> ResolverEnvironment {
         match self.kind {
             Kind::Specific { .. } => {
@@ -238,12 +233,9 @@ impl ResolverEnvironment {
                 ref markers,
                 ref exclude,
             } => {
-                let mut exclude: FxHashMap<_, _> = (**exclude).clone();
-                for group in groups {
-                    exclude
-                        .entry(group.package().clone())
-                        .or_default()
-                        .insert(group.extra().clone());
+                let mut exclude: crate::FxHashbrownSet<_> = (**exclude).clone();
+                for item in items {
+                    exclude.insert(item);
                 }
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),

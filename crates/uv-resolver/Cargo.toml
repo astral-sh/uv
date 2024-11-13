@@ -43,6 +43,7 @@ clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
+hashbrown = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }

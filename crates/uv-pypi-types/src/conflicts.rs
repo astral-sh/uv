@@ -1,4 +1,4 @@
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 
 /// A list of conflicting sets of extras/groups pre-defined by an end user.
 ///
@@ -78,7 +78,7 @@ impl ConflictSet {
     /// extra name pair.
     pub fn contains(&self, package: &PackageName, extra: &ExtraName) -> bool {
         self.iter()
-            .any(|set| set.package() == package && set.extra() == extra)
+            .any(|set| set.package() == package && set.extra() == Some(extra))
     }
 }
 
@@ -111,7 +111,6 @@ impl TryFrom<Vec<ConflictItem>> for ConflictSet {
 /// package.
 #[derive(
     Debug,
-    Default,
     Clone,
     Eq,
     Hash,
@@ -122,9 +121,14 @@ impl TryFrom<Vec<ConflictItem>> for ConflictSet {
     serde::Serialize,
     schemars::JsonSchema,
 )]
+#[serde(
+    deny_unknown_fields,
+    try_from = "ConflictItemWire",
+    into = "ConflictItemWire"
+)]
 pub struct ConflictItem {
     package: PackageName,
-    extra: ExtraName,
+    conflict: ConflictPackage,
 }
 
 impl ConflictItem {
@@ -133,23 +137,43 @@ impl ConflictItem {
         &self.package
     }
 
+    /// Returns the package-specific conflict.
+    ///
+    /// i.e., Either an extra or a group name.
+    pub fn conflict(&self) -> &ConflictPackage {
+        &self.conflict
+    }
+
     /// Returns the extra name of this conflicting item.
-    pub fn extra(&self) -> &ExtraName {
-        &self.extra
+    pub fn extra(&self) -> Option<&ExtraName> {
+        self.conflict.extra()
+    }
+
+    /// Returns the group name of this conflicting item.
+    pub fn group(&self) -> Option<&GroupName> {
+        self.conflict.group()
     }
 
     /// Returns this item as a new type with its fields borrowed.
     pub fn as_ref(&self) -> ConflictItemRef<'_> {
         ConflictItemRef {
             package: self.package(),
-            extra: self.extra(),
+            conflict: self.conflict.as_ref(),
         }
     }
 }
 
 impl From<(PackageName, ExtraName)> for ConflictItem {
     fn from((package, extra): (PackageName, ExtraName)) -> ConflictItem {
-        ConflictItem { package, extra }
+        let conflict = ConflictPackage::Extra(extra);
+        ConflictItem { package, conflict }
+    }
+}
+
+impl From<(PackageName, GroupName)> for ConflictItem {
+    fn from((package, group): (PackageName, GroupName)) -> ConflictItem {
+        let conflict = ConflictPackage::Group(group);
+        ConflictItem { package, conflict }
     }
 }
 
@@ -160,7 +184,7 @@ impl From<(PackageName, ExtraName)> for ConflictItem {
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct ConflictItemRef<'a> {
     package: &'a PackageName,
-    extra: &'a ExtraName,
+    conflict: ConflictPackageRef<'a>,
 }
 
 impl<'a> ConflictItemRef<'a> {
@@ -169,23 +193,129 @@ impl<'a> ConflictItemRef<'a> {
         self.package
     }
 
+    /// Returns the package-specific conflict.
+    ///
+    /// i.e., Either an extra or a group name.
+    pub fn conflict(&self) -> ConflictPackageRef<'a> {
+        self.conflict
+    }
+
     /// Returns the extra name of this conflicting item.
-    pub fn extra(&self) -> &'a ExtraName {
-        self.extra
+    pub fn extra(&self) -> Option<&'a ExtraName> {
+        self.conflict.extra()
+    }
+
+    /// Returns the group name of this conflicting item.
+    pub fn group(&self) -> Option<&'a GroupName> {
+        self.conflict.group()
     }
 
     /// Converts this borrowed conflicting item to its owned variant.
     pub fn to_owned(&self) -> ConflictItem {
         ConflictItem {
             package: self.package().clone(),
-            extra: self.extra().clone(),
+            conflict: self.conflict.to_owned(),
         }
     }
 }
 
 impl<'a> From<(&'a PackageName, &'a ExtraName)> for ConflictItemRef<'a> {
     fn from((package, extra): (&'a PackageName, &'a ExtraName)) -> ConflictItemRef<'a> {
-        ConflictItemRef { package, extra }
+        let conflict = ConflictPackageRef::Extra(extra);
+        ConflictItemRef { package, conflict }
+    }
+}
+
+impl<'a> From<(&'a PackageName, &'a GroupName)> for ConflictItemRef<'a> {
+    fn from((package, group): (&'a PackageName, &'a GroupName)) -> ConflictItemRef<'a> {
+        let conflict = ConflictPackageRef::Group(group);
+        ConflictItemRef { package, conflict }
+    }
+}
+
+impl<'a> hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'a> {
+    fn equivalent(&self, key: &ConflictItem) -> bool {
+        key.as_ref() == *self
+    }
+}
+
+/// The actual conflicting data for a package.
+///
+/// That is, either an extra or a group name.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, schemars::JsonSchema)]
+pub enum ConflictPackage {
+    Extra(ExtraName),
+    Group(GroupName),
+}
+
+impl ConflictPackage {
+    /// If this conflict corresponds to an extra, then return the
+    /// extra name.
+    pub fn extra(&self) -> Option<&ExtraName> {
+        match *self {
+            ConflictPackage::Extra(ref extra) => Some(extra),
+            ConflictPackage::Group(_) => None,
+        }
+    }
+
+    /// If this conflict corresponds to a group, then return the
+    /// group name.
+    pub fn group(&self) -> Option<&GroupName> {
+        match *self {
+            ConflictPackage::Group(ref group) => Some(group),
+            ConflictPackage::Extra(_) => None,
+        }
+    }
+
+    /// Returns this conflict as a new type with its fields borrowed.
+    pub fn as_ref(&self) -> ConflictPackageRef<'_> {
+        match *self {
+            ConflictPackage::Extra(ref extra) => ConflictPackageRef::Extra(extra),
+            ConflictPackage::Group(ref group) => ConflictPackageRef::Group(group),
+        }
+    }
+}
+
+/// The actual conflicting data for a package, by reference.
+///
+/// That is, either a borrowed extra name or a borrowed group name.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum ConflictPackageRef<'a> {
+    Extra(&'a ExtraName),
+    Group(&'a GroupName),
+}
+
+impl<'a> ConflictPackageRef<'a> {
+    /// If this conflict corresponds to an extra, then return the
+    /// extra name.
+    pub fn extra(&self) -> Option<&'a ExtraName> {
+        match *self {
+            ConflictPackageRef::Extra(extra) => Some(extra),
+            ConflictPackageRef::Group(_) => None,
+        }
+    }
+
+    /// If this conflict corresponds to a group, then return the
+    /// group name.
+    pub fn group(&self) -> Option<&'a GroupName> {
+        match *self {
+            ConflictPackageRef::Group(group) => Some(group),
+            ConflictPackageRef::Extra(_) => None,
+        }
+    }
+
+    /// Converts this borrowed conflict to its owned variant.
+    pub fn to_owned(&self) -> ConflictPackage {
+        match *self {
+            ConflictPackageRef::Extra(extra) => ConflictPackage::Extra(extra.clone()),
+            ConflictPackageRef::Group(group) => ConflictPackage::Group(group.clone()),
+        }
+    }
+}
+
+impl<'a> hashbrown::Equivalent<ConflictPackage> for ConflictPackageRef<'a> {
+    fn equivalent(&self, key: &ConflictPackage) -> bool {
+        key.as_ref() == *self
     }
 }
 
@@ -198,6 +328,19 @@ pub enum ConflictError {
     /// An error for when there is one conflicting items.
     #[error("Each set of conflicts must have at least two entries, but found only one")]
     OneItem,
+    /// An error that occurs when the `package` field is missing.
+    ///
+    /// (This is only applicable when deserializing from the lock file.
+    /// When deserializing from `pyproject.toml`, the `package` field is
+    /// optional.)
+    #[error("Expected `package` field in conflicting entry")]
+    MissingPackage,
+    /// An error that occurs when both `extra` and `group` are missing.
+    #[error("Expected `extra` or `group` field in conflicting entry")]
+    MissingExtraAndGroup,
+    /// An error that occurs when both `extra` and `group` are present.
+    #[error("Expected one of `extra` or `group` in conflicting entry, but found both")]
+    FoundExtraAndGroup,
 }
 
 /// Like [`Conflicts`], but for deserialization in `pyproject.toml`.
@@ -228,7 +371,10 @@ impl SchemaConflicts {
             let mut set = vec![];
             for item in &tool_uv_set.0 {
                 let package = item.package.clone().unwrap_or_else(|| package.clone());
-                set.push(ConflictItem::from((package, item.extra.clone())));
+                set.push(ConflictItem {
+                    package: package.clone(),
+                    conflict: item.conflict.clone(),
+                });
             }
             // OK because we guarantee that
             // `SchemaConflictingGroupList` is valid and there aren't
@@ -257,7 +403,6 @@ pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
 /// name.
 #[derive(
     Debug,
-    Default,
     Clone,
     Eq,
     Hash,
@@ -268,11 +413,14 @@ pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
     serde::Serialize,
     schemars::JsonSchema,
 )]
-#[serde(deny_unknown_fields)]
+#[serde(
+    deny_unknown_fields,
+    try_from = "ConflictItemWire",
+    into = "ConflictItemWire"
+)]
 pub struct SchemaConflictItem {
-    #[serde(default)]
     package: Option<PackageName>,
-    extra: ExtraName,
+    conflict: ConflictPackage,
 }
 
 impl<'de> serde::Deserialize<'de> for SchemaConflictSet {
@@ -295,5 +443,85 @@ impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
             _ => {}
         }
         Ok(SchemaConflictSet(items))
+    }
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct ConflictItemWire {
+    #[serde(default)]
+    package: Option<PackageName>,
+    #[serde(default)]
+    extra: Option<ExtraName>,
+    #[serde(default)]
+    group: Option<GroupName>,
+}
+
+impl TryFrom<ConflictItemWire> for ConflictItem {
+    type Error = ConflictError;
+
+    fn try_from(wire: ConflictItemWire) -> Result<ConflictItem, ConflictError> {
+        let Some(package) = wire.package else {
+            return Err(ConflictError::MissingPackage);
+        };
+        match (wire.extra, wire.group) {
+            (None, None) => Err(ConflictError::MissingExtraAndGroup),
+            (Some(_), Some(_)) => Err(ConflictError::FoundExtraAndGroup),
+            (Some(extra), None) => Ok(ConflictItem::from((package, extra))),
+            (None, Some(group)) => Ok(ConflictItem::from((package, group))),
+        }
+    }
+}
+
+impl From<ConflictItem> for ConflictItemWire {
+    fn from(item: ConflictItem) -> ConflictItemWire {
+        match item.conflict {
+            ConflictPackage::Extra(extra) => ConflictItemWire {
+                package: Some(item.package),
+                extra: Some(extra),
+                group: None,
+            },
+            ConflictPackage::Group(group) => ConflictItemWire {
+                package: Some(item.package),
+                extra: None,
+                group: Some(group),
+            },
+        }
+    }
+}
+
+impl TryFrom<ConflictItemWire> for SchemaConflictItem {
+    type Error = ConflictError;
+
+    fn try_from(wire: ConflictItemWire) -> Result<SchemaConflictItem, ConflictError> {
+        let package = wire.package;
+        match (wire.extra, wire.group) {
+            (None, None) => Err(ConflictError::MissingExtraAndGroup),
+            (Some(_), Some(_)) => Err(ConflictError::FoundExtraAndGroup),
+            (Some(extra), None) => Ok(SchemaConflictItem {
+                package,
+                conflict: ConflictPackage::Extra(extra),
+            }),
+            (None, Some(group)) => Ok(SchemaConflictItem {
+                package,
+                conflict: ConflictPackage::Group(group),
+            }),
+        }
+    }
+}
+
+impl From<SchemaConflictItem> for ConflictItemWire {
+    fn from(item: SchemaConflictItem) -> ConflictItemWire {
+        match item.conflict {
+            ConflictPackage::Extra(extra) => ConflictItemWire {
+                package: item.package,
+                extra: Some(extra),
+                group: None,
+            },
+            ConflictPackage::Group(group) => ConflictItemWire {
+                package: item.package,
+                extra: None,
+                group: Some(group),
+            },
+        }
     }
 }

@@ -2950,7 +2950,7 @@ struct Fork {
     /// This exists to make some access patterns more efficient. Namely,
     /// it makes it easy to check whether there's a dependency with a
     /// particular conflicting group in this fork.
-    conflicts: FxHashMap<PackageName, FxHashSet<ExtraName>>,
+    conflicts: crate::FxHashbrownSet<ConflictItem>,
     /// The resolver environment for this fork.
     ///
     /// Principally, this corresponds to the markers in this for. So in the
@@ -2971,7 +2971,7 @@ impl Fork {
     fn new(env: ResolverEnvironment) -> Fork {
         Fork {
             dependencies: vec![],
-            conflicts: FxHashMap::default(),
+            conflicts: crate::FxHashbrownSet::default(),
             env,
         }
     }
@@ -2979,10 +2979,7 @@ impl Fork {
     /// Add a dependency to this fork.
     fn add_dependency(&mut self, dep: PubGrubDependency) {
         if let Some(conflicting_item) = dep.package.conflicting_item() {
-            self.conflicts
-                .entry(conflicting_item.package().clone())
-                .or_default()
-                .insert(conflicting_item.extra().clone());
+            self.conflicts.insert(conflicting_item.to_owned());
         }
         self.dependencies.push(dep);
     }
@@ -3001,9 +2998,7 @@ impl Fork {
                 return true;
             }
             if let Some(conflicting_item) = dep.package.conflicting_item() {
-                if let Some(set) = self.conflicts.get_mut(conflicting_item.package()) {
-                    set.remove(conflicting_item.extra());
-                }
+                self.conflicts.remove(&conflicting_item);
             }
             false
         });
@@ -3011,11 +3006,8 @@ impl Fork {
 
     /// Returns true if any of the dependencies in this fork contain a
     /// dependency with the given package and extra values.
-    fn contains_conflicting_item(&self, group: ConflictItemRef<'_>) -> bool {
-        self.conflicts
-            .get(group.package())
-            .map(|set| set.contains(group.extra()))
-            .unwrap_or(false)
+    fn contains_conflicting_item(&self, item: ConflictItemRef<'_>) -> bool {
+        self.conflicts.contains(&item)
     }
 
     /// Exclude the given groups from this fork.
@@ -3031,9 +3023,7 @@ impl Fork {
                 return true;
             }
             if let Some(conflicting_item) = dep.package.conflicting_item() {
-                if let Some(set) = self.conflicts.get_mut(conflicting_item.package()) {
-                    set.remove(conflicting_item.extra());
-                }
+                self.conflicts.remove(&conflicting_item);
             }
             false
         });
