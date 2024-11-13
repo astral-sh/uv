@@ -945,6 +945,32 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             MetadataResponse::RequiresPython(..) => {
                 unreachable!("`requires-python` is only known upfront for registry distributions")
             }
+            MetadataResponse::Error(dist, err) => {
+                return Err(match &**dist {
+                    Dist::Built(built_dist @ BuiltDist::Path(_)) => {
+                        ResolveError::Read(Box::new(built_dist.clone()), (*err).clone())
+                    }
+                    Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                        ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                    }
+                    Dist::Source(source_dist @ SourceDist::Directory(_)) => {
+                        ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                    }
+                    Dist::Built(built_dist) => {
+                        ResolveError::Download(Box::new(built_dist.clone()), (*err).clone())
+                    }
+                    Dist::Source(source_dist) => {
+                        if source_dist.is_local() {
+                            ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                        } else {
+                            ResolveError::DownloadAndBuild(
+                                Box::new(source_dist.clone()),
+                                (*err).clone(),
+                            )
+                        }
+                    }
+                });
+            }
         };
 
         let version = &metadata.version;
@@ -1330,6 +1356,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Ok(Dependencies::Unavailable(
                             UnavailableVersion::RequiresPython(requires_python.clone()),
                         ));
+                    }
+                    MetadataResponse::Error(dist, err) => {
+                        return Err(match &**dist {
+                            Dist::Built(built_dist @ BuiltDist::Path(_)) => {
+                                ResolveError::Read(Box::new(built_dist.clone()), (*err).clone())
+                            }
+                            Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                                ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                            }
+                            Dist::Source(source_dist @ SourceDist::Directory(_)) => {
+                                ResolveError::Build(Box::new(source_dist.clone()), (*err).clone())
+                            }
+                            Dist::Built(built_dist) => {
+                                ResolveError::Download(Box::new(built_dist.clone()), (*err).clone())
+                            }
+                            Dist::Source(source_dist) => {
+                                if source_dist.is_local() {
+                                    ResolveError::Build(
+                                        Box::new(source_dist.clone()),
+                                        (*err).clone(),
+                                    )
+                                } else {
+                                    ResolveError::DownloadAndBuild(
+                                        Box::new(source_dist.clone()),
+                                        (*err).clone(),
+                                    )
+                                }
+                            }
+                        });
                     }
                 };
 
@@ -1791,28 +1846,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let metadata = provider
                     .get_or_build_wheel_metadata(&dist)
                     .boxed_local()
-                    .await
-                    .map_err(|err| match dist.clone() {
-                        Dist::Built(built_dist @ BuiltDist::Path(_)) => {
-                            ResolveError::Read(Box::new(built_dist), err)
-                        }
-                        Dist::Source(source_dist @ SourceDist::Path(_)) => {
-                            ResolveError::Build(Box::new(source_dist), err)
-                        }
-                        Dist::Source(source_dist @ SourceDist::Directory(_)) => {
-                            ResolveError::Build(Box::new(source_dist), err)
-                        }
-                        Dist::Built(built_dist) => {
-                            ResolveError::Download(Box::new(built_dist), err)
-                        }
-                        Dist::Source(source_dist) => {
-                            if source_dist.is_local() {
-                                ResolveError::Build(Box::new(source_dist), err)
-                            } else {
-                                ResolveError::DownloadAndBuild(Box::new(source_dist), err)
-                            }
-                        }
-                    })?;
+                    .await?;
 
                 Ok(Some(Response::Dist { dist, metadata }))
             }
@@ -1928,31 +1962,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let metadata = provider
                                 .get_or_build_wheel_metadata(&dist)
                                 .boxed_local()
-                                .await
-                                .map_err(|err| match dist.clone() {
-                                    Dist::Built(built_dist @ BuiltDist::Path(_)) => {
-                                        ResolveError::Read(Box::new(built_dist), err)
-                                    }
-                                    Dist::Source(source_dist @ SourceDist::Path(_)) => {
-                                        ResolveError::Build(Box::new(source_dist), err)
-                                    }
-                                    Dist::Source(source_dist @ SourceDist::Directory(_)) => {
-                                        ResolveError::Build(Box::new(source_dist), err)
-                                    }
-                                    Dist::Built(built_dist) => {
-                                        ResolveError::Download(Box::new(built_dist), err)
-                                    }
-                                    Dist::Source(source_dist) => {
-                                        if source_dist.is_local() {
-                                            ResolveError::Build(Box::new(source_dist), err)
-                                        } else {
-                                            ResolveError::DownloadAndBuild(
-                                                Box::new(source_dist),
-                                                err,
-                                            )
-                                        }
-                                    }
-                                })?;
+                                .await?;
 
                             Response::Dist { dist, metadata }
                         }
