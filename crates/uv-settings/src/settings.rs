@@ -43,7 +43,7 @@ pub struct Options {
     pub top_level: ResolverInstallerOptions,
 
     #[serde(flatten)]
-    pub install_mirrors: InstallMirrorOptions,
+    pub install_mirrors: PythonInstallMirrors,
 
     #[serde(flatten)]
     pub publish: PublishOptions,
@@ -681,7 +681,7 @@ pub struct ResolverInstallerOptions {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct InstallMirrorOptions {
+pub struct PythonInstallMirrors {
     /// Mirror URL for downloading managed Python installations.
     ///
     /// By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
@@ -715,17 +715,17 @@ pub struct InstallMirrorOptions {
     pub pypy_install_mirror: Option<String>,
 }
 
-impl Default for InstallMirrorOptions {
+impl Default for PythonInstallMirrors {
     fn default() -> Self {
-        InstallMirrorOptions::resolve(None, None)
+        PythonInstallMirrors::resolve(None, None)
     }
 }
 
-impl InstallMirrorOptions {
+impl PythonInstallMirrors {
     pub fn resolve(python_mirror: Option<String>, pypy_mirror: Option<String>) -> Self {
         let python_mirror_env = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
         let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
-        InstallMirrorOptions {
+        PythonInstallMirrors {
             python_install_mirror: python_mirror_env.or(python_mirror),
             pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
         }
@@ -1601,7 +1601,7 @@ pub struct OptionsWire {
     no_binary_package: Option<Vec<PackageName>>,
 
     // #[serde(flatten)]
-    // install_mirror: InstallMirrorOptions,
+    // install_mirror: PythonInstallMirrors,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
 
@@ -1734,7 +1734,7 @@ impl From<OptionsWire> for Options {
             override_dependencies,
             constraint_dependencies,
             environments,
-            install_mirrors: InstallMirrorOptions::resolve(
+            install_mirrors: PythonInstallMirrors::resolve(
                 python_install_mirror,
                 pypy_install_mirror,
             ),

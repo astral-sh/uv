@@ -23,7 +23,7 @@ use uv_python::{
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
-use uv_settings::InstallMirrorOptions;
+use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
@@ -47,7 +47,7 @@ pub(crate) async fn init(
     author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -179,7 +179,7 @@ pub(crate) async fn init(
 async fn init_script(
     script_path: &Path,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     connectivity: Connectivity,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -272,7 +272,7 @@ async fn init_project(
     author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::path::{Path, PathBuf};
-use uv_settings::InstallMirrorOptions;
+use uv_settings::PythonInstallMirrors;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -43,7 +43,7 @@ pub(crate) async fn export(
     frozen: bool,
     include_header: bool,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,

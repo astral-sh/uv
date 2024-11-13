@@ -32,7 +32,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{InstallTarget, Lock};
 use uv_scripts::Pep723Item;
-use uv_settings::InstallMirrorOptions;
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
@@ -72,7 +72,7 @@ pub(crate) async fn run(
     dev: DevGroupsSpecification,
     editable: EditableMode,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,

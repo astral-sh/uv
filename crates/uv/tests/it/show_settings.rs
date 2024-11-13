@@ -123,7 +123,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -274,7 +274,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -426,7 +426,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -610,7 +610,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -734,7 +734,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -896,7 +896,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -1100,7 +1100,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -1311,7 +1311,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -1487,7 +1487,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                 no_index: true,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -1633,7 +1633,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -1829,7 +1829,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -2008,7 +2008,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -2154,7 +2154,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -2283,7 +2283,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -2412,7 +2412,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -2543,7 +2543,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -2751,7 +2751,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         },
         force: false,
         editable: false,
-        install_mirrors: InstallMirrorOptions {
+        install_mirrors: PythonInstallMirrors {
             python_install_mirror: None,
             pypy_install_mirror: None,
         },
@@ -2854,7 +2854,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -3040,7 +3040,7 @@ fn resolve_both() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -3218,7 +3218,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -3441,7 +3441,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -3573,7 +3573,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -3724,7 +3724,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -3926,7 +3926,7 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -4107,7 +4107,7 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -4294,7 +4294,7 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -4476,7 +4476,7 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -4665,7 +4665,7 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },
@@ -4847,7 +4847,7 @@ fn index_priority() -> anyhow::Result<()> {
                 no_index: false,
             },
             python: None,
-            install_mirrors: InstallMirrorOptions {
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror: None,
                 pypy_install_mirror: None,
             },

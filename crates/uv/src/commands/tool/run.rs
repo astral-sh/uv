@@ -26,7 +26,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::InstallMirrorOptions;
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
@@ -69,7 +69,7 @@ pub(crate) async fn run(
     with: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     invocation_source: ToolRunCommand,
     isolated: bool,
@@ -429,7 +429,7 @@ async fn get_or_create_environment(
     with: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     settings: &ResolverInstallerSettings,
     isolated: bool,
     python_preference: PythonPreference,

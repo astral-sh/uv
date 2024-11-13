@@ -33,7 +33,7 @@ use uv_python::{
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{FlatIndex, InstallTarget};
 use uv_scripts::{Pep723Item, Pep723Script};
-use uv_settings::InstallMirrorOptions;
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError};
@@ -72,7 +72,7 @@ pub(crate) async fn add(
     extras: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     script: Option<PathBuf>,
     python_preference: PythonPreference,

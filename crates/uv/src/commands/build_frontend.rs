@@ -28,7 +28,7 @@ use uv_python::{
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
-use uv_settings::InstallMirrorOptions;
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
@@ -53,7 +53,7 @@ pub(crate) async fn build_frontend(
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     no_config: bool,
     python_preference: PythonPreference,
@@ -119,7 +119,7 @@ async fn build_impl(
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettingsRef<'_>,
     no_config: bool,
     python_preference: PythonPreference,
@@ -351,7 +351,7 @@ async fn build_package(
     source: AnnotatedSource<'_>,
     output_dir: Option<&Path>,
     python_request: Option<&str>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     no_config: bool,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,

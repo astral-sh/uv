@@ -35,7 +35,7 @@ use uv_resolver::{
     ResolverEnvironment,
 };
 use uv_scripts::Pep723Item;
-use uv_settings::InstallMirrorOptions;
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -534,7 +534,7 @@ impl ProjectInterpreter {
         connectivity: Connectivity,
         native_tls: bool,
         allow_insecure_host: &[TrustedHost],
-        install_mirrors: InstallMirrorOptions,
+        install_mirrors: PythonInstallMirrors,
         no_config: bool,
         cache: &Cache,
         printer: Printer,
@@ -675,7 +675,7 @@ impl ProjectInterpreter {
 pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
     python: Option<PythonRequest>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -1491,7 +1491,7 @@ pub(crate) async fn update_environment(
 /// Determine the [`RequiresPython`] requirement for a new PEP 723 script.
 pub(crate) async fn init_script_python_requirement(
     python: Option<&str>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     directory: &Path,
     no_pin_python: bool,
     python_preference: PythonPreference,

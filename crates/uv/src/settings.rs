@@ -33,7 +33,7 @@ use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{AnnotationStyle, DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_settings::{
-    Combine, FilesystemOptions, InstallMirrorOptions, Options, PipOptions, PublishOptions,
+    Combine, FilesystemOptions, Options, PipOptions, PublishOptions, PythonInstallMirrors,
     ResolverInstallerOptions, ResolverOptions,
 };
 use uv_static::EnvVars;
@@ -191,7 +191,7 @@ pub(crate) struct InitSettings {
     pub(crate) no_pin_python: bool,
     pub(crate) no_workspace: bool,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
 }
 
 impl InitSettings {
@@ -267,7 +267,7 @@ pub(crate) struct RunSettings {
     pub(crate) no_project: bool,
     pub(crate) no_sync: bool,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: Vec<PathBuf>,
@@ -370,7 +370,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
@@ -464,7 +464,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) force: bool,
     pub(crate) editable: bool,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
 }
 
 impl ToolInstallSettings {
@@ -532,7 +532,7 @@ impl ToolInstallSettings {
 pub(crate) struct ToolUpgradeSettings {
     pub(crate) name: Vec<PackageName>,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
 }
@@ -830,7 +830,7 @@ pub(crate) struct SyncSettings {
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
@@ -913,7 +913,7 @@ pub(crate) struct LockSettings {
     pub(crate) frozen: bool,
     pub(crate) dry_run: bool,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
 }
@@ -968,7 +968,7 @@ pub(crate) struct AddSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
     pub(crate) settings: ResolverInstallerSettings,
@@ -1101,7 +1101,7 @@ pub(crate) struct RemoveSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
 }
@@ -1177,7 +1177,7 @@ pub(crate) struct TreeSettings {
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) resolver: ResolverSettings,
 }
 
@@ -1245,7 +1245,7 @@ pub(crate) struct ExportSettings {
     pub(crate) frozen: bool,
     pub(crate) include_header: bool,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
 }
@@ -1957,7 +1957,7 @@ pub(crate) struct BuildSettings {
     pub(crate) build_constraint: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverSettings,
 }
@@ -1987,7 +1987,7 @@ impl BuildSettings {
 
         let install_mirrors = match &filesystem {
             Some(fs) => fs.install_mirrors.clone(),
-            None => InstallMirrorOptions::default(),
+            None => PythonInstallMirrors::default(),
         };
 
         Self {
@@ -2365,7 +2365,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
 pub(crate) struct PipSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) python: Option<String>,
-    pub(crate) install_mirrors: InstallMirrorOptions,
+    pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) break_system_packages: bool,

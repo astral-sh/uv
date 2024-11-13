@@ -14,7 +14,7 @@ use uv_python::{
     PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
-use uv_settings::{Combine, InstallMirrorOptions, ResolverInstallerOptions, ToolOptions};
+use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 
 use crate::commands::pip::loggers::{
@@ -33,7 +33,7 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn upgrade(
     name: Vec<PackageName>,
     python: Option<String>,
-    install_mirrors: InstallMirrorOptions,
+    install_mirrors: PythonInstallMirrors,
     connectivity: Connectivity,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
