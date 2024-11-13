@@ -2,13 +2,15 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
-use std::io::Read;
+use std::io::{stdin, Read};
 use std::path::{Path, PathBuf};
+use std::process::Stdio; // for synchronous reading from stdin
 
 use anyhow::{anyhow, bail, Context};
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use tokio::io::{self, AsyncWriteExt};
 use tokio::process::Command;
 use tracing::{debug, warn};
 use url::Url;
@@ -1298,9 +1300,39 @@ impl RunCommand {
         let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
 
         if target.eq_ignore_ascii_case("-") {
-            let mut buf = Vec::with_capacity(1024);
-            std::io::stdin().read_to_end(&mut buf)?;
-            Ok(Self::PythonStdin(buf))
+            // Spawn the Python process with piped stdin
+            let mut child = Command::new("python3")
+                .stdin(Stdio::piped()) // Pipe parent's stdin to the child process
+                .stdout(Stdio::inherit()) // Use parent's stdout
+                .stderr(Stdio::inherit()) // Use parent's stderr
+                .spawn()?; // Spawn the child process
+
+            // If we successfully opened the child's stdin
+            if let Some(mut child_stdin) = child.stdin.take() {
+                // Spawning a blocking task to read stdin and send it to the child process
+                let buffer = tokio::task::spawn_blocking(move || {
+                    let mut buffer = Vec::new();
+                    stdin()
+                        .read_to_end(&mut buffer)
+                        .expect("Failed to read from stdin");
+                    buffer
+                })
+                .await
+                .map_err(|e| {
+                    io::Error::new(io::ErrorKind::Other, format!("Task join error: {}", e))
+                })?;
+
+                // Writing buffer to the child's stdin asynchronously
+                child_stdin.write_all(&buffer).await?;
+            }
+
+            // Waiting for the child process to finish
+            let status = child.wait().await?;
+            if !status.success() {
+                eprintln!("Python script failed with status: {:?}", status);
+            }
+
+            Ok(Self::PythonStdin(vec![]))
         } else if target.eq_ignore_ascii_case("python") {
             Ok(Self::Python(args.to_vec()))
         } else if target_path
