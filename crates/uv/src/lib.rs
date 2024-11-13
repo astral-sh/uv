@@ -24,7 +24,7 @@ use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLeve
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_fs::CWD;
-use uv_pypi_types::ConflictingGroupList;
+use uv_pypi_types::Conflicts;
 use uv_requirements::RequirementsSource;
 use uv_scripts::{Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
@@ -333,7 +333,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 args.environments,
-                ConflictingGroupList::empty(),
+                Conflicts::empty(),
                 args.settings.extras,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,

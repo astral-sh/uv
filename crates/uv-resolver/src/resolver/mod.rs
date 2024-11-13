@@ -38,8 +38,7 @@ use uv_pep440::{release_specifiers_to_ranges, Version, MIN_VERSION};
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
-    ConflictingGroup, ConflictingGroupList, ConflictingGroupRef, Requirement, ResolutionMetadata,
-    VerbatimParsedUrl,
+    ConflictItem, ConflictItemRef, Conflicts, Requirement, ResolutionMetadata, VerbatimParsedUrl,
 };
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
@@ -110,7 +109,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     hasher: HashStrategy,
     env: ResolverEnvironment,
     python_requirement: PythonRequirement,
-    conflicting_groups: ConflictingGroupList,
+    conflicting_groups: Conflicts,
     workspace_members: BTreeSet<PackageName>,
     selector: CandidateSelector,
     index: InMemoryIndex,
@@ -151,7 +150,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         env: ResolverEnvironment,
-        conflicting_groups: ConflictingGroupList,
+        conflicting_groups: Conflicts,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
@@ -199,7 +198,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         hasher: &HashStrategy,
         env: ResolverEnvironment,
         python_requirement: &PythonRequirement,
-        conflicting_groups: ConflictingGroupList,
+        conflicting_groups: Conflicts,
         index: &InMemoryIndex,
         git: &GitResolver,
         capabilities: &IndexCapabilities,
@@ -1631,7 +1630,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             return None;
                         }
                         if !env.included_by_group(
-                            ConflictingGroupRef::from((&requirement.name, source_extra)),
+                            ConflictItemRef::from((&requirement.name, source_extra)),
                         ) {
                             return None;
                         }
@@ -1724,7 +1723,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         return None;
                                     }
                                     if !env.included_by_group(
-                                        ConflictingGroupRef::from((&requirement.name, source_extra)),
+                                        ConflictItemRef::from((&requirement.name, source_extra)),
                                     ) {
                                         return None;
                                     }
@@ -2695,7 +2694,7 @@ impl Dependencies {
         self,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
-        conflicting_groups: &ConflictingGroupList,
+        conflicting_groups: &Conflicts,
     ) -> ForkedDependencies {
         let deps = match self {
             Dependencies::Available(deps) => deps,
@@ -2776,7 +2775,7 @@ impl Forks {
         name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>>,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
-        conflicting_groups: &ConflictingGroupList,
+        conflicting_groups: &Conflicts,
     ) -> Forks {
         let python_marker = python_requirement.to_marker_tree();
 
@@ -3016,7 +3015,7 @@ impl Fork {
 
     /// Returns true if any of the dependencies in this fork contain a
     /// dependency with the given package and extra values.
-    fn contains_conflicting_group(&self, group: ConflictingGroupRef<'_>) -> bool {
+    fn contains_conflicting_group(&self, group: ConflictItemRef<'_>) -> bool {
         self.conflicting_groups
             .get(group.package())
             .map(|set| set.contains(group.extra()))
@@ -3026,7 +3025,7 @@ impl Fork {
     /// Exclude the given groups from this fork.
     ///
     /// This removes all dependencies matching the given conflicting groups.
-    fn exclude(mut self, groups: impl IntoIterator<Item = ConflictingGroup>) -> Fork {
+    fn exclude(mut self, groups: impl IntoIterator<Item = ConflictItem>) -> Fork {
         self.env = self.env.exclude_by_group(groups);
         self.dependencies.retain(|dep| {
             let Some(conflicting_group) = dep.package.conflicting_group() else {
@@ -3114,10 +3113,7 @@ impl PartialOrd for Fork {
 /// depends on `c[x2]`. That's a conflict, but not easily detectable unless
 /// you reject either `c[x1]` or `c[x2]` on the grounds that `x1` and `x2` are
 /// conflicting and thus cannot be enabled unconditionally.
-fn find_conflicting_extra(
-    conflicting: &ConflictingGroupList,
-    reqs: &[Requirement],
-) -> Option<ResolveError> {
+fn find_conflicting_extra(conflicting: &Conflicts, reqs: &[Requirement]) -> Option<ResolveError> {
     for req in reqs {
         for extra in &req.extras {
             if conflicting.contains(&req.name, extra) {

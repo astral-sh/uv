@@ -3,9 +3,7 @@ use std::sync::Arc;
 use rustc_hash::{FxHashMap, FxHashSet};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::{
-    ConflictingGroup, ConflictingGroupList, ConflictingGroupRef, ResolverMarkerEnvironment,
-};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, ResolverMarkerEnvironment};
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
@@ -165,7 +163,7 @@ impl ResolverEnvironment {
 
     /// Returns true if the dependency represented by this forker may be
     /// included in the given resolver environment.
-    pub(crate) fn included_by_group(&self, group: ConflictingGroupRef<'_>) -> bool {
+    pub(crate) fn included_by_group(&self, group: ConflictItemRef<'_>) -> bool {
         match self.kind {
             Kind::Specific { .. } => true,
             Kind::Universal { ref exclude, .. } => !exclude
@@ -229,7 +227,7 @@ impl ResolverEnvironment {
     /// specific marker environment. i.e., "pip"-style resolution.
     pub(crate) fn exclude_by_group(
         &self,
-        groups: impl IntoIterator<Item = ConflictingGroup>,
+        groups: impl IntoIterator<Item = ConflictItem>,
     ) -> ResolverEnvironment {
         match self.kind {
             Kind::Specific { .. } => {
@@ -427,7 +425,7 @@ impl<'d> Forker<'d> {
     pub(crate) fn fork(
         &self,
         env: &ResolverEnvironment,
-        _conflicting_groups: &ConflictingGroupList,
+        _conflicting_groups: &Conflicts,
     ) -> Option<(Forker<'d>, Vec<ResolverEnvironment>)> {
         if !env.included_by_marker(&self.marker) {
             return None;

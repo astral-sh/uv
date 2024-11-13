@@ -18,7 +18,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{
-    ConflictingGroupList, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
+    Conflicts, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
 };
 
 use crate::graph_ops::marker_reachability;
@@ -103,7 +103,7 @@ impl ResolutionGraph {
         index: &InMemoryIndex,
         git: &GitResolver,
         python: &PythonRequirement,
-        conflicting_groups: &ConflictingGroupList,
+        conflicting_groups: &Conflicts,
         resolution_strategy: &ResolutionStrategy,
         options: Options,
     ) -> Result<Self, ResolveError> {

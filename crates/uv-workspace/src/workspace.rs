@@ -11,7 +11,7 @@ use uv_distribution_types::Index;
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use uv_pypi_types::{ConflictingGroupList, Requirement, RequirementSource, SupportedEnvironments};
+use uv_pypi_types::{Conflicts, Requirement, RequirementSource, SupportedEnvironments};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -393,8 +393,8 @@ impl Workspace {
     }
 
     /// Returns the set of conflicts for the workspace.
-    pub fn conflicting_groups(&self) -> ConflictingGroupList {
-        let mut conflicting = ConflictingGroupList::empty();
+    pub fn conflicting_groups(&self) -> Conflicts {
+        let mut conflicting = Conflicts::empty();
         for member in self.packages.values() {
             conflicting.append(&mut member.pyproject_toml.conflicting_groups());
         }

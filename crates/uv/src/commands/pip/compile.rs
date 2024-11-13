@@ -23,7 +23,7 @@ use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
-use uv_pypi_types::{ConflictingGroupList, Requirement, SupportedEnvironments};
+use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,
@@ -54,7 +54,7 @@ pub(crate) async fn pip_compile(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
-    conflicting_groups: ConflictingGroupList,
+    conflicting_groups: Conflicts,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
@@ -264,7 +264,7 @@ pub(crate) async fn pip_compile(
         (
             Some(tags),
             ResolverEnvironment::specific(marker_env),
-            ConflictingGroupList::empty(),
+            Conflicts::empty(),
         )
     };
 
