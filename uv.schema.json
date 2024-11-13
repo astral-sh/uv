@@ -76,6 +76,17 @@
         }
       ]
     },
+    "conflicts": {
+      "description": "A list sets of conflicting groups or extras.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SchemaConflicts"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "constraint-dependencies": {
       "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
       "type": [
@@ -565,6 +576,35 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettingValue"
       }
+    },
+    "ConflictPackage": {
+      "description": "The actual conflicting data for a package.\n\nThat is, either an extra or a group name.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "Extra"
+          ],
+          "properties": {
+            "Extra": {
+              "$ref": "#/definitions/ExtraName"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Group"
+          ],
+          "properties": {
+            "Group": {
+              "$ref": "#/definitions/GroupName"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "ExcludeNewer": {
       "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",
@@ -1315,6 +1355,43 @@
           ]
         }
       ]
+    },
+    "SchemaConflictItem": {
+      "description": "Like [`ConflictItem`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "type": "object",
+      "required": [
+        "conflict"
+      ],
+      "properties": {
+        "conflict": {
+          "$ref": "#/definitions/ConflictPackage"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PackageName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SchemaConflictSet": {
+      "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SchemaConflictItem"
+      }
+    },
+    "SchemaConflicts": {
+      "description": "Like [`Conflicts`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.\n\nN.B. `Conflicts` is still used for (de)serialization. Specifically, in the lock file, where the package name is required.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SchemaConflictSet"
+      }
     },
     "Source": {
       "description": "A `tool.uv.sources` value.",
