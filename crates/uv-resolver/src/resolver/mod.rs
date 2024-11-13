@@ -109,7 +109,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     hasher: HashStrategy,
     env: ResolverEnvironment,
     python_requirement: PythonRequirement,
-    conflicting_groups: Conflicts,
+    conflicts: Conflicts,
     workspace_members: BTreeSet<PackageName>,
     selector: CandidateSelector,
     index: InMemoryIndex,
@@ -150,7 +150,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         env: ResolverEnvironment,
-        conflicting_groups: Conflicts,
+        conflicts: Conflicts,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
@@ -177,7 +177,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             hasher,
             env,
             python_requirement,
-            conflicting_groups,
+            conflicts,
             index,
             build_context.git(),
             build_context.capabilities(),
@@ -198,7 +198,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         hasher: &HashStrategy,
         env: ResolverEnvironment,
         python_requirement: &PythonRequirement,
-        conflicting_groups: Conflicts,
+        conflicts: Conflicts,
         index: &InMemoryIndex,
         git: &GitResolver,
         capabilities: &IndexCapabilities,
@@ -226,7 +226,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             locations: locations.clone(),
             env,
             python_requirement: python_requirement.clone(),
-            conflicting_groups,
+            conflicts,
             installed_packages,
             unavailable_packages: DashMap::default(),
             incomplete_packages: DashMap::default(),
@@ -607,7 +607,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.index,
             &self.git,
             &self.python_requirement,
-            &self.conflicting_groups,
+            &self.conflicts,
             self.selector.resolution_strategy(),
             self.options,
         )
@@ -1207,7 +1207,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             })
         } else {
-            Ok(result?.fork(env, python_requirement, &self.conflicting_groups))
+            Ok(result?.fork(env, python_requirement, &self.conflicts))
         }
     }
 
@@ -1387,15 +1387,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                if let Some(err) =
-                    find_conflicting_extra(&self.conflicting_groups, &metadata.requires_dist)
+                if let Some(err) = find_conflicting_extra(&self.conflicts, &metadata.requires_dist)
                 {
                     return Err(err);
                 }
                 for dependencies in metadata.dependency_groups.values() {
-                    if let Some(err) =
-                        find_conflicting_extra(&self.conflicting_groups, dependencies)
-                    {
+                    if let Some(err) = find_conflicting_extra(&self.conflicts, dependencies) {
                         return Err(err);
                     }
                 }
@@ -2694,7 +2691,7 @@ impl Dependencies {
         self,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
-        conflicting_groups: &Conflicts,
+        conflicts: &Conflicts,
     ) -> ForkedDependencies {
         let deps = match self {
             Dependencies::Available(deps) => deps,
@@ -2713,7 +2710,7 @@ impl Dependencies {
         let Forks {
             mut forks,
             diverging_packages,
-        } = Forks::new(name_to_deps, env, python_requirement, conflicting_groups);
+        } = Forks::new(name_to_deps, env, python_requirement, conflicts);
         if forks.is_empty() {
             ForkedDependencies::Unforked(vec![])
         } else if forks.len() == 1 {
@@ -2775,7 +2772,7 @@ impl Forks {
         name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>>,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
-        conflicting_groups: &Conflicts,
+        conflicts: &Conflicts,
     ) -> Forks {
         let python_marker = python_requirement.to_marker_tree();
 
@@ -2839,8 +2836,7 @@ impl Forks {
 
                 let mut new = vec![];
                 for fork in std::mem::take(&mut forks) {
-                    let Some((remaining_forker, envs)) = forker.fork(&fork.env, conflicting_groups)
-                    else {
+                    let Some((remaining_forker, envs)) = forker.fork(&fork.env) else {
                         new.push(fork);
                         continue;
                     };
@@ -2880,12 +2876,12 @@ impl Forks {
         // For example, if we have conflicting groups {x1, x2} and {x3,
         // x4}, we need to make sure the forks generated from one set
         // also account for the other set.
-        for groups in conflicting_groups.iter() {
+        for groups in conflicts.iter() {
             let mut new = vec![];
             for fork in std::mem::take(&mut forks) {
                 let mut has_conflicting_dependency = false;
                 for group in groups.iter() {
-                    if fork.contains_conflicting_group(group.as_ref()) {
+                    if fork.contains_conflicting_item(group.as_ref()) {
                         has_conflicting_dependency = true;
                         break;
                     }
@@ -2954,7 +2950,7 @@ struct Fork {
     /// This exists to make some access patterns more efficient. Namely,
     /// it makes it easy to check whether there's a dependency with a
     /// particular conflicting group in this fork.
-    conflicting_groups: FxHashMap<PackageName, FxHashSet<ExtraName>>,
+    conflicts: FxHashMap<PackageName, FxHashSet<ExtraName>>,
     /// The resolver environment for this fork.
     ///
     /// Principally, this corresponds to the markers in this for. So in the
@@ -2975,18 +2971,18 @@ impl Fork {
     fn new(env: ResolverEnvironment) -> Fork {
         Fork {
             dependencies: vec![],
-            conflicting_groups: FxHashMap::default(),
+            conflicts: FxHashMap::default(),
             env,
         }
     }
 
     /// Add a dependency to this fork.
     fn add_dependency(&mut self, dep: PubGrubDependency) {
-        if let Some(conflicting_group) = dep.package.conflicting_group() {
-            self.conflicting_groups
-                .entry(conflicting_group.package().clone())
+        if let Some(conflicting_item) = dep.package.conflicting_item() {
+            self.conflicts
+                .entry(conflicting_item.package().clone())
                 .or_default()
-                .insert(conflicting_group.extra().clone());
+                .insert(conflicting_item.extra().clone());
         }
         self.dependencies.push(dep);
     }
@@ -3004,9 +3000,9 @@ impl Fork {
             if self.env.included_by_marker(markers) {
                 return true;
             }
-            if let Some(conflicting_group) = dep.package.conflicting_group() {
-                if let Some(set) = self.conflicting_groups.get_mut(conflicting_group.package()) {
-                    set.remove(conflicting_group.extra());
+            if let Some(conflicting_item) = dep.package.conflicting_item() {
+                if let Some(set) = self.conflicts.get_mut(conflicting_item.package()) {
+                    set.remove(conflicting_item.extra());
                 }
             }
             false
@@ -3015,8 +3011,8 @@ impl Fork {
 
     /// Returns true if any of the dependencies in this fork contain a
     /// dependency with the given package and extra values.
-    fn contains_conflicting_group(&self, group: ConflictItemRef<'_>) -> bool {
-        self.conflicting_groups
+    fn contains_conflicting_item(&self, group: ConflictItemRef<'_>) -> bool {
+        self.conflicts
             .get(group.package())
             .map(|set| set.contains(group.extra()))
             .unwrap_or(false)
@@ -3028,15 +3024,15 @@ impl Fork {
     fn exclude(mut self, groups: impl IntoIterator<Item = ConflictItem>) -> Fork {
         self.env = self.env.exclude_by_group(groups);
         self.dependencies.retain(|dep| {
-            let Some(conflicting_group) = dep.package.conflicting_group() else {
+            let Some(conflicting_item) = dep.package.conflicting_item() else {
                 return true;
             };
-            if self.env.included_by_group(conflicting_group) {
+            if self.env.included_by_group(conflicting_item) {
                 return true;
             }
-            if let Some(conflicting_group) = dep.package.conflicting_group() {
-                if let Some(set) = self.conflicting_groups.get_mut(conflicting_group.package()) {
-                    set.remove(conflicting_group.extra());
+            if let Some(conflicting_item) = dep.package.conflicting_item() {
+                if let Some(set) = self.conflicts.get_mut(conflicting_item.package()) {
+                    set.remove(conflicting_item.extra());
                 }
             }
             false

@@ -242,7 +242,7 @@ async fn albatross_root_workspace() {
                   "override-dependencies": null,
                   "constraint-dependencies": null,
                   "environments": null,
-                  "conflicting-groups": null
+                  "conflicts": null
                 }
               },
               "dependency-groups": null
@@ -334,7 +334,7 @@ async fn albatross_virtual_workspace() {
                   "override-dependencies": null,
                   "constraint-dependencies": null,
                   "environments": null,
-                  "conflicting-groups": null
+                  "conflicts": null
                 }
               },
               "dependency-groups": null
@@ -540,7 +540,7 @@ async fn exclude_package() -> Result<()> {
                   "override-dependencies": null,
                   "constraint-dependencies": null,
                   "environments": null,
-                  "conflicting-groups": null
+                  "conflicts": null
                 }
               },
               "dependency-groups": null
@@ -644,7 +644,7 @@ async fn exclude_package() -> Result<()> {
                   "override-dependencies": null,
                   "constraint-dependencies": null,
                   "environments": null,
-                  "conflicting-groups": null
+                  "conflicts": null
                 }
               },
               "dependency-groups": null
@@ -761,7 +761,7 @@ async fn exclude_package() -> Result<()> {
                   "override-dependencies": null,
                   "constraint-dependencies": null,
                   "environments": null,
-                  "conflicting-groups": null
+                  "conflicts": null
                 }
               },
               "dependency-groups": null
@@ -852,7 +852,7 @@ async fn exclude_package() -> Result<()> {
                   "override-dependencies": null,
                   "constraint-dependencies": null,
                   "environments": null,
-                  "conflicting-groups": null
+                  "conflicts": null
                 }
               },
               "dependency-groups": null

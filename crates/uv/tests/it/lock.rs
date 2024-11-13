@@ -2220,7 +2220,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project1" },
               { extra = "project2" },
@@ -2257,7 +2257,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         requires-python = ">=3.12"
         resolution-markers = [
         ]
-        conflicting-groups = [[
+        conflicts = [[
             { package = "project", extra = "project1" },
             { package = "project", extra = "project2" },
         ]]
@@ -2417,7 +2417,7 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project1" },
               { extra = "project2" },
@@ -2456,7 +2456,7 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         requires-python = ">=3.12"
         resolution-markers = [
         ]
-        conflicting-groups = [[
+        conflicts = [[
             { package = "project", extra = "project1" },
             { package = "project", extra = "project2" },
             { package = "project", extra = "project3" },
@@ -2542,7 +2542,7 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project1" },
               { extra = "project2" },
@@ -2712,7 +2712,7 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project1" },
               { extra = "project2" },
@@ -2758,7 +2758,7 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project1" },
               { extra = "project2" },
@@ -2808,7 +2808,7 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project1" },
               { extra = "project2" },
@@ -2889,7 +2889,7 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project3" },
               { extra = "project4" },
@@ -2928,7 +2928,7 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project1" },
               { extra = "project2" },
@@ -2971,7 +2971,7 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         requires-python = ">=3.12"
         resolution-markers = [
         ]
-        conflicting-groups = [[
+        conflicts = [[
             { package = "project", extra = "project1" },
             { package = "project", extra = "project2" },
         ], [
@@ -3098,7 +3098,7 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         requires-python = ">=3.12"
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
             [
               { extra = "project1" },
               { extra = "project2" },
@@ -3133,7 +3133,7 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         requires-python = ">=3.12"
         resolution-markers = [
         ]
-        conflicting-groups = [[
+        conflicts = [[
             { package = "project", extra = "project1" },
             { package = "project", extra = "project2" },
         ]]
@@ -3272,7 +3272,7 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
         project2 = ["anyio==4.2.0"]
 
         [tool.uv]
-        conflicting-groups = [
+        conflicts = [
           [
             { extra = "project1" },
             { extra = "project2" },

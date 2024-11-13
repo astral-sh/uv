@@ -6,7 +6,7 @@ Ok(
     Lock {
         version: 1,
         fork_markers: [],
-        conflicting_groups: ConflictingGroupList(
+        conflicts: Conflicts(
             [],
         ),
         supported_environments: [],

@@ -163,7 +163,7 @@ mod resolver {
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
         let sources = SourceStrategy::default();
         let dependency_metadata = DependencyMetadata::default();
-        let conflicting_groups = Conflicts::empty();
+        let conflicts = Conflicts::empty();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -209,7 +209,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
-            conflicting_groups,
+            conflicts,
             Some(&TAGS),
             &flat_index,
             &index,

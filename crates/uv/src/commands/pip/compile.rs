@@ -54,7 +54,7 @@ pub(crate) async fn pip_compile(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
-    conflicting_groups: Conflicts,
+    conflicts: Conflicts,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
@@ -256,7 +256,7 @@ pub(crate) async fn pip_compile(
         (
             None,
             ResolverEnvironment::universal(environments.into_markers()),
-            conflicting_groups,
+            conflicts,
         )
     } else {
         let (tags, marker_env) =

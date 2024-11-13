@@ -283,18 +283,15 @@ pub(super) async fn do_sync(
 
     // Validate that we aren't trying to install extras that are
     // declared as conflicting.
-    let conflicting_groups = target.lock().conflicting_groups();
-    for groups in conflicting_groups.iter() {
-        let conflicting = groups
+    let conflicts = target.lock().conflicts();
+    for set in conflicts.iter() {
+        let conflicting = set
             .iter()
-            .filter(|group| extras.contains(group.extra()))
-            .map(|group| group.extra().clone())
+            .filter(|item| extras.contains(item.extra()))
+            .map(|item| item.extra().clone())
             .collect::<Vec<ExtraName>>();
         if conflicting.len() >= 2 {
-            return Err(ProjectError::ExtraIncompatibility(
-                groups.clone(),
-                conflicting,
-            ));
+            return Err(ProjectError::ExtraIncompatibility(set.clone(), conflicting));
         }
     }
 
