@@ -5718,7 +5718,6 @@ fn sorted_dependencies() -> Result<()> {
     [project]
     name = "project"
     version = "0.1.0"
-    description = "Add your description here"
     requires-python = ">=3.12"
     dependencies = [
         "CacheControl[filecache]>=0.14,<0.15",
@@ -5759,7 +5758,6 @@ fn sorted_dependencies() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = [
             "anyio>=4.3.0",
@@ -5784,7 +5782,6 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
     [project]
     name = "project"
     version = "0.1.0"
-    description = "Add your description here"
     requires-python = ">=3.12"
     dependencies = [
         "CacheControl[filecache]>=0.14,<0.15",
@@ -5827,7 +5824,6 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = [
             "CacheControl[filecache]>=0.14,<0.15",
@@ -5852,7 +5848,6 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
     [project]
     name = "project"
     version = "0.1.0"
-    description = "Add your description here"
     requires-python = ">=3.12"
     dependencies = [
         "typing>=3",
@@ -5886,7 +5881,6 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = [
             "anyio>=4.3.0",
@@ -5910,7 +5904,6 @@ fn custom_dependencies() -> Result<()> {
     [project]
     name = "project"
     version = "0.1.0"
-    description = "Add your description here"
     requires-python = ">=3.12"
     dependencies = [
         "yarl",
@@ -5939,7 +5932,6 @@ fn custom_dependencies() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = [
             "yarl",
