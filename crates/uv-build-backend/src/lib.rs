@@ -384,7 +384,7 @@ pub struct SourceDistSettings {
     /// Glob expressions which files and directories to exclude from the previous source
     /// distribution includes.
     ///
-    /// Excludes are not, which means that `__pycache__` excludes all directories named
+    /// Excludes are not anchored, which means that `__pycache__` excludes all directories named
     /// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
     /// `/dist` will exclude only `<project root>/dist`.
     ///
@@ -461,6 +461,7 @@ pub fn build_source_dist(
 
     let mut exclude_builder = GlobSetBuilder::new();
     for exclude in settings.exclude {
+        // Excludes are unanchored
         let exclude = if let Some(exclude) = exclude.strip_prefix("/") {
             exclude.to_string()
         } else {
@@ -482,7 +483,7 @@ pub fn build_source_dist(
     // TODO(konsti): Add files linked by pyproject.toml
 
     for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This is should be prettier.
+        // TODO(konsti): This should be prettier.
         let relative = entry
             .path()
             .strip_prefix(source_tree)
@@ -490,17 +491,18 @@ pub fn build_source_dist(
             .to_path_buf();
 
         // Fast path: Don't descend into a directory that can't be included. This is the most
-        // important performance optimization, it avoids us descending e.g. into the `.venv`.
-        // While walkdir is generally cheap, we still need to avoid traversing data directories at
-        // least on the top level, and each IO operations has a high latency on network file
-        // systems (compared to reading the file).
+        // important performance optimization, it avoids descending into directories such as
+        // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
+        // directories that often exist on the top level of a project. This is especially noticeable
+        // on network file systems with high latencies per operation (while contiguous reading may
+        // still be fast).
         include_matcher.match_directory(&relative) && !exclude_matcher.is_match(&relative)
     }) {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
             err,
         })?;
-        // TODO(konsti): This is should be prettier.
+        // TODO(konsti): This should be prettier.
         let relative = entry
             .path()
             .strip_prefix(source_tree)

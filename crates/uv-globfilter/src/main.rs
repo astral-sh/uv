@@ -19,6 +19,7 @@ fn main() {
 
     let mut exclude_builder = GlobSetBuilder::new();
     for exclude in excludes {
+        // Excludes are unanchored
         let exclude = if let Some(exclude) = exclude.strip_prefix("/") {
             exclude.to_string()
         } else {
@@ -34,7 +35,7 @@ fn main() {
     for entry in WalkDir::new(&walkdir_root)
         .into_iter()
         .filter_entry(|entry| {
-            // TODO(konsti): This is should be prettier.
+            // TODO(konsti): This should be prettier.
             let relative = entry
                 .path()
                 .strip_prefix(&walkdir_root)
@@ -45,7 +46,7 @@ fn main() {
         })
     {
         let entry = entry.unwrap();
-        // TODO(konsti): This is should be prettier.
+        // TODO(konsti): This should be prettier.
         let relative = entry
             .path()
             .strip_prefix(&walkdir_root)

@@ -234,7 +234,7 @@ mod tests {
         let mut matches: Vec<_> = WalkDir::new(walkdir_root)
             .into_iter()
             .filter_entry(|entry| {
-                // TODO(konsti): This is should be prettier.
+                // TODO(konsti): This should be prettier.
                 let relative = entry
                     .path()
                     .strip_prefix(walkdir_root)
@@ -245,7 +245,7 @@ mod tests {
             })
             .filter_map(|entry| {
                 let entry = entry.as_ref().unwrap();
-                // TODO(konsti): This is should be prettier.
+                // TODO(konsti): This should be prettier.
                 let relative = entry
                     .path()
                     .strip_prefix(walkdir_root)
