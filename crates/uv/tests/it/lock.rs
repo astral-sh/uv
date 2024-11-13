@@ -2164,6 +2164,1212 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     Ok(())
 }
 
+/// This tests a "basic" case for specifying conflicting extras.
+///
+/// Namely, we check that 1) without declaring them conflicting,
+/// resolution fails, 2) declaring them conflicting, resolution
+/// succeeds, 3) install succeeds, 4) install fails when requesting two
+/// or more extras that are declared to conflict with each other.
+///
+/// This test was inspired by:
+/// <https://github.com/astral-sh/uv/issues/8024>
+#[test]
+fn lock_conflicting_extra_basic() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // First we test that resolving with two extras that have
+    // conflicting dependencies fails.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[project2] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.3.0, we can conclude that project[project1] and project[project2] are incompatible.
+          And because your project requires project[project1] and project[project2], we can conclude that your projects's requirements are unsatisfiable.
+    "###);
+
+    // And now with the same extra configuration, we tell uv about
+    // the conflicting extras, which forces it to resolve each in
+    // their own fork.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project1" },
+              { extra = "project2" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+        ]
+        conflicting-groups = [[
+            { package = "project", extra = "project1" },
+            { package = "project", extra = "project2" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.optional-dependencies]
+        project1 = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        project2 = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "sortedcontainers", marker = "extra == 'project1'", specifier = "==2.3.0" },
+            { name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.4.0" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+    // Another install, but with one of the extras enabled.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=project1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.3.0
+    "###);
+    // Another install, but with the other extra enabled.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=project2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - sortedcontainers==2.3.0
+     + sortedcontainers==2.4.0
+    "###);
+    // And finally, installing both extras should error.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-extras"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested extras (`project1`, `project2`) are incompatible with the declared conflicting extra: {`project[project1]`, `project[project2]`}
+    "###);
+
+    Ok(())
+}
+
+/// Like `lock_conflicting_extra_basic`, but defines three conflicting
+/// extras instead of two.
+#[test]
+fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // First we test that resolving with two extras that have
+    // conflicting dependencies fails.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.2.0"]
+        project2 = ["sortedcontainers==2.3.0"]
+        project3 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[project3] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.2.0, we can conclude that project[project1] and project[project3] are incompatible.
+          And because your project requires project[project1] and project[project3], we can conclude that your projects's requirements are unsatisfiable.
+    "###);
+
+    // And now with the same extra configuration, we tell uv about
+    // the conflicting extras, which forces it to resolve each in
+    // their own fork.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project1" },
+              { extra = "project2" },
+              { extra = "project3" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.2.0"]
+        project2 = ["sortedcontainers==2.3.0"]
+        project3 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+        ]
+        conflicting-groups = [[
+            { package = "project", extra = "project1" },
+            { package = "project", extra = "project2" },
+            { package = "project", extra = "project3" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.optional-dependencies]
+        project1 = [
+            { name = "sortedcontainers", version = "2.2.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        project2 = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        project3 = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "sortedcontainers", marker = "extra == 'project1'", specifier = "==2.2.0" },
+            { name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.3.0" },
+            { name = "sortedcontainers", marker = "extra == 'project3'", specifier = "==2.4.0" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/83/c9/466c0f9b42a0563366bb7c39906d9c6673315f81516f55e3a23a99f52234/sortedcontainers-2.2.0.tar.gz", hash = "sha256:331f5b7acb6bdfaf0b0646f5f86c087e414c9ae9d85e2076ad2eacb17ec2f4ff", size = 30402 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/0c/75/4f79725a6ad966f1985d96c5aeda0b27d00c23afa14e8566efcdee1380ad/sortedcontainers-2.2.0-py2.py3-none-any.whl", hash = "sha256:f0694fbe8d090fab0fbabbfecad04756fbbb35dc3c0f89e0f6965396fe815d25", size = 29386 },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// This tests that extras don't conflict with one another when they are in
+/// distinct groups of extras.
+#[test]
+fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project1" },
+              { extra = "project2" },
+            ],
+            [
+              { extra = "project3" },
+              { extra = "project4" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = []
+        project2 = []
+        project3 = []
+        project4 = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+    // project1/project2 conflict!
+    uv_snapshot!(
+        context.filters(),
+        context.sync().arg("--frozen").arg("--extra=project1").arg("--extra=project2"),
+        @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested extras (`project1`, `project2`) are incompatible with the declared conflicting extra: {`project[project1]`, `project[project2]`}
+    "###);
+    // project3/project4 conflict!
+    uv_snapshot!(
+        context.filters(),
+        context.sync().arg("--frozen").arg("--extra=project3").arg("--extra=project4"),
+        @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The requested extras (`project3`, `project4`) are incompatible with the declared conflicting extra: {`project[project3]`, `project[project4]`}
+    "###);
+    // ... but project1/project3 does not.
+    uv_snapshot!(
+        context.filters(),
+        context.sync().arg("--frozen").arg("--extra=project1").arg("--extra=project3"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+    // ... and neither does project2/project3.
+    uv_snapshot!(
+        context.filters(),
+        context.sync().arg("--frozen").arg("--extra=project2").arg("--extra=project3"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+    // And similarly, with project 4.
+    uv_snapshot!(
+        context.filters(),
+        context.sync().arg("--frozen").arg("--extra=project1").arg("--extra=project4"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+    // ... and neither does project2/project3.
+    uv_snapshot!(
+        context.filters(),
+        context.sync().arg("--frozen").arg("--extra=project2").arg("--extra=project4"),
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// This tests that if the user has conflicting extras, but puts them in two
+/// distinct groups of extras, then resolution still fails. (Because the only
+/// way to resolve them in different forks is to define the extras as directly
+/// conflicting.)
+#[test]
+fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+        project3 = ["sortedcontainers==2.3.0"]
+        project4 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Fails, as expected.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[project4] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.3.0, we can conclude that project[project1] and project[project4] are incompatible.
+          And because your project requires project[project1] and project[project4], we can conclude that your projects's requirements are unsatisfiable.
+    "###);
+
+    // If we define project1/project2 as conflicting and project3/project4
+    // as conflicting, that still isn't enough! That's because project1
+    // conflicts with project4 and project2 conflicts with project3.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project1" },
+              { extra = "project2" },
+            ],
+            [
+              { extra = "project3" },
+              { extra = "project4" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+        project3 = ["sortedcontainers==2.3.0"]
+        project4 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[project2] depends on sortedcontainers==2.4.0, we can conclude that project[project2] and project[project3] are incompatible.
+          And because your project requires project[project2] and project[project3], we can conclude that your projects's requirements are unsatisfiable.
+    "###);
+
+    // One could try to declare all pairs of conflicting extras as
+    // conflicting, but this doesn't quite work either. For example,
+    // the first group of conflicting extra, project1/project2,
+    // specifically allows project4 to be co-mingled with project1 (and
+    // similarly, project3 with project2), which are conflicting.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project1" },
+              { extra = "project2" },
+            ],
+            [
+              { extra = "project3" },
+              { extra = "project4" },
+            ],
+            [
+              { extra = "project1" },
+              { extra = "project4" },
+            ],
+            [
+              { extra = "project2" },
+              { extra = "project3" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+        project3 = ["sortedcontainers==2.3.0"]
+        project4 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    // We can also fix this by just putting them all in one big
+    // group, even though project1/project3 don't conflict and
+    // project2/project4 don't conflict.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project1" },
+              { extra = "project2" },
+              { extra = "project3" },
+              { extra = "project4" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+        project3 = ["sortedcontainers==2.3.0"]
+        project4 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// This tests that we handle two independent sets of conflicting
+/// extras correctly.
+#[test]
+fn lock_conflicting_extra_multiple_independent() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // If we don't declare any conflicting extras, then resolution
+    // will of course fail.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+        project3 = ["anyio==4.1.0"]
+        project4 = ["anyio==4.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[project4] depends on anyio==4.2.0 and project[project3] depends on anyio==4.1.0, we can conclude that project[project3] and project[project4] are incompatible.
+          And because your project requires project[project3] and project[project4], we can conclude that your projects's requirements are unsatisfiable.
+    "###);
+
+    // OK, responding to the error, we declare our anyio extras
+    // as conflicting. But now we should see sortedcontainers as
+    // conflicting.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project3" },
+              { extra = "project4" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+        project3 = ["anyio==4.1.0"]
+        project4 = ["anyio==4.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[project2] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.3.0, we can conclude that project[project1] and project[project2] are incompatible.
+          And because your project requires project[project1] and project[project2], we can conclude that your projects's requirements are unsatisfiable.
+    "###);
+
+    // Once we declare ALL our conflicting extras, resolution succeeds.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project1" },
+              { extra = "project2" },
+            ],
+            [
+              { extra = "project3" },
+              { extra = "project4" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+        project3 = ["anyio==4.1.0"]
+        project4 = ["anyio==4.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+        ]
+        conflicting-groups = [[
+            { package = "project", extra = "project1" },
+            { package = "project", extra = "project2" },
+        ], [
+            { package = "project", extra = "project3" },
+            { package = "project", extra = "project4" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "anyio"
+        version = "4.1.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/6e/57/075e07fb01ae2b740289ec9daec670f60c06f62d04b23a68077fd5d73fab/anyio-4.1.0.tar.gz", hash = "sha256:5a0bec7085176715be77df87fc66d6c9d70626bd752fcc85f57cdbee5b3760da", size = 155773 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/85/4f/d010eca6914703d8e6be222165d02c3e708ed909cdb2b7af3743667f302e/anyio-4.1.0-py3-none-any.whl", hash = "sha256:56a415fbc462291813a94528a779597226619c8e78af7de0507333f700011e5f", size = 83924 },
+        ]
+
+        [[package]]
+        name = "anyio"
+        version = "4.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/bf/cd/d6d9bb1dadf73e7af02d18225cbd2c93f8552e13130484f1c8dcfece292b/anyio-4.2.0-py3-none-any.whl", hash = "sha256:745843b39e829e108e518c489b31dc757de7d2131d53fac32bd8df268227bfee", size = 85481 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.optional-dependencies]
+        project1 = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        project2 = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        project3 = [
+            { name = "anyio", version = "4.1.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        project4 = [
+            { name = "anyio", version = "4.2.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio", marker = "extra == 'project3'", specifier = "==4.1.0" },
+            { name = "anyio", marker = "extra == 'project4'", specifier = "==4.2.0" },
+            { name = "sortedcontainers", marker = "extra == 'project1'", specifier = "==2.3.0" },
+            { name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.4.0" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+#[test]
+fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicting-groups = [
+            [
+              { extra = "project1" },
+              { extra = "project2" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+        ]
+        conflicting-groups = [[
+            { package = "project", extra = "project1" },
+            { package = "project", extra = "project2" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+
+        [package.optional-dependencies]
+        project1 = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        project2 = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "sortedcontainers", marker = "extra == 'project1'", specifier = "==2.3.0" },
+            { name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.4.0" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked` to check it's okay.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    // Now get rid of the conflicting group config, and check that `--locked`
+    // fails.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        project1 = ["sortedcontainers==2.3.0"]
+        project2 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+    // Re-run with `--locked`, which should now fail because of
+    // the conflicting group config removal.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[project2] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.3.0, we can conclude that project[project1] and project[project2] are incompatible.
+          And because your project requires project[project1] and project[project2], we can conclude that your projects's requirements are unsatisfiable.
+    "###);
+
+    Ok(())
+}
+
+/// This tests that we report an error when a requirement unconditionally
+/// enables a conflicting extra.
+#[test]
+fn lock_conflicting_extra_unconditional() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = [
+          "proxy1[project1,project2]"
+        ]
+
+        [tool.uv.workspace]
+        members = ["proxy1"]
+
+        [tool.uv.sources]
+        proxy1 = { workspace = true }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let proxy1_pyproject_toml = context.temp_dir.child("proxy1").child("pyproject.toml");
+    proxy1_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "proxy1"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = []
+
+        [project.optional-dependencies]
+        project1 = ["anyio==4.1.0"]
+        project2 = ["anyio==4.2.0"]
+
+        [tool.uv]
+        conflicting-groups = [
+          [
+            { extra = "project1" },
+            { extra = "project2" },
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extra `project1` unconditionally enabled in `proxy1[project1,project2] @ file://[TEMP_DIR]/proxy1`
+    "###);
+
+    // An error should occur even when only one conflicting extra is enabled.
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = [
+          "proxy1[project1]"
+        ]
+
+        [tool.uv.workspace]
+        members = ["proxy1"]
+
+        [tool.uv.sources]
+        proxy1 = { workspace = true }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extra `project1` unconditionally enabled in `proxy1[project1] @ file://[TEMP_DIR]/proxy1`
+    "###);
+
+    // And same thing for the other extra.
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = [
+          "proxy1[project2]"
+        ]
+
+        [tool.uv.workspace]
+        members = ["proxy1"]
+
+        [tool.uv.sources]
+        proxy1 = { workspace = true }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Found conflicting extra `project2` unconditionally enabled in `proxy1[project2] @ file://[TEMP_DIR]/proxy1`
+    "###);
+
+    Ok(())
+}
+
 /// Show updated dependencies on `lock --upgrade`.
 #[test]
 fn lock_upgrade_log() -> Result<()> {

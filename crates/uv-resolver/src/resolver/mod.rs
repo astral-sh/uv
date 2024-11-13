@@ -1,7 +1,5 @@
 //! Given a set of requirements, find a set of compatible packages.
 
-#![allow(warnings)]
-
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -15,13 +13,14 @@ use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use pubgrub::{Incompatibility, Range, Ranges, State};
+use pubgrub::{Incompatibility, Range, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, instrument, trace, warn, Level};
 
+use environment::ForkingPossibility;
 pub use environment::ResolverEnvironment;
 pub(crate) use fork_map::{ForkMap, ForkSet};
 pub(crate) use urls::Urls;
@@ -38,7 +37,10 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, MIN_VERSION};
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{Requirement, ResolutionMetadata, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ConflictingGroup, ConflictingGroupList, ConflictingGroupRef, Requirement, ResolutionMetadata,
+    VerbatimParsedUrl,
+};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -108,6 +110,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     hasher: HashStrategy,
     env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    conflicting_groups: ConflictingGroupList,
     workspace_members: BTreeSet<PackageName>,
     selector: CandidateSelector,
     index: InMemoryIndex,
@@ -148,6 +151,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         env: ResolverEnvironment,
+        conflicting_groups: ConflictingGroupList,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
@@ -174,6 +178,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             hasher,
             env,
             python_requirement,
+            conflicting_groups,
             index,
             build_context.git(),
             build_context.capabilities(),
@@ -194,6 +199,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         hasher: &HashStrategy,
         env: ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        conflicting_groups: ConflictingGroupList,
         index: &InMemoryIndex,
         git: &GitResolver,
         capabilities: &IndexCapabilities,
@@ -221,6 +227,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             locations: locations.clone(),
             env,
             python_requirement: python_requirement.clone(),
+            conflicting_groups,
             installed_packages,
             unavailable_packages: DashMap::default(),
             incomplete_packages: DashMap::default(),
@@ -601,6 +608,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.index,
             &self.git,
             &self.python_requirement,
+            &self.conflicting_groups,
             self.selector.resolution_strategy(),
             self.options,
         )
@@ -683,15 +691,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         forks
             .into_iter()
             .enumerate()
-            .filter_map(move |(i, fork)| {
+            .map(move |(i, fork)| {
                 let is_last = i == forks_len - 1;
                 let forked_state = cur_state.take().unwrap();
                 if !is_last {
                     cur_state = Some(forked_state.clone());
                 }
 
-                let markers = fork.markers.clone();
-                Some((fork, forked_state.with_env(&markers)?))
+                let env = fork.env.clone();
+                (fork, forked_state.with_env(env))
             })
             .map(move |(fork, mut forked_state)| {
                 forked_state.add_package_version_dependencies(
@@ -720,17 +728,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     self.visit_package(package, url, index, request_sink)?;
                 }
                 Ok(forked_state)
-            })
-            // Drop any forked states whose markers are known to never
-            // match any marker environments.
-            .filter(|result| {
-                if let Ok(ref forked_state) = result {
-                    let markers = forked_state.env.try_markers().expect("is a fork");
-                    if markers.is_false() {
-                        return false;
-                    }
-                }
-                true
             })
     }
 
@@ -1185,7 +1182,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Dependencies::Unavailable(err) => ForkedDependencies::Unavailable(err),
             })
         } else {
-            Ok(result?.fork(python_requirement))
+            Ok(result?.fork(env, python_requirement, &self.conflicting_groups))
         }
     }
 
@@ -1336,6 +1333,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
+                if let Some(err) =
+                    find_conflicting_extra(&self.conflicting_groups, &metadata.requires_dist)
+                {
+                    return Err(err);
+                }
+                for dependencies in metadata.dependency_groups.values() {
+                    if let Some(err) =
+                        find_conflicting_extra(&self.conflicting_groups, dependencies)
+                    {
+                        return Err(err);
+                    }
+                }
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dependency_groups,
@@ -1548,7 +1557,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
-                if !env.included(&requirement.marker) {
+                if !env.included_by_marker(&requirement.marker) {
                     trace!("skipping {requirement} because of {env}");
                     return None;
                 }
@@ -1563,6 +1572,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if !requirement.evaluate_markers(
                             env.marker_environment(),
                             std::slice::from_ref(source_extra),
+                        ) {
+                            return None;
+                        }
+                        if !env.included_by_group(
+                            ConflictingGroupRef::from((&requirement.name, source_extra)),
                         ) {
                             return None;
                         }
@@ -1640,7 +1654,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                             // If we're in a fork in universal mode, ignore any dependency that isn't part of
                             // this fork (but will be part of another fork).
-                            if !env.included(&constraint.marker) {
+                            if !env.included_by_marker(&constraint.marker) {
                                 trace!("skipping {constraint} because of {env}");
                                 return None;
                             }
@@ -1651,6 +1665,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     if !constraint.evaluate_markers(
                                         env.marker_environment(),
                                         std::slice::from_ref(source_extra),
+                                    ) {
+                                        return None;
+                                    }
+                                    if !env.included_by_group(
+                                        ConflictingGroupRef::from((&requirement.name, source_extra)),
                                     ) {
                                         return None;
                                     }
@@ -2071,7 +2090,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
 /// State that is used during unit propagation in the resolver, one instance per fork.
 #[derive(Clone)]
-struct ForkState {
+pub(crate) struct ForkState {
     /// The internal state used by the resolver.
     ///
     /// Note that not all parts of this state are strictly internal. For
@@ -2283,16 +2302,14 @@ impl ForkState {
     ///
     /// If the fork should be dropped (e.g., because its markers can never be true for its
     /// Python requirement), then this returns `None`.
-    fn with_env(mut self, markers: &MarkerTree) -> Option<Self> {
-        self.env = self
-            .env
-            .narrow_environment(&self.python_requirement, markers)?;
+    fn with_env(mut self, env: ResolverEnvironment) -> Self {
+        self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
         if let Some(req) = self.env.narrow_python_requirement(&self.python_requirement) {
             debug!("Narrowed `requires-python` bound to: {}", req.target());
             self.python_requirement = req;
         }
-        Some(self)
+        self
     }
 
     fn into_resolution(self) -> Resolution {
@@ -2664,7 +2681,12 @@ impl Dependencies {
     /// A fork *only* occurs when there are multiple dependencies with the same
     /// name *and* those dependency specifications have corresponding marker
     /// expressions that are completely disjoint with one another.
-    fn fork(self, python_requirement: &PythonRequirement) -> ForkedDependencies {
+    fn fork(
+        self,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+        conflicting_groups: &ConflictingGroupList,
+    ) -> ForkedDependencies {
         let deps = match self {
             Dependencies::Available(deps) => deps,
             Dependencies::Unforkable(deps) => return ForkedDependencies::Unforked(deps),
@@ -2682,7 +2704,7 @@ impl Dependencies {
         let Forks {
             mut forks,
             diverging_packages,
-        } = Forks::new(name_to_deps, python_requirement);
+        } = Forks::new(name_to_deps, env, python_requirement, conflicting_groups);
         if forks.is_empty() {
             ForkedDependencies::Unforked(vec![])
         } else if forks.len() == 1 {
@@ -2742,14 +2764,13 @@ struct Forks {
 impl Forks {
     fn new(
         name_to_deps: BTreeMap<PackageName, Vec<PubGrubDependency>>,
+        env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        conflicting_groups: &ConflictingGroupList,
     ) -> Forks {
         let python_marker = python_requirement.to_marker_tree();
 
-        let mut forks = vec![Fork {
-            dependencies: vec![],
-            markers: MarkerTree::TRUE,
-        }];
+        let mut forks = vec![Fork::new(env.clone())];
         let mut diverging_packages = BTreeSet::new();
         for (name, mut deps) in name_to_deps {
             assert!(!deps.is_empty(), "every name has at least one dependency");
@@ -2780,63 +2801,117 @@ impl Forks {
                     let dep = deps.pop().unwrap();
                     let markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
                     for fork in &mut forks {
-                        if !fork.markers.is_disjoint(&markers) {
-                            fork.dependencies.push(dep.clone());
+                        if fork.env.included_by_marker(&markers) {
+                            fork.add_dependency(dep.clone());
                         }
                     }
                     continue;
                 }
             }
             for dep in deps {
-                let mut markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
-                if markers.is_false() {
-                    // If the markers can never be satisfied, then we
-                    // can drop this dependency unceremoniously.
-                    continue;
-                }
-                if markers.is_true() {
-                    // Or, if the markers are always true, then we just
-                    // add the dependency to every fork unconditionally.
-                    for fork in &mut forks {
-                        if !fork.markers.is_disjoint(&markers) {
-                            fork.dependencies.push(dep.clone());
-                        }
+                let mut forker = match ForkingPossibility::new(env, &dep) {
+                    ForkingPossibility::Possible(forker) => forker,
+                    ForkingPossibility::DependencyAlwaysExcluded => {
+                        // If the markers can never be satisfied by the parent
+                        // fork, then we can drop this dependency unceremoniously.
+                        continue;
                     }
-                    continue;
-                }
+                    ForkingPossibility::NoForkingPossible => {
+                        // Or, if the markers are always true, then we just
+                        // add the dependency to every fork unconditionally.
+                        for fork in &mut forks {
+                            fork.add_dependency(dep.clone());
+                        }
+                        continue;
+                    }
+                };
                 // Otherwise, we *should* need to add a new fork...
                 diverging_packages.insert(name.clone());
 
                 let mut new = vec![];
-                for mut fork in std::mem::take(&mut forks) {
-                    if fork.markers.is_disjoint(&markers) {
+                for fork in std::mem::take(&mut forks) {
+                    let Some((remaining_forker, envs)) = forker.fork(&fork.env, conflicting_groups)
+                    else {
                         new.push(fork);
                         continue;
-                    }
+                    };
+                    forker = remaining_forker;
 
-                    let not_markers = markers.negate();
-                    let mut new_markers = markers.clone();
-                    new_markers.and(fork.markers.negate());
-                    if !fork.markers.is_disjoint(&not_markers) {
+                    for fork_env in envs {
                         let mut new_fork = fork.clone();
-                        new_fork.intersect(not_markers);
+                        new_fork.set_env(fork_env);
+                        // We only add the dependency to this fork if it
+                        // satisfies the fork's markers. Some forks are
+                        // specifically created to exclude this dependency,
+                        // so this isn't always true!
+                        if forker.included(&new_fork.env) {
+                            new_fork.add_dependency(dep.clone());
+                        }
                         // Filter out any forks we created that are disjoint with our
                         // Python requirement.
-                        if !new_fork.markers.is_disjoint(&python_marker) {
+                        if new_fork.env.included_by_marker(&python_marker) {
                             new.push(new_fork);
                         }
                     }
-                    fork.dependencies.push(dep.clone());
-                    fork.intersect(markers);
-                    // Filter out any forks we created that are disjoint with our
-                    // Python requirement.
-                    if !fork.markers.is_disjoint(&python_marker) {
-                        new.push(fork);
-                    }
-                    markers = new_markers;
                 }
                 forks = new;
             }
+        }
+        // When there is a conflicting group configuration, we need
+        // to potentially add more forks. Each fork added contains an
+        // exclusion list of conflicting groups where dependencies with
+        // the corresponding package and extra name are forcefully
+        // excluded from that group.
+        //
+        // We specifically iterate on conflicting groups and
+        // potentially re-generate all forks for each one. We do it
+        // this way in case there are multiple sets of conflicting
+        // groups that impact the forks here.
+        //
+        // For example, if we have conflicting groups {x1, x2} and {x3,
+        // x4}, we need to make sure the forks generated from one set
+        // also account for the other set.
+        for groups in conflicting_groups.iter() {
+            let mut new = vec![];
+            for fork in std::mem::take(&mut forks) {
+                let mut has_conflicting_dependency = false;
+                for group in groups.iter() {
+                    if fork.contains_conflicting_group(group.as_ref()) {
+                        has_conflicting_dependency = true;
+                        break;
+                    }
+                }
+                if !has_conflicting_dependency {
+                    new.push(fork);
+                    continue;
+                }
+
+                // Create a fork that excludes ALL extras.
+                let mut fork_none = fork.clone();
+                for group in groups.iter() {
+                    fork_none = fork_none.exclude([group.clone()]);
+                }
+                new.push(fork_none);
+
+                // Now create a fork for each conflicting group, where
+                // that fork excludes every *other* conflicting group.
+                //
+                // So if we have conflicting extras foo, bar and baz,
+                // then this creates three forks: one that excludes
+                // {foo, bar}, one that excludes {foo, baz} and one
+                // that excludes {bar, baz}.
+                for (i, _) in groups.iter().enumerate() {
+                    let fork_allows_group = fork.clone().exclude(
+                        groups
+                            .iter()
+                            .enumerate()
+                            .filter(|&(j, _)| i != j)
+                            .map(|(_, group)| group.clone()),
+                    );
+                    new.push(fork_allows_group);
+                }
+            }
+            forks = new;
         }
         Forks {
             forks,
@@ -2854,7 +2929,7 @@ impl Forks {
 /// have the same name and because the marker expressions are disjoint,
 /// a fork occurs. One fork will contain `a<2` but not `a>=2`, while
 /// the other fork will contain `a>=2` but not `a<2`.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 struct Fork {
     /// The list of dependencies for this fork, guaranteed to be conflict
     /// free. (i.e., There are no two packages with the same name with
@@ -2865,25 +2940,107 @@ struct Fork {
     /// it should be impossible for a package with a marker expression that is
     /// disjoint from the marker expression on this fork to be added.
     dependencies: Vec<PubGrubDependency>,
-    /// The markers that provoked this fork.
+    /// The conflicting groups in this fork.
     ///
-    /// So in the example above, the `a<2` fork would have
-    /// `sys_platform == 'foo'`, while the `a>=2` fork would have
-    /// `sys_platform == 'bar'`.
+    /// This exists to make some access patterns more efficient. Namely,
+    /// it makes it easy to check whether there's a dependency with a
+    /// particular conflicting group in this fork.
+    conflicting_groups: FxHashMap<PackageName, FxHashSet<ExtraName>>,
+    /// The resolver environment for this fork.
     ///
-    /// (This doesn't include any marker expressions from a parent fork.)
-    markers: MarkerTree,
+    /// Principally, this corresponds to the markers in this for. So in the
+    /// example above, the `a<2` fork would have `sys_platform == 'foo'`, while
+    /// the `a>=2` fork would have `sys_platform == 'bar'`.
+    ///
+    /// If this fork was generated from another fork, then this *includes*
+    /// the criteria from its parent. i.e., Its marker expression represents
+    /// the intersection of the marker expression from its parent and any
+    /// additional marker expression generated by addition forking based on
+    /// conflicting dependency specifications.
+    env: ResolverEnvironment,
 }
 
 impl Fork {
-    fn intersect(&mut self, markers: MarkerTree) {
-        self.markers.and(markers);
+    /// Create a new fork with no dependencies with the given resolver
+    /// environment.
+    fn new(env: ResolverEnvironment) -> Fork {
+        Fork {
+            dependencies: vec![],
+            conflicting_groups: FxHashMap::default(),
+            env,
+        }
+    }
+
+    /// Add a dependency to this fork.
+    fn add_dependency(&mut self, dep: PubGrubDependency) {
+        if let Some(conflicting_group) = dep.package.conflicting_group() {
+            self.conflicting_groups
+                .entry(conflicting_group.package().clone())
+                .or_default()
+                .insert(conflicting_group.extra().clone());
+        }
+        self.dependencies.push(dep);
+    }
+
+    /// Sets the resolver environment to the one given.
+    ///
+    /// Any dependency in this fork that does not satisfy the given environment
+    /// is removed.
+    fn set_env(&mut self, env: ResolverEnvironment) {
+        self.env = env;
         self.dependencies.retain(|dep| {
             let Some(markers) = dep.package.marker() else {
                 return true;
             };
-            !self.markers.is_disjoint(markers)
+            if self.env.included_by_marker(markers) {
+                return true;
+            }
+            if let Some(conflicting_group) = dep.package.conflicting_group() {
+                if let Some(set) = self.conflicting_groups.get_mut(conflicting_group.package()) {
+                    set.remove(conflicting_group.extra());
+                }
+            }
+            false
         });
+    }
+
+    /// Returns true if any of the dependencies in this fork contain a
+    /// dependency with the given package and extra values.
+    fn contains_conflicting_group(&self, group: ConflictingGroupRef<'_>) -> bool {
+        self.conflicting_groups
+            .get(group.package())
+            .map(|set| set.contains(group.extra()))
+            .unwrap_or(false)
+    }
+
+    /// Exclude the given groups from this fork.
+    ///
+    /// This removes all dependencies matching the given conflicting groups.
+    fn exclude(mut self, groups: impl IntoIterator<Item = ConflictingGroup>) -> Fork {
+        self.env = self.env.exclude_by_group(groups);
+        self.dependencies.retain(|dep| {
+            let Some(conflicting_group) = dep.package.conflicting_group() else {
+                return true;
+            };
+            if self.env.included_by_group(conflicting_group) {
+                return true;
+            }
+            if let Some(conflicting_group) = dep.package.conflicting_group() {
+                if let Some(set) = self.conflicting_groups.get_mut(conflicting_group.package()) {
+                    set.remove(conflicting_group.extra());
+                }
+            }
+            false
+        });
+        self
+    }
+}
+
+impl Eq for Fork {}
+
+impl PartialEq for Fork {
+    fn eq(&self, other: &Fork) -> bool {
+        self.dependencies == other.dependencies && self.env == other.env
     }
 }
 
@@ -2892,8 +3049,8 @@ impl Ord for Fork {
         // A higher `requires-python` requirement indicates a _lower-priority_ fork. We'd prefer
         // to solve `<3.7` before solving `>=3.7`, since the resolution produced by the former might
         // work for the latter, but the inverse is unlikely to be true.
-        let self_bound = marker::requires_python(&self.markers).unwrap_or_default();
-        let other_bound = marker::requires_python(&other.markers).unwrap_or_default();
+        let self_bound = self.env.requires_python().unwrap_or_default();
+        let other_bound = other.env.requires_python().unwrap_or_default();
 
         other_bound.lower().cmp(self_bound.lower()).then_with(|| {
             // If there's no difference, prioritize forks with upper bounds. We'd prefer to solve
@@ -2929,4 +3086,37 @@ impl PartialOrd for Fork {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
+}
+
+/// Returns an error if a conflicting extra is found in the given requirements.
+///
+/// Specifically, if there is any conflicting extra (just one is enough) that
+/// is unconditionally enabled as part of a dependency specification, then this
+/// returns an error.
+///
+/// The reason why we're so conservative here is because it avoids us needing
+/// the look at the entire dependency tree at once.
+///
+/// For example, consider packages `root`, `a`, `b` and `c`, where `c` has
+/// declared conflicting extras of `x1` and `x2`.
+///
+/// Now imagine `root` depends on `a` and `b`, `a` depends on `c[x1]` and `b`
+/// depends on `c[x2]`. That's a conflict, but not easily detectable unless
+/// you reject either `c[x1]` or `c[x2]` on the grounds that `x1` and `x2` are
+/// conflicting and thus cannot be enabled unconditionally.
+fn find_conflicting_extra(
+    conflicting: &ConflictingGroupList,
+    reqs: &[Requirement],
+) -> Option<ResolveError> {
+    for req in reqs {
+        for extra in &req.extras {
+            if conflicting.contains(&req.name, extra) {
+                return Some(ResolveError::ConflictingExtra {
+                    requirement: Box::new(req.clone()),
+                    extra: extra.clone(),
+                });
+            }
+        }
+    }
+    None
 }

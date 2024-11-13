@@ -12,7 +12,7 @@ use tracing::trace;
 use uv_distribution_types::{
     BuiltDist, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist, SourceDist,
 };
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{LocalVersionSlice, Version};
 use uv_static::EnvVars;
 
@@ -40,6 +40,13 @@ pub enum ResolveError {
 
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
+
+    #[error("Found conflicting extra `{extra}` unconditionally enabled in `{requirement}`")]
+    ConflictingExtra {
+        // Boxed because `Requirement` is large.
+        requirement: Box<uv_pypi_types::Requirement>,
+        extra: ExtraName,
+    },
 
     #[error("Overrides contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
     ConflictingOverrideUrls(PackageName, String, String),

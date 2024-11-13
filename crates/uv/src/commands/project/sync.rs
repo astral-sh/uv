@@ -15,7 +15,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
     LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
@@ -279,6 +279,23 @@ pub(super) async fn do_sync(
             venv.interpreter().python_version().clone(),
             target.lock().requires_python().clone(),
         ));
+    }
+
+    // Validate that we aren't trying to install extras that are
+    // declared as conflicting.
+    let conflicting_groups = target.lock().conflicting_groups();
+    for groups in conflicting_groups.iter() {
+        let conflicting = groups
+            .iter()
+            .filter(|group| extras.contains(group.extra()))
+            .map(|group| group.extra().clone())
+            .collect::<Vec<ExtraName>>();
+        if conflicting.len() >= 2 {
+            return Err(ProjectError::ExtraIncompatibility(
+                groups.clone(),
+                conflicting,
+            ));
+        }
     }
 
     // Determine the markers to use for resolution.

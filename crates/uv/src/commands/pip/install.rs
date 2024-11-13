@@ -20,7 +20,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_pep508::PackageName;
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{ConflictingGroupList, Requirement};
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
 };
@@ -400,6 +400,7 @@ pub(crate) async fn pip_install(
         Some(&tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
+        ConflictingGroupList::empty(),
         &client,
         &flat_index,
         &state.index,

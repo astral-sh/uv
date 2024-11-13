@@ -26,7 +26,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{ConflictingGroupList, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
@@ -186,6 +186,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
+            // Conflicting groups only make sense when doing
+            // universal resolution.
+            ConflictingGroupList::empty(),
             Some(tags),
             self.flat_index,
             self.index,

@@ -19,10 +19,10 @@ use uv_distribution_types::{
 use uv_fs::{Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{ConflictingGroupList, ConflictingGroups, Requirement};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
@@ -80,6 +80,17 @@ pub(crate) enum ProjectError {
 
     #[error("The current Python platform is not compatible with the lockfile's supported environments: {0}")]
     LockedPlatformIncompatibility(String),
+
+    #[error(
+        "The requested extras ({}) are incompatible with the declared conflicting extra: {{{}}}",
+        _1.iter().map(|extra| format!("`{extra}`")).collect::<Vec<String>>().join(", "),
+        _0
+            .iter()
+            .map(|group| format!("`{}[{}]`", group.package(), group.extra()))
+            .collect::<Vec<String>>()
+            .join(", "),
+    )]
+    ExtraIncompatibility(ConflictingGroups, Vec<ExtraName>),
 
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
     RequestedPythonProjectIncompatibility(Version, RequiresPython),
@@ -1097,6 +1108,7 @@ pub(crate) async fn resolve_environment<'a>(
         Some(tags),
         ResolverEnvironment::specific(marker_env),
         python_requirement,
+        ConflictingGroupList::empty(),
         &client,
         &flat_index,
         &state.index,
@@ -1439,6 +1451,7 @@ pub(crate) async fn update_environment(
         Some(tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
+        ConflictingGroupList::empty(),
         &client,
         &flat_index,
         &state.index,

@@ -40,7 +40,8 @@ use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{
-    redact_credentials, HashDigest, ParsedArchiveUrl, ParsedGitUrl, Requirement, RequirementSource,
+    redact_credentials, ConflictingGroupList, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
+    Requirement, RequirementSource,
 };
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -80,6 +81,8 @@ pub struct Lock {
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<MarkerTree>,
+    /// The conflicting groups/extras specified by the user.
+    conflicting_groups: ConflictingGroupList,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
     /// The range of supported Python versions.
@@ -236,6 +239,7 @@ impl Lock {
             requires_python,
             options,
             ResolverManifest::default(),
+            ConflictingGroupList::empty(),
             vec![],
             graph.fork_markers.clone(),
         )?;
@@ -311,6 +315,7 @@ impl Lock {
         requires_python: RequiresPython,
         options: ResolverOptions,
         manifest: ResolverManifest,
+        conflicting_groups: ConflictingGroupList,
         supported_environments: Vec<MarkerTree>,
         fork_markers: Vec<MarkerTree>,
     ) -> Result<Self, LockError> {
@@ -460,6 +465,7 @@ impl Lock {
         let lock = Self {
             version,
             fork_markers,
+            conflicting_groups,
             supported_environments,
             requires_python,
             options,
@@ -474,6 +480,13 @@ impl Lock {
     #[must_use]
     pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
         self.manifest = manifest;
+        self
+    }
+
+    /// Record the conflicting groups that were used to generate this lock.
+    #[must_use]
+    pub fn with_conflicting_groups(mut self, conflicting_groups: ConflictingGroupList) -> Self {
+        self.conflicting_groups = conflicting_groups;
         self
     }
 
@@ -534,6 +547,11 @@ impl Lock {
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
         self.options.exclude_newer
+    }
+
+    /// Returns the conflicting groups that were used to generate this lock.
+    pub fn conflicting_groups(&self) -> &ConflictingGroupList {
+        &self.conflicting_groups
     }
 
     /// Returns the supported environments that were used to generate this lock.
@@ -612,6 +630,19 @@ impl Lock {
                     .filter_map(|marker| marker.try_to_string()),
             );
             doc.insert("supported-markers", value(supported_environments));
+        }
+
+        if !self.conflicting_groups.is_empty() {
+            let mut list = Array::new();
+            for groups in self.conflicting_groups.iter() {
+                list.push(each_element_on_its_line_array(groups.iter().map(|group| {
+                    let mut table = InlineTable::new();
+                    table.insert("package", Value::from(group.package().to_string()));
+                    table.insert("extra", Value::from(group.extra().to_string()));
+                    table
+                })));
+            }
+            doc.insert("conflicting-groups", value(list));
         }
 
         // Write the settings that were used to generate the resolution.
@@ -1352,6 +1383,8 @@ struct LockWire {
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
+    #[serde(rename = "conflicting-groups", default)]
+    conflicting_groups: Option<ConflictingGroupList>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
     options: ResolverOptions,
@@ -1403,6 +1436,8 @@ impl TryFrom<LockWire> for Lock {
             wire.requires_python,
             wire.options,
             wire.manifest,
+            wire.conflicting_groups
+                .unwrap_or_else(ConflictingGroupList::empty),
             supported_environments,
             fork_markers,
         )?;
