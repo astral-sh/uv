@@ -43,3 +43,19 @@ fn double_extras() {
         ])
     );
 }
+
+#[test]
+fn single_specifiers() {
+    assert_eq!(
+        CommaSeparatedRequirements::from_str("requests>=2.1,<3").unwrap(),
+        CommaSeparatedRequirements(vec!["requests>=2.1,<3".to_string(),])
+    );
+}
+
+#[test]
+fn double_specifiers() {
+    assert_eq!(
+        CommaSeparatedRequirements::from_str("requests>=2.1,<3, flask").unwrap(),
+        CommaSeparatedRequirements(vec!["requests>=2.1,<3".to_string(), "flask".to_string()])
+    );
+}
