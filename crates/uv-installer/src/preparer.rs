@@ -9,28 +9,12 @@ use uv_cache::Cache;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, CachedDist, Dist, Hashed, Identifier, Name, RemoteSource,
-    SourceDist,
+    BuildableSource, BuiltDist, CachedDist, DerivationChain, Dist, Hashed, Identifier, Name,
+    RemoteSource, SourceDist,
 };
 use uv_pep508::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy, InFlight};
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("Building source distributions is disabled, but attempted to build `{0}`")]
-    NoBuild(PackageName),
-    #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
-    NoBinary(PackageName),
-    #[error("Failed to download `{0}`")]
-    Download(Box<BuiltDist>, #[source] uv_distribution::Error),
-    #[error("Failed to download and build `{0}`")]
-    DownloadAndBuild(Box<SourceDist>, #[source] uv_distribution::Error),
-    #[error("Failed to build `{0}`")]
-    Build(Box<SourceDist>, #[source] uv_distribution::Error),
-    #[error("Unzip failed in another thread: {0}")]
-    Thread(String),
-}
 
 /// Prepare distributions for installation.
 ///
@@ -145,16 +129,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed_local()
-                .map_err(|err| match dist.clone() {
-                    Dist::Built(dist) => Error::Download(Box::new(dist), err),
-                    Dist::Source(dist) => {
-                        if dist.is_local() {
-                            Error::Build(Box::new(dist), err)
-                        } else {
-                            Error::DownloadAndBuild(Box::new(dist), err)
-                        }
-                    }
-                })
+                .map_err(|err| Error::from_dist(dist.clone(), err))
                 .await
                 .and_then(|wheel: LocalWheel| {
                     if wheel.satisfies(policy) {
@@ -165,16 +140,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                             policy.digests(),
                             wheel.hashes(),
                         );
-                        Err(match dist {
-                            Dist::Built(dist) => Error::Download(Box::new(dist), err),
-                            Dist::Source(dist) => {
-                                if dist.is_local() {
-                                    Error::Build(Box::new(dist), err)
-                                } else {
-                                    Error::DownloadAndBuild(Box::new(dist), err)
-                                }
-                            }
-                        })
+                        Err(Error::from_dist(dist, err))
                     }
                 })
                 .map(CachedDist::from);
@@ -198,6 +164,50 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
             match result.as_ref() {
                 Ok(cached) => Ok(cached.clone()),
                 Err(err) => Err(Error::Thread(err.to_string())),
+            }
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Building source distributions is disabled, but attempted to build `{0}`")]
+    NoBuild(PackageName),
+    #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
+    NoBinary(PackageName),
+    #[error("Failed to download `{0}`")]
+    Download(
+        Box<BuiltDist>,
+        DerivationChain,
+        #[source] uv_distribution::Error,
+    ),
+    #[error("Failed to download and build `{0}`")]
+    DownloadAndBuild(
+        Box<SourceDist>,
+        DerivationChain,
+        #[source] uv_distribution::Error,
+    ),
+    #[error("Failed to build `{0}`")]
+    Build(
+        Box<SourceDist>,
+        DerivationChain,
+        #[source] uv_distribution::Error,
+    ),
+    #[error("Unzip failed in another thread: {0}")]
+    Thread(String),
+}
+
+impl Error {
+    /// Create an [`Error`] from a distribution error.
+    fn from_dist(dist: Dist, cause: uv_distribution::Error) -> Self {
+        match dist {
+            Dist::Built(dist) => Self::Download(Box::new(dist), DerivationChain::default(), cause),
+            Dist::Source(dist) => {
+                if dist.is_local() {
+                    Self::Build(Box::new(dist), DerivationChain::default(), cause)
+                } else {
+                    Self::DownloadAndBuild(Box::new(dist), DerivationChain::default(), cause)
+                }
             }
         }
     }

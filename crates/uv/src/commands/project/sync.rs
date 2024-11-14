@@ -13,7 +13,9 @@ use uv_configuration::{
     ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
+use uv_distribution_types::{
+    DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
+};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
@@ -467,9 +469,7 @@ pub(super) async fn do_sync(
 }
 
 /// Filter out any virtual workspace members.
-fn apply_no_virtual_project(
-    resolution: uv_distribution_types::Resolution,
-) -> uv_distribution_types::Resolution {
+fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
     resolution.filter(|dist| {
         let ResolvedDist::Installable { dist, .. } = dist else {
             return true;
@@ -488,10 +488,7 @@ fn apply_no_virtual_project(
 }
 
 /// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(
-    resolution: uv_distribution_types::Resolution,
-    editable: EditableMode,
-) -> uv_distribution_types::Resolution {
+fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolution {
     match editable {
         // No modifications are necessary for editable mode; retain any editable distributions.
         EditableMode::Editable => resolution,

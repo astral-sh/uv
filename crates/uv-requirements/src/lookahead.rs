@@ -174,16 +174,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .database
                     .get_or_build_wheel_metadata(&dist, self.hasher.get(&dist))
                     .await
-                    .map_err(|err| match dist {
-                        Dist::Built(built) => Error::Download(Box::new(built), err),
-                        Dist::Source(source) => {
-                            if source.is_local() {
-                                Error::Build(Box::new(source), err)
-                            } else {
-                                Error::DownloadAndBuild(Box::new(source), err)
-                            }
-                        }
-                    })?;
+                    .map_err(|err| Error::from_dist(dist, err))?;
 
                 let metadata = archive.metadata.clone();
 

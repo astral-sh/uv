@@ -18,9 +18,9 @@ pub use resolution::{
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
-    Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
-    VersionsResponse, WheelMetadataResult,
+    BuildId, DefaultResolverProvider, DerivationChainBuilder, InMemoryIndex, MetadataResponse,
+    PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
+    ResolverProvider, VersionsResponse, WheelMetadataResult,
 };
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;

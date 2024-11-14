@@ -5573,6 +5573,8 @@ fn fail_to_add_revert_project() -> Result<()> {
               exec(code, locals())
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
+
+      help: `child` was included because `parent==0.1.0` depends on `child`
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
@@ -5680,6 +5682,8 @@ fn fail_to_edit_revert_project() -> Result<()> {
               exec(code, locals())
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
+
+      help: `child` was included because `parent==0.1.0` depends on `child`
     "###);
 
     let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;

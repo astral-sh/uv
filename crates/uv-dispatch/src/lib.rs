@@ -29,8 +29,8 @@ use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
-    PythonRequirement, Resolver, ResolverEnvironment,
+    DerivationChainBuilder, ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest,
+    OptionsBuilder, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -278,7 +278,33 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 remote.iter().map(ToString::to_string).join(", ")
             );
 
-            preparer.prepare(remote, self.in_flight).await?
+            preparer
+                .prepare(remote, self.in_flight)
+                .await
+                .map_err(|err| match err {
+                    uv_installer::PrepareError::DownloadAndBuild(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)
+                    }
+                    uv_installer::PrepareError::Download(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::Download(dist, chain, err)
+                    }
+                    uv_installer::PrepareError::Build(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::Build(dist, chain, err)
+                    }
+                    _ => err,
+                })?
         };
 
         // Remove any unnecessary packages.

@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{BuiltDist, Name, SourceDist};
+use uv_distribution_types::{BuiltDist, DerivationChain, Name, SourceDist};
 use uv_normalize::PackageName;
 
 use crate::commands::pip;
@@ -42,7 +42,7 @@ impl OperationDiagnostic {
     pub(crate) fn with_hint(hint: String) -> Self {
         Self {
             hint: Some(hint),
-            context: None,
+            ..Default::default()
         }
     }
 
@@ -50,8 +50,8 @@ impl OperationDiagnostic {
     #[must_use]
     pub(crate) fn with_context(context: &'static str) -> Self {
         Self {
-            hint: None,
             context: Some(context),
+            ..Default::default()
         }
     }
 
@@ -74,47 +74,70 @@ impl OperationDiagnostic {
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::DownloadAndBuild(
                 dist,
+                chain,
                 err,
             )) => {
-                download_and_build(dist, Box::new(err));
+                download_and_build(dist, &chain, Box::new(err));
                 None
             }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Download(dist, err)) => {
-                download(dist, Box::new(err));
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Download(
+                dist,
+                chain,
+                err,
+            )) => {
+                download(dist, &chain, Box::new(err));
                 None
             }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err)) => {
-                build(dist, Box::new(err));
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, chain, err)) => {
+                build(dist, &chain, Box::new(err));
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::DownloadAndBuild(
                 dist,
+                chain,
                 err,
             )) => {
-                download_and_build(dist, Box::new(err));
+                download_and_build(dist, &chain, Box::new(err));
                 None
             }
-            pip::operations::Error::Requirements(uv_requirements::Error::Download(dist, err)) => {
-                download(dist, Box::new(err));
+            pip::operations::Error::Requirements(uv_requirements::Error::Download(
+                dist,
+                chain,
+                err,
+            )) => {
+                download(dist, &chain, Box::new(err));
                 None
             }
-            pip::operations::Error::Requirements(uv_requirements::Error::Build(dist, err)) => {
-                build(dist, Box::new(err));
+            pip::operations::Error::Requirements(uv_requirements::Error::Build(
+                dist,
+                chain,
+                err,
+            )) => {
+                build(dist, &chain, Box::new(err));
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
                 dist,
+                chain,
                 err,
             )) => {
-                download_and_build(dist, Box::new(err));
+                download_and_build(dist, &chain, Box::new(err));
                 None
             }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::Download(dist, err)) => {
-                download(dist, Box::new(err));
+            pip::operations::Error::Prepare(uv_installer::PrepareError::Download(
+                dist,
+                chain,
+                err,
+            )) => {
+                download(dist, &chain, Box::new(err));
                 None
             }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::Build(dist, err)) => {
-                build(dist, Box::new(err));
+            pip::operations::Error::Prepare(uv_installer::PrepareError::Build(
+                dist,
+                chain,
+                err,
+            )) => {
+                build(dist, &chain, Box::new(err));
                 None
             }
             pip::operations::Error::Requirements(err) => {
@@ -133,7 +156,7 @@ impl OperationDiagnostic {
 }
 
 /// Render a remote source distribution build failure with a help message.
-pub(crate) fn download_and_build(sdist: Box<SourceDist>, cause: Error) {
+pub(crate) fn download_and_build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to download and build `{sdist}`")]
     #[diagnostic()]
@@ -146,14 +169,32 @@ pub(crate) fn download_and_build(sdist: Box<SourceDist>, cause: Error) {
     }
 
     let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS.get(sdist.name()).map(|suggestion| {
-            format!(
-                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                sdist.name().cyan(),
-                suggestion.cyan(),
-                suggestion.cyan(),
-            )
-        }),
+        help: SUGGESTIONS
+            .get(sdist.name())
+            .map(|suggestion| {
+                format!(
+                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                    sdist.name().cyan(),
+                    suggestion.cyan(),
+                    suggestion.cyan(),
+                )
+            })
+            .or_else(|| {
+                if chain.is_empty() {
+                    None
+                } else {
+                    let mut message = format!("`{}` was included because", sdist.name().cyan());
+                    for (i, step) in chain.iter().enumerate() {
+                        if i == 0 {
+                            message = format!("{message} `{}` depends on", step.cyan());
+                        } else {
+                            message = format!("{message} `{}` which depends on", step.cyan());
+                        }
+                    }
+                    message = format!("{message} `{}`", sdist.name().cyan());
+                    Some(message)
+                }
+            }),
         sdist,
         cause,
     });
@@ -161,7 +202,7 @@ pub(crate) fn download_and_build(sdist: Box<SourceDist>, cause: Error) {
 }
 
 /// Render a remote binary distribution download failure with a help message.
-pub(crate) fn download(sdist: Box<BuiltDist>, cause: Error) {
+pub(crate) fn download(sdist: Box<BuiltDist>, chain: &DerivationChain, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to download `{sdist}`")]
     #[diagnostic()]
@@ -174,14 +215,32 @@ pub(crate) fn download(sdist: Box<BuiltDist>, cause: Error) {
     }
 
     let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS.get(sdist.name()).map(|suggestion| {
-            format!(
-                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                sdist.name().cyan(),
-                suggestion.cyan(),
-                suggestion.cyan(),
-            )
-        }),
+        help: SUGGESTIONS
+            .get(sdist.name())
+            .map(|suggestion| {
+                format!(
+                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                    sdist.name().cyan(),
+                    suggestion.cyan(),
+                    suggestion.cyan(),
+                )
+            })
+            .or_else(|| {
+                if chain.is_empty() {
+                    None
+                } else {
+                    let mut message = format!("`{}` was included because", sdist.name().cyan());
+                    for (i, step) in chain.iter().enumerate() {
+                        if i == 0 {
+                            message = format!("{message} `{}` depends on", step.cyan());
+                        } else {
+                            message = format!("{message} `{}` which depends on", step.cyan());
+                        }
+                    }
+                    message = format!("{message} `{}`", sdist.name().cyan());
+                    Some(message)
+                }
+            }),
         sdist,
         cause,
     });
@@ -189,7 +248,7 @@ pub(crate) fn download(sdist: Box<BuiltDist>, cause: Error) {
 }
 
 /// Render a local source distribution build failure with a help message.
-pub(crate) fn build(sdist: Box<SourceDist>, cause: Error) {
+pub(crate) fn build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to build `{sdist}`")]
     #[diagnostic()]
@@ -202,14 +261,32 @@ pub(crate) fn build(sdist: Box<SourceDist>, cause: Error) {
     }
 
     let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS.get(sdist.name()).map(|suggestion| {
-            format!(
-                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                sdist.name().cyan(),
-                suggestion.cyan(),
-                suggestion.cyan(),
-            )
-        }),
+        help: SUGGESTIONS
+            .get(sdist.name())
+            .map(|suggestion| {
+                format!(
+                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                    sdist.name().cyan(),
+                    suggestion.cyan(),
+                    suggestion.cyan(),
+                )
+            })
+            .or_else(|| {
+                if chain.is_empty() {
+                    None
+                } else {
+                    let mut message = format!("`{}` was included because", sdist.name().cyan());
+                    for (i, step) in chain.iter().enumerate() {
+                        if i == 0 {
+                            message = format!("{message} `{}` depends on", step.cyan());
+                        } else {
+                            message = format!("{message} `{}` which depends on", step.cyan());
+                        }
+                    }
+                    message = format!("{message} `{}`", sdist.name().cyan());
+                    Some(message)
+                }
+            }),
         sdist,
         cause,
     });
