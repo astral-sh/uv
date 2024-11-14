@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.5.2
+
+### Enhancements
+
+- Hide `--no-system` from `uv pip tree` CLI ([#9040](https://github.com/astral-sh/uv/pull/9040))
+- Allow configuration of Python and PyPy install mirrors in `uv.toml` ([#8695](https://github.com/astral-sh/uv/pull/8695))
+- Allow passing Python download mirrors to `uv python install` ([#8695](https://github.com/astral-sh/uv/pull/8695))
+- Add support for specifying conflicting extras and dependency groups ([#8976](https://github.com/astral-sh/uv/pull/8976), [#9096](https://github.com/astral-sh/uv/pull/9096))
+- Consistent colon usage in build failure errors ([#8994](https://github.com/astral-sh/uv/pull/8994))
+- Show full derivation chain when encountering build failures ([#9108](https://github.com/astral-sh/uv/pull/9108))
+- Show link we failed on parsing index pages ([#9118](https://github.com/astral-sh/uv/pull/9118))
+- Remove duplicate log when searching for interpreters ([#9092](https://github.com/astral-sh/uv/pull/9092))
+- Update uv development status classifier to "Stable" on PyPI ([#8943](https://github.com/astral-sh/uv/pull/8943))
+- Use rich diagnostic formatting for early build failures ([#9041](https://github.com/astral-sh/uv/pull/9041))
+- Use rich diagnostic formatting for install failures ([#9043](https://github.com/astral-sh/uv/pull/9043))
+
+### Performance
+
+- Avoid retraversing filesystem when testing exact glob matches ([#9022](https://github.com/astral-sh/uv/pull/9022))
+
+### Bug fixes
+
+- Allow `--no-build` to validate lock ([#9024](https://github.com/astral-sh/uv/pull/9024))
+- Allow default indexes to be marked as explicit ([#8990](https://github.com/astral-sh/uv/pull/8990))
+- Avoid creating `.venv` in `uv add --frozen` and `uv add --no-sync` ([#8980](https://github.com/astral-sh/uv/pull/8980))
+- Avoid duplicating first-entry comments in `uv add` ([#9109](https://github.com/astral-sh/uv/pull/9109))
+- Defer reporting of build failures in resolver ([#9098](https://github.com/astral-sh/uv/pull/9098))
+- Fix references to `--resolution-strategy` in error message output ([#8971](https://github.com/astral-sh/uv/pull/8971))
+- Ignore virtual environments in parent directories when choosing Python version for new projects ([#9075](https://github.com/astral-sh/uv/pull/9075))
+- Forward SIGTERM to child processes in `uv run` ([#8933](https://github.com/astral-sh/uv/pull/8933))
+- Prefer Python executable names that match the request over default names ([#9066](https://github.com/astral-sh/uv/pull/9066))
+- Prefer compatible to incompatible distributions when packages exist on multiple indexes ([#8961](https://github.com/astral-sh/uv/pull/8961))
+- Publish: Ignore non-matching files ([#8986](https://github.com/astral-sh/uv/pull/8986))
+- Revert `uv.lock` changes when `uv add` fails ([#9030](https://github.com/astral-sh/uv/pull/9030))
+- Show file extensions on available commands when not `.exe` ([#9099](https://github.com/astral-sh/uv/pull/9099))
+- Sort by name, then specifiers in `uv add` ([#9097](https://github.com/astral-sh/uv/pull/9097))
+- Split after specifiers in `--with` requirements ([#9089](https://github.com/astral-sh/uv/pull/9089))
+- Support multiple extras in universal pip compile output ([#8960](https://github.com/astral-sh/uv/pull/8960))
+
+### Preview features
+
+- Build backend: Add tests for source tree -> source dist -> wheel conversions ([#9091](https://github.com/astral-sh/uv/pull/9091))
+- Build backend: Switch to custom `glob-walkdir` implementation ([#9013](https://github.com/astral-sh/uv/pull/9013))
+- Build backend: Add minimal wheel settings ([#9085](https://github.com/astral-sh/uv/pull/9085))
+
+### Documentation
+
+- Add wget instructions for systems without curl ([#8630](https://github.com/astral-sh/uv/pull/8630))
+- Fix `.env` file example in docs ([#9064](https://github.com/astral-sh/uv/pull/9064))
+- Fix reference to `--resolution` in docs ([#8968](https://github.com/astral-sh/uv/pull/8968))
+- Fix typo in GitLab integration docs ([#9047](https://github.com/astral-sh/uv/pull/9047))
+- Update format of environment variable reference ([#9018](https://github.com/astral-sh/uv/pull/9018))
+- Use Python syntax for `value_type` consistently ([#9017](https://github.com/astral-sh/uv/pull/9017))
+- Use `[[index]]` API in configuration example ([#9065](https://github.com/astral-sh/uv/pull/9065))
+- Mention how to use extras ([#8972](https://github.com/astral-sh/uv/pull/8972))
+- Add some words about specifying conflicting extras/groups ([#9120](https://github.com/astral-sh/uv/pull/9120))
+
 ## 0.5.1
 
 ### Enhancements
