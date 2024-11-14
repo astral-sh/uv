@@ -3183,7 +3183,7 @@ fn config_settings() {
 /// Reinstall a duplicate package in a virtual environment.
 #[test]
 fn reinstall_duplicate() -> Result<()> {
-    use crate::common::copy_dir_all;
+    use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
     let context1 = TestContext::new("3.12");
@@ -5399,7 +5399,7 @@ fn already_installed_local_version_of_remote_package() {
 #[cfg(unix)]
 fn already_installed_multiple_versions() -> Result<()> {
     fn prepare(context: &TestContext) -> Result<()> {
-        use crate::common::copy_dir_all;
+        use uv_fs::copy_dir_all;
 
         // Install into the base environment
         context.pip_install().arg("anyio==3.7.0").assert().success();

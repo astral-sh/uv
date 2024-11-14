@@ -7,11 +7,11 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::str::contains;
 use std::path::Path;
-
+use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 
-use crate::common::{copy_dir_all, uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, TestContext};
 
 #[test]
 fn run_with_python_version() -> Result<()> {

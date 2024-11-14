@@ -12,10 +12,9 @@ use predicates::Predicate;
 use url::Url;
 
 use crate::common::{
-    copy_dir_all, download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter,
-    TestContext,
+    download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter, TestContext,
 };
-use uv_fs::Simplified;
+use uv_fs::{copy_dir_all, Simplified};
 use uv_static::EnvVars;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
