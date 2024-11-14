@@ -11,13 +11,13 @@ use std::fs::FileType;
 use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{io, mem};
-use tar::{EntryType, Header};
+use tar::{Builder, EntryType, Header};
 use thiserror::Error;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename, WheelFilename};
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter, PortableGlobError};
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 use zip::{CompressionMethod, ZipWriter};
 
 #[derive(Debug, Error)]
@@ -66,6 +66,8 @@ pub enum Error {
     Csv(#[from] csv::Error),
     #[error("Expected a Python module with an `__init__.py` at: `{}`", _0.user_display())]
     MissingModule(PathBuf),
+    #[error("Absolute module root is not allowed: `{}`", _0.display())]
+    AbsoluteModuleRoot(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]
@@ -292,11 +294,29 @@ fn write_hashed(
     })
 }
 
+/// TODO(konsti): Wire this up with actual settings and remove this struct.
+///
+/// Which files to include in the wheel
+pub struct WheelSettings {
+    /// The directory that contains the module directory, usually `src`, or an empty path when
+    /// using the flat layout over the src layout.
+    module_root: PathBuf,
+}
+
+impl Default for WheelSettings {
+    fn default() -> Self {
+        Self {
+            module_root: PathBuf::from("src"),
+        }
+    }
+}
+
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
     source_tree: &Path,
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
+    wheel_settings: WheelSettings,
     uv_version: &str,
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
@@ -319,7 +339,10 @@ pub fn build_wheel(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding content files to {}", wheel_path.user_display());
-    let strip_root = source_tree.join("src");
+    if wheel_settings.module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(wheel_settings.module_root));
+    }
+    let strip_root = source_tree.join(wheel_settings.module_root);
     let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
@@ -337,6 +360,9 @@ pub fn build_wheel(
         let relative_path_str = relative_path
             .to_str()
             .ok_or_else(|| Error::NotUtf8Path(relative_path.to_path_buf()))?;
+
+        debug!("Adding to wheel: `{relative_path_str}`");
+
         if entry.file_type().is_dir() {
             wheel_writer.write_directory(relative_path_str)?;
         } else if entry.file_type().is_file() {
@@ -514,50 +540,62 @@ pub fn build_source_dist(
             continue;
         };
 
-        debug!("Including {}", relative.user_display());
-
-        let metadata = fs_err::metadata(entry.path())?;
-        let mut header = Header::new_gnu();
-        #[cfg(unix)]
-        {
-            header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
-        }
-        #[cfg(not(unix))]
-        {
-            header.set_mode(0o644);
-        }
-
-        if entry.file_type().is_dir() {
-            header.set_entry_type(EntryType::Directory);
-            header
-                .set_path(Path::new(&top_level).join(relative))
-                .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
-            header.set_size(0);
-            header.set_cksum();
-            tar.append(&header, io::empty())
-                .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
-            continue;
-        } else if entry.file_type().is_file() {
-            header.set_size(metadata.len());
-            header.set_cksum();
-            tar.append_data(
-                &mut header,
-                Path::new(&top_level).join(relative),
-                BufReader::new(File::open(entry.path())?),
-            )
-            .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
-        } else {
-            return Err(Error::UnsupportedFileType(
-                relative.clone(),
-                entry.file_type(),
-            ));
-        }
+        add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, &relative)?;
     }
 
     tar.finish()
         .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
 
     Ok(filename)
+}
+
+/// Add a file or a directory to a source distribution.
+fn add_source_dist_entry(
+    tar: &mut Builder<GzEncoder<File>>,
+    entry: &DirEntry,
+    top_level: &str,
+    source_dist_path: &Path,
+    relative: &Path,
+) -> Result<(), Error> {
+    debug!("Including {}", relative.user_display());
+
+    let metadata = fs_err::metadata(entry.path())?;
+    let mut header = Header::new_gnu();
+    #[cfg(unix)]
+    {
+        header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
+    }
+    #[cfg(not(unix))]
+    {
+        header.set_mode(0o644);
+    }
+
+    if entry.file_type().is_dir() {
+        header.set_entry_type(EntryType::Directory);
+        header
+            .set_path(Path::new(&top_level).join(relative))
+            .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
+        header.set_size(0);
+        header.set_cksum();
+        tar.append(&header, io::empty())
+            .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
+        Ok(())
+    } else if entry.file_type().is_file() {
+        header.set_size(metadata.len());
+        header.set_cksum();
+        tar.append_data(
+            &mut header,
+            Path::new(&top_level).join(relative),
+            BufReader::new(File::open(entry.path())?),
+        )
+        .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
+        Ok(())
+    } else {
+        Err(Error::UnsupportedFileType(
+            relative.to_path_buf(),
+            entry.file_type(),
+        ))
+    }
 }
 
 /// Write the dist-info directory to the output directory without building the wheel.
