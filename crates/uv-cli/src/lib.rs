@@ -2804,12 +2804,18 @@ pub struct SyncArgs {
     ///
     /// May be provided more than once.
     ///
+    /// When multiple extras or groups are specified that appear in
+    /// `tool.uv.conflicts`, uv will report an error.
+    ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    ///
+    /// When two or more extras are declared as conflicting in
+    /// `tool.uv.conflicts`, using this flag will always result in an error.
     ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
@@ -2840,6 +2846,9 @@ pub struct SyncArgs {
     pub only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
+    ///
+    /// When multiple extras or groups are specified that appear in
+    /// `tool.uv.conflicts`, uv will report an error.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with("only_group"))]
