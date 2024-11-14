@@ -637,6 +637,7 @@ impl Lock {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(item.package().to_string()));
                     match item.kind() {
+                        ConflictKind::Project => {}
                         ConflictKind::Extra(ref extra) => {
                             table.insert("extra", Value::from(extra.to_string()));
                         }

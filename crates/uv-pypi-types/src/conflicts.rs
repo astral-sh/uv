@@ -173,6 +173,13 @@ impl ConflictItem {
     }
 }
 
+impl From<PackageName> for ConflictItem {
+    fn from(package: PackageName) -> ConflictItem {
+        let kind = ConflictKind::Project;
+        ConflictItem { package, kind }
+    }
+}
+
 impl From<(PackageName, ExtraName)> for ConflictItem {
     fn from((package, extra): (PackageName, ExtraName)) -> ConflictItem {
         let kind = ConflictKind::Extra(extra);
@@ -229,6 +236,13 @@ impl<'a> ConflictItemRef<'a> {
     }
 }
 
+impl<'a> From<&'a PackageName> for ConflictItemRef<'a> {
+    fn from(package: &'a PackageName) -> ConflictItemRef<'a> {
+        let kind = ConflictKindRef::Project;
+        ConflictItemRef { package, kind }
+    }
+}
+
 impl<'a> From<(&'a PackageName, &'a ExtraName)> for ConflictItemRef<'a> {
     fn from((package, extra): (&'a PackageName, &'a ExtraName)) -> ConflictItemRef<'a> {
         let kind = ConflictKindRef::Extra(extra);
@@ -251,11 +265,12 @@ impl<'a> hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'a> {
 
 /// The actual conflicting data for a package.
 ///
-/// That is, either an extra or a group name.
+/// That is, either an extra or a group name, or the entire project itself.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, schemars::JsonSchema)]
 pub enum ConflictKind {
     Extra(ExtraName),
     Group(GroupName),
+    Project,
 }
 
 impl ConflictKind {
@@ -264,7 +279,7 @@ impl ConflictKind {
     pub fn extra(&self) -> Option<&ExtraName> {
         match *self {
             ConflictKind::Extra(ref extra) => Some(extra),
-            ConflictKind::Group(_) => None,
+            ConflictKind::Group(_) | ConflictKind::Project => None,
         }
     }
 
@@ -273,7 +288,7 @@ impl ConflictKind {
     pub fn group(&self) -> Option<&GroupName> {
         match *self {
             ConflictKind::Group(ref group) => Some(group),
-            ConflictKind::Extra(_) => None,
+            ConflictKind::Extra(_) | ConflictKind::Project => None,
         }
     }
 
@@ -282,6 +297,7 @@ impl ConflictKind {
         match *self {
             ConflictKind::Extra(ref extra) => ConflictKindRef::Extra(extra),
             ConflictKind::Group(ref group) => ConflictKindRef::Group(group),
+            ConflictKind::Project => ConflictKindRef::Project,
         }
     }
 }
@@ -293,6 +309,7 @@ impl ConflictKind {
 pub enum ConflictKindRef<'a> {
     Extra(&'a ExtraName),
     Group(&'a GroupName),
+    Project,
 }
 
 impl<'a> ConflictKindRef<'a> {
@@ -301,7 +318,7 @@ impl<'a> ConflictKindRef<'a> {
     pub fn extra(&self) -> Option<&'a ExtraName> {
         match *self {
             ConflictKindRef::Extra(extra) => Some(extra),
-            ConflictKindRef::Group(_) => None,
+            ConflictKindRef::Group(_) | ConflictKindRef::Project => None,
         }
     }
 
@@ -310,7 +327,7 @@ impl<'a> ConflictKindRef<'a> {
     pub fn group(&self) -> Option<&'a GroupName> {
         match *self {
             ConflictKindRef::Group(group) => Some(group),
-            ConflictKindRef::Extra(_) => None,
+            ConflictKindRef::Extra(_) | ConflictKindRef::Project => None,
         }
     }
 
@@ -319,6 +336,7 @@ impl<'a> ConflictKindRef<'a> {
         match *self {
             ConflictKindRef::Extra(extra) => ConflictKind::Extra(extra.clone()),
             ConflictKindRef::Group(group) => ConflictKind::Group(group.clone()),
+            ConflictKindRef::Project => ConflictKind::Project,
         }
     }
 }
@@ -369,9 +387,9 @@ pub enum ConflictError {
     /// optional.)
     #[error("Expected `package` field in conflicting entry")]
     MissingPackage,
-    /// An error that occurs when both `extra` and `group` are missing.
-    #[error("Expected `extra` or `group` field in conflicting entry")]
-    MissingExtraAndGroup,
+    /// An error that occurs when all of `package`, `extra` and `group` are missing.
+    #[error("Expected `package`, `extra` or `group` field in conflicting entry")]
+    MissingPackageAndExtraAndGroup,
     /// An error that occurs when both `extra` and `group` are present.
     #[error("Expected one of `extra` or `group` in conflicting entry, but found both")]
     FoundExtraAndGroup,
@@ -498,8 +516,8 @@ impl TryFrom<ConflictItemWire> for ConflictItem {
             return Err(ConflictError::MissingPackage);
         };
         match (wire.extra, wire.group) {
-            (None, None) => Err(ConflictError::MissingExtraAndGroup),
             (Some(_), Some(_)) => Err(ConflictError::FoundExtraAndGroup),
+            (None, None) => Ok(ConflictItem::from(package)),
             (Some(extra), None) => Ok(ConflictItem::from((package, extra))),
             (None, Some(group)) => Ok(ConflictItem::from((package, group))),
         }
@@ -519,6 +537,11 @@ impl From<ConflictItem> for ConflictItemWire {
                 extra: None,
                 group: Some(group),
             },
+            ConflictKind::Project => ConflictItemWire {
+                package: Some(item.package),
+                extra: None,
+                group: None,
+            },
         }
     }
 }
@@ -529,8 +552,16 @@ impl TryFrom<ConflictItemWire> for SchemaConflictItem {
     fn try_from(wire: ConflictItemWire) -> Result<SchemaConflictItem, ConflictError> {
         let package = wire.package;
         match (wire.extra, wire.group) {
-            (None, None) => Err(ConflictError::MissingExtraAndGroup),
             (Some(_), Some(_)) => Err(ConflictError::FoundExtraAndGroup),
+            (None, None) => {
+                let Some(package) = package else {
+                    return Err(ConflictError::MissingPackageAndExtraAndGroup);
+                };
+                Ok(SchemaConflictItem {
+                    package: Some(package),
+                    kind: ConflictKind::Project,
+                })
+            }
             (Some(extra), None) => Ok(SchemaConflictItem {
                 package,
                 kind: ConflictKind::Extra(extra),
@@ -555,6 +586,11 @@ impl From<SchemaConflictItem> for ConflictItemWire {
                 package: item.package,
                 extra: None,
                 group: Some(group),
+            },
+            ConflictKind::Project => ConflictItemWire {
+                package: item.package,
+                extra: None,
+                group: None,
             },
         }
     }
