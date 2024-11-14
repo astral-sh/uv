@@ -419,7 +419,7 @@ fn parse_missing_href() {
     ";
     let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
     let result = SimpleHtml::parse(text, &base).unwrap_err();
-    insta::assert_snapshot!(result, @"Missing href attribute on anchor link");
+    insta::assert_snapshot!(result, @"Missing href attribute on anchor link: `Jinja2-3.1.2-py3-none-any.whl`");
 }
 
 #[test]
@@ -436,7 +436,7 @@ fn parse_empty_href() {
     "#;
     let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
     let result = SimpleHtml::parse(text, &base).unwrap_err();
-    insta::assert_snapshot!(result, @"Missing href attribute on anchor link");
+    insta::assert_snapshot!(result, @"Missing href attribute on anchor link: `Jinja2-3.1.2-py3-none-any.whl`");
 }
 
 #[test]
