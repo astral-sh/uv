@@ -1,11 +1,12 @@
 use std::collections::VecDeque;
 
+use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use pubgrub::{Kind, Range, SelectedDependencies, State};
 use rustc_hash::FxHashSet;
 
 use uv_distribution_types::{
-    DerivationChain, DerivationStep, DistRef, Name, Node, Resolution, ResolvedDist,
+    DerivationChain, DerivationStep, DistRef, Edge, Name, Node, Resolution, ResolvedDist,
 };
 use uv_pep440::Version;
 
@@ -40,11 +41,11 @@ impl DerivationChainBuilder {
 
         // Perform a BFS to find the shortest path to the root.
         let mut queue = VecDeque::new();
-        queue.push_back((target, Vec::new()));
+        queue.push_back((target, None, None, Vec::new()));
 
         // TODO(charlie): Consider respecting markers here.
         let mut seen = FxHashSet::default();
-        while let Some((node, mut path)) = queue.pop_front() {
+        while let Some((node, extra, group, mut path)) = queue.pop_front() {
             if !seen.insert(node) {
                 continue;
             }
@@ -55,16 +56,25 @@ impl DerivationChainBuilder {
                     return Some(DerivationChain::from_iter(path));
                 }
                 Node::Dist { dist, .. } => {
-                    path.push(DerivationStep::new(
-                        dist.name().clone(),
-                        dist.version().clone(),
-                        Range::empty(),
-                    ));
-                    for neighbor in resolution
-                        .graph()
-                        .neighbors_directed(node, Direction::Incoming)
-                    {
-                        queue.push_back((neighbor, path.clone()));
+                    for edge in resolution.graph().edges_directed(node, Direction::Incoming) {
+                        let mut path = path.clone();
+                        path.push(DerivationStep::new(
+                            dist.name().clone(),
+                            extra.clone(),
+                            group.clone(),
+                            dist.version().clone(),
+                            Range::empty(),
+                        ));
+                        let target = edge.source();
+                        let extra = match edge.weight() {
+                            Edge::Optional(extra, ..) => Some(extra.clone()),
+                            _ => None,
+                        };
+                        let group = match edge.weight() {
+                            Edge::Dev(group, ..) => Some(group.clone()),
+                            _ => None,
+                        };
+                        queue.push_back((target, extra, group, path));
                     }
                 }
             }
@@ -109,6 +119,8 @@ impl DerivationChainBuilder {
                                 // Add to the current path.
                                 path.push(DerivationStep::new(
                                     name.clone(),
+                                    p1.extra().cloned(),
+                                    p1.dev().cloned(),
                                     version.clone(),
                                     v2.clone(),
                                 ));
