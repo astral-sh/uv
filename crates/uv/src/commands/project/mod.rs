@@ -22,7 +22,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
+use uv_pypi_types::{ConflictKind, ConflictSet, Conflicts, Requirement};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
@@ -85,22 +85,22 @@ pub(crate) enum ProjectError {
         "{} are incompatible with the declared conflicts: {{{}}}",
         _1.iter().map(|conflict| {
             match conflict {
-                ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                ConflictPackage::Group(ref group) => format!("group `{group}`"),
+                ConflictKind::Extra(ref extra) => format!("extra `{extra}`"),
+                ConflictKind::Group(ref group) => format!("group `{group}`"),
             }
         }).collect::<Vec<String>>().join(", "),
         _0
             .iter()
             .map(|item| {
-                match item.conflict() {
-                    ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
-                    ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
+                match item.kind() {
+                    ConflictKind::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
+                    ConflictKind::Group(ref group) => format!("`{}:{}`", item.package(), group),
                 }
             })
             .collect::<Vec<String>>()
             .join(", "),
     )]
-    ConflictIncompatibility(ConflictSet, Vec<ConflictPackage>),
+    ConflictIncompatibility(ConflictSet, Vec<ConflictKind>),
 
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
     RequestedPythonProjectIncompatibility(Version, RequiresPython),

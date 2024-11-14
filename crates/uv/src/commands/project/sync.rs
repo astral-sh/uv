@@ -20,8 +20,7 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
-    ConflictPackage, LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl,
-    VerbatimParsedUrl,
+    ConflictKind, LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, InstallTarget};
@@ -292,21 +291,21 @@ pub(super) async fn do_sync(
     // those should result in an error.
     let conflicts = target.lock().conflicts();
     for set in conflicts.iter() {
-        let mut conflicts: Vec<ConflictPackage> = vec![];
+        let mut conflicts: Vec<ConflictKind> = vec![];
         for item in set.iter() {
             if item
                 .extra()
                 .map(|extra| extras.contains(extra))
                 .unwrap_or(false)
             {
-                conflicts.push(item.conflict().clone());
+                conflicts.push(item.kind().clone());
             }
             if item
                 .group()
                 .map(|group1| dev.iter().any(|group2| group1 == group2))
                 .unwrap_or(false)
             {
-                conflicts.push(item.conflict().clone());
+                conflicts.push(item.kind().clone());
             }
         }
         if conflicts.len() >= 2 {

@@ -40,7 +40,7 @@ use uv_pep440::Version;
 use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{
-    redact_credentials, ConflictPackage, Conflicts, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
+    redact_credentials, ConflictKind, Conflicts, HashDigest, ParsedArchiveUrl, ParsedGitUrl,
     Requirement, RequirementSource,
 };
 use uv_types::{BuildContext, HashStrategy};
@@ -636,11 +636,11 @@ impl Lock {
                 list.push(each_element_on_its_line_array(set.iter().map(|item| {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(item.package().to_string()));
-                    match item.conflict() {
-                        ConflictPackage::Extra(ref extra) => {
+                    match item.kind() {
+                        ConflictKind::Extra(ref extra) => {
                             table.insert("extra", Value::from(extra.to_string()));
                         }
-                        ConflictPackage::Group(ref group) => {
+                        ConflictKind::Group(ref group) => {
                             table.insert("group", Value::from(group.to_string()));
                         }
                     }
