@@ -1,7 +1,9 @@
 use super::*;
+use indoc::indoc;
 use insta::assert_snapshot;
 use std::str::FromStr;
 use tempfile::TempDir;
+use uv_fs::copy_dir_all;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -28,26 +30,34 @@ fn test_wheel() {
 #[test]
 fn test_record() {
     let record = vec![RecordEntry {
-        path: "uv_backend/__init__.py".to_string(),
+        path: "built_by_uv/__init__.py".to_string(),
         hash: "89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865".to_string(),
         size: 37,
     }];
 
     let mut writer = Vec::new();
-    write_record(&mut writer, "uv_backend-0.1.0", record).unwrap();
+    write_record(&mut writer, "built_by_uv-0.1.0", record).unwrap();
     assert_snapshot!(String::from_utf8(writer).unwrap(), @r"
-            uv_backend/__init__.py,sha256=89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865,37
-            uv_backend-0.1.0/RECORD,,
+            built_by_uv/__init__.py,sha256=89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865,37
+            built_by_uv-0.1.0/RECORD,,
         ");
 }
 
 /// Check that we write deterministic wheels.
 #[test]
 fn test_determinism() {
+    let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+    let src = TempDir::new().unwrap();
+    for dir in ["src", "tests", "data-dir"] {
+        copy_dir_all(built_by_uv.join(dir), src.path().join(dir)).unwrap();
+    }
+    for dir in ["pyproject.toml", "README.md", "uv.lock"] {
+        fs_err::copy(built_by_uv.join(dir), src.path().join(dir)).unwrap();
+    }
+
     let temp1 = TempDir::new().unwrap();
-    let uv_backend = Path::new("../../scripts/packages/uv_backend");
     build_wheel(
-        uv_backend,
+        src.path(),
         temp1.path(),
         None,
         WheelSettings::default(),
@@ -57,14 +67,18 @@ fn test_determinism() {
 
     // Touch the file to check that we don't serialize the last modified date.
     fs_err::write(
-        uv_backend.join("src/uv_backend/__init__.py"),
-        "def greet():\n    print(\"Hello 👋\")\n",
+        src.path().join("src/built_by_uv/__init__.py"),
+        indoc! {r#"
+        def greet() -> str:
+            return "Hello 👋"
+        "#
+        },
     )
     .unwrap();
 
     let temp2 = TempDir::new().unwrap();
     build_wheel(
-        uv_backend,
+        src.path(),
         temp2.path(),
         None,
         WheelSettings::default(),
@@ -72,7 +86,7 @@ fn test_determinism() {
     )
     .unwrap();
 
-    let wheel_filename = "uv_backend-0.1.0-py3-none-any.whl";
+    let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
     assert_eq!(
         fs_err::read(temp1.path().join(wheel_filename)).unwrap(),
         fs_err::read(temp2.path().join(wheel_filename)).unwrap()
@@ -83,8 +97,8 @@ fn test_determinism() {
 #[test]
 fn test_prepare_metadata() {
     let metadata_dir = TempDir::new().unwrap();
-    let uv_backend = Path::new("../../scripts/packages/uv_backend");
-    metadata(uv_backend, metadata_dir.path(), "1.0.0+test").unwrap();
+    let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+    metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
     let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
         .into_iter()
@@ -101,38 +115,36 @@ fn test_prepare_metadata() {
         .collect();
     files.sort();
     assert_snapshot!(files.join("\n"), @r"
-        uv_backend-0.1.0.dist-info
-        uv_backend-0.1.0.dist-info/METADATA
-        uv_backend-0.1.0.dist-info/RECORD
-        uv_backend-0.1.0.dist-info/WHEEL
+        built_by_uv-0.1.0.dist-info
+        built_by_uv-0.1.0.dist-info/METADATA
+        built_by_uv-0.1.0.dist-info/RECORD
+        built_by_uv-0.1.0.dist-info/WHEEL
         ");
 
     let metadata_file = metadata_dir
         .path()
-        .join("uv_backend-0.1.0.dist-info/METADATA");
+        .join("built_by_uv-0.1.0.dist-info/METADATA");
     assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @r###"
-        Metadata-Version: 2.3
-        Name: uv-backend
-        Version: 0.1.0
-        Summary: Add your description here
-        Requires-Python: >=3.12
-        Description-Content-Type: text/markdown
-
-        # uv_backend
-
-        A simple package to be built with the uv build backend.
-        "###);
+    Metadata-Version: 2.3
+    Name: built-by-uv
+    Version: 0.1.0
+    Summary: A package to be built with the uv build backend that uses all features exposed by the build backend
+    Requires-Dist: anyio>=4,<5
+    Requires-Python: >=3.12
+    "###);
 
     let record_file = metadata_dir
         .path()
-        .join("uv_backend-0.1.0.dist-info/RECORD");
+        .join("built_by_uv-0.1.0.dist-info/RECORD");
     assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-    uv_backend-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
-    uv_backend-0.1.0.dist-info/METADATA,sha256=e4a0d390317d7182f65ea978254c71ed283e0a4242150cf1c99a694b113ff68d,224
-    uv_backend-0.1.0.dist-info/RECORD,,
+    built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
+    built_by_uv-0.1.0.dist-info/METADATA,sha256=ec36b5ae8830bdd248e90aaf581483ffb057f9a2d0f41e19e585531e7d07c9dc,215
+    built_by_uv-0.1.0.dist-info/RECORD,,
     "###);
 
-    let wheel_file = metadata_dir.path().join("uv_backend-0.1.0.dist-info/WHEEL");
+    let wheel_file = metadata_dir
+        .path()
+        .join("built_by_uv-0.1.0.dist-info/WHEEL");
     assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @r###"
         Wheel-Version: 1.0
         Generator: uv 1.0.0+test

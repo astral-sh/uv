@@ -1,0 +1,11 @@
+[project]
+name = "built-by-uv"
+version = "0.1.0"
+description = "A package to be built with the uv build backend that uses all features exposed by the build backend"
+#rreadme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["anyio>=4,<5"]
+
+[build-system]
+requires = ["uv>=0.4.15,<5"]
+build-backend = "uv"
