@@ -4884,6 +4884,7 @@ dependencies = [
  "fs-err",
  "itertools 0.13.0",
  "jiff",
+ "petgraph",
  "rkyv",
  "rustc-hash",
  "schemars",

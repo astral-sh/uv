@@ -6,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 
 use either::Either;
 use petgraph::visit::IntoNodeReferences;
-use petgraph::{Directed, Graph};
+use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
@@ -21,8 +21,6 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 use crate::graph_ops::marker_reachability;
 use crate::lock::{Package, PackageId, Source};
 use crate::{InstallTarget, LockError};
-
-type LockGraph<'lock> = Graph<Node<'lock>, Edge, Directed>;
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
@@ -42,7 +40,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
-        let mut petgraph = LockGraph::with_capacity(size_guess, size_guess);
+        let mut petgraph = Graph::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
@@ -282,15 +280,12 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
     }
 }
 
-/// A node in the [`LockGraph`].
+/// A node in the graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Node<'lock> {
     Root,
     Package(&'lock Package),
 }
-
-/// The edges of the [`LockGraph`].
-type Edge = MarkerTree;
 
 /// A flat requirement, with its associated marker.
 #[derive(Debug, Clone, PartialEq, Eq)]

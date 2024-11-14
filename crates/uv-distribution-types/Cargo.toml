@@ -33,6 +33,7 @@ bitflags = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+petgraph = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
