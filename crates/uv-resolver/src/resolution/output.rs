@@ -275,7 +275,7 @@ impl ResolverOutput {
     }
 
     fn add_edge(
-        petgraph: &mut Graph<ResolutionGraphNode, MarkerTree>,
+        graph: &mut Graph<ResolutionGraphNode, MarkerTree>,
         inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
         edge: &ResolutionDependencyEdge,
@@ -306,20 +306,20 @@ impl ResolverOutput {
             edge_marker
         };
 
-        if let Some(marker) = petgraph
+        if let Some(marker) = graph
             .find_edge(from_index, to_index)
-            .and_then(|edge| petgraph.edge_weight_mut(edge))
+            .and_then(|edge| graph.edge_weight_mut(edge))
         {
             // If either the existing marker or new marker is `true`, then the dependency is
             // included unconditionally, and so the combined marker is `true`.
             marker.or(edge_marker);
         } else {
-            petgraph.update_edge(from_index, to_index, edge_marker);
+            graph.update_edge(from_index, to_index, edge_marker);
         }
     }
 
     fn add_version<'a>(
-        petgraph: &mut Graph<ResolutionGraphNode, MarkerTree>,
+        graph: &mut Graph<ResolutionGraphNode, MarkerTree>,
         inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
@@ -372,7 +372,7 @@ impl ResolverOutput {
         }
 
         // Add the distribution to the graph.
-        let node = petgraph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
+        let node = graph.add_node(ResolutionGraphNode::Dist(AnnotatedDist {
             dist,
             name: name.clone(),
             version: version.clone(),
@@ -814,7 +814,7 @@ impl Display for ConflictingDistributionError {
     }
 }
 
-/// Convert a [`ResolutionGraph`] into a [`uv_distribution_types::Resolution`].
+/// Convert a [`ResolverOutput`] into a [`uv_distribution_types::Resolution`].
 ///
 /// This involves converting [`ResolutionGraphNode`]s into [`Node`]s, which in turn involves
 /// dropping any extras and dependency groups from the graph nodes. Instead, each package is
@@ -823,12 +823,21 @@ impl Display for ConflictingDistributionError {
 /// departure from the PubGrub model.
 ///
 /// For simplicity, this transformation makes the assumption that the resolution only applies to a
-/// single platform, i.e., it shouldn't be called on universal resolutions.
+/// subset of markers, i.e., it shouldn't be called on universal resolutions, and expects only a
+/// single version of each package to be present in the graph.
 impl From<ResolverOutput> for uv_distribution_types::Resolution {
     fn from(output: ResolverOutput) -> Self {
         let ResolverOutput {
-            graph, diagnostics, ..
+            graph,
+            diagnostics,
+            fork_markers,
+            ..
         } = output;
+
+        assert!(
+            fork_markers.is_empty(),
+            "universal resolutions are not supported"
+        );
 
         let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
         let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
@@ -853,7 +862,7 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
             }
         }
 
-        // Re-add the edges to the reduced petgraph.
+        // Re-add the edges to the reduced graph.
         for edge in graph.edge_indices() {
             let (source, target) = graph.edge_endpoints(edge).unwrap();
             let marker = graph[edge].clone();
@@ -892,11 +901,11 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.
 fn report_missing_lower_bounds(
-    petgraph: &Graph<ResolutionGraphNode, MarkerTree>,
+    graph: &Graph<ResolutionGraphNode, MarkerTree>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
 ) {
-    for node_index in petgraph.node_indices() {
-        let ResolutionGraphNode::Dist(dist) = petgraph.node_weight(node_index).unwrap() else {
+    for node_index in graph.node_indices() {
+        let ResolutionGraphNode::Dist(dist) = graph.node_weight(node_index).unwrap() else {
             // Ignore the root package.
             continue;
         };
@@ -907,7 +916,7 @@ fn report_missing_lower_bounds(
             // have to drop.
             continue;
         }
-        if !has_lower_bound(node_index, dist.name(), petgraph) {
+        if !has_lower_bound(node_index, dist.name(), graph) {
             diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
                 package_name: dist.name().clone(),
             });
@@ -919,10 +928,10 @@ fn report_missing_lower_bounds(
 fn has_lower_bound(
     node_index: NodeIndex,
     package_name: &PackageName,
-    petgraph: &Graph<ResolutionGraphNode, MarkerTree>,
+    graph: &Graph<ResolutionGraphNode, MarkerTree>,
 ) -> bool {
-    for neighbor_index in petgraph.neighbors_directed(node_index, Direction::Incoming) {
-        let neighbor_dist = match petgraph.node_weight(neighbor_index).unwrap() {
+    for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
+        let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
             ResolutionGraphNode::Root => {
                 // We already handled direct dependencies with a missing constraint
                 // separately.

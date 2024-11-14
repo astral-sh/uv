@@ -1,5 +1,3 @@
-use petgraph::{Directed, Graph};
-
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
@@ -8,15 +6,19 @@ use uv_pypi_types::{HashDigest, RequirementSource};
 use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
+///
+/// This is similar to [`ResolverOutput`], but represents a resolution for a subset of all
+/// marker environments. For example, the resolution is guaranteed to contain at most one version
+/// for a given package.
 #[derive(Debug, Default, Clone)]
 pub struct Resolution {
-    graph: Graph<Node, Edge, Directed>,
+    graph: petgraph::graph::DiGraph<Node, Edge>,
     diagnostics: Vec<ResolutionDiagnostic>,
 }
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub fn new(graph: Graph<Node, Edge, Directed>) -> Self {
+    pub fn new(graph: petgraph::graph::DiGraph<Node, Edge>) -> Self {
         Self {
             graph,
             diagnostics: Vec::new(),
@@ -24,7 +26,7 @@ impl Resolution {
     }
 
     /// Return the underlying graph of the resolution.
-    pub fn graph(&self) -> &Graph<Node, Edge, Directed> {
+    pub fn graph(&self) -> &petgraph::graph::DiGraph<Node, Edge> {
         &self.graph
     }
 
@@ -174,10 +176,8 @@ impl Diagnostic for ResolutionDiagnostic {
 
 /// A node in the resolution, along with whether its been filtered out.
 ///
-/// This is similar to [`ResolutionGraph`], but represents a resolution for a single platform.
-///
 /// We retain filtered nodes as we still need to be able to trace dependencies through the graph
-/// (e.g., to determine why a package was install in the resolution).
+/// (e.g., to determine why a package was included in the resolution).
 #[derive(Debug, Clone)]
 pub enum Node {
     Root,
