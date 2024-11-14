@@ -484,10 +484,66 @@ each other and resolves all optional dependencies together when creating the loc
 If optional dependencies declared in one extra are not compatible with those in another extra, uv
 will fail to resolve the requirements of the project with an error.
 
-!!! note
+To work around this, uv supports declaring conflicting extras. For example, consider two sets of
+optional dependencies that conflict with one another:
 
-    There is currently no way to declare conflicting optional dependencies. See
-    [astral.sh/uv#6981](https://github.com/astral-sh/uv/issues/6981) to track support.
+```toml title="pyproject.toml"
+[project.optional-dependencies]
+project1 = ["numpy==2.1.2"]
+project2 = ["numpy==2.0.0"]
+```
+
+If you try to run `uv lock` with the above dependencies, you should get an error like this:
+
+```
+  x No solution found when resolving dependencies:
+  `-> Because myproject[project2] depends on numpy==2.0.0 and myproject[project1] depends on numpy==2.1.2, we can conclude that myproject[project1] and
+      myproject[project2] are incompatible.
+      And because your project requires myproject[project1] and myproject[project2], we can conclude that your projects's requirements are unsatisfiable.
+```
+
+But if we specify that `project1` and `project2` are conflicting, uv will resolve them in different
+forks. We can specify conflicts in the `tool.uv` section:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { extra = "project1" },
+      { extra = "project2" },
+    ],
+]
+```
+
+And now running `uv lock` will succeed. Note though, that this will prevent you from enabling both
+`project1` and `project2` simultaneously:
+
+```console
+$ uv sync --extra project1 --extra project2
+Resolved 3 packages in 14ms
+error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`myproject[project1]`, `myproject[project2]`}
+```
+
+This error occurs because installing both `project1` and `project2` simultaneously could result in
+installing two different versions of the same package into the same environment.
+
+The above strategy for dealing with conflicting extras also works with groups:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+project1 = ["numpy==2.1.2"]
+project2 = ["numpy==2.0.0"]
+
+[tool.uv]
+conflicts = [
+    [
+      { group = "project1" },
+      { group = "project2" },
+    ],
+]
+```
+
+The only difference with conflicting extras is that you need to use `group` instead of `extra`.
 
 ## Managing dependencies
 
