@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use tl::HTMLTag;
+use tl::{HTMLTag, Parser};
 use tracing::{instrument, warn};
 use url::Url;
 
@@ -44,7 +44,7 @@ impl SimpleHtml {
             .iter()
             .filter_map(|node| node.as_tag())
             .filter(|link| link.name().as_bytes() == b"a")
-            .map(|link| Self::parse_anchor(link))
+            .map(|link| Self::parse_anchor(link, dom.parser()))
             .collect::<Result<Vec<_>, _>>()?;
         // While it has not been positively observed, we sort the files
         // to ensure we have a defined ordering. Otherwise, if we rely on
@@ -70,14 +70,14 @@ impl SimpleHtml {
     }
 
     /// Parse a [`File`] from an `<a>` tag.
-    fn parse_anchor(link: &HTMLTag) -> Result<File, Error> {
+    fn parse_anchor(link: &HTMLTag, parser: &Parser) -> Result<File, Error> {
         // Extract the href.
         let href = link
             .attributes()
             .get("href")
             .flatten()
             .filter(|bytes| !bytes.as_bytes().is_empty())
-            .ok_or(Error::MissingHref)?;
+            .ok_or(Error::MissingHref(link.inner_text(parser).to_string()))?;
         let href = std::str::from_utf8(href.as_bytes())?;
 
         // Extract the hash, which should be in the fragment.
@@ -187,8 +187,8 @@ pub enum Error {
     #[error(transparent)]
     HtmlParse(#[from] tl::ParseError),
 
-    #[error("Missing href attribute on anchor link")]
-    MissingHref,
+    #[error("Missing href attribute on anchor link: `{0}`")]
+    MissingHref(String),
 
     #[error("Expected distribution filename as last path component of URL: {0}")]
     MissingFilename(String),
