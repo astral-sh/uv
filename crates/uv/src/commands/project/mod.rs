@@ -85,7 +85,7 @@ pub(crate) enum ProjectError {
         "{} are incompatible with the declared conflicts: {{{}}}",
         _1.iter().map(|conflict| {
             match conflict {
-                ConflictKind::Project => format!("project"),
+                ConflictKind::Project => "the project".to_string(),
                 ConflictKind::Extra(ref extra) => format!("extra `{extra}`"),
                 ConflictKind::Group(ref group) => format!("group `{group}`"),
             }
@@ -94,7 +94,7 @@ pub(crate) enum ProjectError {
             .iter()
             .map(|item| {
                 match item.kind() {
-                    ConflictKind::Project => format!("project"),
+                    ConflictKind::Project => "the project".to_string(),
                     ConflictKind::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
                     ConflictKind::Group(ref group) => format!("`{}:{}`", item.package(), group),
                 }

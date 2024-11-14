@@ -293,18 +293,12 @@ pub(super) async fn do_sync(
     for set in conflicts.iter() {
         let mut conflicts: Vec<ConflictKind> = vec![];
         for item in set.iter() {
-            if item
-                .extra()
-                .map(|extra| extras.contains(extra))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.kind().clone());
-            }
-            if item
-                .group()
-                .map(|group1| dev.iter().any(|group2| group1 == group2))
-                .unwrap_or(false)
-            {
+            let is_conflicting = match *item.kind() {
+                ConflictKind::Project => dev.prod(),
+                ConflictKind::Extra(ref extra) => extras.contains(extra),
+                ConflictKind::Group(ref group1) => dev.iter().any(|group2| group1 == group2),
+            };
+            if is_conflicting {
                 conflicts.push(item.kind().clone());
             }
         }

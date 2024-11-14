@@ -554,6 +554,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let PubGrubDependency {
                                 package,
                                 version: _,
+                                parent: _,
                                 specifier: _,
                                 url: _,
                             } = dependency;
@@ -722,6 +723,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let PubGrubDependency {
                         package,
                         version: _,
+                        parent: _,
                         specifier: _,
                         url: _,
                     } = dependency;
@@ -1447,7 +1449,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let mut dependencies: Vec<_> = requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, Some(name))
+                        PubGrubDependency::from_requirement(requirement, Some(package))
                     })
                     .collect();
 
@@ -1466,6 +1468,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 marker: marker.clone(),
                             }),
                             version: Range::singleton(version.clone()),
+                            parent: None,
                             specifier: None,
                             url: None,
                         });
@@ -1489,6 +1492,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 marker: marker.and_then(MarkerTree::contents),
                             }),
                             version: Range::singleton(version.clone()),
+                            parent: None,
                             specifier: None,
                             url: None,
                         })
@@ -1517,6 +1521,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         marker: marker.cloned(),
                                     }),
                                     version: Range::singleton(version.clone()),
+                                    parent: None,
                                     specifier: None,
                                     url: None,
                                 })
@@ -1543,6 +1548,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         marker: marker.cloned(),
                                     }),
                                     version: Range::singleton(version.clone()),
+                                    parent: None,
                                     specifier: None,
                                     url: None,
                                 })
@@ -2306,6 +2312,7 @@ impl ForkState {
                 let PubGrubDependency {
                     package,
                     version,
+                    parent: _,
                     specifier: _,
                     url: _,
                 } = dependency;
@@ -3025,7 +3032,7 @@ impl Fork {
 
     /// Add a dependency to this fork.
     fn add_dependency(&mut self, dep: PubGrubDependency) {
-        if let Some(conflicting_item) = dep.package.conflicting_item() {
+        if let Some(conflicting_item) = dep.conflicting_item() {
             self.conflicts.insert(conflicting_item.to_owned());
         }
         self.dependencies.push(dep);
@@ -3044,7 +3051,7 @@ impl Fork {
             if self.env.included_by_marker(markers) {
                 return true;
             }
-            if let Some(conflicting_item) = dep.package.conflicting_item() {
+            if let Some(conflicting_item) = dep.conflicting_item() {
                 self.conflicts.remove(&conflicting_item);
             }
             false
@@ -3063,13 +3070,13 @@ impl Fork {
     fn exclude(mut self, groups: impl IntoIterator<Item = ConflictItem>) -> Fork {
         self.env = self.env.exclude_by_group(groups);
         self.dependencies.retain(|dep| {
-            let Some(conflicting_item) = dep.package.conflicting_item() else {
+            let Some(conflicting_item) = dep.conflicting_item() else {
                 return true;
             };
             if self.env.included_by_group(conflicting_item) {
                 return true;
             }
-            if let Some(conflicting_item) = dep.package.conflicting_item() {
+            if let Some(conflicting_item) = dep.conflicting_item() {
                 self.conflicts.remove(&conflicting_item);
             }
             false

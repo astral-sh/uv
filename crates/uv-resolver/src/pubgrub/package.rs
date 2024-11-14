@@ -208,13 +208,14 @@ impl PubGrubPackage {
         }
     }
 
-    /// Extracts a possible conflicting group from this package.
+    /// Extracts a possible conflicting item from this package.
     ///
-    /// If this package can't possibly be classified as a conflicting group,
-    /// then this returns `None`.
+    /// If this package can't possibly be classified as a conflicting, then
+    /// this returns `None`.
     pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
         let package = self.name_no_root()?;
         match (self.extra(), self.dev()) {
+            // (None, None) => Some(ConflictItemRef::from(package)),
             (None, None) => None,
             (Some(extra), None) => Some(ConflictItemRef::from((package, extra))),
             (None, Some(group)) => Some(ConflictItemRef::from((package, group))),
