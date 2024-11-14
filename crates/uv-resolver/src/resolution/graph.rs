@@ -444,7 +444,14 @@ impl ResolutionGraph {
                 archive.metadata.clone()
             };
 
-            (dist.into(), hashes, Some(metadata))
+            (
+                ResolvedDist::Installable {
+                    dist,
+                    version: version.clone(),
+                },
+                hashes,
+                Some(metadata),
+            )
         } else {
             let dist = pins
                 .get(name, version)

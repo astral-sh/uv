@@ -2360,8 +2360,8 @@ impl Source {
     fn from_resolved_dist(resolved_dist: &ResolvedDist, root: &Path) -> Result<Source, LockError> {
         match *resolved_dist {
             // We pass empty installed packages for locking.
-            ResolvedDist::Installed(_) => unreachable!(),
-            ResolvedDist::Installable(ref dist) => Source::from_dist(dist, root),
+            ResolvedDist::Installed { .. } => unreachable!(),
+            ResolvedDist::Installable { ref dist, .. } => Source::from_dist(dist, root),
         }
     }
 
@@ -2892,8 +2892,8 @@ impl SourceDist {
     ) -> Result<Option<SourceDist>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
-            ResolvedDist::Installed(_) => unreachable!(),
-            ResolvedDist::Installable(ref dist) => {
+            ResolvedDist::Installed { .. } => unreachable!(),
+            ResolvedDist::Installable { ref dist, .. } => {
                 SourceDist::from_dist(id, dist, &annotated_dist.hashes, annotated_dist.index())
             }
         }
@@ -3174,8 +3174,8 @@ impl Wheel {
     fn from_annotated_dist(annotated_dist: &AnnotatedDist) -> Result<Vec<Wheel>, LockError> {
         match annotated_dist.dist {
             // We pass empty installed packages for locking.
-            ResolvedDist::Installed(_) => unreachable!(),
-            ResolvedDist::Installable(ref dist) => {
+            ResolvedDist::Installed { .. } => unreachable!(),
+            ResolvedDist::Installable { ref dist, .. } => {
                 Wheel::from_dist(dist, &annotated_dist.hashes, annotated_dist.index())
             }
         }

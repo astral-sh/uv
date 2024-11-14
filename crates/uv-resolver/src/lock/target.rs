@@ -266,11 +266,14 @@ impl<'env> InstallTarget<'env> {
             ) {
                 map.insert(
                     dist.id.name.clone(),
-                    ResolvedDist::Installable(dist.to_dist(
-                        self.workspace().install_path(),
-                        TagPolicy::Required(tags),
-                        build_options,
-                    )?),
+                    ResolvedDist::Installable {
+                        dist: dist.to_dist(
+                            self.workspace().install_path(),
+                            TagPolicy::Required(tags),
+                            build_options,
+                        )?,
+                        version: dist.id.version.clone(),
+                    },
                 );
                 hashes.insert(dist.id.name.clone(), dist.hashes());
             }
