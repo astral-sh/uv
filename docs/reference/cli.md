@@ -1390,6 +1390,8 @@ uv sync [OPTIONS]
 
 <dl class="cli-reference"><dt><code>--all-extras</code></dt><dd><p>Include all optional dependencies.</p>
 
+<p>When two or more extras are declared as conflicting in <code>tool.uv.conflicts</code>, using this flag will always result in an error.</p>
+
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
 
 </dd><dt><code>--all-packages</code></dt><dd><p>Sync all packages in the workspace.</p>
@@ -1462,6 +1464,8 @@ uv sync [OPTIONS]
 
 <p>May be provided more than once.</p>
 
+<p>When multiple extras or groups are specified that appear in <code>tool.uv.conflicts</code>, uv will report an error.</p>
+
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
 
 </dd><dt><code>--extra-index-url</code> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
@@ -1484,6 +1488,8 @@ uv sync [OPTIONS]
 
 <p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
 </dd><dt><code>--group</code> <i>group</i></dt><dd><p>Include dependencies from the specified dependency group.</p>
+
+<p>When multiple extras or groups are specified that appear in <code>tool.uv.conflicts</code>, uv will report an error.</p>
 
 <p>May be provided multiple times.</p>
 
