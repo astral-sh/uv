@@ -216,7 +216,7 @@ impl<'env> InstallTarget<'env> {
 
                     let dep_dist = self.lock().find_by_id(&dep.package_id);
 
-                    // Add the dependency to the graph.
+                    // Add the package to the graph.
                     let dep_index = match inverse.entry(&dep.package_id) {
                         Entry::Vacant(entry) => {
                             let index = petgraph.add_node(self.package_to_node(
@@ -275,7 +275,7 @@ impl<'env> InstallTarget<'env> {
                         name: root_name.clone(),
                     })?;
 
-                // Add the workspace package to the graph.
+                // Add the package to the graph.
                 let index = match inverse.entry(&dist.id) {
                     Entry::Vacant(entry) => {
                         let index = petgraph.add_node(self.package_to_node(
@@ -293,7 +293,7 @@ impl<'env> InstallTarget<'env> {
                     }
                 };
 
-                // Add an edge from the root.
+                // Add the edge.
                 petgraph.add_edge(
                     root,
                     index,
@@ -301,9 +301,13 @@ impl<'env> InstallTarget<'env> {
                 );
 
                 // Push its dependencies on the queue.
-                queue.push_back((dist, None));
+                if seen.insert((&dist.id, None)) {
+                    queue.push_back((dist, None));
+                }
                 for extra in &dependency.extras {
-                    queue.push_back((dist, Some(extra)));
+                    if seen.insert((&dist.id, Some(extra))) {
+                        queue.push_back((dist, Some(extra)));
+                    }
                 }
             }
         }
