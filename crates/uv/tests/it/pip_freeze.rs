@@ -80,7 +80,7 @@ fn freeze_duplicate() -> Result<()> {
     pip==22.1.1
 
     ----- stderr -----
-    warning: The package `pip` has multiple installed distributions: 
+    warning: The package `pip` has multiple installed distributions:
       - [SITE_PACKAGES]/pip-21.3.1.dist-info
       - [SITE_PACKAGES]/pip-22.1.1.dist-info
     "#

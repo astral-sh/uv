@@ -67,6 +67,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"Caused by: .* \(os error 2\)",
         "Caused by: No such file or directory (os error 2)",
     ),
+    // Trim end-of-line whitespaces, to allow removing them on save.
+    (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
