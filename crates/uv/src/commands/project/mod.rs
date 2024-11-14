@@ -31,8 +31,8 @@ use uv_python::{
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
-    ResolverEnvironment,
+    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_scripts::Pep723Item;
 use uv_settings::PythonInstallMirrors;
@@ -955,7 +955,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
     }
 }
 
-/// Run dependency resolution for an interpreter, returning the [`ResolutionGraph`].
+/// Run dependency resolution for an interpreter, returning the [`ResolverOutput`].
 pub(crate) async fn resolve_environment<'a>(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
@@ -968,7 +968,7 @@ pub(crate) async fn resolve_environment<'a>(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
-) -> Result<ResolutionGraph, ProjectError> {
+) -> Result<ResolverOutput, ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettingsRef {

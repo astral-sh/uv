@@ -58,21 +58,22 @@ impl CachedEnvironment {
         };
 
         // Resolve the requirements with the interpreter.
-        let graph = resolve_environment(
-            spec,
-            &interpreter,
-            settings.as_ref().into(),
-            state,
-            resolve,
-            connectivity,
-            concurrency,
-            native_tls,
-            allow_insecure_host,
-            cache,
-            printer,
-        )
-        .await?;
-        let resolution = Resolution::from(graph);
+        let resolution = Resolution::from(
+            resolve_environment(
+                spec,
+                &interpreter,
+                settings.as_ref().into(),
+                state,
+                resolve,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+            )
+            .await?,
+        );
 
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL

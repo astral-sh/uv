@@ -12,14 +12,14 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
-use crate::{ResolutionGraph, ResolverEnvironment};
+use crate::{ResolverEnvironment, ResolverOutput};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
 #[derive(Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
-    resolution: &'a ResolutionGraph,
+    resolution: &'a ResolverOutput,
     /// The resolver marker environment, used to determine the markers that apply to each package.
     env: &'a ResolverEnvironment,
     /// The packages to exclude from the output.
@@ -50,7 +50,7 @@ impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
-        underlying: &'a ResolutionGraph,
+        underlying: &'a ResolverOutput,
         env: &'a ResolverEnvironment,
         no_emit_packages: &'a [PackageName],
         show_hashes: bool,
@@ -136,7 +136,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
         // that for each package tells us if it should be installed on the current platform, without
         // looking at which packages depend on it.
-        let petgraph = self.resolution.petgraph.map(
+        let graph = self.resolution.graph.map(
             |_index, node| match node {
                 ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
                 ResolutionGraphNode::Dist(dist) => {
@@ -150,17 +150,17 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
         );
 
         // Reduce the graph, removing or combining extras for a given package.
-        let petgraph = if self.include_extras {
-            combine_extras(&petgraph)
+        let graph = if self.include_extras {
+            combine_extras(&graph)
         } else {
-            strip_extras(&petgraph)
+            strip_extras(&graph)
         };
 
         // Collect all packages.
-        let mut nodes = petgraph
+        let mut nodes = graph
             .node_indices()
             .filter_map(|index| {
-                let dist = &petgraph[index];
+                let dist = &graph[index];
                 let name = dist.name();
                 if self.no_emit_packages.contains(name) {
                     return None;
@@ -199,9 +199,9 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             if self.include_annotations {
                 // Display all dependents (i.e., all packages that depend on the current package).
                 let dependents = {
-                    let mut dependents = petgraph
+                    let mut dependents = graph
                         .edges_directed(index, Direction::Incoming)
-                        .map(|edge| &petgraph[edge.source()])
+                        .map(|edge| &graph[edge.source()])
                         .map(uv_distribution_types::Name::name)
                         .collect::<Vec<_>>();
                     dependents.sort_unstable();

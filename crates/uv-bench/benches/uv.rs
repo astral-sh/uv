@@ -101,7 +101,7 @@ mod resolver {
     use uv_python::Interpreter;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
-        ResolutionGraph, Resolver, ResolverEnvironment,
+        Resolver, ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -139,7 +139,7 @@ mod resolver {
         client: &RegistryClient,
         interpreter: &Interpreter,
         universal: bool,
-    ) -> Result<ResolutionGraph> {
+    ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();

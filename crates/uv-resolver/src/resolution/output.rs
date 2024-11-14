@@ -35,12 +35,14 @@ use crate::{
 
 pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
 
-/// A complete resolution graph in which every node represents a pinned package and every edge
-/// represents a dependency between two pinned packages.
+/// The output of a successful resolution.
+///
+/// Includes a complete resolution graph in which every node represents a pinned package and every
+/// edge represents a dependency between two pinned packages.
 #[derive(Debug)]
-pub struct ResolutionGraph {
+pub struct ResolverOutput {
     /// The underlying graph.
-    pub(crate) petgraph: Graph<ResolutionGraphNode, MarkerTree, Directed>,
+    pub(crate) graph: Graph<ResolutionGraphNode, MarkerTree, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: RequiresPython,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
@@ -92,8 +94,8 @@ struct PackageRef<'a> {
     group: Option<&'a GroupName>,
 }
 
-impl ResolutionGraph {
-    /// Create a new graph from the resolved PubGrub state.
+impl ResolverOutput {
+    /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
     pub(crate) fn from_state(
         resolutions: &[Resolution],
         requirements: &[Requirement],
@@ -108,14 +110,14 @@ impl ResolutionGraph {
         options: Options,
     ) -> Result<Self, ResolveError> {
         let size_guess = resolutions[0].nodes.len();
-        let mut petgraph: Graph<ResolutionGraphNode, MarkerTree, Directed> =
+        let mut graph: Graph<ResolutionGraphNode, MarkerTree, Directed> =
             Graph::with_capacity(size_guess, size_guess);
         let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
             FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
         let mut diagnostics = Vec::new();
 
         // Add the root node.
-        let root_index = petgraph.add_node(ResolutionGraphNode::Root);
+        let root_index = graph.add_node(ResolutionGraphNode::Root);
 
         let mut package_markers: FxHashMap<PackageName, MarkersForDistribution> =
             FxHashMap::default();
@@ -140,7 +142,7 @@ impl ResolutionGraph {
                     continue;
                 }
                 Self::add_version(
-                    &mut petgraph,
+                    &mut graph,
                     &mut inverse,
                     &mut diagnostics,
                     preferences,
@@ -165,13 +167,7 @@ impl ResolutionGraph {
                     continue;
                 }
 
-                Self::add_edge(
-                    &mut petgraph,
-                    &mut inverse,
-                    root_index,
-                    edge,
-                    marker.clone(),
-                );
+                Self::add_edge(&mut graph, &mut inverse, root_index, edge, marker.clone());
             }
         }
 
@@ -213,24 +209,24 @@ impl ResolutionGraph {
         };
 
         // Compute and apply the marker reachability.
-        let mut reachability = marker_reachability(&petgraph, &fork_markers);
+        let mut reachability = marker_reachability(&graph, &fork_markers);
 
         // Apply the reachability to the graph.
-        for index in petgraph.node_indices() {
-            if let ResolutionGraphNode::Dist(dist) = &mut petgraph[index] {
+        for index in graph.node_indices() {
+            if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
                 dist.marker = reachability.remove(&index).unwrap_or_default();
             }
         }
 
         // Discard any unreachable nodes.
-        petgraph.retain_nodes(|graph, node| !graph[node].marker().is_false());
+        graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-            report_missing_lower_bounds(&petgraph, &mut diagnostics);
+            report_missing_lower_bounds(&graph, &mut diagnostics);
         }
 
-        let graph = Self {
-            petgraph,
+        let output = Self {
+            graph,
             requires_python,
             diagnostics,
             requirements: requirements.to_vec(),
@@ -253,7 +249,7 @@ impl ResolutionGraph {
         // versions of the same package into the same virtualenv. ---AG
         if conflicts.is_empty() {
             #[allow(unused_mut, reason = "Used in debug_assertions below")]
-            let mut conflicting = graph.find_conflicting_distributions();
+            let mut conflicting = output.find_conflicting_distributions();
             if !conflicting.is_empty() {
                 tracing::warn!(
                     "found {} conflicting distributions in resolution, \
@@ -275,7 +271,7 @@ impl ResolutionGraph {
                 return Err(ResolveError::ConflictingDistribution(err));
             }
         }
-        Ok(graph)
+        Ok(output)
     }
 
     fn add_edge(
@@ -566,9 +562,9 @@ impl ResolutionGraph {
 
     /// Returns an iterator over the distinct packages in the graph.
     fn dists(&self) -> impl Iterator<Item = &AnnotatedDist> {
-        self.petgraph
+        self.graph
             .node_indices()
-            .filter_map(move |index| match &self.petgraph[index] {
+            .filter_map(move |index| match &self.graph[index] {
                 ResolutionGraphNode::Root => None,
                 ResolutionGraphNode::Dist(dist) => Some(dist),
             })
@@ -677,8 +673,8 @@ impl ResolutionGraph {
         }
 
         let mut seen_marker_values = IndexSet::default();
-        for i in self.petgraph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &self.petgraph[i] else {
+        for i in self.graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &self.graph[i] else {
                 continue;
             };
             let version_id = match dist.version_or_url() {
@@ -750,7 +746,7 @@ impl ResolutionGraph {
     fn find_conflicting_distributions(&self) -> Vec<ConflictingDistributionError> {
         let mut name_to_markers: BTreeMap<&PackageName, Vec<(&Version, &MarkerTree)>> =
             BTreeMap::new();
-        for node in self.petgraph.node_weights() {
+        for node in self.graph.node_weights() {
             let annotated_dist = match node {
                 ResolutionGraphNode::Root => continue,
                 ResolutionGraphNode::Dist(ref annotated_dist) => annotated_dist,
@@ -818,8 +814,8 @@ impl Display for ConflictingDistributionError {
     }
 }
 
-impl From<ResolutionGraph> for uv_distribution_types::Resolution {
-    fn from(graph: ResolutionGraph) -> Self {
+impl From<ResolverOutput> for uv_distribution_types::Resolution {
+    fn from(graph: ResolverOutput) -> Self {
         Self::new(
             graph
                 .dists()

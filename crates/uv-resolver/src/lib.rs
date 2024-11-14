@@ -14,7 +14,7 @@ pub use prerelease::PrereleaseMode;
 pub use python_requirement::PythonRequirement;
 pub use requires_python::{RequiresPython, RequiresPythonRange};
 pub use resolution::{
-    AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolutionGraph,
+    AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
