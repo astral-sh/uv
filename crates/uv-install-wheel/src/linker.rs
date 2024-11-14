@@ -470,7 +470,7 @@ fn copy_wheel_files(
         let entry = entry?;
         let path = entry.path();
 
-        let relative = path.strip_prefix(&wheel).unwrap();
+        let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {
@@ -500,7 +500,7 @@ fn hardlink_wheel_files(
         let entry = entry?;
         let path = entry.path();
 
-        let relative = path.strip_prefix(&wheel).unwrap();
+        let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {

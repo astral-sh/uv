@@ -1,19 +1,21 @@
-use crate::pep639_glob::parse_pep639_glob;
 use crate::Error;
+use globset::{Glob, GlobSetBuilder};
 use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use tracing::debug;
+use tracing::{debug, trace};
 use uv_fs::Simplified;
+use uv_globfilter::parse_portable_glob;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 use uv_warnings::warn_user_once;
 use version_ranges::Ranges;
+use walkdir::WalkDir;
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -312,27 +314,53 @@ impl PyProjectToml {
                 };
 
                 let mut license_files = Vec::new();
+                let mut license_glob_builder = GlobSetBuilder::new();
                 for license_glob in license_globs {
-                    let pep639_glob = parse_pep639_glob(license_glob)
-                        .map_err(|err| Error::Pep639Glob(license_glob.to_string(), err))?;
-                    let absolute_glob = PathBuf::from(glob::Pattern::escape(
+                    let pep639_glob =
+                        parse_portable_glob(license_glob).map_err(|err| Error::PortableGlob {
+                            field: license_glob.to_string(),
+                            source: err,
+                        })?;
+                    let absolute_glob = PathBuf::from(globset::escape(
                         root.simplified().to_string_lossy().as_ref(),
                     ))
                     .join(pep639_glob.to_string())
                     .to_string_lossy()
                     .to_string();
-                    for license_file in glob::glob(&absolute_glob)
-                        .map_err(|err| Error::Pattern(absolute_glob.to_string(), err))?
-                    {
-                        let license_file = license_file
-                            .map_err(Error::Glob)?
-                            .to_string_lossy()
-                            .to_string();
-                        if !license_files.contains(&license_file) {
-                            license_files.push(license_file);
+                    license_glob_builder.add(Glob::new(&absolute_glob).map_err(|err| {
+                        Error::GlobSet {
+                            field: "project.license-files".to_string(),
+                            err,
                         }
+                    })?);
+                }
+                let license_globs = license_glob_builder.build().map_err(|err| Error::GlobSet {
+                    field: "project.license-files".to_string(),
+                    err,
+                })?;
+
+                for entry in WalkDir::new(".") {
+                    let entry = entry.map_err(|err| Error::WalkDir {
+                        root: PathBuf::from("."),
+                        err,
+                    })?;
+                    let relative = entry
+                        .path()
+                        .strip_prefix("./")
+                        .expect("walkdir starts with root");
+                    if !license_globs.is_match(relative) {
+                        trace!("Not a license files match: `{}`", relative.user_display());
+                        continue;
+                    }
+
+                    debug!("License files match: `{}`", relative.user_display());
+                    let license_file = relative.to_string_lossy().to_string();
+
+                    if !license_files.contains(&license_file) {
+                        license_files.push(license_file);
                     }
                 }
+
                 // The glob order may be unstable
                 license_files.sort();
 

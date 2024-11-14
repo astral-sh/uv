@@ -79,7 +79,7 @@ fn test_prepare_metadata() {
                 .unwrap()
                 .path()
                 .strip_prefix(metadata_dir.path())
-                .unwrap()
+                .expect("walkdir starts with root")
                 .portable_display()
                 .to_string()
         })
