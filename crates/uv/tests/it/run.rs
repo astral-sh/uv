@@ -248,7 +248,7 @@ fn run_no_args() -> Result<()> {
 
     The following commands are available in the environment:
 
-    - pydoc
+    - pydoc.bat
     - python
     - pythonw
 
