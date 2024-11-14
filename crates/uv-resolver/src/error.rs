@@ -257,117 +257,15 @@ impl NoSolutionError {
     /// implement PEP 440 semantics for local version equality. For example, `1.0.0+foo` needs to
     /// satisfy `==1.0.0`.
     pub(crate) fn collapse_local_version_segments(derivation_tree: ErrorTree) -> ErrorTree {
-        /// Remove local versions sentinels (`+[max]`) from the interval.
-        fn strip_sentinel(
-            mut lower: Bound<Version>,
-            mut upper: Bound<Version>,
-        ) -> (Bound<Version>, Bound<Version>) {
-            match (&lower, &upper) {
-                (Bound::Unbounded, Bound::Unbounded) => {}
-                (Bound::Unbounded, Bound::Included(v)) => {
-                    // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                    if v.local() == LocalVersionSlice::Max {
-                        upper = Bound::Included(v.clone().without_local());
-                    }
-                }
-                (Bound::Unbounded, Bound::Excluded(v)) => {
-                    // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                    if v.local() == LocalVersionSlice::Max {
-                        upper = Bound::Excluded(v.clone().without_local());
-                    }
-                }
-                (Bound::Included(v), Bound::Unbounded) => {
-                    // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                    if v.local() == LocalVersionSlice::Max {
-                        lower = Bound::Excluded(v.clone().without_local());
-                    }
-                }
-                (Bound::Included(v), Bound::Included(b)) => {
-                    // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                    if v.local() == LocalVersionSlice::Max {
-                        lower = Bound::Excluded(v.clone().without_local());
-                    }
-                    // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                    if b.local() == LocalVersionSlice::Max {
-                        upper = Bound::Included(b.clone().without_local());
-                    }
-                }
-                (Bound::Included(v), Bound::Excluded(b)) => {
-                    // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                    if v.local() == LocalVersionSlice::Max {
-                        lower = Bound::Excluded(v.clone().without_local());
-                    }
-                    // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                    if b.local() == LocalVersionSlice::Max {
-                        upper = Bound::Included(b.clone().without_local());
-                    }
-                }
-                (Bound::Excluded(v), Bound::Unbounded) => {
-                    // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                    if v.local() == LocalVersionSlice::Max {
-                        lower = Bound::Excluded(v.clone().without_local());
-                    }
-                }
-                (Bound::Excluded(v), Bound::Included(b)) => {
-                    // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                    if v.local() == LocalVersionSlice::Max {
-                        lower = Bound::Excluded(v.clone().without_local());
-                    }
-                    // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                    if b.local() == LocalVersionSlice::Max {
-                        upper = Bound::Included(b.clone().without_local());
-                    }
-                }
-                (Bound::Excluded(v), Bound::Excluded(b)) => {
-                    // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                    if v.local() == LocalVersionSlice::Max {
-                        lower = Bound::Excluded(v.clone().without_local());
-                    }
-                    // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                    if b.local() == LocalVersionSlice::Max {
-                        upper = Bound::Excluded(b.clone().without_local());
-                    }
-                }
-            }
-            (lower, upper)
-        }
-
-        /// Remove local versions sentinels (`+[max]`) from the version ranges.
-        #[allow(clippy::needless_pass_by_value)]
-        fn strip_sentinels(versions: Ranges<Version>) -> Ranges<Version> {
-            let mut range = Ranges::empty();
-            for (lower, upper) in versions.iter() {
-                let (lower, upper) = strip_sentinel(lower.clone(), upper.clone());
-                range = range.union(&Range::from_range_bounds((lower, upper)));
-            }
-            range
-        }
-
-        /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]`.
-        fn is_sentinel(versions: &Ranges<Version>) -> bool {
-            versions.iter().all(|(lower, upper)| {
-                let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
-                    return false;
-                };
-                if lower.local() == LocalVersionSlice::Max {
-                    return false;
-                }
-                if upper.local() != LocalVersionSlice::Max {
-                    return false;
-                }
-                *lower == upper.clone().without_local()
-            })
-        }
-
         fn strip(derivation_tree: ErrorTree) -> Option<ErrorTree> {
             match derivation_tree {
                 DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree),
                 DerivationTree::External(External::NoVersions(package, versions)) => {
-                    if is_sentinel(&versions) {
+                    if SentinelRange::from(&versions).is_sentinel() {
                         return None;
                     }
 
-                    let versions = strip_sentinels(versions);
+                    let versions = SentinelRange::from(&versions).strip();
                     Some(DerivationTree::External(External::NoVersions(
                         package, versions,
                     )))
@@ -378,14 +276,14 @@ impl NoSolutionError {
                     package2,
                     versions2,
                 )) => {
-                    let versions1 = strip_sentinels(versions1);
-                    let versions2 = strip_sentinels(versions2);
+                    let versions1 = SentinelRange::from(&versions1).strip();
+                    let versions2 = SentinelRange::from(&versions2).strip();
                     Some(DerivationTree::External(External::FromDependencyOf(
                         package1, versions1, package2, versions2,
                     )))
                 }
                 DerivationTree::External(External::Custom(package, versions, reason)) => {
-                    let versions = strip_sentinels(versions);
+                    let versions = SentinelRange::from(&versions).strip();
                     Some(DerivationTree::External(External::Custom(
                         package, versions, reason,
                     )))
@@ -402,10 +300,10 @@ impl NoSolutionError {
                                 .map(|(pkg, term)| {
                                     let term = match term {
                                         Term::Positive(versions) => {
-                                            Term::Positive(strip_sentinels(versions))
+                                            Term::Positive(SentinelRange::from(&versions).strip())
                                         }
                                         Term::Negative(versions) => {
-                                            Term::Negative(strip_sentinels(versions))
+                                            Term::Negative(SentinelRange::from(&versions).strip())
                                         }
                                     };
                                     (pkg, term)
@@ -897,6 +795,119 @@ fn drop_root_dependency_on_project(
                 }
             }
         }
+    }
+}
+
+/// A version range that may include local version sentinels (`+[max]`).
+#[derive(Debug)]
+pub struct SentinelRange<'range>(&'range Range<Version>);
+
+impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
+    fn from(range: &'range Range<Version>) -> Self {
+        Self(range)
+    }
+}
+
+impl<'range> SentinelRange<'range> {
+    /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]`.
+    pub fn is_sentinel(&self) -> bool {
+        self.0.iter().all(|(lower, upper)| {
+            let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
+                return false;
+            };
+            if lower.local() == LocalVersionSlice::Max {
+                return false;
+            }
+            if upper.local() != LocalVersionSlice::Max {
+                return false;
+            }
+            *lower == upper.clone().without_local()
+        })
+    }
+
+    /// Remove local versions sentinels (`+[max]`) from the version ranges.
+    pub fn strip(&self) -> Ranges<Version> {
+        let mut range = Ranges::empty();
+        for (lower, upper) in self.0.iter() {
+            let (lower, upper) = Self::strip_sentinel(lower.clone(), upper.clone());
+            range = range.union(&Range::from_range_bounds((lower, upper)));
+        }
+        range
+    }
+
+    /// Remove local versions sentinels (`+[max]`) from the interval.
+    fn strip_sentinel(
+        mut lower: Bound<Version>,
+        mut upper: Bound<Version>,
+    ) -> (Bound<Version>, Bound<Version>) {
+        match (&lower, &upper) {
+            (Bound::Unbounded, Bound::Unbounded) => {}
+            (Bound::Unbounded, Bound::Included(v)) => {
+                // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                if v.local() == LocalVersionSlice::Max {
+                    upper = Bound::Included(v.clone().without_local());
+                }
+            }
+            (Bound::Unbounded, Bound::Excluded(v)) => {
+                // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                if v.local() == LocalVersionSlice::Max {
+                    upper = Bound::Excluded(v.clone().without_local());
+                }
+            }
+            (Bound::Included(v), Bound::Unbounded) => {
+                // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                if v.local() == LocalVersionSlice::Max {
+                    lower = Bound::Excluded(v.clone().without_local());
+                }
+            }
+            (Bound::Included(v), Bound::Included(b)) => {
+                // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                if v.local() == LocalVersionSlice::Max {
+                    lower = Bound::Excluded(v.clone().without_local());
+                }
+                // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                if b.local() == LocalVersionSlice::Max {
+                    upper = Bound::Included(b.clone().without_local());
+                }
+            }
+            (Bound::Included(v), Bound::Excluded(b)) => {
+                // `>=1.0.0+[max]` is equivalent to `>1.0.0`
+                if v.local() == LocalVersionSlice::Max {
+                    lower = Bound::Excluded(v.clone().without_local());
+                }
+                // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                if b.local() == LocalVersionSlice::Max {
+                    upper = Bound::Included(b.clone().without_local());
+                }
+            }
+            (Bound::Excluded(v), Bound::Unbounded) => {
+                // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                if v.local() == LocalVersionSlice::Max {
+                    lower = Bound::Excluded(v.clone().without_local());
+                }
+            }
+            (Bound::Excluded(v), Bound::Included(b)) => {
+                // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                if v.local() == LocalVersionSlice::Max {
+                    lower = Bound::Excluded(v.clone().without_local());
+                }
+                // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
+                if b.local() == LocalVersionSlice::Max {
+                    upper = Bound::Included(b.clone().without_local());
+                }
+            }
+            (Bound::Excluded(v), Bound::Excluded(b)) => {
+                // `>1.0.0+[max]` is equivalent to `>1.0.0`
+                if v.local() == LocalVersionSlice::Max {
+                    lower = Bound::Excluded(v.clone().without_local());
+                }
+                // `<1.0.0+[max]` is equivalent to `<1.0.0`
+                if b.local() == LocalVersionSlice::Max {
+                    upper = Bound::Excluded(b.clone().without_local());
+                }
+            }
+        }
+        (lower, upper)
     }
 }
 

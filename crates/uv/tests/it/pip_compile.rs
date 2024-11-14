@@ -13292,7 +13292,7 @@ fn compile_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` was included because `child==0.1.0` depends on `wsgiref`
+      help: `wsgiref` (v0.1.2) was included because `child` (v0.1.0) depends on `wsgiref`
     "###
     );
 

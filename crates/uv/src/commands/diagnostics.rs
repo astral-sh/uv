@@ -3,9 +3,12 @@ use std::sync::LazyLock;
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
+use version_ranges::Ranges;
 
 use uv_distribution_types::{BuiltDist, DerivationChain, Name, SourceDist};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
+use uv_resolver::SentinelRange;
 
 use crate::commands::pip;
 
@@ -155,6 +158,54 @@ impl OperationDiagnostic {
     }
 }
 
+/// Format a [`DerivationChain`] as a human-readable error message.
+fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
+    let mut message = if let Some(version) = version {
+        format!(
+            "`{}` (v{}) was included because",
+            name.cyan(),
+            version.cyan()
+        )
+    } else {
+        format!("`{}` was included because", name.cyan())
+    };
+    let mut range: Option<Ranges<Version>> = None;
+    for (i, step) in chain.iter().enumerate() {
+        if i > 0 {
+            if let Some(range) =
+                range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
+            {
+                message = format!(
+                    "{message} `{}{}` (v{}) which depends on",
+                    step.name.cyan(),
+                    range.cyan(),
+                    step.version.cyan()
+                );
+            } else {
+                message = format!(
+                    "{message} `{}` (v{}) which depends on",
+                    step.name.cyan(),
+                    step.version.cyan()
+                );
+            }
+        } else {
+            message = format!(
+                "{message} `{}` (v{}) depends on",
+                step.name.cyan(),
+                step.version.cyan()
+            );
+        }
+        range = Some(SentinelRange::from(&step.range).strip());
+    }
+    if let Some(range) = range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
+    {
+        message = format!("{message} `{}{}`", name.cyan(), range.cyan());
+    } else {
+        message = format!("{message} `{}`", name.cyan());
+    }
+    message
+}
+
 /// Render a remote source distribution build failure with a help message.
 pub(crate) fn download_and_build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
@@ -183,16 +234,7 @@ pub(crate) fn download_and_build(sdist: Box<SourceDist>, chain: &DerivationChain
                 if chain.is_empty() {
                     None
                 } else {
-                    let mut message = format!("`{}` was included because", sdist.name().cyan());
-                    for (i, step) in chain.iter().enumerate() {
-                        if i == 0 {
-                            message = format!("{message} `{}` depends on", step.cyan());
-                        } else {
-                            message = format!("{message} `{}` which depends on", step.cyan());
-                        }
-                    }
-                    message = format!("{message} `{}`", sdist.name().cyan());
-                    Some(message)
+                    Some(format_chain(sdist.name(), sdist.version(), chain))
                 }
             }),
         sdist,
@@ -202,12 +244,12 @@ pub(crate) fn download_and_build(sdist: Box<SourceDist>, chain: &DerivationChain
 }
 
 /// Render a remote binary distribution download failure with a help message.
-pub(crate) fn download(sdist: Box<BuiltDist>, chain: &DerivationChain, cause: Error) {
+pub(crate) fn download(wheel: Box<BuiltDist>, chain: &DerivationChain, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to download `{sdist}`")]
+    #[error("Failed to download `{wheel}`")]
     #[diagnostic()]
     struct Diagnostic {
-        sdist: Box<BuiltDist>,
+        wheel: Box<BuiltDist>,
         #[source]
         cause: Error,
         #[help]
@@ -216,11 +258,11 @@ pub(crate) fn download(sdist: Box<BuiltDist>, chain: &DerivationChain, cause: Er
 
     let report = miette::Report::new(Diagnostic {
         help: SUGGESTIONS
-            .get(sdist.name())
+            .get(wheel.name())
             .map(|suggestion| {
                 format!(
                     "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    sdist.name().cyan(),
+                    wheel.name().cyan(),
                     suggestion.cyan(),
                     suggestion.cyan(),
                 )
@@ -229,19 +271,10 @@ pub(crate) fn download(sdist: Box<BuiltDist>, chain: &DerivationChain, cause: Er
                 if chain.is_empty() {
                     None
                 } else {
-                    let mut message = format!("`{}` was included because", sdist.name().cyan());
-                    for (i, step) in chain.iter().enumerate() {
-                        if i == 0 {
-                            message = format!("{message} `{}` depends on", step.cyan());
-                        } else {
-                            message = format!("{message} `{}` which depends on", step.cyan());
-                        }
-                    }
-                    message = format!("{message} `{}`", sdist.name().cyan());
-                    Some(message)
+                    Some(format_chain(wheel.name(), Some(wheel.version()), chain))
                 }
             }),
-        sdist,
+        wheel,
         cause,
     });
     anstream::eprint!("{report:?}");
@@ -275,16 +308,7 @@ pub(crate) fn build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Erro
                 if chain.is_empty() {
                     None
                 } else {
-                    let mut message = format!("`{}` was included because", sdist.name().cyan());
-                    for (i, step) in chain.iter().enumerate() {
-                        if i == 0 {
-                            message = format!("{message} `{}` depends on", step.cyan());
-                        } else {
-                            message = format!("{message} `{}` which depends on", step.cyan());
-                        }
-                    }
-                    message = format!("{message} `{}`", sdist.name().cyan());
-                    Some(message)
+                    Some(format_chain(sdist.name(), sdist.version(), chain))
                 }
             }),
         sdist,

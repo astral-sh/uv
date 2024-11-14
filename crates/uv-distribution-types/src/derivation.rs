@@ -1,5 +1,6 @@
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use version_ranges::Ranges;
 
 /// A chain of derivation steps from the root package to the current package, to explain why a
 /// package is included in the resolution.
@@ -29,18 +30,6 @@ impl DerivationChain {
     }
 }
 
-impl std::fmt::Display for DerivationChain {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (idx, step) in self.0.iter().enumerate() {
-            if idx > 0 {
-                write!(f, " -> ")?;
-            }
-            write!(f, "{}=={}", step.name, step.version)?;
-        }
-        Ok(())
-    }
-}
-
 impl<'chain> IntoIterator for &'chain DerivationChain {
     type Item = &'chain DerivationStep;
     type IntoIter = std::slice::Iter<'chain, DerivationStep>;
@@ -63,20 +52,20 @@ impl IntoIterator for DerivationChain {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DerivationStep {
     /// The name of the package.
-    name: PackageName,
+    pub name: PackageName,
     /// The version of the package.
-    version: Version,
+    pub version: Version,
+    /// The constraints applied to the subsequent package in the chain.
+    pub range: Ranges<Version>,
 }
 
 impl DerivationStep {
     /// Create a [`DerivationStep`] from a package name and version.
-    pub fn new(name: PackageName, version: Version) -> Self {
-        Self { name, version }
-    }
-}
-
-impl std::fmt::Display for DerivationStep {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}=={}", self.name, self.version)
+    pub fn new(name: PackageName, version: Version, range: Ranges<Version>) -> Self {
+        Self {
+            name,
+            version,
+            range,
+        }
     }
 }
