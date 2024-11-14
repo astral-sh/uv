@@ -391,9 +391,8 @@ $ uv add httpx --optional network
 
 !!! note
 
-    If you have optional dependencies that conflict with one another and are using uv in
-    project mode with universal resolution, then resolution will fail. To work around this,
-    it's possible to [declare them as conflicting](./projects.md#optional-dependencies).
+    If you have optional dependencies that conflict with one another, resolution will fail
+    unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
 
 ## Development dependencies
 
@@ -461,9 +460,8 @@ to resolve the requirements of the project with an error.
 
 !!! note
 
-    If you have dependency groups that conflict with one another and are using uv in
-    project mode with universal resolution, then resolution will fail. To work around this,
-    it's possible to [declare them as conflicting](./projects.md#optional-dependencies).
+    If you have dependency groups that conflict with one another, resolution will fail
+    unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
 
 ### Default groups
 

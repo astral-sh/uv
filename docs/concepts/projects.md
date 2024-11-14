@@ -489,56 +489,57 @@ optional dependencies that conflict with one another:
 
 ```toml title="pyproject.toml"
 [project.optional-dependencies]
-project1 = ["numpy==2.1.2"]
-project2 = ["numpy==2.0.0"]
+extra1 = ["numpy==2.1.2"]
+extra2 = ["numpy==2.0.0"]
 ```
 
-If you try to run `uv lock` with the above dependencies, you should get an error like this:
+If you run `uv lock` with the above dependencies, resolution will fail:
 
-```
+```console
+$ uv lock
   x No solution found when resolving dependencies:
-  `-> Because myproject[project2] depends on numpy==2.0.0 and myproject[project1] depends on numpy==2.1.2, we can conclude that myproject[project1] and
-      myproject[project2] are incompatible.
-      And because your project requires myproject[project1] and myproject[project2], we can conclude that your projects's requirements are unsatisfiable.
+  `-> Because myproject[extra2] depends on numpy==2.0.0 and myproject[extra1] depends on numpy==2.1.2, we can conclude that myproject[extra1] and
+      myproject[extra2] are incompatible.
+      And because your project requires myproject[extra1] and myproject[extra2], we can conclude that your projects's requirements are unsatisfiable.
 ```
 
-But if we specify that `project1` and `project2` are conflicting, uv will resolve them in different
-forks. We can specify conflicts in the `tool.uv` section:
+But if you specify that `extra1` and `extra2` are conflicting, uv will resolve them separately.
+Specify conflicts in the `tool.uv` section:
 
 ```toml title="pyproject.toml"
 [tool.uv]
 conflicts = [
     [
-      { extra = "project1" },
-      { extra = "project2" },
+      { extra = "extra1" },
+      { extra = "extra2" },
     ],
 ]
 ```
 
-And now running `uv lock` will succeed. Note though, that this will prevent you from enabling both
-`project1` and `project2` simultaneously:
+Now, running `uv lock` will succeed. Note though, that now you cannot install both `extra1` and
+`extra2` at the same time:
 
 ```console
-$ uv sync --extra project1 --extra project2
+$ uv sync --extra extra1 --extra extra2
 Resolved 3 packages in 14ms
-error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`myproject[project1]`, `myproject[project2]`}
+error: extra `extra1`, extra `extra2` are incompatible with the declared conflicts: {`myproject[extra1]`, `myproject[extra2]`}
 ```
 
-This error occurs because installing both `project1` and `project2` simultaneously could result in
-installing two different versions of the same package into the same environment.
+This error occurs because installing both `extra1` and `extra2` would result in installing two
+different versions of a package into the same environment.
 
-The above strategy for dealing with conflicting extras also works with groups:
+The above strategy for dealing with conflicting extras also works with dependency groups:
 
 ```toml title="pyproject.toml"
 [dependency-groups]
-project1 = ["numpy==2.1.2"]
-project2 = ["numpy==2.0.0"]
+group1 = ["numpy==2.1.2"]
+group2 = ["numpy==2.0.0"]
 
 [tool.uv]
 conflicts = [
     [
-      { group = "project1" },
-      { group = "project2" },
+      { group = "group1" },
+      { group = "group2" },
     ],
 ]
 ```
