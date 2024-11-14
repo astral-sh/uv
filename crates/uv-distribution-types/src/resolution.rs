@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::MarkerTree;
-use uv_pypi_types::{HashDigest, Requirement, RequirementSource};
+use uv_pypi_types::{HashDigest, RequirementSource};
 
 use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
 
@@ -167,9 +166,9 @@ impl Diagnostic for ResolutionDiagnostic {
     }
 }
 
-impl From<&ResolvedDist> for Requirement {
+impl From<&ResolvedDist> for RequirementSource {
     fn from(resolved_dist: &ResolvedDist) -> Self {
-        let source = match resolved_dist {
+        match resolved_dist {
             ResolvedDist::Installable { dist, .. } => match dist {
                 Dist::Built(BuiltDist::Registry(wheels)) => RequirementSource::Registry {
                     specifier: uv_pep440::VersionSpecifiers::from(
@@ -235,13 +234,6 @@ impl From<&ResolvedDist> for Requirement {
                 ),
                 index: None,
             },
-        };
-        Requirement {
-            name: resolved_dist.name().clone(),
-            extras: vec![],
-            marker: MarkerTree::TRUE,
-            source,
-            origin: None,
         }
     }
 }
