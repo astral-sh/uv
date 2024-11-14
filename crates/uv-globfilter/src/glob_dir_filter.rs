@@ -1,4 +1,3 @@
-use bstr::{ByteSlice, ByteVec};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex_automata::dfa;
 use regex_automata::dfa::Automaton;
@@ -99,8 +98,8 @@ impl GlobDirFilter {
 
         // Paths aren't necessarily UTF-8, which we can gloss over since the globs match bytes only
         // anyway.
-        let byte_path = Vec::from_path_lossy(path);
-        for b in byte_path.as_bytes() {
+        let byte_path = path.as_os_str().as_encoded_bytes();
+        for b in byte_path {
             state = dfa.next_state(state, *b);
         }
         // Say we're looking at a directory `foo/bar`. We want to continue if either `foo/bar` is

@@ -11,7 +11,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-bstr = { workspace = true }
 globset = { workspace = true }
 regex = { workspace = true }
 regex-automata = { workspace = true }

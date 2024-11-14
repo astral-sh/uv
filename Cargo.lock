@@ -4961,7 +4961,6 @@ dependencies = [
 name = "uv-globfilter"
 version = "0.1.0"
 dependencies = [
- "bstr",
  "fs-err",
  "globset",
  "insta",
