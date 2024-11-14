@@ -7681,3 +7681,152 @@ fn add_preserves_trailing_depth() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn add_preserves_first_own_line_comment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            # comment
+            "sniffio==1.3.1",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + charset-normalizer==3.3.2
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "charset-normalizer>=3.3.2",
+            # comment
+            "sniffio==1.3.1",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn add_preserves_first_line_bracket_comment() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [ # comment
+            "sniffio==1.3.1",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + charset-normalizer==3.3.2
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [ # comment
+            "charset-normalizer>=3.3.2",
+            "sniffio==1.3.1",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn add_no_indent() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+"sniffio==1.3.1"
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("charset-normalizer"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + charset-normalizer==3.3.2
+     + sniffio==1.3.1
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+                [project]
+                name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = [
+            "charset-normalizer>=3.3.2",
+            "sniffio==1.3.1",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
