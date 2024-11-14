@@ -1,7 +1,8 @@
-use crate::common::{copy_dir_all, uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, TestContext};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
 #[test]

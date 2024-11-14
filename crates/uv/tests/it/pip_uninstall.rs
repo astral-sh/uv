@@ -327,7 +327,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
 /// Uninstall a duplicate package in a virtual environment.
 #[test]
 fn uninstall_duplicate() -> Result<()> {
-    use crate::common::copy_dir_all;
+    use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
     let context1 = TestContext::new("3.12");

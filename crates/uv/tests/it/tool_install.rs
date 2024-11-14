@@ -8,10 +8,10 @@ use assert_fs::{
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
-
+use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
-use crate::common::{copy_dir_all, uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, TestContext};
 
 #[test]
 fn tool_install() {
