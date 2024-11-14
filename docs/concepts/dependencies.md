@@ -389,6 +389,11 @@ To add an optional dependency, use the `--optional <extra>` option:
 $ uv add httpx --optional network
 ```
 
+!!! note
+
+    If you have optional dependencies that conflict with one another, resolution will fail
+    unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
+
 ## Development dependencies
 
 Unlike optional dependencies, development dependencies are local-only and will _not_ be included in
@@ -455,8 +460,8 @@ to resolve the requirements of the project with an error.
 
 !!! note
 
-    There is currently no way to declare conflicting dependency groups. See
-    [astral.sh/uv#6981](https://github.com/astral-sh/uv/issues/6981) to track support.
+    If you have dependency groups that conflict with one another, resolution will fail
+    unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
 
 ### Default groups
 
