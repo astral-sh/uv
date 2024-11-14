@@ -10,8 +10,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionMetadata, IndexUrl, Name, ResolutionDiagnostic, ResolvedDist, VersionId,
-    VersionOrUrlRef,
+    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, ResolutionDiagnostic, ResolvedDist,
+    VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -814,19 +814,79 @@ impl Display for ConflictingDistributionError {
     }
 }
 
+/// Convert a [`ResolutionGraph`] into a [`uv_distribution_types::Resolution`].
+///
+/// This involves converting [`ResolutionGraphNode`]s into [`Node`]s, which in turn involves
+/// dropping any extras and dependency groups from the graph nodes. Instead, each package is
+/// collapsed into a single node, with  extras and dependency groups annotating the _edges_, rather
+/// than being represented as separate nodes. This is a more natural representation, but a further
+/// departure from the PubGrub model.
+///
+/// For simplicity, this transformation makes the assumption that the resolution only applies to a
+/// single platform, i.e., it shouldn't be called on universal resolutions.
 impl From<ResolverOutput> for uv_distribution_types::Resolution {
-    fn from(graph: ResolverOutput) -> Self {
-        Self::new(
-            graph
-                .dists()
-                .map(|node| (node.name().clone(), node.dist.clone()))
-                .collect(),
-            graph
-                .dists()
-                .map(|node| (node.name().clone(), node.hashes.clone()))
-                .collect(),
-            graph.diagnostics,
-        )
+    fn from(output: ResolverOutput) -> Self {
+        let ResolverOutput {
+            graph, diagnostics, ..
+        } = output;
+
+        let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
+        let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+
+        // Create the root node.
+        let root = transformed.add_node(Node::Root);
+
+        // Re-add the nodes to the reduced graph.
+        for index in graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &graph[index] else {
+                continue;
+            };
+            if dist.is_base() {
+                inverse.insert(
+                    &dist.name,
+                    transformed.add_node(Node::Dist {
+                        dist: dist.dist.clone(),
+                        hashes: dist.hashes.clone(),
+                        install: true,
+                    }),
+                );
+            }
+        }
+
+        // Re-add the edges to the reduced petgraph.
+        for edge in graph.edge_indices() {
+            let (source, target) = graph.edge_endpoints(edge).unwrap();
+            let marker = graph[edge].clone();
+
+            match (&graph[source], &graph[target]) {
+                (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
+                    let target = inverse[&target_dist.name()];
+                    transformed.update_edge(root, target, Edge::Prod(marker));
+                }
+                (
+                    ResolutionGraphNode::Dist(source_dist),
+                    ResolutionGraphNode::Dist(target_dist),
+                ) => {
+                    let source = inverse[&source_dist.name()];
+                    let target = inverse[&target_dist.name()];
+
+                    let edge = if let Some(extra) = source_dist.extra.as_ref() {
+                        Edge::Optional(extra.clone(), marker)
+                    } else if let Some(dev) = source_dist.dev.as_ref() {
+                        Edge::Dev(dev.clone(), marker)
+                    } else {
+                        Edge::Prod(marker)
+                    };
+
+                    transformed.add_edge(source, target, edge);
+                }
+                _ => {
+                    unreachable!("root should not contain incoming edges");
+                }
+            }
+        }
+
+        uv_distribution_types::Resolution::new(transformed).with_diagnostics(diagnostics)
     }
 }
 

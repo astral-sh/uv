@@ -510,19 +510,19 @@ fn apply_editable_mode(
                 version,
             } = dist
             else {
-                return dist;
+                return None;
             };
 
-            ResolvedDist::Installable {
+            Some(ResolvedDist::Installable {
                 dist: Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                    name,
-                    install_path,
+                    name: name.clone(),
+                    install_path: install_path.clone(),
                     editable: false,
                     r#virtual: false,
-                    url,
+                    url: url.clone(),
                 })),
-                version,
-            }
+                version: version.clone(),
+            })
         }),
     }
 }

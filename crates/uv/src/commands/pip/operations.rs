@@ -733,8 +733,8 @@ pub(crate) fn diagnose_environment(
     for diagnostic in site_packages.diagnostics(markers)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
-            .packages()
-            .any(|package| diagnostic.includes(package))
+            .distributions()
+            .any(|dist| diagnostic.includes(dist.name()))
         {
             writeln!(
                 printer.stderr(),

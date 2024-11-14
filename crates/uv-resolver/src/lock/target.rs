@@ -1,11 +1,13 @@
+use either::Either;
+use petgraph::Graph;
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
 
-use either::Either;
-use rustc_hash::FxHashSet;
-
 use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
-use uv_distribution_types::{Resolution, ResolvedDist};
+use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
@@ -155,12 +157,57 @@ impl<'env> InstallTarget<'env> {
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
+        /// Convert a lockfile entry to an installable distribution.
+        macro_rules! node {
+            ($dist:expr) => {
+                if install_options.include_package(
+                    $dist.name(),
+                    self.project_name(),
+                    self.lock().members(),
+                ) {
+                    let dist = $dist.to_dist(
+                        self.workspace().install_path(),
+                        TagPolicy::Required(tags),
+                        build_options,
+                    )?;
+                    let version = $dist.version().clone();
+                    let dist = ResolvedDist::Installable { dist, version };
+                    let hashes = $dist.hashes();
+                    Node::Dist {
+                        dist,
+                        hashes,
+                        install: true,
+                    }
+                } else {
+                    let dist = $dist.to_dist(
+                        self.workspace().install_path(),
+                        TagPolicy::Preferred(tags),
+                        &BuildOptions::default(),
+                    )?;
+                    let version = $dist.version().clone();
+                    let dist = ResolvedDist::Installable { dist, version };
+                    let hashes = $dist.hashes();
+                    Node::Dist {
+                        dist,
+                        hashes,
+                        install: false,
+                    }
+                }
+            };
+        }
+
+        let size_guess = self.lock().packages.len();
+        let mut petgraph = Graph::with_capacity(size_guess, size_guess);
+        let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
+
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
+        let root = petgraph.add_node(Node::Root);
+
         // Add the workspace packages to the queue.
         for root_name in self.packages() {
-            let root = self
+            let dist = self
                 .lock()
                 .find_by_name(root_name)
                 .map_err(|_| LockErrorKind::MultipleRootPackages {
@@ -171,20 +218,27 @@ impl<'env> InstallTarget<'env> {
                 })?;
 
             if dev.prod() {
-                // Add the base package.
-                queue.push_back((root, None));
+                // Add the workspace package to the graph.
+                if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
+                    entry.insert(petgraph.add_node(node!(dist)));
+                }
 
-                // Add any extras.
+                // Add an edge from the root.
+                let index = inverse[&dist.id];
+                petgraph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
+
+                // Push its dependencies on the queue.
+                queue.push_back((dist, None));
                 match extras {
                     ExtrasSpecification::None => {}
                     ExtrasSpecification::All => {
-                        for extra in root.optional_dependencies.keys() {
-                            queue.push_back((root, Some(extra)));
+                        for extra in dist.optional_dependencies.keys() {
+                            queue.push_back((dist, Some(extra)));
                         }
                     }
                     ExtrasSpecification::Some(extras) => {
                         for extra in extras {
-                            queue.push_back((root, Some(extra)));
+                            queue.push_back((dist, Some(extra)));
                         }
                     }
                 }
@@ -192,9 +246,26 @@ impl<'env> InstallTarget<'env> {
 
             // Add any dev dependencies.
             for group in dev.iter() {
-                for dep in root.dependency_groups.get(group).into_iter().flatten() {
+                for dep in dist.dependency_groups.get(group).into_iter().flatten() {
                     if dep.complexified_marker.evaluate(marker_env, &[]) {
                         let dep_dist = self.lock().find_by_id(&dep.package_id);
+
+                        // Add the dependency to the graph.
+                        if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
+                            entry.insert(petgraph.add_node(node!(dep_dist)));
+                        }
+
+                        // Add an edge from the root. Development dependencies may be installed without
+                        // installing the workspace package itself (which can never have markers on it
+                        // anyway), so they're directly connected to the root.
+                        let dep_index = inverse[&dep.package_id];
+                        petgraph.add_edge(
+                            root,
+                            dep_index,
+                            Edge::Dev(group.clone(), MarkerTree::TRUE),
+                        );
+
+                        // Push its dependencies on the queue.
                         if seen.insert((&dep.package_id, None)) {
                             queue.push_back((dep_dist, None));
                         }
@@ -217,7 +288,7 @@ impl<'env> InstallTarget<'env> {
             for dependency in groups.get(group).into_iter().flatten() {
                 if dependency.marker.evaluate(marker_env, &[]) {
                     let root_name = &dependency.name;
-                    let root = self
+                    let dist = self
                         .lock()
                         .find_by_markers(root_name, marker_env)
                         .map_err(|_| LockErrorKind::MultipleRootPackages {
@@ -227,28 +298,64 @@ impl<'env> InstallTarget<'env> {
                             name: root_name.clone(),
                         })?;
 
-                    // Add the base package.
-                    queue.push_back((root, None));
+                    // Add the workspace package to the graph.
+                    if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
+                        entry.insert(petgraph.add_node(node!(dist)));
+                    }
 
-                    // Add any extras.
+                    // Add an edge from the root.
+                    let index = inverse[&dist.id];
+                    petgraph.add_edge(
+                        root,
+                        index,
+                        Edge::Dev(group.clone(), dependency.marker.clone()),
+                    );
+
+                    // Push its dependencies on the queue.
+                    queue.push_back((dist, None));
                     for extra in &dependency.extras {
-                        queue.push_back((root, Some(extra)));
+                        queue.push_back((dist, Some(extra)));
                     }
                 }
             }
         }
 
-        let mut map = BTreeMap::default();
-        let mut hashes = BTreeMap::default();
-        while let Some((dist, extra)) = queue.pop_front() {
+        while let Some((package, extra)) = queue.pop_front() {
+            let index = inverse[&package.id];
+
             let deps = if let Some(extra) = extra {
-                Either::Left(dist.optional_dependencies.get(extra).into_iter().flatten())
+                Either::Left(
+                    package
+                        .optional_dependencies
+                        .get(extra)
+                        .into_iter()
+                        .flatten(),
+                )
             } else {
-                Either::Right(dist.dependencies.iter())
+                Either::Right(package.dependencies.iter())
             };
             for dep in deps {
                 if dep.complexified_marker.evaluate(marker_env, &[]) {
                     let dep_dist = self.lock().find_by_id(&dep.package_id);
+
+                    // Add the dependency to the graph.
+                    if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
+                        entry.insert(petgraph.add_node(node!(dep_dist)));
+                    }
+
+                    // Add the edge.
+                    let dep_index = inverse[&dep.package_id];
+                    petgraph.add_edge(
+                        index,
+                        dep_index,
+                        if let Some(extra) = extra {
+                            Edge::Optional(extra.clone(), dep.complexified_marker.clone())
+                        } else {
+                            Edge::Prod(dep.complexified_marker.clone())
+                        },
+                    );
+
+                    // Push its dependencies on the queue.
                     if seen.insert((&dep.package_id, None)) {
                         queue.push_back((dep_dist, None));
                     }
@@ -259,26 +366,8 @@ impl<'env> InstallTarget<'env> {
                     }
                 }
             }
-            if install_options.include_package(
-                &dist.id.name,
-                self.project_name(),
-                self.lock().members(),
-            ) {
-                map.insert(
-                    dist.id.name.clone(),
-                    ResolvedDist::Installable {
-                        dist: dist.to_dist(
-                            self.workspace().install_path(),
-                            TagPolicy::Required(tags),
-                            build_options,
-                        )?,
-                        version: dist.id.version.clone(),
-                    },
-                );
-                hashes.insert(dist.id.name.clone(), dist.hashes());
-            }
         }
-        let diagnostics = vec![];
-        Ok(Resolution::new(map, hashes, diagnostics))
+
+        Ok(Resolution::new(petgraph))
     }
 }

@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
+use petgraph::{Directed, Graph};
+
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{HashDigest, RequirementSource};
 
 use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
@@ -8,48 +10,65 @@ use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
 /// A set of packages pinned at specific versions.
 #[derive(Debug, Default, Clone)]
 pub struct Resolution {
-    packages: BTreeMap<PackageName, ResolvedDist>,
-    hashes: BTreeMap<PackageName, Vec<HashDigest>>,
+    graph: Graph<Node, Edge, Directed>,
     diagnostics: Vec<ResolutionDiagnostic>,
 }
 
 impl Resolution {
     /// Create a new resolution from the given pinned packages.
-    pub fn new(
-        packages: BTreeMap<PackageName, ResolvedDist>,
-        hashes: BTreeMap<PackageName, Vec<HashDigest>>,
-        diagnostics: Vec<ResolutionDiagnostic>,
-    ) -> Self {
+    pub fn new(graph: Graph<Node, Edge, Directed>) -> Self {
         Self {
-            packages,
-            hashes,
-            diagnostics,
+            graph,
+            diagnostics: Vec::new(),
         }
     }
 
-    /// Return the hashes for the given package name, if they exist.
-    pub fn get_hashes(&self, package_name: &PackageName) -> &[HashDigest] {
-        self.hashes.get(package_name).map_or(&[], Vec::as_slice)
+    /// Return the underlying graph of the resolution.
+    pub fn graph(&self) -> &Graph<Node, Edge, Directed> {
+        &self.graph
     }
 
-    /// Iterate over the [`PackageName`] entities in this resolution.
-    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
-        self.packages.keys()
+    /// Add [`Diagnostics`] to the resolution.
+    #[must_use]
+    pub fn with_diagnostics(mut self, diagnostics: Vec<ResolutionDiagnostic>) -> Self {
+        self.diagnostics.extend(diagnostics);
+        self
+    }
+
+    /// Return the hashes for the given package name, if they exist.
+    pub fn hashes(&self) -> impl Iterator<Item = (&ResolvedDist, &[HashDigest])> {
+        self.graph
+            .node_indices()
+            .filter_map(move |node| match &self.graph[node] {
+                Node::Dist {
+                    dist,
+                    hashes,
+                    install,
+                    ..
+                } if *install => Some((dist, hashes.as_slice())),
+                _ => None,
+            })
     }
 
     /// Iterate over the [`ResolvedDist`] entities in this resolution.
     pub fn distributions(&self) -> impl Iterator<Item = &ResolvedDist> {
-        self.packages.values()
+        self.graph
+            .raw_nodes()
+            .iter()
+            .filter_map(|node| match &node.weight {
+                Node::Dist { dist, install, .. } if *install => Some(dist),
+                _ => None,
+            })
     }
 
     /// Return the number of distributions in this resolution.
     pub fn len(&self) -> usize {
-        self.packages.len()
+        self.distributions().count()
     }
 
     /// Return `true` if there are no pinned packages in this resolution.
     pub fn is_empty(&self) -> bool {
-        self.packages.is_empty()
+        self.distributions().next().is_none()
     }
 
     /// Return the [`ResolutionDiagnostic`]s that were produced during resolution.
@@ -59,44 +78,31 @@ impl Resolution {
 
     /// Filter the resolution to only include packages that match the given predicate.
     #[must_use]
-    pub fn filter(self, predicate: impl Fn(&ResolvedDist) -> bool) -> Self {
-        let packages = self
-            .packages
-            .into_iter()
-            .filter(|(_, dist)| predicate(dist))
-            .collect::<BTreeMap<_, _>>();
-        let hashes = self
-            .hashes
-            .into_iter()
-            .filter(|(name, _)| packages.contains_key(name))
-            .collect();
-        let diagnostics = self.diagnostics.clone();
-        Self {
-            packages,
-            hashes,
-            diagnostics,
+    pub fn filter(mut self, predicate: impl Fn(&ResolvedDist) -> bool) -> Self {
+        for node in self.graph.node_weights_mut() {
+            if let Node::Dist { dist, install, .. } = node {
+                if !predicate(dist) {
+                    *install = false;
+                }
+            }
         }
+        self
     }
 
     /// Map over the resolved distributions in this resolution.
+    ///
+    /// For efficiency, the map function should return `None` if the resolved distribution is
+    /// unchanged.
     #[must_use]
-    pub fn map(self, predicate: impl Fn(ResolvedDist) -> ResolvedDist) -> Self {
-        let packages = self
-            .packages
-            .into_iter()
-            .map(|(name, dist)| (name, predicate(dist)))
-            .collect::<BTreeMap<_, _>>();
-        let hashes = self
-            .hashes
-            .into_iter()
-            .filter(|(name, _)| packages.contains_key(name))
-            .collect();
-        let diagnostics = self.diagnostics.clone();
-        Self {
-            packages,
-            hashes,
-            diagnostics,
+    pub fn map(mut self, predicate: impl Fn(&ResolvedDist) -> Option<ResolvedDist>) -> Self {
+        for node in self.graph.node_weights_mut() {
+            if let Node::Dist { dist, .. } = node {
+                if let Some(transformed) = predicate(dist) {
+                    *dist = transformed;
+                }
+            }
         }
+        self
     }
 }
 
@@ -166,15 +172,48 @@ impl Diagnostic for ResolutionDiagnostic {
     }
 }
 
+/// A node in the resolution, along with whether its been filtered out.
+///
+/// This is similar to [`ResolutionGraph`], but represents a resolution for a single platform.
+///
+/// We retain filtered nodes as we still need to be able to trace dependencies through the graph
+/// (e.g., to determine why a package was install in the resolution).
+#[derive(Debug, Clone)]
+pub enum Node {
+    Root,
+    Dist {
+        dist: ResolvedDist,
+        hashes: Vec<HashDigest>,
+        install: bool,
+    },
+}
+
+/// An edge in the resolution graph, along with the marker that must be satisfied to traverse it.
+#[derive(Debug, Clone)]
+pub enum Edge {
+    Prod(MarkerTree),
+    Optional(ExtraName, MarkerTree),
+    Dev(GroupName, MarkerTree),
+}
+
+impl Edge {
+    /// Return the [`MarkerTree`] for this edge.
+    pub fn marker(&self) -> &MarkerTree {
+        match self {
+            Self::Prod(marker) => marker,
+            Self::Optional(_, marker) => marker,
+            Self::Dev(_, marker) => marker,
+        }
+    }
+}
+
 impl From<&ResolvedDist> for RequirementSource {
     fn from(resolved_dist: &ResolvedDist) -> Self {
         match resolved_dist {
-            ResolvedDist::Installable { dist, .. } => match dist {
+            ResolvedDist::Installable { dist, version } => match dist {
                 Dist::Built(BuiltDist::Registry(wheels)) => RequirementSource::Registry {
                     specifier: uv_pep440::VersionSpecifiers::from(
-                        uv_pep440::VersionSpecifier::equals_version(
-                            wheels.best_wheel().filename.version.clone(),
-                        ),
+                        uv_pep440::VersionSpecifier::equals_version(version.clone()),
                     ),
                     index: Some(wheels.best_wheel().index.url().clone()),
                 },

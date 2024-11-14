@@ -2,12 +2,10 @@ use std::collections::BTreeSet;
 
 use owo_colors::OwoColorize;
 use petgraph::visit::EdgeRef;
-use petgraph::Direction;
+use petgraph::{Directed, Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use uv_distribution_types::{
-    DistributionMetadata, Name, SourceAnnotation, SourceAnnotations, VersionId,
-};
+use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
@@ -305,11 +303,9 @@ pub enum AnnotationStyle {
 }
 
 /// We don't need the edge markers anymore since we switched to propagated markers.
-type IntermediatePetGraph<'dist> =
-    petgraph::graph::Graph<DisplayResolutionGraphNode<'dist>, (), petgraph::Directed>;
+type IntermediatePetGraph<'dist> = Graph<DisplayResolutionGraphNode<'dist>, (), Directed>;
 
-type RequirementsTxtGraph<'dist> =
-    petgraph::graph::Graph<RequirementsTxtDist<'dist>, (), petgraph::Directed>;
+type RequirementsTxtGraph<'dist> = Graph<RequirementsTxtDist<'dist>, (), Directed>;
 
 /// Reduce the graph, such that all nodes for a single package are combined, regardless of
 /// the extras, as long as they have the same version and markers.
@@ -324,8 +320,10 @@ type RequirementsTxtGraph<'dist> =
 /// We also remove the root node, to simplify the graph structure.
 fn combine_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGraph<'dist> {
     /// Return the key for a node.
-    fn version_marker(dist: &RequirementsTxtDist) -> (VersionId, MarkerTree) {
-        (dist.version_id(), dist.markers.clone())
+    fn version_marker<'dist>(
+        dist: &'dist RequirementsTxtDist,
+    ) -> (&'dist PackageName, &'dist MarkerTree) {
+        (dist.name(), dist.markers)
     }
 
     let mut next = RequirementsTxtGraph::with_capacity(graph.node_count(), graph.edge_count());
