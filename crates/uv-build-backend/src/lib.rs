@@ -299,13 +299,54 @@ pub struct WheelSettings {
     /// The directory that contains the module directory, usually `src`, or an empty path when
     /// using the flat layout over the src layout.
     module_root: PathBuf,
+    data: WheelDataIncludes,
 }
 
 impl Default for WheelSettings {
     fn default() -> Self {
         Self {
             module_root: PathBuf::from("src"),
+            data: WheelDataIncludes::default(),
         }
+    }
+}
+
+/// Data includes for wheels.
+///
+/// Each entry is a list of globs. File and directories matching a glob will be copied to the
+/// matching directory in the wheel in
+/// `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this data
+/// is moved to its target location, as defined by
+/// <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>:
+/// - `data`: Installed over the virtualenv environment root. Warning: This may override existing
+///   files!
+/// - `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
+///   `<venv>\Scripts` on Windows. This directory is added to PATH when the virtual environment is
+///   activated or when using `uv run`, so this data type can be used to install additional
+///   binaries. Consider using `project.scripts` instead for starting Python code.
+/// - `headers`: Installed to the include directory, where compilers building Python packages with
+///   this package as built requirement will search for header files.
+/// - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended to
+///   uses these two options.
+#[derive(Default)]
+pub struct WheelDataIncludes {
+    purelib: Option<Vec<String>>,
+    platlib: Option<Vec<String>>,
+    headers: Option<Vec<String>>,
+    scripts: Option<Vec<String>>,
+    data: Option<Vec<String>>,
+}
+
+impl WheelDataIncludes {
+    fn iter(&self) -> impl Iterator<Item = (&'static str, Option<&[String]>)> {
+        [
+            ("purelib", self.purelib.as_deref()),
+            ("platlib", self.platlib.as_deref()),
+            ("headers", self.headers.as_deref()),
+            ("scripts", self.scripts.as_deref()),
+            ("data", self.data.as_deref()),
+        ]
+        .into_iter()
     }
 }
 
@@ -375,7 +416,9 @@ pub fn build_wheel(
         entry.path();
     }
 
+    // Add the license files
     if let Some(license_files) = &pyproject_toml.license_files() {
+        debug!("Adding license files");
         let license_dir = format!(
             "{}-{}.dist-info/licenses/",
             pyproject_toml.name().as_dist_info_name(),
@@ -389,6 +432,27 @@ pub fn build_wheel(
             &mut wheel_writer,
             "project.license-files",
         )?;
+    }
+
+    // Add the data files
+    for (name, includes) in wheel_settings.data.iter() {
+        if let Some(includes) = &includes {
+            debug!("Adding {name} data files");
+            let data_dir = format!(
+                "{}-{}.data/{}/",
+                pyproject_toml.name().as_dist_info_name(),
+                pyproject_toml.version(),
+                name
+            );
+
+            wheel_subdir_from_globs(
+                source_tree,
+                &data_dir,
+                includes,
+                &mut wheel_writer,
+                &format!("tool.uv.wheel.data.{name}"),
+            )?;
+        }
     }
 
     debug!("Adding metadata files to: `{}`", wheel_path.user_display());
