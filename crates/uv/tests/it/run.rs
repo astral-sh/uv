@@ -2793,7 +2793,7 @@ fn run_gui_script_explicit() -> Result<()> {
 
 #[test]
 #[cfg(not(windows))]
-fn run_gui_script_not_supported() -> Result<()> {  // Add Result return type
+fn run_gui_script_not_supported() -> Result<()> { 
     let context = TestContext::new("3.12");
 
     let test_script = context.temp_dir.child("script");
@@ -2814,7 +2814,7 @@ fn run_gui_script_not_supported() -> Result<()> {  // Add Result return type
     error: `--gui-script` is only supported on Windows
     "###);
 
-    Ok(())  // Add Ok(()) at the end
+    Ok(())
 }
 
 #[test]
