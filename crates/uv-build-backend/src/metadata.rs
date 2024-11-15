@@ -76,6 +76,10 @@ impl PyProjectToml {
         Ok(toml::from_str(contents)?)
     }
 
+    pub(crate) fn project(&self) -> &Project {
+        &self.project
+    }
+
     /// Warn if the `[build-system]` table looks suspicious.
     ///
     /// Example of a valid table:
@@ -530,68 +534,68 @@ impl PyProjectToml {
 /// should update the shared schema instead.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-struct Project {
+pub(crate) struct Project {
     /// The name of the project.
-    name: PackageName,
+    pub(crate) name: PackageName,
     /// The version of the project.
-    version: Version,
+    pub(crate) version: Version,
     /// The summary description of the project in one line.
-    description: Option<String>,
+    pub(crate) description: Option<String>,
     /// The full description of the project (i.e. the README).
-    readme: Option<Readme>,
+    pub(crate) readme: Option<Readme>,
     /// The Python version requirements of the project.
-    requires_python: Option<VersionSpecifiers>,
+    pub(crate) requires_python: Option<VersionSpecifiers>,
     /// The license under which the project is distributed.
     ///
     /// Supports both the current standard and the provisional PEP 639.
-    license: Option<License>,
+    pub(crate) license: Option<License>,
     /// The paths to files containing licenses and other legal notices to be distributed with the
     /// project.
     ///
     /// From the provisional PEP 639
-    license_files: Option<Vec<String>>,
+    pub(crate) license_files: Option<Vec<String>>,
     /// The people or organizations considered to be the "authors" of the project.
-    authors: Option<Vec<Contact>>,
+    pub(crate) authors: Option<Vec<Contact>>,
     /// The people or organizations considered to be the "maintainers" of the project.
-    maintainers: Option<Vec<Contact>>,
+    pub(crate) maintainers: Option<Vec<Contact>>,
     /// The keywords for the project.
-    keywords: Option<Vec<String>>,
+    pub(crate) keywords: Option<Vec<String>>,
     /// Trove classifiers which apply to the project.
-    classifiers: Option<Vec<String>>,
+    pub(crate) classifiers: Option<Vec<String>>,
     /// A table of URLs where the key is the URL label and the value is the URL itself.
     ///
     /// PyPI shows all URLs with their name. For some known patterns, they add favicons.
     /// main: <https://github.com/pypi/warehouse/blob/main/warehouse/templates/packaging/detail.html>
     /// archived: <https://github.com/pypi/warehouse/blob/e3bd3c3805ff47fff32b67a899c1ce11c16f3c31/warehouse/templates/packaging/detail.html>
-    urls: Option<BTreeMap<String, String>>,
+    pub(crate) urls: Option<BTreeMap<String, String>>,
     /// The console entrypoints of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.
-    scripts: Option<BTreeMap<String, String>>,
+    pub(crate) scripts: Option<BTreeMap<String, String>>,
     /// The GUI entrypoints of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.
-    gui_scripts: Option<BTreeMap<String, String>>,
+    pub(crate) gui_scripts: Option<BTreeMap<String, String>>,
     /// Entrypoints groups of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.
-    entry_points: Option<BTreeMap<String, BTreeMap<String, String>>>,
+    pub(crate) entry_points: Option<BTreeMap<String, BTreeMap<String, String>>>,
     /// The dependencies of the project.
-    dependencies: Option<Vec<Requirement>>,
+    pub(crate) dependencies: Option<Vec<Requirement>>,
     /// The optional dependencies of the project.
-    optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
+    pub(crate) optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified so another tool
     /// can/will provide such metadata dynamically.
     ///
     /// Not supported, an error if anything but the default empty list.
-    dynamic: Option<Vec<String>>,
+    pub(crate) dynamic: Option<Vec<String>>,
 }
 
 /// The optional `project.readme` key in a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#readme>.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged, rename_all = "kebab-case")]
-enum Readme {
+pub(crate) enum Readme {
     /// Relative path to the README.
     String(PathBuf),
     /// Relative path to the README.
@@ -608,11 +612,22 @@ enum Readme {
     },
 }
 
+impl Readme {
+    /// If the readme is a file, return the path to the file.
+    pub(crate) fn path(&self) -> Option<&Path> {
+        match self {
+            Readme::String(path) => Some(path),
+            Readme::File { file, .. } => Some(file),
+            Readme::Text { .. } => None,
+        }
+    }
+}
+
 /// The optional `project.license` key in a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#license>.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
-enum License {
+pub(crate) enum License {
     /// An SPDX Expression.
     ///
     /// From the provisional PEP 639.
@@ -639,7 +654,7 @@ enum License {
     deny_unknown_fields,
     expecting = "a table with 'name' and/or 'email' keys"
 )]
-enum Contact {
+pub(crate) enum Contact {
     /// TODO(konsti): RFC 822 validation.
     NameEmail { name: String, email: String },
     /// TODO(konsti): RFC 822 validation.
