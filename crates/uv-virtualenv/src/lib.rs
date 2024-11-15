@@ -55,6 +55,7 @@ pub fn create_venv(
     allow_existing: bool,
     relocatable: bool,
     seed: bool,
+    bundle_interpreter: bool,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
@@ -65,6 +66,7 @@ pub fn create_venv(
         allow_existing,
         relocatable,
         seed,
+        bundle_interpreter,
     )?;
 
     // Create the corresponding `PythonEnvironment`.

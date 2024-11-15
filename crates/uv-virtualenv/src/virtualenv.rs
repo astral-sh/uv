@@ -53,6 +53,7 @@ pub(crate) fn create(
     allow_existing: bool,
     relocatable: bool,
     seed: bool,
+    bundle_interpreter: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment. This is typically the Python executable

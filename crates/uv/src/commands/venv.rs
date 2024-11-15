@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    LowerBound, NoBinary, NoBuild, SourceStrategy, TrustedHost,
+    LowerBound, NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
@@ -62,6 +62,7 @@ pub(crate) async fn venv(
     native_tls: bool,
     no_config: bool,
     no_project: bool,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
@@ -89,6 +90,7 @@ pub(crate) async fn venv(
         native_tls,
         no_config,
         no_project,
+        preview,
         cache,
         printer,
         relocatable,
@@ -147,6 +149,7 @@ async fn venv_impl(
     native_tls: bool,
     no_config: bool,
     no_project: bool,
+    preview: PreviewMode,
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
@@ -268,6 +271,8 @@ async fn venv_impl(
     )
     .into_diagnostic()?;
 
+    let bundle_interpeter = relocatable && preview.is_enabled();
+
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
         &path,
@@ -277,6 +282,7 @@ async fn venv_impl(
         allow_existing,
         relocatable,
         seed,
+        bundle_interpreter,
     )
     .map_err(VenvError::Creation)?;
 

@@ -798,6 +798,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 cli.top_level.no_config,
                 args.no_project,
+                globals.preview,
                 &cache,
                 printer,
                 args.relocatable,
