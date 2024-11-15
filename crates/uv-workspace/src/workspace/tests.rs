@@ -5,12 +5,13 @@ use std::str::FromStr;
 use anyhow::Result;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
-use insta::assert_json_snapshot;
+use insta::{assert_json_snapshot, assert_snapshot};
 
 use uv_normalize::GroupName;
 
 use crate::pyproject::{DependencyGroupSpecifier, PyProjectToml};
 use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
+use crate::WorkspaceError;
 
 async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
     let root_dir = env::current_dir()
@@ -28,12 +29,15 @@ async fn workspace_test(folder: &str) -> (ProjectWorkspace, String) {
     (project, root_escaped)
 }
 
-async fn temporary_test(folder: &Path) -> (ProjectWorkspace, String) {
+async fn temporary_test(
+    folder: &Path,
+) -> Result<(ProjectWorkspace, String), (WorkspaceError, String)> {
+    let root_escaped = regex::escape(folder.to_string_lossy().as_ref());
     let project = ProjectWorkspace::discover(folder, &DiscoveryOptions::default())
         .await
-        .unwrap();
-    let root_escaped = regex::escape(folder.to_string_lossy().as_ref());
-    (project, root_escaped)
+        .map_err(|error| (error, root_escaped.clone()))?;
+
+    Ok((project, root_escaped))
 }
 
 #[tokio::test]
@@ -467,7 +471,7 @@ async fn exclude_package() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    let (project, root_escaped) = temporary_test(root.as_ref()).await;
+    let (project, root_escaped) = temporary_test(root.as_ref()).await.unwrap();
     let filters = vec![(root_escaped.as_str(), "[ROOT]")];
     insta::with_settings!({filters => filters}, {
         assert_json_snapshot!(
@@ -570,7 +574,7 @@ async fn exclude_package() -> Result<()> {
     )?;
 
     // `bird-feeder` should still be excluded.
-    let (project, root_escaped) = temporary_test(root.as_ref()).await;
+    let (project, root_escaped) = temporary_test(root.as_ref()).await.unwrap();
     let filters = vec![(root_escaped.as_str(), "[ROOT]")];
     insta::with_settings!({filters => filters}, {
         assert_json_snapshot!(
@@ -674,7 +678,7 @@ async fn exclude_package() -> Result<()> {
     )?;
 
     // `bird-feeder` should now be included.
-    let (project, root_escaped) = temporary_test(root.as_ref()).await;
+    let (project, root_escaped) = temporary_test(root.as_ref()).await.unwrap();
     let filters = vec![(root_escaped.as_str(), "[ROOT]")];
     insta::with_settings!({filters => filters}, {
         assert_json_snapshot!(
@@ -791,7 +795,7 @@ async fn exclude_package() -> Result<()> {
     )?;
 
     // `bird-feeder` and `seeds` should now be excluded.
-    let (project, root_escaped) = temporary_test(root.as_ref()).await;
+    let (project, root_escaped) = temporary_test(root.as_ref()).await.unwrap();
     let filters = vec![(root_escaped.as_str(), "[ROOT]")];
     insta::with_settings!({filters => filters}, {
         assert_json_snapshot!(
@@ -899,4 +903,115 @@ bar = ["b"]
         bar,
         &[DependencyGroupSpecifier::Requirement("b".to_string())]
     );
+}
+
+#[tokio::test]
+async fn nested_workspace() -> Result<()> {
+    let root = tempfile::TempDir::new()?;
+    let root = ChildPath::new(root.path());
+
+    // Create the root.
+    root.child("pyproject.toml").write_str(
+        r#"
+            [project]
+            name = "albatross"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["tqdm>=4,<5"]
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+            "#,
+    )?;
+
+    // Create an included package (`seeds`).
+    root.child("packages")
+        .child("seeds")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "seeds"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["idna==3.6"]
+
+            [tool.uv.workspace]
+            members = ["nested_packages/*"]
+            "#,
+        )?;
+
+    let (error, root_escaped) = temporary_test(root.as_ref()).await.unwrap_err();
+    let filters = vec![(root_escaped.as_str(), "[ROOT]")];
+    insta::with_settings!({filters => filters}, {
+        assert_snapshot!(
+            error,
+        @"Nested workspaces are not supported, but workspace member (`[ROOT]/packages/seeds`) has a `uv.workspace` table");
+    });
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn duplicate_names() -> Result<()> {
+    let root = tempfile::TempDir::new()?;
+    let root = ChildPath::new(root.path());
+
+    // Create the root.
+    root.child("pyproject.toml").write_str(
+        r#"
+            [project]
+            name = "albatross"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["tqdm>=4,<5"]
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+            "#,
+    )?;
+
+    // Create an included package (`seeds`).
+    root.child("packages")
+        .child("seeds")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "seeds"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["idna==3.6"]
+
+            [tool.uv.workspace]
+            members = ["nested_packages/*"]
+            "#,
+        )?;
+
+    // Create an included package (`seeds2`).
+    root.child("packages")
+        .child("seeds2")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+            [project]
+            name = "seeds"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["idna==3.6"]
+
+            [tool.uv.workspace]
+            members = ["nested_packages/*"]
+            "#,
+        )?;
+
+    let (error, root_escaped) = temporary_test(root.as_ref()).await.unwrap_err();
+    let filters = vec![(root_escaped.as_str(), "[ROOT]")];
+    insta::with_settings!({filters => filters}, {
+        assert_snapshot!(
+            error,
+        @"Two workspace members are both named: `seeds`: `[ROOT]/packages/seeds` and `[ROOT]/packages/seeds2`");
+    });
+
+    Ok(())
 }
