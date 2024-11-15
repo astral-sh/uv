@@ -2738,6 +2738,87 @@ fn run_script_explicit_directory() -> Result<()> {
 }
 
 #[test]
+#[cfg(windows)]
+fn run_gui_script_explicit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a script that shows a GUI window
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "tkinter",
+        # ]
+        # ///
+        import tkinter as tk
+        import sys
+        
+        # Create a window that will close itself after 1 second
+        root = tk.Tk()
+        root.title("UV GUI Test")
+        root.geometry("200x100")
+        
+        # Print to stdout - this should only be visible when run with python.exe
+        print("This should not be visible in GUI mode")
+        
+        # Close after 1 second
+        root.after(1000, root.destroy)
+        root.mainloop()
+    "#})?;
+
+    // Run with --gui-script flag
+    let output = context.run()
+        .arg("--gui-script")
+        .arg("script")
+        .output()?;
+
+    // In GUI mode (pythonw.exe):
+    // 1. The process should succeed
+    // 2. stdout should be empty since pythonw doesn't show console output
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+
+    // Run with regular --script flag (python.exe)
+    let output = context.run()
+        .arg("--script")
+        .arg("script")
+        .output()?;
+
+    // In regular mode:
+    // 1. The process should succeed
+    // 2. stdout should contain our print message
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("This should not be visible in GUI mode"));
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn run_gui_script_not_supported() {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+        print("Hello")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--gui-script` is only supported on Windows
+    "###);
+}
+
+#[test]
 fn run_remote_pep723_script() {
     let context = TestContext::new("3.12").with_filtered_python_names();
     let mut filters = context.filters();

@@ -1251,6 +1251,7 @@ impl RunCommand {
         command: &ExternalCommand,
         module: bool,
         script: bool,
+        gui_script: bool,
         connectivity: Connectivity,
         native_tls: bool,
         allow_insecure_host: &[TrustedHost],
@@ -1304,6 +1305,11 @@ impl RunCommand {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
         } else if script {
             return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
+        } else if gui_script {
+            #[cfg(windows)] // @reviewer less sure about this part, but seems likea good check
+            return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
+            #[cfg(not(windows))]
+            anyhow::bail!("`--gui-script` is only supported on Windows");
         }
 
         let metadata = target_path.metadata();

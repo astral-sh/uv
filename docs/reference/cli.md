@@ -429,6 +429,13 @@ uv run [OPTIONS] [COMMAND]
 
 <p>Using <code>--script</code> will attempt to parse the path as a PEP 723 script, irrespective of its extension.</p>
 
+</dd><dt><code>--gui-script</code></dt><dd><p>Run the given path as a Python GUI script (Windows only).</p>
+
+<p>Using <code>--gui-script</code> will attempt to parse the path as a PEP 723 script and run it with <code>pythonw.exe</code>, 
+irrespective of its extension. This is useful for GUI applications where you don't want a console window to appear.</p>
+
+<p>This flag is only available on Windows. On other platforms, using this flag will result in an error.</p>
+
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
 </dd><dt><code>--upgrade-package</code>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
