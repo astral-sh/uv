@@ -11,7 +11,7 @@ use std::fs::FileType;
 use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{io, mem};
-use tar::{Builder, EntryType, Header};
+use tar::{EntryType, Header};
 use thiserror::Error;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename, WheelFilename};
@@ -54,8 +54,6 @@ pub enum Error {
         #[source]
         err: walkdir::Error,
     },
-    #[error("Non-UTF-8 paths are not supported: `{}`", _0.user_display())]
-    NotUtf8Path(PathBuf),
     #[error("Failed to walk source tree")]
     StripPrefix(#[from] StripPrefixError),
     #[error("Unsupported file type {1:?}: `{}`", _0.user_display())]
@@ -356,17 +354,16 @@ pub fn build_wheel(
         let relative_path = entry
             .path()
             .strip_prefix(&strip_root)
-            .expect("walkdir starts with root");
-        let relative_path_str = relative_path
-            .to_str()
-            .ok_or_else(|| Error::NotUtf8Path(relative_path.to_path_buf()))?;
+            .expect("walkdir starts with root")
+            .user_display()
+            .to_string();
 
-        debug!("Adding to wheel: `{relative_path_str}`");
+        debug!("Adding to wheel: `{relative_path}`");
 
         if entry.file_type().is_dir() {
-            wheel_writer.write_directory(relative_path_str)?;
+            wheel_writer.write_directory(&relative_path)?;
         } else if entry.file_type().is_file() {
-            wheel_writer.write_file(relative_path_str, entry.path())?;
+            wheel_writer.write_file(&relative_path, entry.path())?;
         } else {
             // TODO(konsti): We may want to support symlinks, there is support for installing them.
             return Err(Error::UnsupportedFileType(
@@ -378,7 +375,7 @@ pub fn build_wheel(
         entry.path();
     }
 
-    debug!("Adding metadata files to {}", wheel_path.user_display());
+    debug!("Adding metadata files to: `{}`", wheel_path.user_display());
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
@@ -549,7 +546,7 @@ pub fn build_source_dist(
 
 /// Add a file or a directory to a source distribution.
 fn add_source_dist_entry(
-    tar: &mut Builder<GzEncoder<File>>,
+    tar: &mut tar::Builder<GzEncoder<File>>,
     entry: &DirEntry,
     top_level: &str,
     source_dist_path: &Path,
