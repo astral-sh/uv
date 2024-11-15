@@ -180,6 +180,10 @@ uv run [OPTIONS] [COMMAND]
 
 <p>May be provided multiple times.</p>
 
+</dd><dt><code>--gui-script</code></dt><dd><p>Run the given path as a Python GUI script.</p>
+
+<p>Using <code>--gui-script</code> will attempt to parse the path as a PEP 723 script and run it with pythonw.exe, irrespective of its extension. Only available on Windows.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -428,13 +432,6 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt><code>--script</code>, <code>-s</code></dt><dd><p>Run the given path as a Python script.</p>
 
 <p>Using <code>--script</code> will attempt to parse the path as a PEP 723 script, irrespective of its extension.</p>
-
-</dd><dt><code>--gui-script</code></dt><dd><p>Run the given path as a Python GUI script (Windows only).</p>
-
-<p>Using <code>--gui-script</code> will attempt to parse the path as a PEP 723 script and run it with <code>pythonw.exe</code>, 
-irrespective of its extension. This is useful for GUI applications where you don't want a console window to appear.</p>
-
-<p>This flag is only available on Windows. On other platforms, using this flag will result in an error.</p>
 
 </dd><dt><code>--upgrade</code>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 
