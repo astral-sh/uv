@@ -457,21 +457,21 @@ pub fn build_source_dist(
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
-    let metadata = pyproject_toml
-        .to_metadata(source_tree)?
-        .core_metadata_format();
+    let metadata = pyproject_toml.to_metadata(source_tree)?;
+    let metadata_email = metadata.core_metadata_format();
 
     let mut header = Header::new_gnu();
-    header.set_size(metadata.bytes().len() as u64);
+    header.set_size(metadata_email.bytes().len() as u64);
     header.set_mode(0o644);
     header.set_cksum();
     tar.append_data(
         &mut header,
         Path::new(&top_level).join("PKG-INFO"),
-        Cursor::new(metadata),
+        Cursor::new(metadata_email),
     )
     .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
 
+    // The user (or default) includes
     let mut include_globs = Vec::new();
     for include in settings.include {
         let glob = parse_portable_glob(&include).map_err(|err| Error::PortableGlob {
@@ -493,6 +493,16 @@ pub fn build_source_dist(
             Glob::new(&globset::escape(&readme.portable_display().to_string()))
                 .expect("escaped globset is parseable"),
         );
+    }
+
+    // Include the license files
+    for license_files in pyproject_toml.project().license_files.iter().flatten() {
+        trace!("Including license files at: `{license_files}`");
+        let glob = parse_portable_glob(license_files).map_err(|err| Error::PortableGlob {
+            field: "project.license-files".to_string(),
+            source: err,
+        })?;
+        include_globs.push(glob);
     }
 
     let include_matcher =
