@@ -4,7 +4,7 @@ use crate::metadata::{PyProjectToml, ValidationError};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
-use globset::GlobSetBuilder;
+use globset::{Glob, GlobSetBuilder};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use std::fs::FileType;
@@ -480,6 +480,21 @@ pub fn build_source_dist(
         })?;
         include_globs.push(glob.clone());
     }
+
+    // Include the Readme
+    if let Some(readme) = pyproject_toml
+        .project()
+        .readme
+        .as_ref()
+        .and_then(|readme| readme.path())
+    {
+        trace!("Including readme at: `{}`", readme.user_display());
+        include_globs.push(
+            Glob::new(&globset::escape(&readme.portable_display().to_string()))
+                .expect("escaped globset is parseable"),
+        );
+    }
+
     let include_matcher =
         GlobDirFilter::from_globs(&include_globs).map_err(|err| Error::GlobSetTooLarge {
             field: "tool.uv.source-dist.include".to_string(),
