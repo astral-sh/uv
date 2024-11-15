@@ -26,8 +26,7 @@ pub enum WorkspaceError {
     // Workspace structure errors.
     #[error("No `pyproject.toml` found in current directory or any parent directory")]
     MissingPyprojectToml,
-    #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{1}`)", _0.simplified_display()
-    )]
+    #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{1}`)", _0.simplified_display())]
     MissingPyprojectTomlMember(PathBuf, String),
     #[error("No `project` table found in: `{}`", _0.simplified_display())]
     MissingProject(PathBuf),
@@ -35,8 +34,7 @@ pub enum WorkspaceError {
     MissingWorkspace(PathBuf),
     #[error("The project is marked as unmanaged: `{}`", _0.simplified_display())]
     NonWorkspace(PathBuf),
-    #[error("Nested workspaces are not supported, but workspace member (`{}`) has a `uv.workspace` table", _0.simplified_display()
-    )]
+    #[error("Nested workspaces are not supported, but workspace member (`{}`) has a `uv.workspace` table", _0.simplified_display())]
     NestedWorkspace(PathBuf),
     #[error("Two workspace members are both named: `{name}`: `{}` and `{}`", first.simplified_display(), second.simplified_display())]
     DuplicatePackage {
