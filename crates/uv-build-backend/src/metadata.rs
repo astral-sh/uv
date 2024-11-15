@@ -76,8 +76,12 @@ impl PyProjectToml {
         Ok(toml::from_str(contents)?)
     }
 
-    pub(crate) fn project(&self) -> &Project {
-        &self.project
+    pub(crate) fn readme(&self) -> Option<&Readme> {
+        self.project.readme.as_ref()
+    }
+
+    pub(crate) fn license_files(&self) -> Option<&[String]> {
+        self.project.license_files.as_deref()
     }
 
     /// Warn if the `[build-system]` table looks suspicious.
@@ -534,61 +538,61 @@ impl PyProjectToml {
 /// should update the shared schema instead.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct Project {
+struct Project {
     /// The name of the project.
-    pub(crate) name: PackageName,
+    name: PackageName,
     /// The version of the project.
-    pub(crate) version: Version,
+    version: Version,
     /// The summary description of the project in one line.
-    pub(crate) description: Option<String>,
+    description: Option<String>,
     /// The full description of the project (i.e. the README).
-    pub(crate) readme: Option<Readme>,
+    readme: Option<Readme>,
     /// The Python version requirements of the project.
-    pub(crate) requires_python: Option<VersionSpecifiers>,
+    requires_python: Option<VersionSpecifiers>,
     /// The license under which the project is distributed.
     ///
     /// Supports both the current standard and the provisional PEP 639.
-    pub(crate) license: Option<License>,
+    license: Option<License>,
     /// The paths to files containing licenses and other legal notices to be distributed with the
     /// project.
     ///
     /// From the provisional PEP 639
-    pub(crate) license_files: Option<Vec<String>>,
+    license_files: Option<Vec<String>>,
     /// The people or organizations considered to be the "authors" of the project.
-    pub(crate) authors: Option<Vec<Contact>>,
+    authors: Option<Vec<Contact>>,
     /// The people or organizations considered to be the "maintainers" of the project.
-    pub(crate) maintainers: Option<Vec<Contact>>,
+    maintainers: Option<Vec<Contact>>,
     /// The keywords for the project.
-    pub(crate) keywords: Option<Vec<String>>,
+    keywords: Option<Vec<String>>,
     /// Trove classifiers which apply to the project.
-    pub(crate) classifiers: Option<Vec<String>>,
+    classifiers: Option<Vec<String>>,
     /// A table of URLs where the key is the URL label and the value is the URL itself.
     ///
     /// PyPI shows all URLs with their name. For some known patterns, they add favicons.
     /// main: <https://github.com/pypi/warehouse/blob/main/warehouse/templates/packaging/detail.html>
     /// archived: <https://github.com/pypi/warehouse/blob/e3bd3c3805ff47fff32b67a899c1ce11c16f3c31/warehouse/templates/packaging/detail.html>
-    pub(crate) urls: Option<BTreeMap<String, String>>,
+    urls: Option<BTreeMap<String, String>>,
     /// The console entrypoints of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.
-    pub(crate) scripts: Option<BTreeMap<String, String>>,
+    scripts: Option<BTreeMap<String, String>>,
     /// The GUI entrypoints of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.
-    pub(crate) gui_scripts: Option<BTreeMap<String, String>>,
+    gui_scripts: Option<BTreeMap<String, String>>,
     /// Entrypoints groups of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.
-    pub(crate) entry_points: Option<BTreeMap<String, BTreeMap<String, String>>>,
+    entry_points: Option<BTreeMap<String, BTreeMap<String, String>>>,
     /// The dependencies of the project.
-    pub(crate) dependencies: Option<Vec<Requirement>>,
+    dependencies: Option<Vec<Requirement>>,
     /// The optional dependencies of the project.
-    pub(crate) optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
+    optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
     /// Specifies which fields listed by PEP 621 were intentionally unspecified so another tool
     /// can/will provide such metadata dynamically.
     ///
     /// Not supported, an error if anything but the default empty list.
-    pub(crate) dynamic: Option<Vec<String>>,
+    dynamic: Option<Vec<String>>,
 }
 
 /// The optional `project.readme` key in a pyproject.toml as specified in

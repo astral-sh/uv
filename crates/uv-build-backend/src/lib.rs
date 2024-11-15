@@ -375,7 +375,7 @@ pub fn build_wheel(
         entry.path();
     }
 
-    if let Some(license_files) = &pyproject_toml.project().license_files {
+    if let Some(license_files) = &pyproject_toml.license_files() {
         let license_files_globs: Vec<_> = license_files
             .iter()
             .map(|license_files| {
@@ -556,8 +556,7 @@ pub fn build_source_dist(
 
     // Include the Readme
     if let Some(readme) = pyproject_toml
-        .project()
-        .readme
+        .readme()
         .as_ref()
         .and_then(|readme| readme.path())
     {
@@ -569,7 +568,7 @@ pub fn build_source_dist(
     }
 
     // Include the license files
-    for license_files in pyproject_toml.project().license_files.iter().flatten() {
+    for license_files in pyproject_toml.license_files().into_iter().flatten() {
         trace!("Including license files at: `{license_files}`");
         let glob = parse_portable_glob(license_files).map_err(|err| Error::PortableGlob {
             field: "project.license-files".to_string(),
