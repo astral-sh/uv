@@ -173,7 +173,7 @@ jobs:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
-      labels: "ubuntu-latest-xlarge"
+      labels: "depot-ubuntu-22.04-16"
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@v4
@@ -219,7 +219,7 @@ jobs:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
-      labels: "macos-latest-xlarge"
+      labels: "depot-macos-latest"
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@v4
@@ -507,7 +507,7 @@ jobs:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
-      labels: macos-14-large
+      labels: macos-latest-large # Intel runner on GitHub
     name: "build binary | macos x86_64"
     steps:
       - uses: actions/checkout@v4
