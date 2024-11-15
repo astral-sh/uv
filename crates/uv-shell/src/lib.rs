@@ -1,4 +1,7 @@
+mod shlex;
 pub mod windows;
+
+pub use shlex::{escape_posix_for_single_quotes, shlex_posix, shlex_windows};
 
 use std::path::{Path, PathBuf};
 use uv_fs::Simplified;
