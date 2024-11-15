@@ -827,12 +827,10 @@ impl<'range> SentinelRange<'range> {
 
     /// Remove local versions sentinels (`+[max]`) from the version ranges.
     pub fn strip(&self) -> Ranges<Version> {
-        let mut range = Ranges::empty();
-        for (lower, upper) in self.0.iter() {
-            let (lower, upper) = Self::strip_sentinel(lower.clone(), upper.clone());
-            range = range.union(&Range::from_range_bounds((lower, upper)));
-        }
-        range
+        self.0
+            .iter()
+            .map(|(lower, upper)| Self::strip_sentinel(lower.clone(), upper.clone()))
+            .collect()
     }
 
     /// Remove local versions sentinels (`+[max]`) from the interval.
