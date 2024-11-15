@@ -446,7 +446,11 @@ pub fn build_source_dist(
         extension: SourceDistExtension::TarGz,
     };
 
-    let top_level = format!("{}-{}", pyproject_toml.name(), pyproject_toml.version());
+    let top_level = format!(
+        "{}-{}",
+        pyproject_toml.name().as_dist_info_name(),
+        pyproject_toml.version()
+    );
 
     let source_dist_path = source_dist_directory.join(filename.to_string());
     let tar_gz = File::create(&source_dist_path)?;

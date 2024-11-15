@@ -105,7 +105,7 @@ fn built_by_uv_direct() -> Result<()> {
         .build_backend()
         .arg("build-wheel")
         .arg(wheel_dir.path())
-        .current_dir(sdist_tree.path().join("built-by-uv-0.1.0")), @r###"
+        .current_dir(sdist_tree.path().join("built_by_uv-0.1.0")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
