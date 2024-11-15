@@ -131,6 +131,11 @@ fn test_prepare_metadata() {
     Summary: A package to be built with the uv build backend that uses all features exposed by the build backend
     Requires-Dist: anyio>=4,<5
     Requires-Python: >=3.12
+    Description-Content-Type: text/markdown
+
+    # built_by_uv
+
+    A package to be built with the uv build backend that uses all features exposed by the build backend.
     "###);
 
     let record_file = metadata_dir
@@ -138,7 +143,7 @@ fn test_prepare_metadata() {
         .join("built_by_uv-0.1.0.dist-info/RECORD");
     assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
     built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
-    built_by_uv-0.1.0.dist-info/METADATA,sha256=ec36b5ae8830bdd248e90aaf581483ffb057f9a2d0f41e19e585531e7d07c9dc,215
+    built_by_uv-0.1.0.dist-info/METADATA,sha256=dfa55ef756775bc493b878741bcdc848c4379812cee7656bc77d886e6ef71d39,372
     built_by_uv-0.1.0.dist-info/RECORD,,
     "###);
 
