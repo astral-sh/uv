@@ -308,61 +308,65 @@ pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) 
 fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
     /// Format a step in the [`DerivationChain`] as a human-readable error message.
     fn format_step(step: &DerivationStep, range: Option<Ranges<Version>>) -> String {
-        if let Some(visual) =
+        if let Some(range) =
             range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
         {
             if let Some(extra) = &step.extra {
                 // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)`
                 format!(
-                    "`{}{}` (v{})",
+                    "`{}{}` ({})",
                     format!("{}[{}]", step.name, extra).cyan(),
-                    visual.cyan(),
-                    step.version.cyan()
+                    range.cyan(),
+                    format!("v{}", step.version).cyan(),
                 )
             } else if let Some(group) = &step.group {
                 // Ex) `flask:dev>=1.0.0` (v1.2.3)`
                 format!(
-                    "`{}{}` (v{})",
+                    "`{}{}` ({})",
                     format!("{}:{}", step.name, group).cyan(),
-                    visual.cyan(),
-                    step.version.cyan()
+                    range.cyan(),
+                    format!("v{}", step.version).cyan(),
                 )
             } else {
                 // Ex) `flask>=1.0.0` (v1.2.3)`
                 format!(
-                    "`{}{}` (v{})",
+                    "`{}{}` ({})",
                     step.name.cyan(),
-                    visual.cyan(),
-                    step.version.cyan()
+                    range.cyan(),
+                    format!("v{}", step.version).cyan(),
                 )
             }
         } else {
             if let Some(extra) = &step.extra {
                 // Ex) `flask[dotenv]` (v1.2.3)`
                 format!(
-                    "`{}` (v{})",
+                    "`{}` ({})",
                     format!("{}[{}]", step.name, extra).cyan(),
-                    step.version.cyan()
+                    format!("v{}", step.version).cyan(),
                 )
             } else if let Some(group) = &step.group {
                 // Ex) `flask:dev` (v1.2.3)`
                 format!(
-                    "`{}` (v{})",
+                    "`{}` ({})",
                     format!("{}:{}", step.name, group).cyan(),
-                    step.version.cyan()
+                    format!("v{}", step.version).cyan(),
                 )
             } else {
                 // Ex) `flask` (v1.2.3)`
-                format!("`{}` (v{})", step.name.cyan(), step.version.cyan())
+                format!(
+                    "`{}` ({})",
+                    step.name.cyan(),
+                    format!("v{}", step.version).cyan()
+                )
             }
         }
     }
 
     let mut message = if let Some(version) = version {
         format!(
-            "`{}` (v{}) was included because",
+            "`{}` ({}) was included because",
             name.cyan(),
-            version.cyan()
+            format!("v{version}").cyan()
         )
     } else {
         format!("`{}` was included because", name.cyan())
@@ -376,10 +380,9 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
         }
         range = Some(SentinelRange::from(&step.range).strip());
     }
-    if let Some(visual) =
-        range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
+    if let Some(range) = range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
     {
-        message = format!("{message} `{}{}`", name.cyan(), visual.cyan());
+        message = format!("{message} `{}{}`", name.cyan(), range.cyan());
     } else {
         message = format!("{message} `{}`", name.cyan());
     }
