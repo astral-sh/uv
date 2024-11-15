@@ -376,76 +376,19 @@ pub fn build_wheel(
     }
 
     if let Some(license_files) = &pyproject_toml.license_files() {
-        let license_files_globs: Vec<_> = license_files
-            .iter()
-            .map(|license_files| {
-                trace!("Including license files at: `{license_files}`");
-                parse_portable_glob(license_files)
-            })
-            .collect::<Result<_, _>>()
-            .map_err(|err| Error::PortableGlob {
-                field: "project.license-files".to_string(),
-                source: err,
-            })?;
-        let license_files_matcher =
-            GlobDirFilter::from_globs(&license_files_globs).map_err(|err| {
-                Error::GlobSetTooLarge {
-                    field: "project.license-files".to_string(),
-                    source: err,
-                }
-            })?;
-
         let license_dir = format!(
             "{}-{}.dist-info/licenses/",
             pyproject_toml.name().as_dist_info_name(),
             pyproject_toml.version()
         );
 
-        wheel_writer.write_directory(&license_dir)?;
-
-        for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
-            // TODO(konsti): This should be prettier.
-            let relative = entry
-                .path()
-                .strip_prefix(source_tree)
-                .expect("walkdir starts with root");
-
-            // Fast path: Don't descend into a directory that can't be included.
-            license_files_matcher.match_directory(relative)
-        }) {
-            let entry = entry.map_err(|err| Error::WalkDir {
-                root: source_tree.to_path_buf(),
-                err,
-            })?;
-            // TODO(konsti): This should be prettier.
-            let relative = entry
-                .path()
-                .strip_prefix(source_tree)
-                .expect("walkdir starts with root");
-
-            if !license_files_matcher.match_path(relative) {
-                trace!("Excluding {}", relative.user_display());
-                continue;
-            };
-
-            let relative_licenses = Path::new(&license_dir)
-                .join(relative)
-                .portable_display()
-                .to_string();
-
-            if entry.file_type().is_dir() {
-                wheel_writer.write_directory(&relative_licenses)?;
-            } else if entry.file_type().is_file() {
-                debug!("Adding license file: `{}`", relative.user_display());
-                wheel_writer.write_file(&relative_licenses, entry.path())?;
-            } else {
-                // TODO(konsti): We may want to support symlinks, there is support for installing them.
-                return Err(Error::UnsupportedFileType(
-                    entry.path().to_path_buf(),
-                    entry.file_type(),
-                ));
-            }
-        }
+        wheel_subdir_from_globs(
+            source_tree,
+            &license_dir,
+            license_files,
+            &mut wheel_writer,
+            "project.license-files",
+        )?;
     }
 
     debug!("Adding metadata files to: `{}`", wheel_path.user_display());
@@ -459,6 +402,81 @@ pub fn build_wheel(
     wheel_writer.close(&dist_info_dir)?;
 
     Ok(filename)
+}
+
+/// Add the files and directories matching from the source tree matching any of the globs in the
+/// wheel subdirectory.
+fn wheel_subdir_from_globs(
+    src: &Path,
+    target: &str,
+    globs: &[String],
+    wheel_writer: &mut ZipDirectoryWriter,
+    // For error messages
+    globs_field: &str,
+) -> Result<(), Error> {
+    let license_files_globs: Vec<_> = globs
+        .iter()
+        .map(|license_files| {
+            trace!("Including license files at: `{license_files}`");
+            parse_portable_glob(license_files)
+        })
+        .collect::<Result<_, _>>()
+        .map_err(|err| Error::PortableGlob {
+            field: globs_field.to_string(),
+            source: err,
+        })?;
+    let license_files_matcher =
+        GlobDirFilter::from_globs(&license_files_globs).map_err(|err| Error::GlobSetTooLarge {
+            field: globs_field.to_string(),
+            source: err,
+        })?;
+
+    wheel_writer.write_directory(target)?;
+
+    for entry in WalkDir::new(src).into_iter().filter_entry(|entry| {
+        // TODO(konsti): This should be prettier.
+        let relative = entry
+            .path()
+            .strip_prefix(src)
+            .expect("walkdir starts with root");
+
+        // Fast path: Don't descend into a directory that can't be included.
+        license_files_matcher.match_directory(relative)
+    }) {
+        let entry = entry.map_err(|err| Error::WalkDir {
+            root: src.to_path_buf(),
+            err,
+        })?;
+        // TODO(konsti): This should be prettier.
+        let relative = entry
+            .path()
+            .strip_prefix(src)
+            .expect("walkdir starts with root");
+
+        if !license_files_matcher.match_path(relative) {
+            trace!("Excluding {}", relative.user_display());
+            continue;
+        };
+
+        let relative_licenses = Path::new(target)
+            .join(relative)
+            .portable_display()
+            .to_string();
+
+        if entry.file_type().is_dir() {
+            wheel_writer.write_directory(&relative_licenses)?;
+        } else if entry.file_type().is_file() {
+            debug!("Adding {} file: `{}`", globs_field, relative.user_display());
+            wheel_writer.write_file(&relative_licenses, entry.path())?;
+        } else {
+            // TODO(konsti): We may want to support symlinks, there is support for installing them.
+            return Err(Error::UnsupportedFileType(
+                entry.path().to_path_buf(),
+                entry.file_type(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// TODO(konsti): Wire this up with actual settings and remove this struct.
