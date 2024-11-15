@@ -2742,7 +2742,6 @@ fn run_script_explicit_directory() -> Result<()> {
 fn run_gui_script_explicit() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create a script that shows a GUI window
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
         # /// script
@@ -2752,6 +2751,7 @@ fn run_gui_script_explicit() -> Result<()> {
         # ]
         # ///
         import sys
+        import os
         from PyQt5.QtWidgets import QApplication, QMainWindow
         from PyQt5.QtCore import QTimer
         
