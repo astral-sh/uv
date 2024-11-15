@@ -11,7 +11,7 @@ distribution.
 If your project does not include a `[build-system]` definition in the `pyproject.toml`, uv will not
 build it by default. This means that your project may not be ready for distribution. Read more about
 the effect of declaring a build system in the
-[project concept](../concepts/projects.md#build-systems) documentation.
+[project concept](../concepts/projects/config.md#build-systems) documentation.
 
 !!! note
 

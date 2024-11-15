@@ -181,7 +181,7 @@ jobs:
 !!! tip
 
     The
-    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#configuring-the-project-environment-path) can
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects/config.md#project-environment-path) can
     be used to install to the system Python environment instead of creating a virtual environment.
 
 ## Caching

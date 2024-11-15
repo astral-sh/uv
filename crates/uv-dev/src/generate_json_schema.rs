@@ -82,8 +82,8 @@ pub(crate) fn main(args: &Args) -> Result<()> {
 const REPLACEMENTS: &[(&str, &str)] = &[
     // Use the fully-resolved URL rather than the relative Markdown path.
     (
-        "(../concepts/dependencies.md)",
-        "(https://docs.astral.sh/uv/concepts/dependencies/)",
+        "(../concepts/projects/dependencies.md)",
+        "(https://docs.astral.sh/uv/concepts/projects/dependencies/)",
     ),
 ];
 

@@ -5,3 +5,4 @@ mkdocs-redirects>=1.2.1
 mdformat>=0.7.17
 mdformat-mkdocs>=2.0.4
 mdformat-admon>=2.0.2
+mkdocs-redirects>=1.2.2

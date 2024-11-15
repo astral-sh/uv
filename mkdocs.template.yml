@@ -61,6 +61,10 @@ markdown_extensions:
       alternate_style: true
 plugins:
   - search
+  - redirects:
+      redirect_maps:
+        "concepts/workspaces.md": "concepts/projects/workspaces.md"
+        "concepts/dependencies.md": "concepts/projects/dependencies.md"
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -94,9 +98,16 @@ nav:
       - Publishing packages: guides/publish.md
   - Concepts:
       - concepts/index.md
-      - Projects: concepts/projects.md
-      - Dependencies: concepts/dependencies.md
-      - Workspaces: concepts/workspaces.md
+      - Projects:
+          - concepts/projects/index.md
+          - Structure and files: concepts/projects/layout.md
+          - Creating projects: concepts/projects/init.md
+          - Managing dependencies: concepts/projects/dependencies.md
+          - Running commands: concepts/projects/run.md
+          - Locking and syncing: concepts/projects/sync.md
+          - Configuring projects: concepts/projects/config.md
+          - Building distributions: concepts/projects/build.md
+          - Using workspaces: concepts/projects/workspaces.md
       - Tools: concepts/tools.md
       - Python versions: concepts/python-versions.md
       - Resolution: concepts/resolution.md

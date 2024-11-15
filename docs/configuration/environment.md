@@ -214,7 +214,7 @@ Equivalent to the `--preview` argument. Enables preview mode.
 ### `UV_PROJECT_ENVIRONMENT`
 
 Specifies the path to the directory to use for a project virtual environment.
-See the [project documentation](../concepts/projects.md#configuring-the-project-environment-path)
+See the [project documentation](../concepts/projects/config.md#project-environment-path)
 for more details.
 
 ### `UV_PUBLISH_CHECK_URL`

@@ -79,7 +79,7 @@ mkdocs-material @ git+ssh://git@github.com/astral-sh/mkdocs-material-insiders.gi
     #   -r docs/requirements.in
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
-mkdocs-redirects==1.2.1
+mkdocs-redirects==1.2.2
     # via -r docs/requirements.in
 more-itertools==10.3.0
     # via mdformat-mkdocs

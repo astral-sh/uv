@@ -1,4 +1,4 @@
-# Workspaces
+# Using workspaces
 
 Inspired by the [Cargo](https://doc.rust-lang.org/cargo/reference/workspaces.html) concept of the
 same name, a workspace is "a collection of one or more packages, called _workspace members_, that
@@ -49,8 +49,8 @@ build-backend = "hatchling.build"
 
 Every directory included by the `members` globs (and not excluded by the `exclude` globs) must
 contain a `pyproject.toml` file. However, workspace members can be _either_
-[applications](./projects.md#applications) or [libraries](./projects.md#libraries); both are
-supported in the workspace context.
+[applications](./init.md#applications) or [libraries](./init.md#libraries); both are supported in
+the workspace context.
 
 Every workspace needs a root, which is _also_ a workspace member. In the above example, `albatross`
 is the workspace root, and the workspace members include all projects under the `packages`

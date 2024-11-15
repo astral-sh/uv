@@ -196,7 +196,7 @@ impl EnvVars {
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
 
     /// Specifies the path to the directory to use for a project virtual environment.
-    /// See the [project documentation](../concepts/projects.md#configuring-the-project-environment-path)
+    /// See the [project documentation](../concepts/projects/config.md#project-environment-path)
     /// for more details.
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
 
