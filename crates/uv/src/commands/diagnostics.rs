@@ -5,7 +5,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_distribution_types::{BuiltDist, DerivationChain, Name, SourceDist};
+use uv_distribution_types::{BuiltDist, DerivationChain, DerivationStep, Name, SourceDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
@@ -158,54 +158,6 @@ impl OperationDiagnostic {
     }
 }
 
-/// Format a [`DerivationChain`] as a human-readable error message.
-fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
-    let mut message = if let Some(version) = version {
-        format!(
-            "`{}` (v{}) was included because",
-            name.cyan(),
-            version.cyan()
-        )
-    } else {
-        format!("`{}` was included because", name.cyan())
-    };
-    let mut range: Option<Ranges<Version>> = None;
-    for (i, step) in chain.iter().enumerate() {
-        if i > 0 {
-            if let Some(range) =
-                range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
-            {
-                message = format!(
-                    "{message} `{}{}` (v{}) which depends on",
-                    step.name.cyan(),
-                    range.cyan(),
-                    step.version.cyan()
-                );
-            } else {
-                message = format!(
-                    "{message} `{}` (v{}) which depends on",
-                    step.name.cyan(),
-                    step.version.cyan()
-                );
-            }
-        } else {
-            message = format!(
-                "{message} `{}` (v{}) depends on",
-                step.name.cyan(),
-                step.version.cyan()
-            );
-        }
-        range = Some(SentinelRange::from(&step.range).strip());
-    }
-    if let Some(range) = range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
-    {
-        message = format!("{message} `{}{}`", name.cyan(), range.cyan());
-    } else {
-        message = format!("{message} `{}`", name.cyan());
-    }
-    message
-}
-
 /// Render a remote source distribution build failure with a help message.
 pub(crate) fn download_and_build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Error) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
@@ -350,4 +302,86 @@ pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) 
     let header = err.header();
     let report = miette::Report::new(Error { header, err, help });
     anstream::eprint!("{report:?}");
+}
+
+/// Format a [`DerivationChain`] as a human-readable error message.
+fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
+    /// Format a step in the [`DerivationChain`] as a human-readable error message.
+    fn format_step(step: &DerivationStep, range: Option<Ranges<Version>>) -> String {
+        if let Some(visual) =
+            range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
+        {
+            if let Some(extra) = &step.extra {
+                // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)`
+                format!(
+                    "`{}{}` (v{})",
+                    format!("{}[{}]", step.name, extra).cyan(),
+                    visual.cyan(),
+                    step.version.cyan()
+                )
+            } else if let Some(group) = &step.group {
+                // Ex) `flask:dev>=1.0.0` (v1.2.3)`
+                format!(
+                    "`{}{}` (v{})",
+                    format!("{}:{}", step.name, group).cyan(),
+                    visual.cyan(),
+                    step.version.cyan()
+                )
+            } else {
+                // Ex) `flask>=1.0.0` (v1.2.3)`
+                format!(
+                    "`{}{}` (v{})",
+                    step.name.cyan(),
+                    visual.cyan(),
+                    step.version.cyan()
+                )
+            }
+        } else {
+            if let Some(extra) = &step.extra {
+                // Ex) `flask[dotenv]` (v1.2.3)`
+                format!(
+                    "`{}` (v{})",
+                    format!("{}[{}]", step.name, extra).cyan(),
+                    step.version.cyan()
+                )
+            } else if let Some(group) = &step.group {
+                // Ex) `flask:dev` (v1.2.3)`
+                format!(
+                    "`{}` (v{})",
+                    format!("{}:{}", step.name, group).cyan(),
+                    step.version.cyan()
+                )
+            } else {
+                // Ex) `flask` (v1.2.3)`
+                format!("`{}` (v{})", step.name.cyan(), step.version.cyan())
+            }
+        }
+    }
+
+    let mut message = if let Some(version) = version {
+        format!(
+            "`{}` (v{}) was included because",
+            name.cyan(),
+            version.cyan()
+        )
+    } else {
+        format!("`{}` was included because", name.cyan())
+    };
+    let mut range: Option<Ranges<Version>> = None;
+    for (i, step) in chain.iter().enumerate() {
+        if i > 0 {
+            message = format!("{message} {} which depends on", format_step(step, range));
+        } else {
+            message = format!("{message} {} depends on", format_step(step, range));
+        }
+        range = Some(SentinelRange::from(&step.range).strip());
+    }
+    if let Some(visual) =
+        range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
+    {
+        message = format!("{message} `{}{}`", name.cyan(), visual.cyan());
+    } else {
+        message = format!("{message} `{}`", name.cyan());
+    }
+    message
 }

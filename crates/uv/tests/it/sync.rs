@@ -792,7 +792,7 @@ fn sync_build_isolation_extra() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+      help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "###);
 
     // Running `uv sync` with `--all-extras` should also fail.
@@ -811,7 +811,7 @@ fn sync_build_isolation_extra() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+      help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "###);
 
     // Install the build dependencies.
@@ -4398,7 +4398,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+      help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
     "###);
 
     Ok(())
@@ -4464,7 +4464,7 @@ fn sync_derivation_chain_group() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+      help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
     "###);
 
     Ok(())

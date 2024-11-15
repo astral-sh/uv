@@ -1,4 +1,4 @@
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use version_ranges::Ranges;
 
@@ -53,6 +53,10 @@ impl IntoIterator for DerivationChain {
 pub struct DerivationStep {
     /// The name of the package.
     pub name: PackageName,
+    /// The enabled extra of the package, if any.
+    pub extra: Option<ExtraName>,
+    /// The enabled dependency group of the package, if any.
+    pub group: Option<GroupName>,
     /// The version of the package.
     pub version: Version,
     /// The constraints applied to the subsequent package in the chain.
@@ -61,9 +65,17 @@ pub struct DerivationStep {
 
 impl DerivationStep {
     /// Create a [`DerivationStep`] from a package name and version.
-    pub fn new(name: PackageName, version: Version, range: Ranges<Version>) -> Self {
+    pub fn new(
+        name: PackageName,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+        version: Version,
+        range: Ranges<Version>,
+    ) -> Self {
         Self {
             name,
+            extra,
+            group,
             version,
             range,
         }
