@@ -2768,10 +2768,7 @@ fn run_gui_script_explicit() -> Result<()> {
     "#})?;
 
     // Run with --gui-script flag
-    let output = context.run()
-        .arg("--gui-script")
-        .arg("script")
-        .output()?;
+    let output = context.run().arg("--gui-script").arg("script").output()?;
 
     // In GUI mode (pythonw.exe):
     // 1. The process should succeed
@@ -2780,23 +2777,23 @@ fn run_gui_script_explicit() -> Result<()> {
     assert!(output.stdout.is_empty());
 
     // Run with regular --script flag (python.exe)
-    let output = context.run()
-        .arg("--script")
-        .arg("script")
-        .output()?;
+    let output = context.run().arg("--script").arg("script").output()?;
 
     // In regular mode:
     // 1. The process should succeed
     // 2. stdout should contain our print message
     assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("This should not be visible in GUI mode"));
+
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("This should not be visible in GUI mode")
+    );
 
     Ok(())
 }
 
 #[test]
 #[cfg(not(windows))]
-fn run_gui_script_not_supported() {
+fn run_gui_script_not_supported() -> Result<()> {  // Add Result return type
     let context = TestContext::new("3.12");
 
     let test_script = context.temp_dir.child("script");
@@ -2816,6 +2813,8 @@ fn run_gui_script_not_supported() {
     ----- stderr -----
     error: `--gui-script` is only supported on Windows
     "###);
+
+    Ok(())  // Add Ok(()) at the end
 }
 
 #[test]
