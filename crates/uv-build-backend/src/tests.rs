@@ -48,10 +48,16 @@ fn test_record() {
 fn test_determinism() {
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
     let src = TempDir::new().unwrap();
-    for dir in ["src", "tests", "data-dir"] {
+    for dir in ["src", "tests", "data-dir", "third-party-licenses"] {
         copy_dir_all(built_by_uv.join(dir), src.path().join(dir)).unwrap();
     }
-    for dir in ["pyproject.toml", "README.md", "uv.lock"] {
+    for dir in [
+        "pyproject.toml",
+        "README.md",
+        "uv.lock",
+        "LICENSE-APACHE",
+        "LICENSE-MIT",
+    ] {
         fs_err::copy(built_by_uv.join(dir), src.path().join(dir)).unwrap();
     }
 
@@ -125,7 +131,7 @@ fn test_prepare_metadata() {
         .path()
         .join("built_by_uv-0.1.0.dist-info/METADATA");
     assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @r###"
-    Metadata-Version: 2.3
+    Metadata-Version: 2.4
     Name: built-by-uv
     Version: 0.1.0
     Summary: A package to be built with the uv build backend that uses all features exposed by the build backend
@@ -143,7 +149,7 @@ fn test_prepare_metadata() {
         .join("built_by_uv-0.1.0.dist-info/RECORD");
     assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
     built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
-    built_by_uv-0.1.0.dist-info/METADATA,sha256=dfa55ef756775bc493b878741bcdc848c4379812cee7656bc77d886e6ef71d39,372
+    built_by_uv-0.1.0.dist-info/METADATA,sha256=acb91f5a18cb53fa57b45eb4590ea13195a774c856a9dd8cf27cc5435d6451b6,372
     built_by_uv-0.1.0.dist-info/RECORD,,
     "###);
 

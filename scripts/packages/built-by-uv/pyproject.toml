@@ -5,6 +5,7 @@ description = "A package to be built with the uv build backend that uses all fea
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["anyio>=4,<5"]
+license-files = ["LICENSE*", "third-party-licenses/*"]
 
 [build-system]
 requires = ["uv>=0.4.15,<5"]
