@@ -56,7 +56,7 @@ pub enum Error {
     },
     #[error("Failed to walk source tree")]
     StripPrefix(#[from] StripPrefixError),
-    #[error("Unsupported file type {1:?}: `{}`", _0.user_display())]
+    #[error("Unsupported file type {:?}: `{}`", _1, _0.user_display())]
     UnsupportedFileType(PathBuf, FileType),
     #[error("Failed to write wheel zip archive")]
     Zip(#[from] zip::result::ZipError),
