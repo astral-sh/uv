@@ -294,7 +294,7 @@ pub enum Error {
     #[error("Failed to parse: `{}`", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: `{}`. The `{1}` field is not allowed in a `uv.toml` file. `{1}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display())]
+    #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1)]
     PyprojectOnlyField(PathBuf, &'static str),
 }
 

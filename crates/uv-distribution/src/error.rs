@@ -92,7 +92,7 @@ pub enum Error {
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
     NotFound(Url),
-    #[error("Attempted to re-extract the source distribution for `{0}`, but the {1} hash didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
+    #[error("Attempted to re-extract the source distribution for `{}`, but the {} hash didn't match. Run `{}` to clear the cache.", _0, _1, "uv cache clean".green())]
     CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]
     RequiresPython(VersionSpecifiers, Version),
