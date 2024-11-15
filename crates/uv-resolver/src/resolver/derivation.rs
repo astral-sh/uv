@@ -99,7 +99,7 @@ impl DerivationChainBuilder {
                 if let Kind::FromDependencyOf(p1, _v1, p2, v2) = &incompat.kind {
                     if p2 == package && v2.contains(version) {
                         if let Some(version) = solution.get(p1) {
-                            if let Some(name) = p1.name() {
+                            if let Some(name) = p1.name_no_root() {
                                 // Add to the current path.
                                 path.push(DerivationStep::new(name.clone(), version.clone()));
 
