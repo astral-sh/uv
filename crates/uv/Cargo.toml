@@ -94,6 +94,7 @@ tracing-subscriber = { workspace = true, features = ["json"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }

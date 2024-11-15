@@ -4479,6 +4479,7 @@ dependencies = [
  "uv-virtualenv",
  "uv-warnings",
  "uv-workspace",
+ "version-ranges",
  "walkdir",
  "which",
  "zip",
@@ -4925,6 +4926,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "version-ranges",
 ]
 
 [[package]]

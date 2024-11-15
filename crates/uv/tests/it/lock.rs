@@ -7357,7 +7357,7 @@ fn lock_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
-      help: `idna` was included because `project==0.1.0` depends on `anyio==3.7.0` which depends on `idna`
+      help: `idna` (v3.6) was included because `project` (v0.1.0) depends on `anyio` (v3.7.0) which depends on `idna`
     "###);
 
     Ok(())
@@ -8196,7 +8196,7 @@ fn lock_redact_https() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` was included because `foo==0.1.0` depends on `iniconfig`
+      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     "###);
 
     // Installing from the lockfile should fail without an index.
@@ -8209,7 +8209,7 @@ fn lock_redact_https() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` was included because `foo==0.1.0` depends on `iniconfig`
+      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     "###);
 
     // Installing from the lockfile should succeed when credentials are included on the command-line.
@@ -8249,7 +8249,7 @@ fn lock_redact_https() -> Result<()> {
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-      help: `iniconfig` was included because `foo==0.1.0` depends on `iniconfig`
+      help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     "###);
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.
@@ -19832,7 +19832,7 @@ fn lock_dynamic_version() -> Result<()> {
 }
 
 #[test]
-fn lock_derivation_chain() -> Result<()> {
+fn lock_derivation_chain_prod() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -19842,7 +19842,7 @@ fn lock_derivation_chain() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["wsgiref"]
+        dependencies = ["wsgiref==0.1.2"]
         "#,
     )?;
 
@@ -19882,7 +19882,7 @@ fn lock_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` was included because `project==0.1.0` depends on `wsgiref`
+      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref==0.1.2`
     "###);
 
     Ok(())
@@ -19900,7 +19900,7 @@ fn lock_derivation_chain_extra() -> Result<()> {
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
-        optional-dependencies = { wsgi = ["wsgiref"] }
+        optional-dependencies = { wsgi = ["wsgiref>=0.1"] }
         "#,
     )?;
 
@@ -19940,7 +19940,7 @@ fn lock_derivation_chain_extra() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` was included because `project==0.1.0` depends on `wsgiref`
+      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref>=0.1`
     "###);
 
     Ok(())
@@ -20000,7 +20000,7 @@ fn lock_derivation_chain_group() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` was included because `project==0.1.0` depends on `wsgiref`
+      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
     "###);
 
     Ok(())
@@ -20031,7 +20031,7 @@ fn lock_derivation_chain_extended() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["wsgiref"]
+        dependencies = ["wsgiref>=0.1, <0.2"]
         "#,
     )?;
 
@@ -20071,7 +20071,7 @@ fn lock_derivation_chain_extended() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` was included because `project==0.1.0` depends on `child==0.1.0` which depends on `wsgiref`
+      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `child` (v0.1.0) which depends on `wsgiref>=0.1, <0.2`
     "###);
 
     Ok(())

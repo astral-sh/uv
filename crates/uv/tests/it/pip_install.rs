@@ -7372,7 +7372,7 @@ fn resolve_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-      help: `wsgiref` was included because `project==0.1.0` depends on `wsgiref`
+      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
     "###
     );
 

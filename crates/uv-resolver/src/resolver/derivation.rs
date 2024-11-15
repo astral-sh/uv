@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use petgraph::Direction;
-use pubgrub::{Kind, SelectedDependencies, State};
+use pubgrub::{Kind, Range, SelectedDependencies, State};
 use rustc_hash::FxHashSet;
 
 use uv_distribution_types::{
@@ -58,6 +58,7 @@ impl DerivationChainBuilder {
                     path.push(DerivationStep::new(
                         dist.name().clone(),
                         dist.version().clone(),
+                        Range::empty(),
                     ));
                     for neighbor in resolution
                         .graph()
@@ -88,20 +89,29 @@ impl DerivationChainBuilder {
             solution: &SelectedDependencies<UvDependencyProvider>,
             path: &mut Vec<DerivationStep>,
         ) -> bool {
-            // Retrieve the incompatiblies for the current package.
-            let Some(incompats) = state.incompatibilities.get(package) else {
+            // Retrieve the incompatibilities for the current package.
+            let Some(incompatibilities) = state.incompatibilities.get(package) else {
                 return false;
             };
-            for index in incompats {
+            for index in incompatibilities {
                 let incompat = &state.incompatibility_store[*index];
 
                 // Find a dependency from a package to the current package.
-                if let Kind::FromDependencyOf(p1, _v1, p2, v2) = &incompat.kind {
+                if let Kind::FromDependencyOf(p1, _, p2, v2) = &incompat.kind {
                     if p2 == package && v2.contains(version) {
                         if let Some(version) = solution.get(p1) {
-                            if let Some(name) = p1.name_no_root() {
+                            if p1.name_no_root() == p2.name_no_root() {
+                                // Skip proxied dependencies.
+                                if find_path(p1, version, state, solution, path) {
+                                    return true;
+                                }
+                            } else if let Some(name) = p1.name_no_root() {
                                 // Add to the current path.
-                                path.push(DerivationStep::new(name.clone(), version.clone()));
+                                path.push(DerivationStep::new(
+                                    name.clone(),
+                                    version.clone(),
+                                    v2.clone(),
+                                ));
 
                                 // Recursively search the next package.
                                 if find_path(p1, version, state, solution, path) {
@@ -128,7 +138,6 @@ impl DerivationChainBuilder {
                 return None;
             }
             path.reverse();
-            path.dedup();
             path
         };
 
