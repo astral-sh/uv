@@ -2795,7 +2795,6 @@ fn run_gui_script_explicit() -> Result<()> {
 #[cfg(not(windows))]
 fn run_gui_script_not_supported() -> Result<()> { 
     let context = TestContext::new("3.12");
-
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
         # /// script
