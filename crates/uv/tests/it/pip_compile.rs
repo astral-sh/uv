@@ -13226,3 +13226,75 @@ fn same_version_multi_index_incompatibility() -> Result<()> {
 
     Ok(())
 }
+
+/// Show the derivation chain on build failure.
+#[test]
+fn compile_derivation_chain() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["wsgiref"]
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&indoc::formatdoc! {r#"
+        [build-system]
+        requires = ["setuptools>=42"]
+
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+            "child @ {}",
+        ]
+    "#, Url::from_file_path(child).unwrap()})?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"/.*/src", "/[TMP]/src"),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_compile().arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `wsgiref==0.1.2`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 5, in <module>
+            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+              print "Setuptools version",version,"or greater has been installed."
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+
+      help: `wsgiref` was included because `child==0.1.0` depends on `wsgiref`
+    "###
+    );
+
+    Ok(())
+}
