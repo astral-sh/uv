@@ -1,5 +1,5 @@
 use super::*;
-use indoc::indoc;
+use flate2::bufread::GzDecoder;
 use insta::assert_snapshot;
 use std::str::FromStr;
 use tempfile::TempDir;
@@ -41,62 +41,6 @@ fn test_record() {
             built_by_uv/__init__.py,sha256=89f869e53a3a0061a52c0233e6442d4d72de80a8a2d3406d9ea0bfd397ed7865,37
             built_by_uv-0.1.0/RECORD,,
         ");
-}
-
-/// Check that we write deterministic wheels.
-#[test]
-fn test_determinism() {
-    let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
-    let src = TempDir::new().unwrap();
-    for dir in ["src", "tests", "data-dir", "third-party-licenses"] {
-        copy_dir_all(built_by_uv.join(dir), src.path().join(dir)).unwrap();
-    }
-    for dir in [
-        "pyproject.toml",
-        "README.md",
-        "uv.lock",
-        "LICENSE-APACHE",
-        "LICENSE-MIT",
-    ] {
-        fs_err::copy(built_by_uv.join(dir), src.path().join(dir)).unwrap();
-    }
-
-    let temp1 = TempDir::new().unwrap();
-    build_wheel(
-        src.path(),
-        temp1.path(),
-        None,
-        WheelSettings::default(),
-        "1.0.0+test",
-    )
-    .unwrap();
-
-    // Touch the file to check that we don't serialize the last modified date.
-    fs_err::write(
-        src.path().join("src/built_by_uv/__init__.py"),
-        indoc! {r#"
-        def greet() -> str:
-            return "Hello 👋"
-        "#
-        },
-    )
-    .unwrap();
-
-    let temp2 = TempDir::new().unwrap();
-    build_wheel(
-        src.path(),
-        temp2.path(),
-        None,
-        WheelSettings::default(),
-        "1.0.0+test",
-    )
-    .unwrap();
-
-    let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
-    assert_eq!(
-        fs_err::read(temp1.path().join(wheel_filename)).unwrap(),
-        fs_err::read(temp2.path().join(wheel_filename)).unwrap()
-    );
 }
 
 /// Snapshot all files from the prepare metadata hook.
@@ -162,4 +106,137 @@ fn test_prepare_metadata() {
         Root-Is-Purelib: true
         Tag: py3-none-any
     "###);
+}
+
+/// Test that source tree -> source dist -> wheel includes the right files and is stable and
+/// deterministic in dependent of the build path.
+#[test]
+fn built_by_uv_building() {
+    let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
+    let src = TempDir::new().unwrap();
+    for dir in ["src", "tests", "data-dir", "third-party-licenses"] {
+        copy_dir_all(built_by_uv.join(dir), src.path().join(dir)).unwrap();
+    }
+    for dir in [
+        "pyproject.toml",
+        "README.md",
+        "uv.lock",
+        "LICENSE-APACHE",
+        "LICENSE-MIT",
+    ] {
+        fs_err::copy(built_by_uv.join(dir), src.path().join(dir)).unwrap();
+    }
+
+    // Build a wheel from the source tree
+    let direct_output_dir = TempDir::new().unwrap();
+    build_wheel(
+        src.path(),
+        direct_output_dir.path(),
+        None,
+        WheelSettings::default(),
+        "1.0.0+test",
+    )
+    .unwrap();
+
+    let wheel = zip::ZipArchive::new(
+        File::open(
+            direct_output_dir
+                .path()
+                .join("built_by_uv-0.1.0-py3-none-any.whl"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut direct_wheel_contents: Vec<_> = wheel.file_names().collect();
+    direct_wheel_contents.sort_unstable();
+
+    // Build a source dist from the source tree
+    let source_dist_dir = TempDir::new().unwrap();
+    build_source_dist(
+        src.path(),
+        source_dist_dir.path(),
+        SourceDistSettings::default(),
+        "1.0.0+test",
+    )
+    .unwrap();
+
+    // Build a wheel from the source dist
+    let sdist_tree = TempDir::new().unwrap();
+    let source_dist_path = source_dist_dir.path().join("built_by_uv-0.1.0.tar.gz");
+    let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+    let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+    let mut source_dist_contents: Vec<_> = source_dist
+        .entries()
+        .unwrap()
+        .map(|entry| entry.unwrap().path().unwrap().to_str().unwrap().to_string())
+        .collect();
+    source_dist_contents.sort();
+    // Reset the reader and unpack
+    let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+    let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+    source_dist.unpack(sdist_tree.path()).unwrap();
+    drop(source_dist_dir);
+
+    let indirect_output_dir = TempDir::new().unwrap();
+    build_wheel(
+        &sdist_tree.path().join("built_by_uv-0.1.0"),
+        indirect_output_dir.path(),
+        None,
+        WheelSettings::default(),
+        "1.0.0+test",
+    )
+    .unwrap();
+
+    // Check that we write deterministic wheels.
+    let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
+    assert_eq!(
+        fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
+        fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap()
+    );
+
+    // Check the contained files and directories
+    assert_snapshot!(source_dist_contents.join("\n"), @r"
+        built_by_uv-0.1.0/LICENSE-APACHE
+        built_by_uv-0.1.0/LICENSE-MIT
+        built_by_uv-0.1.0/PKG-INFO
+        built_by_uv-0.1.0/README.md
+        built_by_uv-0.1.0/pyproject.toml
+        built_by_uv-0.1.0/src/built_by_uv
+        built_by_uv-0.1.0/src/built_by_uv/__init__.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
+        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
+    ");
+
+    let wheel = zip::ZipArchive::new(
+        File::open(
+            indirect_output_dir
+                .path()
+                .join("built_by_uv-0.1.0-py3-none-any.whl"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut indirect_wheel_contents: Vec<_> = wheel.file_names().collect();
+    indirect_wheel_contents.sort_unstable();
+    assert_eq!(indirect_wheel_contents, direct_wheel_contents);
+
+    assert_snapshot!(indirect_wheel_contents.join("\n"), @r"
+        built_by_uv-0.1.0.dist-info/
+        built_by_uv-0.1.0.dist-info/METADATA
+        built_by_uv-0.1.0.dist-info/RECORD
+        built_by_uv-0.1.0.dist-info/WHEEL
+        built_by_uv-0.1.0.dist-info/licenses/
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
+        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
+        built_by_uv/
+        built_by_uv/__init__.py
+        built_by_uv/arithmetic/
+        built_by_uv/arithmetic/__init__.py
+        built_by_uv/arithmetic/circle.py
+        built_by_uv/arithmetic/pi.txt
+    ");
 }
