@@ -375,6 +375,79 @@ pub fn build_wheel(
         entry.path();
     }
 
+    if let Some(license_files) = &pyproject_toml.project().license_files {
+        let license_files_globs: Vec<_> = license_files
+            .iter()
+            .map(|license_files| {
+                trace!("Including license files at: `{license_files}`");
+                parse_portable_glob(license_files)
+            })
+            .collect::<Result<_, _>>()
+            .map_err(|err| Error::PortableGlob {
+                field: "project.license-files".to_string(),
+                source: err,
+            })?;
+        let license_files_matcher =
+            GlobDirFilter::from_globs(&license_files_globs).map_err(|err| {
+                Error::GlobSetTooLarge {
+                    field: "project.license-files".to_string(),
+                    source: err,
+                }
+            })?;
+
+        let license_dir = format!(
+            "{}-{}.dist-info/licenses/",
+            pyproject_toml.name().as_dist_info_name(),
+            pyproject_toml.version()
+        );
+
+        wheel_writer.write_directory(&license_dir)?;
+
+        for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
+
+            // Fast path: Don't descend into a directory that can't be included.
+            license_files_matcher.match_directory(relative)
+        }) {
+            let entry = entry.map_err(|err| Error::WalkDir {
+                root: source_tree.to_path_buf(),
+                err,
+            })?;
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
+
+            if !license_files_matcher.match_path(relative) {
+                trace!("Excluding {}", relative.user_display());
+                continue;
+            };
+
+            let relative_licenses = Path::new(&license_dir)
+                .join(relative)
+                .portable_display()
+                .to_string();
+
+            if entry.file_type().is_dir() {
+                wheel_writer.write_directory(&relative_licenses)?;
+            } else if entry.file_type().is_file() {
+                debug!("Adding license file: `{}`", relative.user_display());
+                wheel_writer.write_file(&relative_licenses, entry.path())?;
+            } else {
+                // TODO(konsti): We may want to support symlinks, there is support for installing them.
+                return Err(Error::UnsupportedFileType(
+                    entry.path().to_path_buf(),
+                    entry.file_type(),
+                ));
+            }
+        }
+    }
+
     debug!("Adding metadata files to: `{}`", wheel_path.user_display());
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
