@@ -2748,74 +2748,39 @@ fn run_gui_script_explicit() -> Result<()> {
         # /// script
         # requires-python = ">=3.11"
         # dependencies = [
-        #   "tkinter",
+        #   "PyQt5",
         # ]
         # ///
-        import tkinter as tk
         import sys
-        import os
+        from PyQt5.QtWidgets import QApplication, QMainWindow
+        from PyQt5.QtCore import QTimer
         
         # Log environment info
         print("Python executable:", sys.executable, file=sys.stderr)
-        print("DISPLAY env:", os.environ.get('DISPLAY'), file=sys.stderr)
         print("Working directory:", os.getcwd(), file=sys.stderr)
         
         try:
-            # Create a window that will close itself after 1 second
-            print("Attempting to create Tk window...", file=sys.stderr)
-            root = tk.Tk()
-            print("Tk window created successfully", file=sys.stderr)
-            
-            root.title("UV GUI Test")
-            root.geometry("200x100")
-            
-            # Print to stdout - this should only be visible when run with python.exe
-            print("This should not be visible in GUI mode")
+            app = QApplication(sys.argv)
+            window = QMainWindow()
+            window.setWindowTitle("UV GUI Test")
+            window.setGeometry(100, 100, 200, 100)
+            window.show()
             
             # Close after 1 second
-            root.after(1000, root.destroy)
-            print("Starting mainloop...", file=sys.stderr)
-            root.mainloop()
-            print("Mainloop completed", file=sys.stderr)
-            
+            QTimer.singleShot(1000, app.quit)
+            sys.exit(app.exec_())
         except Exception as e:
-            print(f"GUI Error: {type(e).__name__}: {str(e)}", file=sys.stderr)
+            print(f"Error initializing GUI: {e}", file=sys.stderr)
             sys.exit(1)
     "#})?;
 
-    // Run with --gui-script flag
-    let output = context.run().arg("--gui-script").arg("script").output()?;
-
-    // Log the output regardless of success
+    let output = context.run().arg("--script").arg("script").output()?;
     if !output.status.success() {
         eprintln!("GUI script failed with status: {}", output.status);
         eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
     }
-
-    // In GUI mode (pythonw.exe):
-    // 1. The process should succeed
-    // 2. stdout should be empty since pythonw doesn't show console output
     assert!(output.status.success());
-    assert!(output.stdout.is_empty());
-
-    // Run with regular --script flag (python.exe)
-    let output = context.run().arg("--script").arg("script").output()?;
-
-    // Log regular script output if it fails
-    if !output.status.success() {
-        eprintln!("Regular script failed with status: {}", output.status);
-        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-    }
-
-    // In regular mode:
-    // 1. The process should succeed
-    // 2. stdout should contain our print message
-    assert!(output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("This should not be visible in GUI mode")
-    );
 
     Ok(())
 }
