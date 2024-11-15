@@ -195,7 +195,7 @@ fn built_by_uv_building() {
     );
 
     // Check the contained files and directories
-    assert_snapshot!(source_dist_contents.join("\n"), @r"
+    assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
         built_by_uv-0.1.0/LICENSE-APACHE
         built_by_uv-0.1.0/LICENSE-MIT
         built_by_uv-0.1.0/PKG-INFO
@@ -223,7 +223,7 @@ fn built_by_uv_building() {
     indirect_wheel_contents.sort_unstable();
     assert_eq!(indirect_wheel_contents, direct_wheel_contents);
 
-    assert_snapshot!(indirect_wheel_contents.join("\n"), @r"
+    assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
         built_by_uv-0.1.0.dist-info/
         built_by_uv-0.1.0.dist-info/METADATA
         built_by_uv-0.1.0.dist-info/RECORD
