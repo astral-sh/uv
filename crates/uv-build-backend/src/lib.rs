@@ -4,14 +4,14 @@ use crate::metadata::{PyProjectToml, ValidationError};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
-use globset::GlobSetBuilder;
+use globset::{Glob, GlobSetBuilder};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use std::fs::FileType;
 use std::io::{BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{io, mem};
-use tar::{Builder, EntryType, Header};
+use tar::{EntryType, Header};
 use thiserror::Error;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename, WheelFilename};
@@ -54,8 +54,6 @@ pub enum Error {
         #[source]
         err: walkdir::Error,
     },
-    #[error("Non-UTF-8 paths are not supported: `{}`", _0.user_display())]
-    NotUtf8Path(PathBuf),
     #[error("Failed to walk source tree")]
     StripPrefix(#[from] StripPrefixError),
     #[error("Unsupported file type {1:?}: `{}`", _0.user_display())]
@@ -356,17 +354,16 @@ pub fn build_wheel(
         let relative_path = entry
             .path()
             .strip_prefix(&strip_root)
-            .expect("walkdir starts with root");
-        let relative_path_str = relative_path
-            .to_str()
-            .ok_or_else(|| Error::NotUtf8Path(relative_path.to_path_buf()))?;
+            .expect("walkdir starts with root")
+            .user_display()
+            .to_string();
 
-        debug!("Adding to wheel: `{relative_path_str}`");
+        debug!("Adding to wheel: `{relative_path}`");
 
         if entry.file_type().is_dir() {
-            wheel_writer.write_directory(relative_path_str)?;
+            wheel_writer.write_directory(&relative_path)?;
         } else if entry.file_type().is_file() {
-            wheel_writer.write_file(relative_path_str, entry.path())?;
+            wheel_writer.write_file(&relative_path, entry.path())?;
         } else {
             // TODO(konsti): We may want to support symlinks, there is support for installing them.
             return Err(Error::UnsupportedFileType(
@@ -378,7 +375,80 @@ pub fn build_wheel(
         entry.path();
     }
 
-    debug!("Adding metadata files to {}", wheel_path.user_display());
+    if let Some(license_files) = &pyproject_toml.license_files() {
+        let license_files_globs: Vec<_> = license_files
+            .iter()
+            .map(|license_files| {
+                trace!("Including license files at: `{license_files}`");
+                parse_portable_glob(license_files)
+            })
+            .collect::<Result<_, _>>()
+            .map_err(|err| Error::PortableGlob {
+                field: "project.license-files".to_string(),
+                source: err,
+            })?;
+        let license_files_matcher =
+            GlobDirFilter::from_globs(&license_files_globs).map_err(|err| {
+                Error::GlobSetTooLarge {
+                    field: "project.license-files".to_string(),
+                    source: err,
+                }
+            })?;
+
+        let license_dir = format!(
+            "{}-{}.dist-info/licenses/",
+            pyproject_toml.name().as_dist_info_name(),
+            pyproject_toml.version()
+        );
+
+        wheel_writer.write_directory(&license_dir)?;
+
+        for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
+
+            // Fast path: Don't descend into a directory that can't be included.
+            license_files_matcher.match_directory(relative)
+        }) {
+            let entry = entry.map_err(|err| Error::WalkDir {
+                root: source_tree.to_path_buf(),
+                err,
+            })?;
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
+
+            if !license_files_matcher.match_path(relative) {
+                trace!("Excluding {}", relative.user_display());
+                continue;
+            };
+
+            let relative_licenses = Path::new(&license_dir)
+                .join(relative)
+                .portable_display()
+                .to_string();
+
+            if entry.file_type().is_dir() {
+                wheel_writer.write_directory(&relative_licenses)?;
+            } else if entry.file_type().is_file() {
+                debug!("Adding license file: `{}`", relative.user_display());
+                wheel_writer.write_file(&relative_licenses, entry.path())?;
+            } else {
+                // TODO(konsti): We may want to support symlinks, there is support for installing them.
+                return Err(Error::UnsupportedFileType(
+                    entry.path().to_path_buf(),
+                    entry.file_type(),
+                ));
+            }
+        }
+    }
+
+    debug!("Adding metadata files to: `{}`", wheel_path.user_display());
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
@@ -449,28 +519,32 @@ pub fn build_source_dist(
         extension: SourceDistExtension::TarGz,
     };
 
-    let top_level = format!("{}-{}", pyproject_toml.name(), pyproject_toml.version());
+    let top_level = format!(
+        "{}-{}",
+        pyproject_toml.name().as_dist_info_name(),
+        pyproject_toml.version()
+    );
 
     let source_dist_path = source_dist_directory.join(filename.to_string());
     let tar_gz = File::create(&source_dist_path)?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
-    let metadata = pyproject_toml
-        .to_metadata(source_tree)?
-        .core_metadata_format();
+    let metadata = pyproject_toml.to_metadata(source_tree)?;
+    let metadata_email = metadata.core_metadata_format();
 
     let mut header = Header::new_gnu();
-    header.set_size(metadata.bytes().len() as u64);
+    header.set_size(metadata_email.bytes().len() as u64);
     header.set_mode(0o644);
     header.set_cksum();
     tar.append_data(
         &mut header,
         Path::new(&top_level).join("PKG-INFO"),
-        Cursor::new(metadata),
+        Cursor::new(metadata_email),
     )
     .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
 
+    // The user (or default) includes
     let mut include_globs = Vec::new();
     for include in settings.include {
         let glob = parse_portable_glob(&include).map_err(|err| Error::PortableGlob {
@@ -479,6 +553,30 @@ pub fn build_source_dist(
         })?;
         include_globs.push(glob.clone());
     }
+
+    // Include the Readme
+    if let Some(readme) = pyproject_toml
+        .readme()
+        .as_ref()
+        .and_then(|readme| readme.path())
+    {
+        trace!("Including readme at: `{}`", readme.user_display());
+        include_globs.push(
+            Glob::new(&globset::escape(&readme.portable_display().to_string()))
+                .expect("escaped globset is parseable"),
+        );
+    }
+
+    // Include the license files
+    for license_files in pyproject_toml.license_files().into_iter().flatten() {
+        trace!("Including license files at: `{license_files}`");
+        let glob = parse_portable_glob(license_files).map_err(|err| Error::PortableGlob {
+            field: "project.license-files".to_string(),
+            source: err,
+        })?;
+        include_globs.push(glob);
+    }
+
     let include_matcher =
         GlobDirFilter::from_globs(&include_globs).map_err(|err| Error::GlobSetTooLarge {
             field: "tool.uv.source-dist.include".to_string(),
@@ -549,7 +647,7 @@ pub fn build_source_dist(
 
 /// Add a file or a directory to a source distribution.
 fn add_source_dist_entry(
-    tar: &mut Builder<GzEncoder<File>>,
+    tar: &mut tar::Builder<GzEncoder<File>>,
     entry: &DirEntry,
     top_level: &str,
     source_dist_path: &Path,

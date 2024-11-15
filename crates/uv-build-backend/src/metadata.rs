@@ -76,6 +76,14 @@ impl PyProjectToml {
         Ok(toml::from_str(contents)?)
     }
 
+    pub(crate) fn readme(&self) -> Option<&Readme> {
+        self.project.readme.as_ref()
+    }
+
+    pub(crate) fn license_files(&self) -> Option<&[String]> {
+        self.project.license_files.as_deref()
+    }
+
     /// Warn if the `[build-system]` table looks suspicious.
     ///
     /// Example of a valid table:
@@ -591,7 +599,7 @@ struct Project {
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#readme>.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged, rename_all = "kebab-case")]
-enum Readme {
+pub(crate) enum Readme {
     /// Relative path to the README.
     String(PathBuf),
     /// Relative path to the README.
@@ -608,11 +616,22 @@ enum Readme {
     },
 }
 
+impl Readme {
+    /// If the readme is a file, return the path to the file.
+    pub(crate) fn path(&self) -> Option<&Path> {
+        match self {
+            Readme::String(path) => Some(path),
+            Readme::File { file, .. } => Some(file),
+            Readme::Text { .. } => None,
+        }
+    }
+}
+
 /// The optional `project.license` key in a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#license>.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
-enum License {
+pub(crate) enum License {
     /// An SPDX Expression.
     ///
     /// From the provisional PEP 639.
@@ -639,7 +658,7 @@ enum License {
     deny_unknown_fields,
     expecting = "a table with 'name' and/or 'email' keys"
 )]
-enum Contact {
+pub(crate) enum Contact {
     /// TODO(konsti): RFC 822 validation.
     NameEmail { name: String, email: String },
     /// TODO(konsti): RFC 822 validation.
