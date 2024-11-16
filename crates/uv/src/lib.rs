@@ -1497,7 +1497,7 @@ async fn run_project(
                 Pep723Item::Remote(_) => unreachable!("`uv remove` does not support remote files"),
             });
 
-            commands::remove(
+            Box::pin(commands::remove(
                 project_dir,
                 args.locked,
                 args.frozen,
@@ -1518,7 +1518,7 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
-            )
+            ))
             .await
         }
         ProjectCommand::Tree(args) => {

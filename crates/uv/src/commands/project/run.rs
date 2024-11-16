@@ -274,7 +274,49 @@ pub(crate) async fn run(
                     .map_ok(LoweredRequirement::into_inner)
                 })
                 .collect::<Result<_, _>>()?;
-            let spec = RequirementsSpecification::from_requirements(requirements);
+            let constraints = script
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.constraint_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .flat_map(|requirement| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
+                    )
+                    .map_ok(LoweredRequirement::into_inner)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let overrides = script
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.override_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .flat_map(|requirement| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
+                    )
+                    .map_ok(LoweredRequirement::into_inner)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let spec =
+                RequirementsSpecification::from_constraints(requirements, constraints, overrides);
             let result = CachedEnvironment::get_or_create(
                 EnvironmentSpecification::from(spec),
                 interpreter,
