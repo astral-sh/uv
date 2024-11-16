@@ -146,14 +146,17 @@ impl RequiresDist {
                             SourceStrategy::Enabled => requirements
                                 .into_iter()
                                 .flat_map(|requirement| {
-                                    let group_name = name.clone();
                                     let requirement_name = requirement.name.clone();
+                                    let group = name.clone();
+                                    let extra = None;
                                     LoweredRequirement::from_requirement(
                                         requirement,
                                         &metadata.name,
                                         project_workspace.project_root(),
                                         project_sources,
                                         project_indexes,
+                                        extra,
+                                        Some(group.clone()),
                                         locations,
                                         project_workspace.workspace(),
                                         lower_bound,
@@ -163,7 +166,7 @@ impl RequiresDist {
                                         match requirement {
                                             Ok(requirement) => Ok(requirement.into_inner()),
                                             Err(err) => Err(MetadataError::GroupLoweringError(
-                                                group_name.clone(),
+                                                group.clone(),
                                                 requirement_name.clone(),
                                                 Box::new(err),
                                             )),
@@ -203,12 +206,16 @@ impl RequiresDist {
             SourceStrategy::Enabled => requires_dist
                 .flat_map(|requirement| {
                     let requirement_name = requirement.name.clone();
+                    let extra = requirement.marker.top_level_extra_name();
+                    let group = None;
                     LoweredRequirement::from_requirement(
                         requirement,
                         &metadata.name,
                         project_workspace.project_root(),
                         project_sources,
                         project_indexes,
+                        extra,
+                        group,
                         locations,
                         project_workspace.workspace(),
                         lower_bound,
@@ -383,7 +390,28 @@ mod test {
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |                                                ^^^
-        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `index`, `workspace`, `marker`, `extra`
+        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `index`, `workspace`, `marker`, `extra`, `group`
+        "###);
+    }
+
+    #[tokio::test]
+    async fn extra_and_group() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = []
+
+            [tool.uv.sources]
+            tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
+        "#};
+
+        assert_snapshot!(format_err(input).await, @r###"
+        error: TOML parse error at line 7, column 8
+          |
+        7 | tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
+          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        cannot specify both `extra` and `group`
         "###);
     }
 

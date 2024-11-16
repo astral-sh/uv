@@ -90,9 +90,6 @@ impl Metadata {
             bounds,
         )
         .await?;
-        //
-        // println!("name: {:?}", name);
-        // println!("requires_dist: {:#?}", requires_dist);
 
         // Combine with the remaining metadata.
         Ok(Self {

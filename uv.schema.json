@@ -1424,6 +1424,16 @@
               "type": "string",
               "format": "uri"
             },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
@@ -1464,6 +1474,16 @@
               "anyOf": [
                 {
                   "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
                 },
                 {
                   "type": "null"
@@ -1515,6 +1535,16 @@
                 }
               ]
             },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
@@ -1541,6 +1571,16 @@
                 }
               ]
             },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "index": {
               "$ref": "#/definitions/IndexName"
             },
@@ -1561,6 +1601,16 @@
               "anyOf": [
                 {
                   "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
                 },
                 {
                   "type": "null"

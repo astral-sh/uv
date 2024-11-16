@@ -802,6 +802,9 @@ impl TryFrom<SourcesWire> for Sources {
                     if lhs.extra() != rhs.extra() {
                         continue;
                     };
+                    if lhs.group() != rhs.group() {
+                        continue;
+                    };
 
                     let lhs = lhs.marker();
                     let rhs = rhs.marker();
@@ -864,6 +867,7 @@ pub enum Source {
         )]
         marker: MarkerTree,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution
     /// (`.zip`, `.tar.gz`).
@@ -884,6 +888,7 @@ pub enum Source {
         )]
         marker: MarkerTree,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
@@ -899,6 +904,7 @@ pub enum Source {
         )]
         marker: MarkerTree,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
@@ -910,6 +916,7 @@ pub enum Source {
         )]
         marker: MarkerTree,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A dependency on another package in the workspace.
     Workspace {
@@ -923,6 +930,7 @@ pub enum Source {
         )]
         marker: MarkerTree,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
 }
 
@@ -953,6 +961,7 @@ impl<'de> Deserialize<'de> for Source {
             )]
             marker: MarkerTree,
             extra: Option<ExtraName>,
+            group: Option<GroupName>,
         }
 
         // Attempt to deserialize as `CatchAll`.
@@ -969,7 +978,15 @@ impl<'de> Deserialize<'de> for Source {
             workspace,
             marker,
             extra,
+            group,
         } = CatchAll::deserialize(deserializer)?;
+
+        // If both `extra` and `group` are set, return an error.
+        if extra.is_some() && group.is_some() {
+            return Err(serde::de::Error::custom(
+                "cannot specify both `extra` and `group`",
+            ));
+        }
 
         // If the `git` field is set, we're dealing with a Git source.
         if let Some(git) = git {
@@ -1027,6 +1044,7 @@ impl<'de> Deserialize<'de> for Source {
                 branch,
                 marker,
                 extra,
+                group,
             });
         }
 
@@ -1078,6 +1096,7 @@ impl<'de> Deserialize<'de> for Source {
                 subdirectory,
                 marker,
                 extra,
+                group,
             });
         }
 
@@ -1124,6 +1143,7 @@ impl<'de> Deserialize<'de> for Source {
                 editable,
                 marker,
                 extra,
+                group,
             });
         }
 
@@ -1174,6 +1194,7 @@ impl<'de> Deserialize<'de> for Source {
                 index,
                 marker,
                 extra,
+                group,
             });
         }
 
@@ -1224,6 +1245,7 @@ impl<'de> Deserialize<'de> for Source {
                 workspace,
                 marker,
                 extra,
+                group,
             });
         }
 
@@ -1295,6 +1317,7 @@ impl Source {
                         workspace: true,
                         marker: MarkerTree::TRUE,
                         extra: None,
+                        group: None,
                     }))
                 }
                 RequirementSource::Url { .. } => {
@@ -1319,6 +1342,7 @@ impl Source {
                         index,
                         marker: MarkerTree::TRUE,
                         extra: None,
+                        group: None,
                     }
                 } else {
                     return Ok(None);
@@ -1334,6 +1358,7 @@ impl Source {
                 ),
                 marker: MarkerTree::TRUE,
                 extra: None,
+                group: None,
             },
             RequirementSource::Url {
                 subdirectory, url, ..
@@ -1342,6 +1367,7 @@ impl Source {
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
                 extra: None,
+                group: None,
             },
             RequirementSource::Git {
                 repository,
@@ -1368,6 +1394,7 @@ impl Source {
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
                         extra: None,
+                        group: None,
                     }
                 } else {
                     Source::Git {
@@ -1378,6 +1405,7 @@ impl Source {
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
                         extra: None,
+                        group: None,
                     }
                 }
             }
@@ -1405,6 +1433,17 @@ impl Source {
             Source::Path { extra, .. } => extra.as_ref(),
             Source::Registry { extra, .. } => extra.as_ref(),
             Source::Workspace { extra, .. } => extra.as_ref(),
+        }
+    }
+
+    /// Return the dependency group name for the source.
+    pub fn group(&self) -> Option<&GroupName> {
+        match self {
+            Source::Git { group, .. } => group.as_ref(),
+            Source::Url { group, .. } => group.as_ref(),
+            Source::Path { group, .. } => group.as_ref(),
+            Source::Registry { group, .. } => group.as_ref(),
+            Source::Workspace { group, .. } => group.as_ref(),
         }
     }
 }

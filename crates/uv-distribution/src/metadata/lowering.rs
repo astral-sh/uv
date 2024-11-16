@@ -10,7 +10,7 @@ use uv_configuration::LowerBound;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
 use uv_git::GitReference;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
 use uv_pypi_types::{
@@ -35,12 +35,15 @@ enum RequirementOrigin {
 
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
+    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: &'data PackageName,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         project_indexes: &'data [Index],
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         lower_bound: LowerBound,
@@ -55,17 +58,24 @@ impl LoweredRequirement {
             (None, RequirementOrigin::Project)
         };
 
-        // If the source only applies to a given extra, filter it out.
+        // If the source only applies to a given extra or dependency group, filter it out.
         let source = source.map(|source| {
             source
                 .iter()
                 .filter(|source| {
-                    source.extra().map_or(true, |target| {
-                        requirement
-                            .marker
-                            .top_level_extra_name()
-                            .is_some_and(|extra| extra == *target)
-                    })
+                    if let Some(target) = source.extra() {
+                        if extra.as_ref() != Some(target) {
+                            return false;
+                        }
+                    }
+
+                    if let Some(target) = source.group() {
+                        if group.as_ref() != Some(target) {
+                            return false;
+                        }
+                    }
+
+                    true
                 })
                 .cloned()
                 .collect::<Sources>()
@@ -135,7 +145,7 @@ impl LoweredRequirement {
                             tag,
                             branch,
                             marker,
-                            extra: _,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -153,7 +163,7 @@ impl LoweredRequirement {
                             url,
                             subdirectory,
                             marker,
-                            extra: _,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -165,7 +175,7 @@ impl LoweredRequirement {
                             path,
                             editable,
                             marker,
-                            extra: _,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -183,6 +193,7 @@ impl LoweredRequirement {
                             index,
                             marker,
                             extra,
+                            group,
                         } => {
                             // Identify the named index from either the project indexes or the workspace indexes,
                             // in that order.
@@ -201,8 +212,11 @@ impl LoweredRequirement {
                                     index,
                                 ));
                             };
-                            let conflict = extra
-                                .map(|extra| ConflictItem::from((project_name.clone(), extra)));
+                            let conflict = if let Some(extra) = extra {
+                                Some(ConflictItem::from((project_name.clone(), extra)))
+                            } else {
+                                group.map(|group| ConflictItem::from((project_name.clone(), group)))
+                            };
                             let source = registry_source(
                                 &requirement,
                                 index.into_url(),
@@ -214,7 +228,7 @@ impl LoweredRequirement {
                         Source::Workspace {
                             workspace: is_workspace,
                             marker,
-                            extra: _,
+                            ..
                         } => {
                             if !is_workspace {
                                 return Err(LoweringError::WorkspaceFalse);
@@ -368,7 +382,7 @@ impl LoweredRequirement {
                             tag,
                             branch,
                             marker,
-                            extra: _,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -386,7 +400,7 @@ impl LoweredRequirement {
                             url,
                             subdirectory,
                             marker,
-                            extra: _,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -398,7 +412,7 @@ impl LoweredRequirement {
                             path,
                             editable,
                             marker,
-                            extra: _,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -412,11 +426,7 @@ impl LoweredRequirement {
                             )?;
                             (source, marker)
                         }
-                        Source::Registry {
-                            index,
-                            marker,
-                            extra: _,
-                        } => {
+                        Source::Registry { index, marker, .. } => {
                             let Some(index) = locations
                                 .indexes()
                                 .filter(|index| matches!(index.origin, Some(Origin::Cli)))
