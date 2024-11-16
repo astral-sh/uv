@@ -512,11 +512,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     continue;
                 }
 
-                let for_package = if let PubGrubPackageInner::Root(_) = &*state.next {
-                    None
-                } else {
-                    state.next.name().map(|name| format!("{name}=={version}"))
-                };
                 // Retrieve that package dependencies.
                 let forked_deps = self.get_dependencies_forking(
                     &state.next,
@@ -540,7 +535,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                     ForkedDependencies::Unforked(dependencies) => {
                         state.add_package_version_dependencies(
-                            for_package.as_deref(),
                             &version,
                             &self.urls,
                             &self.indexes,
@@ -578,7 +572,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &version,
                             forks,
                             &request_sink,
-                            for_package.as_deref(),
                             &diverging_packages,
                         ) {
                             forked_states.push(new_fork_state?);
@@ -673,7 +666,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         version: &'a Version,
         forks: Vec<Fork>,
         request_sink: &'a Sender<Request>,
-        for_package: Option<&'a str>,
         diverging_packages: &'a [PackageName],
     ) -> impl Iterator<Item = Result<ForkState, ResolveError>> + 'a {
         debug!(
@@ -709,7 +701,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             })
             .map(move |(fork, mut forked_state)| {
                 forked_state.add_package_version_dependencies(
-                    for_package,
                     version,
                     &self.urls,
                     &self.indexes,
@@ -2238,8 +2229,7 @@ impl ForkState {
     /// self-dependencies and handling URLs.
     fn add_package_version_dependencies(
         &mut self,
-        for_package: Option<&str>,
-        version: &Version,
+        for_version: &Version,
         urls: &Urls,
         indexes: &Indexes,
         mut dependencies: Vec<PubGrubDependency>,
@@ -2266,13 +2256,15 @@ impl ForkState {
                 };
 
                 // If the package is pinned to an exact index, add it to the fork.
-                for index in indexes.get(name, &self.env) {
+                for index in indexes.get(name, self.next.name_no_root(), &self.env) {
                     self.fork_indexes.insert(name, index, &self.env)?;
                 }
             }
 
-            if let Some(for_package) = for_package {
-                debug!("Adding transitive dependency for {for_package}: {package}{version}");
+            if let Some(name) = self.next.name_no_root() {
+                debug!(
+                    "Adding transitive dependency for {name}=={for_version}: {package}{version}"
+                );
             } else {
                 // A dependency from the root package or requirements.txt.
                 debug!("Adding direct dependency: {package}{version}");
@@ -2301,7 +2293,7 @@ impl ForkState {
 
         self.pubgrub.add_package_version_dependencies(
             self.next.clone(),
-            version.clone(),
+            for_version.clone(),
             dependencies.into_iter().map(|dependency| {
                 let PubGrubDependency {
                     package,

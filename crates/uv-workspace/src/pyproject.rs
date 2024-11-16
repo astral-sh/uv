@@ -729,6 +729,12 @@ impl Sources {
     }
 }
 
+impl FromIterator<Source> for Sources {
+    fn from_iter<T: IntoIterator<Item = Source>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
 impl IntoIterator for Sources {
     type Item = Source;
     type IntoIter = std::vec::IntoIter<Source>;
@@ -792,13 +798,14 @@ impl TryFrom<SourcesWire> for Sources {
         match wire {
             SourcesWire::One(source) => Ok(Self(vec![source])),
             SourcesWire::Many(sources) => {
-                // Ensure that the markers are disjoint.
-                for (lhs, rhs) in sources
-                    .iter()
-                    .map(Source::marker)
-                    .zip(sources.iter().skip(1).map(Source::marker))
-                {
-                    if !lhs.is_disjoint(&rhs) {
+                for (lhs, rhs) in sources.iter().zip(sources.iter().skip(1)) {
+                    if lhs.extra() != rhs.extra() {
+                        continue;
+                    };
+
+                    let lhs = lhs.marker();
+                    let rhs = rhs.marker();
+                    if !lhs.is_disjoint(rhs) {
                         let Some(left) = lhs.contents().map(|contents| contents.to_string()) else {
                             return Err(SourceError::MissingMarkers);
                         };
@@ -856,6 +863,7 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
     },
     /// A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution
     /// (`.zip`, `.tar.gz`).
@@ -875,6 +883,7 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
@@ -889,6 +898,7 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
@@ -899,6 +909,7 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
     },
     /// A dependency on another package in the workspace.
     Workspace {
@@ -911,6 +922,7 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
     },
 }
 
@@ -940,6 +952,7 @@ impl<'de> Deserialize<'de> for Source {
                 default
             )]
             marker: MarkerTree,
+            extra: Option<ExtraName>,
         }
 
         // Attempt to deserialize as `CatchAll`.
@@ -955,6 +968,7 @@ impl<'de> Deserialize<'de> for Source {
             index,
             workspace,
             marker,
+            extra,
         } = CatchAll::deserialize(deserializer)?;
 
         // If the `git` field is set, we're dealing with a Git source.
@@ -1012,6 +1026,7 @@ impl<'de> Deserialize<'de> for Source {
                 tag,
                 branch,
                 marker,
+                extra,
             });
         }
 
@@ -1062,6 +1077,7 @@ impl<'de> Deserialize<'de> for Source {
                 url,
                 subdirectory,
                 marker,
+                extra,
             });
         }
 
@@ -1107,6 +1123,7 @@ impl<'de> Deserialize<'de> for Source {
                 path,
                 editable,
                 marker,
+                extra,
             });
         }
 
@@ -1153,7 +1170,11 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
-            return Ok(Self::Registry { index, marker });
+            return Ok(Self::Registry {
+                index,
+                marker,
+                extra,
+            });
         }
 
         // If the `workspace` field is set, we're dealing with a workspace source.
@@ -1199,7 +1220,11 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
-            return Ok(Self::Workspace { workspace, marker });
+            return Ok(Self::Workspace {
+                workspace,
+                marker,
+                extra,
+            });
         }
 
         // If none of the fields are set, we're dealing with an error.
@@ -1269,6 +1294,7 @@ impl Source {
                     Ok(Some(Source::Workspace {
                         workspace: true,
                         marker: MarkerTree::TRUE,
+                        extra: None,
                     }))
                 }
                 RequirementSource::Url { .. } => {
@@ -1292,6 +1318,7 @@ impl Source {
                     Source::Registry {
                         index,
                         marker: MarkerTree::TRUE,
+                        extra: None,
                     }
                 } else {
                     return Ok(None);
@@ -1306,6 +1333,7 @@ impl Source {
                         .map_err(SourceError::Absolute)?,
                 ),
                 marker: MarkerTree::TRUE,
+                extra: None,
             },
             RequirementSource::Url {
                 subdirectory, url, ..
@@ -1313,6 +1341,7 @@ impl Source {
                 url: url.to_url(),
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
+                extra: None,
             },
             RequirementSource::Git {
                 repository,
@@ -1338,6 +1367,7 @@ impl Source {
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
+                        extra: None,
                     }
                 } else {
                     Source::Git {
@@ -1347,6 +1377,7 @@ impl Source {
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
+                        extra: None,
                     }
                 }
             }
@@ -1356,13 +1387,24 @@ impl Source {
     }
 
     /// Return the [`MarkerTree`] for the source.
-    pub fn marker(&self) -> MarkerTree {
+    pub fn marker(&self) -> &MarkerTree {
         match self {
-            Source::Git { marker, .. } => marker.clone(),
-            Source::Url { marker, .. } => marker.clone(),
-            Source::Path { marker, .. } => marker.clone(),
-            Source::Registry { marker, .. } => marker.clone(),
-            Source::Workspace { marker, .. } => marker.clone(),
+            Source::Git { marker, .. } => marker,
+            Source::Url { marker, .. } => marker,
+            Source::Path { marker, .. } => marker,
+            Source::Registry { marker, .. } => marker,
+            Source::Workspace { marker, .. } => marker,
+        }
+    }
+
+    /// Return the extra name for the source.
+    pub fn extra(&self) -> Option<&ExtraName> {
+        match self {
+            Source::Git { extra, .. } => extra.as_ref(),
+            Source::Url { extra, .. } => extra.as_ref(),
+            Source::Path { extra, .. } => extra.as_ref(),
+            Source::Registry { extra, .. } => extra.as_ref(),
+            Source::Workspace { extra, .. } => extra.as_ref(),
         }
     }
 }

@@ -426,7 +426,16 @@ pub enum MarkerValueExtra {
 }
 
 impl MarkerValueExtra {
-    fn as_extra(&self) -> Option<&ExtraName> {
+    /// Returns the [`ExtraName`] for this value, if it is a valid extra.
+    pub fn as_extra(&self) -> Option<&ExtraName> {
+        match self {
+            Self::Extra(extra) => Some(extra),
+            Self::Arbitrary(_) => None,
+        }
+    }
+
+    /// Convert the [`MarkerValueExtra`] to an [`ExtraName`], if possible.
+    fn to_extra(self) -> Option<ExtraName> {
         match self {
             Self::Extra(extra) => Some(extra),
             Self::Arbitrary(_) => None,
@@ -1111,6 +1120,19 @@ impl MarkerTree {
         }
 
         extra_expression
+    }
+
+    /// Find a top level `extra == "..."` name.
+    ///
+    /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
+    /// main conjunction.
+    pub fn top_level_extra_name(&self) -> Option<ExtraName> {
+        let extra_expression = self.top_level_extra()?;
+
+        match extra_expression {
+            MarkerExpression::Extra { name, .. } => name.to_extra(),
+            _ => None,
+        }
     }
 
     /// Simplify this marker by *assuming* that the Python version range

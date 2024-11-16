@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 use uv_pep508::{MarkerTree, PackageName};
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{ConflictItemRef, Requirement};
 
 use crate::ResolverEnvironment;
 
@@ -61,6 +61,37 @@ impl<T> ForkMap<T> {
         values
             .iter()
             .filter(|entry| env.included_by_marker(&entry.marker))
+            .map(|entry| &entry.value)
+            .collect()
+    }
+
+    /// Returns a list of values associated with a package that are compatible with the given fork.
+    ///
+    /// Compatibility implies that the markers on the requirement that contained this value
+    /// are not disjoint with the given fork. Note that this does not imply that the requirement
+    /// diverged in the given fork - values from overlapping forks may be combined.
+    pub(crate) fn get_without_conflicts(
+        &self,
+        name: &PackageName,
+        parent_name: Option<&PackageName>,
+        env: &ResolverEnvironment,
+    ) -> Vec<&T> {
+        let Some(values) = self.0.get(name) else {
+            return Vec::new();
+        };
+        values
+            .iter()
+            .filter(|entry| env.included_by_marker(&entry.marker))
+            .filter(|entry| {
+                let Some(parent_name) = parent_name else {
+                    return true;
+                };
+                let Some(extra) = entry.marker.top_level_extra_name() else {
+                    return true;
+                };
+                let group = ConflictItemRef::from((parent_name, &extra));
+                env.included_by_group(group)
+            })
             .map(|entry| &entry.value)
             .collect()
     }

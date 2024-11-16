@@ -475,6 +475,7 @@ pub(crate) async fn add(
                 tag,
                 branch,
                 marker,
+                extra,
             }) => {
                 let credentials = uv_auth::Credentials::from_url(&git);
                 if let Some(credentials) = credentials {
@@ -491,6 +492,7 @@ pub(crate) async fn add(
                     tag,
                     branch,
                     marker,
+                    extra,
                 })
             }
             _ => source,

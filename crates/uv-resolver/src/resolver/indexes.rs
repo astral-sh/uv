@@ -53,9 +53,10 @@ impl Indexes {
     /// Return the explicit index used for a package in the given fork.
     pub(crate) fn get(
         &self,
-        package_name: &PackageName,
+        name: &PackageName,
+        parent: Option<&PackageName>,
         env: &ResolverEnvironment,
     ) -> Vec<&IndexUrl> {
-        self.0.get(package_name, env)
+        self.0.get_without_conflicts(name, parent, env)
     }
 }
