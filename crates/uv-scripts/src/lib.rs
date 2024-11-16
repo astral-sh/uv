@@ -1,11 +1,13 @@
-use memchr::memmem::Finder;
-use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
+
+use memchr::memmem::Finder;
+use serde::Deserialize;
 use thiserror::Error;
+
 use uv_distribution_types::Index;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::PackageName;
@@ -264,12 +266,14 @@ pub struct Tool {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolUv {
     #[serde(flatten)]
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+    pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
     pub indexes: Option<Vec<Index>>,
 }

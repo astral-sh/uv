@@ -654,6 +654,84 @@ fn run_pep723_script_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723-compatible script with `tool.uv` constraints.
+#[test]
+fn run_pep723_script_constraints() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio>=3",
+        # ]
+        #
+        # [tool.uv]
+        # constraint-dependencies = ["idna<=3"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.0
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with `tool.uv` overrides.
+#[test]
+fn run_pep723_script_overrides() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio>=3",
+        # ]
+        #
+        # [tool.uv]
+        # override-dependencies = ["idna<=2"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==2.0
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
 /// With `managed = false`, we should avoid installing the project itself.
 #[test]
 fn run_managed_false() -> Result<()> {
