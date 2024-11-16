@@ -13,7 +13,9 @@ use uv_git::GitReference;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
-use uv_pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ConflictItem, ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl,
+};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
@@ -180,7 +182,7 @@ impl LoweredRequirement {
                         Source::Registry {
                             index,
                             marker,
-                            extra: _,
+                            extra,
                         } => {
                             // Identify the named index from either the project indexes or the workspace indexes,
                             // in that order.
@@ -199,8 +201,14 @@ impl LoweredRequirement {
                                     index,
                                 ));
                             };
-                            let source =
-                                registry_source(&requirement, index.into_url(), lower_bound)?;
+                            let conflict = extra
+                                .map(|extra| ConflictItem::from((project_name.clone(), extra)));
+                            let source = registry_source(
+                                &requirement,
+                                index.into_url(),
+                                conflict,
+                                lower_bound,
+                            )?;
                             (source, marker)
                         }
                         Source::Workspace {
@@ -423,8 +431,13 @@ impl LoweredRequirement {
                                     index,
                                 ));
                             };
-                            let source =
-                                registry_source(&requirement, index.into_url(), lower_bound)?;
+                            let conflict = None;
+                            let source = registry_source(
+                                &requirement,
+                                index.into_url(),
+                                conflict,
+                                lower_bound,
+                            )?;
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
@@ -557,6 +570,7 @@ fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSour
 fn registry_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     index: Url,
+    conflict: Option<ConflictItem>,
     bounds: LowerBound,
 ) -> Result<RequirementSource, LoweringError> {
     match &requirement.version_or_url {
@@ -570,11 +584,13 @@ fn registry_source(
             Ok(RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: Some(index),
+                conflict,
             })
         }
         Some(VersionOrUrl::VersionSpecifier(version)) => Ok(RequirementSource::Registry {
             specifier: version.clone(),
             index: Some(index),
+            conflict,
         }),
         Some(VersionOrUrl::Url(_)) => Err(LoweringError::ConflictingUrls),
     }

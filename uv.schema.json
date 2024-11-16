@@ -1409,6 +1409,16 @@
                 "null"
               ]
             },
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "git": {
               "description": "The repository URL (without the `git+` prefix).",
               "type": "string",
@@ -1450,6 +1460,16 @@
             "url"
           ],
           "properties": {
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
@@ -1485,6 +1505,16 @@
                 "null"
               ]
             },
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
@@ -1501,6 +1531,16 @@
             "index"
           ],
           "properties": {
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "index": {
               "$ref": "#/definitions/IndexName"
             },
@@ -1517,6 +1557,16 @@
             "workspace"
           ],
           "properties": {
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },

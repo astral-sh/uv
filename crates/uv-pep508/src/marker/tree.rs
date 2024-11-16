@@ -435,7 +435,7 @@ impl MarkerValueExtra {
     }
 
     /// Convert the [`MarkerValueExtra`] to an [`ExtraName`], if possible.
-    fn to_extra(self) -> Option<ExtraName> {
+    fn into_extra(self) -> Option<ExtraName> {
         match self {
             Self::Extra(extra) => Some(extra),
             Self::Arbitrary(_) => None,
@@ -1130,7 +1130,7 @@ impl MarkerTree {
         let extra_expression = self.top_level_extra()?;
 
         match extra_expression {
-            MarkerExpression::Extra { name, .. } => name.to_extra(),
+            MarkerExpression::Extra { name, .. } => name.into_extra(),
             _ => None,
         }
     }

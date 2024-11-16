@@ -142,6 +142,7 @@ pub(crate) async fn install(
                         version.clone(),
                     )),
                     index: None,
+                    conflict: None,
                 },
                 origin: None,
             }
@@ -159,6 +160,7 @@ pub(crate) async fn install(
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::empty(),
                     index: None,
+                    conflict: None,
                 },
                 origin: None,
             }

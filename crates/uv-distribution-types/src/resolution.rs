@@ -216,6 +216,7 @@ impl From<&ResolvedDist> for RequirementSource {
                         uv_pep440::VersionSpecifier::equals_version(version.clone()),
                     ),
                     index: Some(wheels.best_wheel().index.url().clone()),
+                    conflict: None,
                 },
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     let mut location = wheel.url.to_url();
@@ -237,6 +238,7 @@ impl From<&ResolvedDist> for RequirementSource {
                         uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
                     ),
                     index: Some(sdist.index.url().clone()),
+                    conflict: None,
                 },
                 Dist::Source(SourceDist::DirectUrl(sdist)) => {
                     let mut location = sdist.url.to_url();
@@ -272,6 +274,7 @@ impl From<&ResolvedDist> for RequirementSource {
                     uv_pep440::VersionSpecifier::equals_version(dist.version().clone()),
                 ),
                 index: None,
+                conflict: None,
             },
         }
     }

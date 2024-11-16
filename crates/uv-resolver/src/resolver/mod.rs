@@ -2256,7 +2256,7 @@ impl ForkState {
                 };
 
                 // If the package is pinned to an exact index, add it to the fork.
-                for index in indexes.get(name, self.next.name_no_root(), &self.env) {
+                for index in indexes.get(name, &self.env) {
                     self.fork_indexes.insert(name, index, &self.env)?;
                 }
             }
