@@ -1297,7 +1297,7 @@ pub struct PipSyncArgs {
     )]
     pub verify_hashes: bool,
 
-    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    #[arg(long, overrides_with("verify_hashes"))]
     pub no_verify_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.
@@ -1580,7 +1580,7 @@ pub struct PipInstallArgs {
     )]
     pub verify_hashes: bool,
 
-    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    #[arg(long, overrides_with("verify_hashes"))]
     pub no_verify_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.
@@ -2214,7 +2214,7 @@ pub struct BuildArgs {
     )]
     pub verify_hashes: bool,
 
-    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    #[arg(long, overrides_with("verify_hashes"))]
     pub no_verify_hashes: bool,
 
     /// The Python interpreter to use for the build environment.
