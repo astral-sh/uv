@@ -19097,6 +19097,40 @@ fn lock_group_include_cycle() -> Result<()> {
 }
 
 #[test]
+fn lock_group_include_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+
+        [dependency-groups]
+        foo = ["typing-extensions", {include-group = "dev"}]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ╰─▶ Group `foo` includes the `dev` group (`include = "dev"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn lock_group_include_missing() -> Result<()> {
     let context = TestContext::new("3.12");
 
