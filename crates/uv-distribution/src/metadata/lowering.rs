@@ -35,15 +35,14 @@ enum RequirementOrigin {
 
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: &'data PackageName,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         project_indexes: &'data [Index],
-        extra: Option<ExtraName>,
-        group: Option<GroupName>,
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
         locations: &'data IndexLocations,
         workspace: &'data Workspace,
         lower_bound: LowerBound,
@@ -64,13 +63,13 @@ impl LoweredRequirement {
                 .iter()
                 .filter(|source| {
                     if let Some(target) = source.extra() {
-                        if extra.as_ref() != Some(target) {
+                        if extra != Some(target) {
                             return false;
                         }
                     }
 
                     if let Some(target) = source.group() {
-                        if group.as_ref() != Some(target) {
+                        if group != Some(target) {
                             return false;
                         }
                     }

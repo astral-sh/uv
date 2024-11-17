@@ -1131,7 +1131,7 @@ impl MarkerTree {
 
         match extra_expression {
             MarkerExpression::Extra { name, .. } => name.into_extra(),
-            _ => None,
+            _ => unreachable!(),
         }
     }
 

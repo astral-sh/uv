@@ -335,18 +335,17 @@ dependencies = ["torch"]
 
 [tool.uv.sources]
 torch = [
-  { index = "torch-cu118", marker = "sys_platform == 'darwin'"},
-  { index = "torch-cu124", marker = "sys_platform != 'darwin'"},
+  { index = "torch-cpu", marker = "platform_system == 'Darwin'"},
+  { index = "torch-gpu", marker = "platform_system == 'Linux'"},
 ]
 
 [[tool.uv.index]]
-name = "torch-cu118"
-url = "https://download.pytorch.org/whl/cu118"
+name = "torch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 
 [[tool.uv.index]]
-name = "torch-cu124"
+name = "torch-gpu"
 url = "https://download.pytorch.org/whl/cu124"
-
 ```
 
 ## Optional dependencies
@@ -393,6 +392,36 @@ $ uv add httpx --optional network
 
     If you have optional dependencies that conflict with one another, resolution will fail
     unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
+
+Sources can also be declared as applying only to a specific optional dependency. For example, to
+pull `torch` from different PyTorch indexes based on an optional `cpu` or `gpu` extra:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = []
+
+[project.optional-dependencies]
+cpu = [
+  "torch",
+]
+gpu = [
+  "torch",
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "torch-cpu", extra = "cpu" },
+  { index = "torch-gpu", extra = "gpu" },
+]
+
+[[tool.uv.index]]
+name = "torch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
+[[tool.uv.index]]
+name = "torch-gpu"
+url = "https://download.pytorch.org/whl/cu124"
+```
 
 ## Development dependencies
 
