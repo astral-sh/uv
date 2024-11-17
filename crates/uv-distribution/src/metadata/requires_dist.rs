@@ -132,7 +132,8 @@ impl RequiresDist {
 
             // Resolve any `include-group` entries in `dependency-groups`.
             let dependency_groups =
-                FlatDependencyGroups::from_dependency_groups(&dependency_groups)?
+                FlatDependencyGroups::from_dependency_groups(&dependency_groups)
+                    .map_err(|err| err.with_dev_dependencies(dev_dependencies))?
                     .into_iter()
                     .chain(
                         // Only add the `dev` group if `dev-dependencies` is defined.

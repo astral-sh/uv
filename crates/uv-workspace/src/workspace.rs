@@ -343,7 +343,8 @@ impl Workspace {
 
             // Resolve any `include-group` entries in `dependency-groups`.
             let dependency_groups =
-                FlatDependencyGroups::from_dependency_groups(&dependency_groups)?;
+                FlatDependencyGroups::from_dependency_groups(&dependency_groups)
+                    .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
 
             // Concatenate the two sets of requirements.
             let dev_dependencies = dependency_groups
