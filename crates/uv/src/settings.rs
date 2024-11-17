@@ -2644,9 +2644,7 @@ impl PipSettings {
                 args.require_hashes
                     .combine(require_hashes)
                     .unwrap_or_default(),
-                args.verify_hashes
-                    .combine(verify_hashes)
-                    .unwrap_or(true),
+                args.verify_hashes.combine(verify_hashes).unwrap_or(true),
             ),
             python: args.python.combine(python),
             system: args.system.combine(system).unwrap_or_default(),

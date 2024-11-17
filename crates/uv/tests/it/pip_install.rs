@@ -6243,6 +6243,27 @@ fn verify_hashes_mismatch() -> Result<()> {
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
+
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+    "###
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
         .arg("requirements.txt")
         .arg("--no-verify-hashes"), @r###"
     success: true
