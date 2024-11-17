@@ -1292,13 +1292,23 @@ pub struct PipSyncArgs {
     #[arg(
         long,
         env = EnvVars::UV_VERIFY_HASHES,
+        require_equals = true,
+        num_args = 0..=1,
+        default_missing_value = "true",
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("no_verify_hashes"),
     )]
-    pub verify_hashes: bool,
+    pub verify_hashes: Option<bool>,
 
-    #[arg(long, overrides_with("verify_hashes"))]
-    pub no_verify_hashes: bool,
+    #[arg(
+        long,
+        require_equals = true,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
+    pub no_verify_hashes: Option<bool>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -1575,13 +1585,23 @@ pub struct PipInstallArgs {
     #[arg(
         long,
         env = EnvVars::UV_VERIFY_HASHES,
+        require_equals = true,
+        num_args = 0..=1,
+        default_missing_value = "true",
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("no_verify_hashes"),
     )]
-    pub verify_hashes: bool,
+    pub verify_hashes: Option<bool>,
 
-    #[arg(long, overrides_with("verify_hashes"))]
-    pub no_verify_hashes: bool,
+    #[arg(
+        long,
+        require_equals = true,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
+    pub no_verify_hashes: Option<bool>,
 
     /// The Python interpreter into which packages should be installed.
     ///
@@ -2209,13 +2229,23 @@ pub struct BuildArgs {
     #[arg(
         long,
         env = EnvVars::UV_VERIFY_HASHES,
+        require_equals = true,
+        num_args = 0..=1,
+        default_missing_value = "true",
         value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with("no_verify_hashes"),
     )]
-    pub verify_hashes: bool,
+    pub verify_hashes: Option<bool>,
 
-    #[arg(long, overrides_with("verify_hashes"))]
-    pub no_verify_hashes: bool,
+    #[arg(
+        long,
+        require_equals = true,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
+    pub no_verify_hashes: Option<bool>,
 
     /// The Python interpreter to use for the build environment.
     ///
