@@ -1535,6 +1535,8 @@ fn sha() -> Result<()> {
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::missing());
 
+    fs_err::remove_dir_all(project.child("dist"))?;
+
     // Accept a correct hash.
     let constraints = project.child("constraints.txt");
     constraints.write_str("setuptools==68.2.2 --hash=sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a")?;
@@ -1547,10 +1549,12 @@ fn sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     running egg_info
+    creating src/project.egg-info
     writing src/project.egg-info/PKG-INFO
     writing dependency_links to src/project.egg-info/dependency_links.txt
     writing requirements to src/project.egg-info/requires.txt
     writing top-level names to src/project.egg-info/top_level.txt
+    writing manifest file 'src/project.egg-info/SOURCES.txt'
     reading manifest file 'src/project.egg-info/SOURCES.txt'
     writing manifest file 'src/project.egg-info/SOURCES.txt'
     running sdist
