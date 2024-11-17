@@ -6241,6 +6241,23 @@ fn verify_hashes_mismatch() -> Result<()> {
     "###
     );
 
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-verify-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
     Ok(())
 }
 

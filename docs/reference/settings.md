@@ -3104,7 +3104,7 @@ Unlike `--require-hashes`, `--verify-hashes` does not require that all requireme
 hashes; instead, it will limit itself to verifying the hashes of those requirements that do
 include them.
 
-**Default value**: `false`
+**Default value**: `true`
 
 **Type**: `bool`
 
@@ -3124,4 +3124,3 @@ include them.
     ```
 
 ---
-
