@@ -5753,7 +5753,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
-</dd><dt><code>--no-verify-hashes</code></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+</dd><dt><code>--no-verify-hashes</code> <i>no-verify-hashes</i></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
@@ -5883,11 +5883,38 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--verify-hashes</code></dt><dd><p>Validate any hashes provided in the requirements file.</p>
+</dd><dt><code>--verify-hashes</code> <i>verify-hashes</i></dt><dd><p>Validate any hashes provided in the requirements file.</p>
 
 <p>Unlike <code>--require-hashes</code>, <code>--verify-hashes</code> does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.</p>
 
 <p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>y</code></li>
+
+<li><code>yes</code></li>
+
+<li><code>t</code></li>
+
+<li><code>true</code></li>
+
+<li><code>on</code></li>
+
+<li><code>1</code></li>
+
+<li><code>n</code></li>
+
+<li><code>no</code></li>
+
+<li><code>f</code></li>
+
+<li><code>false</code></li>
+
+<li><code>off</code></li>
+
+<li><code>0</code></li>
+</ul>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
@@ -6128,7 +6155,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
-</dd><dt><code>--no-verify-hashes</code></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+</dd><dt><code>--no-verify-hashes</code> <i>no-verify-hashes</i></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
@@ -6307,11 +6334,38 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--verify-hashes</code></dt><dd><p>Validate any hashes provided in the requirements file.</p>
+</dd><dt><code>--verify-hashes</code> <i>verify-hashes</i></dt><dd><p>Validate any hashes provided in the requirements file.</p>
 
 <p>Unlike <code>--require-hashes</code>, <code>--verify-hashes</code> does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.</p>
 
 <p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>y</code></li>
+
+<li><code>yes</code></li>
+
+<li><code>t</code></li>
+
+<li><code>true</code></li>
+
+<li><code>on</code></li>
+
+<li><code>1</code></li>
+
+<li><code>n</code></li>
+
+<li><code>no</code></li>
+
+<li><code>f</code></li>
+
+<li><code>false</code></li>
+
+<li><code>off</code></li>
+
+<li><code>0</code></li>
+</ul>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
@@ -7721,7 +7775,7 @@ uv build [OPTIONS] [SRC]
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
-</dd><dt><code>--no-verify-hashes</code></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
+</dd><dt><code>--no-verify-hashes</code> <i>no-verify-hashes</i></dt><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
@@ -7827,11 +7881,38 @@ uv build [OPTIONS] [SRC]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--verify-hashes</code></dt><dd><p>Validate any hashes provided in the build constraints file.</p>
+</dd><dt><code>--verify-hashes</code> <i>verify-hashes</i></dt><dd><p>Validate any hashes provided in the build constraints file.</p>
 
 <p>Unlike <code>--require-hashes</code>, <code>--verify-hashes</code> does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.</p>
 
 <p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>y</code></li>
+
+<li><code>yes</code></li>
+
+<li><code>t</code></li>
+
+<li><code>true</code></li>
+
+<li><code>on</code></li>
+
+<li><code>1</code></li>
+
+<li><code>n</code></li>
+
+<li><code>no</code></li>
+
+<li><code>f</code></li>
+
+<li><code>false</code></li>
+
+<li><code>off</code></li>
+
+<li><code>0</code></li>
+</ul>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd><dt><code>--wheel</code></dt><dd><p>Build a binary distribution (&quot;wheel&quot;) from the given directory</p>
