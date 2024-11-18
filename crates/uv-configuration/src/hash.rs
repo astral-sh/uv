@@ -9,13 +9,13 @@ pub enum HashCheckingMode {
 
 impl HashCheckingMode {
     /// Return the [`HashCheckingMode`] from the command-line arguments, if any.
-    pub fn from_args(require_hashes: bool, verify_hashes: bool) -> Option<Self> {
-        if require_hashes {
+    pub fn from_args(require_hashes: Option<bool>, verify_hashes: Option<bool>) -> Option<Self> {
+        if require_hashes == Some(true) {
             Some(Self::Require)
-        } else if verify_hashes {
-            Some(Self::Verify)
-        } else {
+        } else if verify_hashes == Some(false) {
             None
+        } else {
+            Some(Self::Verify)
         }
     }
 

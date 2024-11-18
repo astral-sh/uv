@@ -8,7 +8,7 @@ use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    options::{flag, flag_option, resolver_installer_options, resolver_options},
+    options::{flag, resolver_installer_options, resolver_options},
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ToolUpgradeArgs,
 };
 use uv_cli::{
@@ -1539,7 +1539,7 @@ impl PipSyncSettings {
                     target,
                     prefix,
                     require_hashes: flag(require_hashes, no_require_hashes),
-                    verify_hashes: flag_option(verify_hashes, no_verify_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
                     no_build: flag(no_build, build),
                     no_binary,
                     only_binary,
@@ -1688,7 +1688,7 @@ impl PipInstallSettings {
                     python_version,
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
-                    verify_hashes: flag_option(verify_hashes, no_verify_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
                     ..PipOptions::from(installer)
                 },
                 filesystem,
@@ -2003,8 +2003,8 @@ impl BuildSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             hash_checking: HashCheckingMode::from_args(
-                flag(require_hashes, no_require_hashes).unwrap_or_default(),
-                flag_option(verify_hashes, no_verify_hashes).unwrap_or(true),
+                flag(require_hashes, no_require_hashes),
+                flag(verify_hashes, no_verify_hashes),
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -2641,10 +2641,8 @@ impl PipSettings {
                 .unwrap_or_default(),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
             hash_checking: HashCheckingMode::from_args(
-                args.require_hashes
-                    .combine(require_hashes)
-                    .unwrap_or_default(),
-                args.verify_hashes.combine(verify_hashes).unwrap_or(true),
+                args.require_hashes.combine(require_hashes),
+                args.verify_hashes.combine(verify_hashes),
             ),
             python: args.python.combine(python),
             system: args.system.combine(system).unwrap_or_default(),

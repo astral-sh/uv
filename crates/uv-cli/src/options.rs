@@ -19,17 +19,6 @@ pub fn flag(yes: bool, no: bool) -> Option<bool> {
     }
 }
 
-pub fn flag_option(yes: Option<bool>, no: Option<bool>) -> Option<bool> {
-    match (yes, no) {
-        (Some(b), None) => Some(b),
-        (None, Some(b)) => Some(!b),
-        (None, None) => None,
-        (Some(true), Some(false)) => Some(true),
-        (Some(false), Some(true)) => Some(false),
-        (Some(_), Some(_)) => unreachable!("Clap should make this impossible"),
-    }
-}
-
 impl From<RefreshArgs> for Refresh {
     fn from(value: RefreshArgs) -> Self {
         let RefreshArgs {
