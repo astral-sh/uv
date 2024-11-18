@@ -62,6 +62,12 @@ pub(crate) fn get_requires_for_build_editable() -> Result<ExitStatus> {
     unimplemented!("uv does not support extra requires")
 }
 
-pub(crate) fn prepare_metadata_for_build_editable(_wheel_directory: &Path) -> Result<ExitStatus> {
-    todo!()
+pub(crate) fn prepare_metadata_for_build_editable(metadata_directory: &Path) -> Result<ExitStatus> {
+    let filename = uv_build_backend::metadata(
+        &env::current_dir()?,
+        metadata_directory,
+        uv_version::version(),
+    )?;
+    println!("{filename}");
+    Ok(ExitStatus::Success)
 }
