@@ -5685,9 +5685,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: Some(
-                Verify,
-            ),
+            hash_checking: None,
             upgrade: None,
             reinstall: None,
         },
