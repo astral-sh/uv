@@ -1247,6 +1247,7 @@ impl std::fmt::Display for RunCommand {
 
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub(crate) async fn from_args(
         command: &ExternalCommand,
         module: bool,
