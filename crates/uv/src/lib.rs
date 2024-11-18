@@ -310,17 +310,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
             let constraints = args
-                .constraint
+                .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
             let overrides = args
-                .r#override
+                .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
             let build_constraints = args
-                .build_constraint
+                .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
@@ -402,12 +402,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
             let constraints = args
-                .constraint
+                .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
             let build_constraints = args
-                .build_constraint
+                .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
@@ -469,25 +469,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .package
                 .into_iter()
                 .map(RequirementsSource::from_package)
-                .chain(args.editable.into_iter().map(RequirementsSource::Editable))
+                .chain(args.editables.into_iter().map(RequirementsSource::Editable))
                 .chain(
-                    args.requirement
+                    args.requirements
                         .into_iter()
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
             let constraints = args
-                .constraint
+                .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
             let overrides = args
-                .r#override
+                .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
             let build_constraints = args
-                .build_constraint
+                .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
@@ -552,7 +552,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_package)
                 .chain(
-                    args.requirement
+                    args.requirements
                         .into_iter()
                         .map(RequirementsSource::from_requirements_txt),
                 )
@@ -717,7 +717,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             // Resolve the build constraints.
             let build_constraints = args
-                .build_constraint
+                .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();

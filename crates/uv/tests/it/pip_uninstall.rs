@@ -19,9 +19,9 @@ fn no_arguments() {
 
     ----- stderr -----
     error: the following required arguments were not provided:
-      <PACKAGE|--requirement <REQUIREMENT>>
+      <PACKAGE|--requirements <REQUIREMENTS>>
 
-    Usage: uv pip uninstall <PACKAGE|--requirement <REQUIREMENT>>
+    Usage: uv pip uninstall <PACKAGE|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###
