@@ -1633,6 +1633,12 @@ pub struct OptionsWire {
     r#package: Option<serde::de::IgnoredAny>,
     default_groups: Option<serde::de::IgnoredAny>,
     dev_dependencies: Option<serde::de::IgnoredAny>,
+
+    // Build backend
+    #[allow(dead_code)]
+    source_dist: Option<serde::de::IgnoredAny>,
+    #[allow(dead_code)]
+    wheel: Option<serde::de::IgnoredAny>,
 }
 
 impl From<OptionsWire> for Options {
@@ -1690,6 +1696,9 @@ impl From<OptionsWire> for Options {
             dev_dependencies,
             managed,
             package,
+            // Used by the build backend
+            source_dist: _,
+            wheel: _,
         } = value;
 
         Self {
