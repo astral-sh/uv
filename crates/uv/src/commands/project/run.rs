@@ -1307,10 +1307,10 @@ impl RunCommand {
         } else if script {
             return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         } else if gui_script {
-            #[cfg(windows)] // @reviewer less sure about this part, but seems likea good check
-            return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
-            #[cfg(not(windows))]
-            anyhow::bail!("`--gui-script` is only supported on Windows");
+            if cfg!(windows) {
+                return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
+            }
+            anyhow::bail!("`--gui-script` is only supported on Windows. Did you mean `--script`?");
         }
 
         let metadata = target_path.metadata();
