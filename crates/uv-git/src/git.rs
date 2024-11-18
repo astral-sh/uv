@@ -26,14 +26,14 @@ const CHECKOUT_READY_LOCK: &str = ".ok";
 pub enum GitError {
     #[error("Git executable not found. Ensure that Git is installed and available.")]
     GitNotFound,
-    #[error("Unexpected error: {0}")]
-    Other(String),
+    #[error(transparent)]
+    Other(#[from] which::Error),
 }
 /// A global cache of the result of `which git`.
 pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
     which::which("git").map_err(|e| match e {
         which::Error::CannotFindBinaryPath => GitError::GitNotFound,
-        e => GitError::Other(e.to_string()),
+        e => GitError::Other(e),
     })
 });
 
