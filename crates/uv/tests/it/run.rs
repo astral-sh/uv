@@ -654,6 +654,48 @@ fn run_pep723_script_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723-compatible script with a `[[tool.uv.index]]`.
+#[test]
+fn run_pep723_script_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "idna>=2",
+        # ]
+        #
+        # [[tool.uv.index]]
+        # name = "test"
+        # url = "https://test.pypi.org/simple"
+        # explicit = true
+        #
+        # [tool.uv.sources]
+        # idna = { index = "test" }
+        # ///
+
+        import idna
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==2.7
+    "###);
+
+    Ok(())
+}
+
 /// Run a PEP 723-compatible script with `tool.uv` constraints.
 #[test]
 fn run_pep723_script_constraints() -> Result<()> {
