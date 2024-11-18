@@ -37,13 +37,16 @@ pub(crate) fn build_editable(
     todo!()
 }
 
+/// Not used from Python code, exists for symmetry with PEP 517.
 pub(crate) fn get_requires_for_build_sdist() -> Result<ExitStatus> {
-    todo!()
+    unimplemented!("uv does not support extra requires")
 }
 
+/// Not used from Python code, exists for symmetry with PEP 517.
 pub(crate) fn get_requires_for_build_wheel() -> Result<ExitStatus> {
-    todo!()
+    unimplemented!("uv does not support extra requires")
 }
+
 pub(crate) fn prepare_metadata_for_build_wheel(metadata_directory: &Path) -> Result<ExitStatus> {
     let filename = uv_build_backend::metadata(
         &env::current_dir()?,
@@ -54,8 +57,9 @@ pub(crate) fn prepare_metadata_for_build_wheel(metadata_directory: &Path) -> Res
     Ok(ExitStatus::Success)
 }
 
+/// Not used from Python code, exists for symmetry with PEP 660.
 pub(crate) fn get_requires_for_build_editable() -> Result<ExitStatus> {
-    todo!()
+    unimplemented!("uv does not support extra requires")
 }
 
 pub(crate) fn prepare_metadata_for_build_editable(_wheel_directory: &Path) -> Result<ExitStatus> {
