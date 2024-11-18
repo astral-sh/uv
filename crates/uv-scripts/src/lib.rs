@@ -275,7 +275,7 @@ pub struct ToolUv {
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
-    pub indexes: Option<Vec<Index>>,
+    pub index: Option<Vec<Index>>,
 }
 
 #[derive(Debug, Error)]
