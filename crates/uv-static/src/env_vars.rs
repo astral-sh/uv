@@ -167,8 +167,9 @@ impl EnvVars {
     /// Equivalent to the `--token` argument for self update. A GitHub token for authentication.
     pub const UV_GITHUB_TOKEN: &'static str = "UV_GITHUB_TOKEN";
 
-    /// Equivalent to the `--verify-hashes` argument. Verifies included hashes.
-    pub const UV_VERIFY_HASHES: &'static str = "UV_VERIFY_HASHES";
+    /// Equivalent to the `--no-verify-hashes` argument. Disables hash verification for
+    /// `requirements.txt` files.
+    pub const UV_NO_VERIFY_HASHES: &'static str = "UV_VERIFY_HASHES";
 
     /// Equivalent to the `--allow-insecure-host` argument.
     pub const UV_INSECURE_HOST: &'static str = "UV_INSECURE_HOST";

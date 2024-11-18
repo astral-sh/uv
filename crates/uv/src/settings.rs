@@ -2003,8 +2003,8 @@ impl BuildSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             hash_checking: HashCheckingMode::from_args(
-                flag(require_hashes, no_require_hashes).unwrap_or_default(),
-                flag(verify_hashes, no_verify_hashes).unwrap_or_default(),
+                flag(require_hashes, no_require_hashes),
+                flag(verify_hashes, no_verify_hashes),
             ),
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -2641,12 +2641,8 @@ impl PipSettings {
                 .unwrap_or_default(),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
             hash_checking: HashCheckingMode::from_args(
-                args.require_hashes
-                    .combine(require_hashes)
-                    .unwrap_or_default(),
-                args.verify_hashes
-                    .combine(verify_hashes)
-                    .unwrap_or_default(),
+                args.require_hashes.combine(require_hashes),
+                args.verify_hashes.combine(verify_hashes),
             ),
             python: args.python.combine(python),
             system: args.system.combine(system).unwrap_or_default(),

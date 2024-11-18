@@ -5753,6 +5753,11 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
+</dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
+
+<p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
+
+<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -5859,7 +5864,9 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 </dd><dt><code>--require-hashes</code></dt><dd><p>Require a matching hash for each requirement.</p>
 
-<p>Hash-checking mode is all or nothing. If enabled, <em>all</em> requirements must be provided with a corresponding hash or set of hashes. Additionally, if enabled, <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
+<p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash.</p>
+
+<p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 
@@ -5883,11 +5890,6 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--verify-hashes</code></dt><dd><p>Validate any hashes provided in the requirements file.</p>
-
-<p>Unlike <code>--require-hashes</code>, <code>--verify-hashes</code> does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.</p>
-
-<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
@@ -6128,6 +6130,11 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
+</dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
+
+<p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
+
+<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -6259,7 +6266,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 </dd><dt><code>--require-hashes</code></dt><dd><p>Require a matching hash for each requirement.</p>
 
-<p>Hash-checking mode is all or nothing. If enabled, <em>all</em> requirements must be provided with a corresponding hash or set of hashes. Additionally, if enabled, <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
+<p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash.</p>
+
+<p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 
@@ -6307,11 +6316,6 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--verify-hashes</code></dt><dd><p>Validate any hashes provided in the requirements file.</p>
-
-<p>Unlike <code>--require-hashes</code>, <code>--verify-hashes</code> does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.</p>
-
-<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
@@ -7721,6 +7725,11 @@ uv build [OPTIONS] [SRC]
 
 </dd><dt><code>--no-sources</code></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any local or Git sources</p>
 
+</dd><dt><code>--no-verify-hashes</code></dt><dd><p>Disable validation of hashes in the requirements file.</p>
+
+<p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
+
+<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -7792,9 +7801,11 @@ uv build [OPTIONS] [SRC]
 
 </dd><dt><code>--refresh-package</code> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
 
-</dd><dt><code>--require-hashes</code></dt><dd><p>Require a matching hash for each build requirement.</p>
+</dd><dt><code>--require-hashes</code></dt><dd><p>Require a matching hash for each requirement.</p>
 
-<p>Hash-checking mode is all or nothing. If enabled, <em>all</em> build requirements must be provided with a corresponding hash or set of hashes via the <code>--build-constraint</code> argument. Additionally, if enabled, <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
+<p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash.</p>
+
+<p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 
@@ -7827,11 +7838,6 @@ uv build [OPTIONS] [SRC]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt><code>--verify-hashes</code></dt><dd><p>Validate any hashes provided in the build constraints file.</p>
-
-<p>Unlike <code>--require-hashes</code>, <code>--verify-hashes</code> does not require that all requirements have hashes; instead, it will limit itself to verifying the hashes of those requirements that do include them.</p>
-
-<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--version</code>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd><dt><code>--wheel</code></dt><dd><p>Build a binary distribution (&quot;wheel&quot;) from the given directory</p>

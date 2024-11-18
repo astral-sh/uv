@@ -188,6 +188,11 @@ Disables all progress output. For example, spinners and progress bars.
 Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
 the environment.
 
+### `UV_NO_VERIFY_HASHES`
+
+Equivalent to the `--no-verify-hashes` argument. Disables hash verification for
+`requirements.txt` files.
+
 ### `UV_NO_WRAP`
 
 Use to disable line wrapping for diagnostics.
@@ -316,10 +321,6 @@ Specifies the directory where uv stores managed tools.
 
 Used ephemeral environments like CI to install uv to a specific path while preventing
 the installer from modifying shell profiles or environment variables.
-
-### `UV_VERIFY_HASHES`
-
-Equivalent to the `--verify-hashes` argument. Verifies included hashes.
 
 
 

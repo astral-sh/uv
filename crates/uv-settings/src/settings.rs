@@ -1348,7 +1348,7 @@ pub struct PipOptions {
     /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
     /// include them.
     #[option(
-        default = "false",
+        default = "true",
         value_type = "bool",
         example = r#"
             verify-hashes = true

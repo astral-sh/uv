@@ -176,7 +176,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -327,7 +329,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -479,7 +483,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -663,7 +669,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -787,7 +795,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -949,7 +959,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -1153,7 +1165,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -1364,7 +1378,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -1540,7 +1556,9 @@ fn resolve_find_links() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -1686,7 +1704,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -1882,7 +1902,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -2061,7 +2083,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -2207,7 +2231,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -2336,7 +2362,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -2465,7 +2493,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -2596,7 +2626,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -2907,7 +2939,9 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -3093,7 +3127,9 @@ fn resolve_both() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -3367,7 +3403,9 @@ fn resolve_config_file() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -3590,7 +3628,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -3722,7 +3762,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -3873,7 +3915,9 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -4075,7 +4119,9 @@ fn index_priority() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -4256,7 +4302,9 @@ fn index_priority() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -4443,7 +4491,9 @@ fn index_priority() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -4625,7 +4675,9 @@ fn index_priority() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -4814,7 +4866,9 @@ fn index_priority() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
-            hash_checking: None,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
@@ -4996,7 +5050,770 @@ fn index_priority() -> anyhow::Result<()> {
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
+            hash_checking: Some(
+                Verify,
+            ),
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+/// Verify hashes by default.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn verify_hashes() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--show-settings"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        allow_insecure_host: [],
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipInstallSettings {
+        package: [],
+        requirement: [
+            "requirements.in",
+        ],
+        editable: [],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        dry_run: false,
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        modifications: Sufficient,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: Some(
+                Verify,
+            ),
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--no-verify-hashes")
+        .arg("--show-settings"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        allow_insecure_host: [],
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipInstallSettings {
+        package: [],
+        requirement: [
+            "requirements.in",
+        ],
+        editable: [],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        dry_run: false,
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        modifications: Sufficient,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
             hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--require-hashes")
+        .arg("--show-settings"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        allow_insecure_host: [],
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipInstallSettings {
+        package: [],
+        requirement: [
+            "requirements.in",
+        ],
+        editable: [],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        dry_run: false,
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        modifications: Sufficient,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: Some(
+                Require,
+            ),
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--no-require-hashes")
+        .arg("--show-settings"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        allow_insecure_host: [],
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipInstallSettings {
+        package: [],
+        requirement: [
+            "requirements.in",
+        ],
+        editable: [],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        dry_run: false,
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        modifications: Sufficient,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: None,
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+        .arg("-r")
+        .arg("requirements.in")
+        .env("UV_NO_VERIFY_HASHES", "1")
+        .arg("--show-settings"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        allow_insecure_host: [],
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipInstallSettings {
+        package: [],
+        requirement: [
+            "requirements.in",
+        ],
+        editable: [],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        dry_run: false,
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        modifications: Sufficient,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: Some(
+                Verify,
+            ),
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "###
+    );
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+        .arg("-r")
+        .arg("requirements.in")
+        .arg("--verify-hashes")
+        .arg("--no-require-hashes")
+        .arg("--show-settings"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        quiet: false,
+        verbose: 0,
+        color: Auto,
+        native_tls: false,
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        connectivity: Online,
+        allow_insecure_host: [],
+        show_settings: true,
+        preview: Disabled,
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipInstallSettings {
+        package: [],
+        requirement: [
+            "requirements.in",
+        ],
+        editable: [],
+        constraint: [],
+        override: [],
+        build_constraint: [],
+        dry_run: false,
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        modifications: Sufficient,
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+            },
+            system: false,
+            extras: None,
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            no_build_isolation: false,
+            no_build_isolation_package: [],
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: Some(
+                ExcludeNewer(
+                    2024-03-25T00:00:00Z,
+                ),
+            ),
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: Enabled,
+            hash_checking: Some(
+                Verify,
+            ),
             upgrade: None,
             reinstall: None,
         },
