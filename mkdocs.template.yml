@@ -62,6 +62,8 @@ markdown_extensions:
 plugins:
   - search
   - redirects:
+      # Note that redirecting an anchor, e.g., `concepts/projects/#managing-dependencies` must be done
+      # client-side and is implemented in `extra.js` instead.
       redirect_maps:
         "concepts/workspaces.md": "concepts/projects/workspaces.md"
         "concepts/dependencies.md": "concepts/projects/dependencies.md"
