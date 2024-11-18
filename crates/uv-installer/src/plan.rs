@@ -13,7 +13,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_platform_tags::Tags;
-use uv_pypi_types::Requirement;
+use uv_pypi_types::RequirementSource;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 
@@ -76,29 +76,28 @@ impl<'a> Planner<'a> {
             let no_binary = build_options.no_binary_package(dist.name());
             let no_build = build_options.no_build_package(dist.name());
 
-            let requirement = Requirement::from(dist);
-
             // Determine whether the distribution is already installed.
-            let installed_dists = site_packages.remove_packages(&requirement.name);
+            let installed_dists = site_packages.remove_packages(dist.name());
             if reinstall {
                 reinstalls.extend(installed_dists);
             } else {
                 match installed_dists.as_slice() {
                     [] => {}
-                    [distribution] => {
-                        match RequirementSatisfaction::check(distribution, &requirement.source)? {
+                    [installed] => {
+                        let source = RequirementSource::from(dist);
+                        match RequirementSatisfaction::check(installed, &source)? {
                             RequirementSatisfaction::Mismatch => {
-                                debug!("Requirement installed, but mismatched: {distribution:?}");
+                                debug!("Requirement installed, but mismatched: {installed:?}");
                             }
                             RequirementSatisfaction::Satisfied => {
-                                debug!("Requirement already installed: {distribution}");
+                                debug!("Requirement already installed: {installed}");
                                 continue;
                             }
                             RequirementSatisfaction::OutOfDate => {
-                                debug!("Requirement installed, but not fresh: {distribution}");
+                                debug!("Requirement installed, but not fresh: {installed}");
                             }
                         }
-                        reinstalls.push(distribution.clone());
+                        reinstalls.push(installed.clone());
                     }
                     // We reinstall installed distributions with multiple versions because
                     // we do not want to keep multiple incompatible versions but removing
@@ -107,18 +106,18 @@ impl<'a> Planner<'a> {
                 }
             }
 
-            let ResolvedDist::Installable(installable) = dist else {
+            let ResolvedDist::Installable { dist, .. } = dist else {
                 unreachable!("Installed distribution could not be found in site-packages: {dist}");
             };
 
             if cache.must_revalidate(dist.name()) {
                 debug!("Must revalidate requirement: {}", dist.name());
-                remote.push(installable.clone());
+                remote.push(dist.clone());
                 continue;
             }
 
             // Identify any cached distributions that satisfy the requirement.
-            match installable {
+            match dist {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
                     if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
                         if *entry.index.url() != wheel.best_wheel().index {
@@ -309,8 +308,8 @@ impl<'a> Planner<'a> {
                 }
             }
 
-            debug!("Identified uncached distribution: {installable}");
-            remote.push(installable.clone());
+            debug!("Identified uncached distribution: {dist}");
+            remote.push(dist.clone());
         }
 
         // Remove any unnecessary packages.

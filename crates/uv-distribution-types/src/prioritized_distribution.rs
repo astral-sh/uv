@@ -442,7 +442,7 @@ impl<'a> CompatibleDist<'a> {
     /// Return the [`ResolvedDistRef`] to use during resolution.
     pub fn for_resolution(&self) -> ResolvedDistRef<'a> {
         match *self {
-            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed(dist),
+            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
             CompatibleDist::SourceDist { sdist, prioritized } => {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
@@ -458,7 +458,7 @@ impl<'a> CompatibleDist<'a> {
     /// Return the [`ResolvedDistRef`] to use during installation.
     pub fn for_installation(&self) -> ResolvedDistRef<'a> {
         match *self {
-            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed(dist),
+            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
             CompatibleDist::SourceDist { sdist, prioritized } => {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }

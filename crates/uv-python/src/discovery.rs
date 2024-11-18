@@ -26,8 +26,8 @@ use crate::microsoft_store::find_microsoft_store_pythons;
 #[cfg(windows)]
 use crate::py_launcher::{registry_pythons, WindowsPython};
 use crate::virtualenv::{
-    conda_prefix_from_env, virtualenv_from_env, virtualenv_from_working_dir,
-    virtualenv_python_executable,
+    conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
+    virtualenv_python_executable, CondaEnvironmentKind,
 };
 use crate::{Interpreter, PythonVersion};
 
@@ -133,6 +133,12 @@ pub enum EnvironmentPreference {
     Any,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct DiscoveryPreferences {
+    python_preference: PythonPreference,
+    environment_preference: EnvironmentPreference,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PythonVariant {
     #[default]
@@ -179,6 +185,8 @@ pub enum PythonSource {
     ActiveEnvironment,
     /// A conda environment was active e.g. via `CONDA_PREFIX`
     CondaPrefix,
+    /// A base conda environment was active e.g. via `CONDA_PREFIX`
+    BaseCondaPrefix,
     /// An environment was discovered e.g. via `.venv`
     DiscoveredEnvironment,
     /// An executable was found in the search path i.e. `PATH`
@@ -199,7 +207,7 @@ pub enum Error {
     Io(#[from] io::Error),
 
     /// An error was encountering when retrieving interpreter information.
-    #[error("Failed to inspect Python interpreter from {2} at `{}` ", .1.user_display())]
+    #[error("Failed to inspect Python interpreter from {} at `{}` ", _2, _1.user_display())]
     Query(
         #[source] Box<crate::interpreter::Error>,
         PathBuf,
@@ -227,18 +235,17 @@ pub enum Error {
     SourceNotAllowed(PythonRequest, PythonSource, PythonPreference),
 }
 
-/// Lazily iterate over Python executables in mutable environments.
+/// Lazily iterate over Python executables in mutable virtual environments.
 ///
 /// The following sources are supported:
 ///
 /// - Active virtual environment (via `VIRTUAL_ENV`)
-/// - Active conda environment (via `CONDA_PREFIX`)
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_environments<'a>(
+fn python_executables_from_virtual_environments<'a>(
 ) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
-    let from_virtual_environment = std::iter::once_with(|| {
+    let from_active_environment = std::iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
             .map(virtualenv_python_executable)
@@ -246,8 +253,9 @@ fn python_executables_from_environments<'a>(
     })
     .flatten();
 
+    // N.B. we prefer the conda environment over discovered virtual environments
     let from_conda_environment = std::iter::once_with(|| {
-        conda_prefix_from_env()
+        conda_environment_from_env(CondaEnvironmentKind::Child)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::CondaPrefix, path)))
@@ -265,7 +273,7 @@ fn python_executables_from_environments<'a>(
     })
     .flatten_ok();
 
-    from_virtual_environment
+    from_active_environment
         .chain(from_conda_environment)
         .chain(from_discovered_environment)
 }
@@ -276,7 +284,7 @@ fn python_executables_from_environments<'a>(
 ///
 /// - Managed Python installations (e.g. `uv python install`)
 /// - The search path (i.e. `PATH`)
-/// - The `py` launcher (Windows only)
+/// - The registry (Windows only)
 ///
 /// The ordering and presence of each source is determined by the [`PythonPreference`].
 ///
@@ -400,23 +408,35 @@ fn python_executables<'a>(
     })
     .flatten();
 
-    let from_environments = python_executables_from_environments();
+    // Check if the the base conda environment is active
+    let from_base_conda_environment = std::iter::once_with(|| {
+        conda_environment_from_env(CondaEnvironmentKind::Base)
+            .into_iter()
+            .map(virtualenv_python_executable)
+            .map(|path| Ok((PythonSource::BaseCondaPrefix, path)))
+    })
+    .flatten();
+
+    let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed = python_executables_from_installed(version, implementation, preference);
 
     // Limit the search to the relevant environment preference; we later validate that they match
     // the preference but queries are expensive and we query less interpreters this way.
     match environments {
         EnvironmentPreference::OnlyVirtual => {
-            Box::new(from_parent_interpreter.chain(from_environments))
+            Box::new(from_parent_interpreter.chain(from_virtual_environments))
         }
         EnvironmentPreference::ExplicitSystem | EnvironmentPreference::Any => Box::new(
             from_parent_interpreter
-                .chain(from_environments)
+                .chain(from_virtual_environments)
+                .chain(from_base_conda_environment)
                 .chain(from_installed),
         ),
-        EnvironmentPreference::OnlySystem => {
-            Box::new(from_parent_interpreter.chain(from_installed))
-        }
+        EnvironmentPreference::OnlySystem => Box::new(
+            from_parent_interpreter
+                .chain(from_base_conda_environment)
+                .chain(from_installed),
+        ),
     }
 }
 
@@ -611,8 +631,8 @@ fn satisfies_environment_preference(
 ) -> bool {
     match (
         preference,
-        // Conda environments are not conformant virtual environments but we treat them as such
-        interpreter.is_virtualenv() || matches!(source, PythonSource::CondaPrefix),
+        // Conda environments are not conformant virtual environments but we treat them as such.
+        interpreter.is_virtualenv() || (matches!(source, PythonSource::CondaPrefix)),
     ) {
         (EnvironmentPreference::Any, _) => true,
         (EnvironmentPreference::OnlyVirtual, true) => true,
@@ -753,6 +773,12 @@ pub fn find_python_installations<'a>(
     preference: PythonPreference,
     cache: &'a Cache,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
+    let sources = DiscoveryPreferences {
+        python_preference: preference,
+        environment_preference: environments,
+    }
+    .sources(request);
+
     match request {
         PythonRequest::File(path) => Box::new(std::iter::once({
             if preference.allows(PythonSource::ProvidedPath) {
@@ -781,9 +807,8 @@ pub fn find_python_installations<'a>(
             }
         })),
         PythonRequest::Directory(path) => Box::new(std::iter::once({
-            debug!("Checking for Python interpreter in {request}");
             if preference.allows(PythonSource::ProvidedPath) {
-                debug!("Checking for Python interpreter at {request}");
+                debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(FindPythonResult::Ok(installation)),
                     Err(InterpreterError::NotFound(_)) => {
@@ -808,9 +833,8 @@ pub fn find_python_installations<'a>(
             }
         })),
         PythonRequest::ExecutableName(name) => {
-            debug!("Searching for Python interpreter with {request}");
             if preference.allows(PythonSource::SearchPath) {
-                debug!("Checking for Python interpreter at {request}");
+                debug!("Searching for Python interpreter with {request}");
                 Box::new(
                     python_interpreters_with_executable_name(name, cache)
                         .filter(move |result| {
@@ -831,7 +855,7 @@ pub fn find_python_installations<'a>(
             }
         }
         PythonRequest::Any => Box::new({
-            debug!("Searching for any Python interpreter in {preference}");
+            debug!("Searching for any Python interpreter in {sources}");
             python_interpreters(&VersionRequest::Any, None, environments, preference, cache).map(
                 |result| {
                     result
@@ -841,7 +865,7 @@ pub fn find_python_installations<'a>(
             )
         }),
         PythonRequest::Default => Box::new({
-            debug!("Searching for default Python interpreter in {preference}");
+            debug!("Searching for default Python interpreter in {sources}");
             python_interpreters(
                 &VersionRequest::Default,
                 None,
@@ -860,7 +884,7 @@ pub fn find_python_installations<'a>(
                 return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
             };
             Box::new({
-                debug!("Searching for {request} in {preference}");
+                debug!("Searching for {request} in {sources}");
                 python_interpreters(version, None, environments, preference, cache).map(|result| {
                     result
                         .map(PythonInstallation::from_tuple)
@@ -869,7 +893,7 @@ pub fn find_python_installations<'a>(
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
-            debug!("Searching for a {request} interpreter in {preference}");
+            debug!("Searching for a {request} interpreter in {sources}");
             python_interpreters(
                 &VersionRequest::Default,
                 Some(implementation),
@@ -894,7 +918,7 @@ pub fn find_python_installations<'a>(
                 return Box::new(std::iter::once(Err(Error::InvalidVersionRequest(err))));
             };
             Box::new({
-                debug!("Searching for {request} in {preference}");
+                debug!("Searching for {request} in {sources}");
                 python_interpreters(
                     version,
                     Some(implementation),
@@ -922,7 +946,7 @@ pub fn find_python_installations<'a>(
                 };
             };
             Box::new({
-                debug!("Searching for {request} in {preference}");
+                debug!("Searching for {request} in {sources}");
                 python_interpreters(
                     request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
@@ -1236,6 +1260,16 @@ impl PythonVariant {
             PythonVariant::Freethreaded => interpreter.gil_disabled(),
         }
     }
+
+    /// Return the lib or executable suffix for the variant, e.g., `t` for `python3.13t`.
+    ///
+    /// Returns an empty string for the default Python variant.
+    pub fn suffix(self) -> &'static str {
+        match self {
+            Self::Default => "",
+            Self::Freethreaded => "t",
+        }
+    }
 }
 impl PythonRequest {
     /// Create a request from a string.
@@ -1493,6 +1527,7 @@ impl PythonSource {
             Self::Managed | Self::Registry | Self::MicrosoftStore => false,
             Self::SearchPath
             | Self::CondaPrefix
+            | Self::BaseCondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
@@ -1505,6 +1540,7 @@ impl PythonSource {
         match self {
             Self::Managed | Self::Registry | Self::SearchPath | Self::MicrosoftStore => false,
             Self::CondaPrefix
+            | Self::BaseCondaPrefix
             | Self::ProvidedPath
             | Self::ParentInterpreter
             | Self::ActiveEnvironment
@@ -1536,7 +1572,10 @@ impl PythonPreference {
     }
 
     pub(crate) fn allows_managed(self) -> bool {
-        matches!(self, Self::Managed | Self::OnlyManaged)
+        match self {
+            Self::OnlySystem => false,
+            Self::Managed | Self::System | Self::OnlyManaged => true,
+        }
     }
 }
 
@@ -1559,9 +1598,9 @@ impl EnvironmentPreference {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Default, Copy, PartialEq, Eq)]
 pub(crate) struct ExecutableName {
-    name: &'static str,
+    implementation: Option<ImplementationName>,
     major: Option<u8>,
     minor: Option<u8>,
     patch: Option<u8>,
@@ -1569,10 +1608,92 @@ pub(crate) struct ExecutableName {
     variant: PythonVariant,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ExecutableNameComparator<'a> {
+    name: ExecutableName,
+    request: &'a VersionRequest,
+    implementation: Option<&'a ImplementationName>,
+}
+
+impl Ord for ExecutableNameComparator<'_> {
+    /// Note the comparison returns a reverse priority ordering.
+    ///
+    /// Higher priority items are "Greater" than lower priority items.
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Prefer the default name over a specific implementation, unless an implementation was
+        // requested
+        let name_ordering = if self.implementation.is_some() {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Less
+        };
+        if self.name.implementation.is_none() && other.name.implementation.is_some() {
+            return name_ordering.reverse();
+        }
+        if self.name.implementation.is_some() && other.name.implementation.is_none() {
+            return name_ordering;
+        }
+        // Otherwise, use the names in supported order
+        let ordering = self.name.implementation.cmp(&other.name.implementation);
+        if ordering != std::cmp::Ordering::Equal {
+            return ordering;
+        }
+        let ordering = self.name.major.cmp(&other.name.major);
+        let is_default_request =
+            matches!(self.request, VersionRequest::Any | VersionRequest::Default);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        let ordering = self.name.minor.cmp(&other.name.minor);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        let ordering = self.name.patch.cmp(&other.name.patch);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        let ordering = self.name.prerelease.cmp(&other.name.prerelease);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        let ordering = self.name.variant.cmp(&other.name.variant);
+        if ordering != std::cmp::Ordering::Equal {
+            return if is_default_request {
+                ordering.reverse()
+            } else {
+                ordering
+            };
+        }
+        ordering
+    }
+}
+
+impl PartialOrd for ExecutableNameComparator<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl ExecutableName {
     #[must_use]
-    fn with_name(mut self, name: &'static str) -> Self {
-        self.name = name;
+    fn with_implementation(mut self, implementation: ImplementationName) -> Self {
+        self.implementation = Some(implementation);
         self
     }
 
@@ -1605,24 +1726,27 @@ impl ExecutableName {
         self.variant = variant;
         self
     }
-}
 
-impl Default for ExecutableName {
-    fn default() -> Self {
-        Self {
-            name: "python",
-            major: None,
-            minor: None,
-            patch: None,
-            prerelease: None,
-            variant: PythonVariant::Default,
+    fn into_comparator<'a>(
+        self,
+        request: &'a VersionRequest,
+        implementation: Option<&'a ImplementationName>,
+    ) -> ExecutableNameComparator<'a> {
+        ExecutableNameComparator {
+            name: self,
+            request,
+            implementation,
         }
     }
 }
 
 impl std::fmt::Display for ExecutableName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)?;
+        if let Some(implementation) = self.implementation {
+            write!(f, "{implementation}")?;
+        } else {
+            f.write_str("python")?;
+        }
         if let Some(major) = self.major {
             write!(f, "{major}")?;
             if let Some(minor) = self.minor {
@@ -1635,12 +1759,7 @@ impl std::fmt::Display for ExecutableName {
         if let Some(prerelease) = &self.prerelease {
             write!(f, "{prerelease}")?;
         }
-        match self.variant {
-            PythonVariant::Default => {}
-            PythonVariant::Freethreaded => {
-                f.write_str("t")?;
-            }
-        };
+        f.write_str(self.variant.suffix())?;
         f.write_str(std::env::consts::EXE_SUFFIX)?;
         Ok(())
     }
@@ -1705,15 +1824,15 @@ impl VersionRequest {
         // Add all the implementation-specific names
         if let Some(implementation) = implementation {
             for i in 0..names.len() {
-                let name = names[i].with_name(implementation.into());
+                let name = names[i].with_implementation(*implementation);
                 names.push(name);
             }
         } else {
             // When looking for all implementations, include all possible names
             if matches!(self, Self::Any) {
                 for i in 0..names.len() {
-                    for implementation in ImplementationName::long_names() {
-                        let name = names[i].with_name(implementation);
+                    for implementation in ImplementationName::iter_all() {
+                        let name = names[i].with_implementation(implementation);
                         names.push(name);
                     }
                 }
@@ -1727,6 +1846,9 @@ impl VersionRequest {
                 names.push(name);
             }
         }
+
+        names.sort_unstable_by_key(|name| name.into_comparator(self, implementation));
+        names.reverse();
 
         names
     }
@@ -1826,6 +1948,7 @@ impl VersionRequest {
             Self::Default => match source {
                 PythonSource::ParentInterpreter
                 | PythonSource::CondaPrefix
+                | PythonSource::BaseCondaPrefix
                 | PythonSource::ProvidedPath
                 | PythonSource::DiscoveredEnvironment
                 | PythonSource::ActiveEnvironment => Self::Any,
@@ -2088,7 +2211,9 @@ impl FromStr for VersionRequest {
                 return Err(Error::InvalidVersionRequest(s.to_string()));
             }
 
-            let [uv_pep440::LocalSegment::String(local)] = version.local() else {
+            let uv_pep440::LocalVersionSlice::Segments([uv_pep440::LocalSegment::String(local)]) =
+                version.local()
+            else {
                 return Err(Error::InvalidVersionRequest(s.to_string()));
             };
 
@@ -2236,7 +2361,7 @@ impl fmt::Display for PythonSource {
         match self {
             Self::ProvidedPath => f.write_str("provided path"),
             Self::ActiveEnvironment => f.write_str("active virtual environment"),
-            Self::CondaPrefix => f.write_str("conda prefix"),
+            Self::CondaPrefix | Self::BaseCondaPrefix => f.write_str("conda prefix"),
             Self::DiscoveredEnvironment => f.write_str("virtual environment"),
             Self::SearchPath => f.write_str("search path"),
             Self::Registry => f.write_str("registry"),
@@ -2248,22 +2373,27 @@ impl fmt::Display for PythonSource {
 }
 
 impl PythonPreference {
-    /// Return the sources that are considered when searching for a Python interpreter.
-    fn sources(self) -> &'static [&'static str] {
+    /// Return the sources that are considered when searching for a Python interpreter with this
+    /// preference.
+    fn sources(self) -> &'static [PythonSource] {
         match self {
-            Self::OnlyManaged => &["managed installations"],
+            Self::OnlyManaged => &[PythonSource::Managed],
             Self::Managed | Self::System => {
                 if cfg!(windows) {
-                    &["managed installations", "system path", "`py` launcher"]
+                    &[
+                        PythonSource::Managed,
+                        PythonSource::SearchPath,
+                        PythonSource::Registry,
+                    ]
                 } else {
-                    &["managed installations", "system path"]
+                    &[PythonSource::Managed, PythonSource::SearchPath]
                 }
             }
             Self::OnlySystem => {
                 if cfg!(windows) {
-                    &["system path", "`py` launcher"]
+                    &[PythonSource::Registry, PythonSource::SearchPath]
                 } else {
-                    &["system path"]
+                    &[PythonSource::SearchPath]
                 }
             }
         }
@@ -2272,29 +2402,62 @@ impl PythonPreference {
 
 impl fmt::Display for PythonPreference {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", conjunction(self.sources()))
+        f.write_str(match self {
+            Self::OnlyManaged => "only managed",
+            Self::Managed => "prefer managed",
+            Self::System => "prefer system",
+            Self::OnlySystem => "only system",
+        })
+    }
+}
+
+impl DiscoveryPreferences {
+    /// Return a string describing the sources that are considered when searching for Python with
+    /// the given preferences.
+    fn sources(&self, request: &PythonRequest) -> String {
+        let python_sources = self
+            .python_preference
+            .sources()
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        match self.environment_preference {
+            EnvironmentPreference::Any => conjunction(
+                &["virtual environments"]
+                    .into_iter()
+                    .chain(python_sources.iter().map(String::as_str))
+                    .collect::<Vec<_>>(),
+            ),
+            EnvironmentPreference::ExplicitSystem => {
+                if request.is_explicit_system() {
+                    conjunction(
+                        &["virtual environments"]
+                            .into_iter()
+                            .chain(python_sources.iter().map(String::as_str))
+                            .collect::<Vec<_>>(),
+                    )
+                } else {
+                    conjunction(&["virtual environments"])
+                }
+            }
+            EnvironmentPreference::OnlySystem => conjunction(
+                &python_sources
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            ),
+            EnvironmentPreference::OnlyVirtual => conjunction(&["virtual environments"]),
+        }
     }
 }
 
 impl fmt::Display for PythonNotFound {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let sources = match self.environment_preference {
-            EnvironmentPreference::Any => conjunction(
-                &["virtual environments"]
-                    .into_iter()
-                    .chain(self.python_preference.sources().iter().copied())
-                    .collect::<Vec<_>>(),
-            ),
-            EnvironmentPreference::ExplicitSystem => {
-                if self.request.is_explicit_system() {
-                    conjunction(&["virtual", "system environment"])
-                } else {
-                    conjunction(&["virtual environment"])
-                }
-            }
-            EnvironmentPreference::OnlySystem => conjunction(self.python_preference.sources()),
-            EnvironmentPreference::OnlyVirtual => conjunction(&["virtual environments"]),
-        };
+        let sources = DiscoveryPreferences {
+            python_preference: self.python_preference,
+            environment_preference: self.environment_preference,
+        }
+        .sources(&self.request);
 
         match self.request {
             PythonRequest::Default | PythonRequest::Any => {

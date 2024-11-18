@@ -1,28 +1,31 @@
 use anyhow::{Context, Result};
 use std::fmt::Write;
 use std::path::Path;
+use uv_settings::PythonInstallMirrors;
 
 use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
+    TrustedHost,
 };
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_resolver::InstallTarget;
 use uv_scripts::Pep723Script;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
-use crate::commands::project::default_dependency_groups;
 use crate::commands::project::lock::LockMode;
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::project::{default_dependency_groups, ProjectError};
+use crate::commands::{diagnostics, project, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -37,6 +40,7 @@ pub(crate) async fn remove(
     dependency_type: DependencyType,
     package: Option<PackageName>,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
@@ -44,6 +48,8 @@ pub(crate) async fn remove(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -185,10 +191,13 @@ pub(crate) async fn remove(
     let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
+        install_mirrors,
         python_preference,
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
+        no_config,
         cache,
         printer,
     )
@@ -207,7 +216,7 @@ pub(crate) async fn remove(
     let state = SharedState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = project::lock::do_safe_lock(
+    let lock = match project::lock::do_safe_lock(
         mode,
         project.workspace(),
         settings.as_ref().into(),
@@ -217,11 +226,20 @@ pub(crate) async fn remove(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
-    .await?
-    .into_lock();
+    .await
+    {
+        Ok(result) => result.into_lock(),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     if no_sync {
         return Ok(ExitStatus::Success);
@@ -235,10 +253,22 @@ pub(crate) async fn remove(
     // Determine the default groups to include.
     let defaults = default_dependency_groups(project.pyproject_toml())?;
 
-    project::sync::do_sync(
-        InstallTarget::from(&project),
+    // Identify the installation target.
+    let target = match &project {
+        VirtualProject::Project(project) => InstallTarget::Project {
+            workspace: project.workspace(),
+            name: project.project_name(),
+            lock: &lock,
+        },
+        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+            workspace,
+            lock: &lock,
+        },
+    };
+
+    match project::sync::do_sync(
+        target,
         &venv,
-        &lock,
         &extras,
         &DevGroupsManifest::from_defaults(defaults),
         EditableMode::Editable,
@@ -249,10 +279,20 @@ pub(crate) async fn remove(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(()) => {}
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     Ok(ExitStatus::Success)
 }

@@ -949,6 +949,74 @@ fn find_python_from_conda_prefix() -> Result<()> {
         "We should allow the active conda python"
     );
 
+    let baseenv = context.tempdir.child("base");
+    TestContext::mock_conda_prefix(&baseenv, "3.12.1")?;
+
+    // But not if it's a base environment
+    let result = context.run_with_vars(
+        &[
+            ("CONDA_PREFIX", Some(baseenv.as_os_str())),
+            ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+        ],
+        || {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlyVirtual,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        },
+    )?;
+
+    assert!(
+        matches!(result, Err(PythonNotFound { .. })),
+        "We should not allow the non-virtual environment; got {result:?}"
+    );
+
+    // Unless, system interpreters are included...
+    let python = context.run_with_vars(
+        &[
+            ("CONDA_PREFIX", Some(baseenv.as_os_str())),
+            ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+        ],
+        || {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlySystem,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        },
+    )??;
+
+    assert_eq!(
+        python.interpreter().python_full_version().to_string(),
+        "3.12.1",
+        "We should find the base conda environment"
+    );
+
+    // If the environment name doesn't match the default, we should not treat it as system
+    let python = context.run_with_vars(
+        &[
+            ("CONDA_PREFIX", Some(condaenv.as_os_str())),
+            ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+        ],
+        || {
+            find_python_installation(
+                &PythonRequest::Default,
+                EnvironmentPreference::OnlyVirtual,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        },
+    )??;
+
+    assert_eq!(
+        python.interpreter().python_full_version().to_string(),
+        "3.12.0",
+        "We should find the conda environment"
+    );
+
     Ok(())
 }
 
@@ -2019,83 +2087,7 @@ fn find_python_graalpy_request_ignores_cpython() -> Result<()> {
 }
 
 #[test]
-fn find_python_prefers_generic_executable_over_implementation_name() -> Result<()> {
-    let mut context = TestContext::new()?;
-
-    // We prefer `python` executables over `graalpy` executables in the same directory
-    // if they are both GraalPy
-    TestContext::create_mock_interpreter(
-        &context.tempdir.join("python"),
-        &PythonVersion::from_str("3.10.0").unwrap(),
-        ImplementationName::GraalPy,
-        true,
-        false,
-    )?;
-    TestContext::create_mock_interpreter(
-        &context.tempdir.join("graalpy"),
-        &PythonVersion::from_str("3.10.1").unwrap(),
-        ImplementationName::GraalPy,
-        true,
-        false,
-    )?;
-    context.add_to_search_path(context.tempdir.to_path_buf());
-
-    let python = context.run(|| {
-        find_python_installation(
-            &PythonRequest::parse("graalpy@3.10"),
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
-    assert_eq!(
-        python.interpreter().python_full_version().to_string(),
-        "3.10.0",
-    );
-
-    // And `python` executables earlier in the search path will take precedence
-    context.reset_search_path();
-    context.add_python_interpreters(&[
-        (true, ImplementationName::GraalPy, "python", "3.10.2"),
-        (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
-    ])?;
-    let python = context.run(|| {
-        find_python_installation(
-            &PythonRequest::parse("graalpy@3.10"),
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
-    assert_eq!(
-        python.interpreter().python_full_version().to_string(),
-        "3.10.2",
-    );
-
-    // But `graalpy` executables earlier in the search path will take precedence
-    context.reset_search_path();
-    context.add_python_interpreters(&[
-        (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
-        (true, ImplementationName::GraalPy, "python", "3.10.2"),
-    ])?;
-    let python = context.run(|| {
-        find_python_installation(
-            &PythonRequest::parse("graalpy@3.10"),
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
-    assert_eq!(
-        python.interpreter().python_full_version().to_string(),
-        "3.10.3",
-    );
-
-    Ok(())
-}
-
-#[test]
-fn find_python_prefers_generic_executable_over_one_with_version() -> Result<()> {
+fn find_python_executable_name_preference() -> Result<()> {
     let mut context = TestContext::new()?;
     TestContext::create_mock_interpreter(
         &context.tempdir.join("pypy3.10"),
@@ -2113,18 +2105,38 @@ fn find_python_prefers_generic_executable_over_one_with_version() -> Result<()> 
     )?;
     context.add_to_search_path(context.tempdir.to_path_buf());
 
-    let python = context.run(|| {
-        find_python_installation(
-            &PythonRequest::parse("pypy@3.10"),
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python = context
+        .run(|| {
+            find_python_installation(
+                &PythonRequest::parse("pypy@3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        python.interpreter().python_full_version().to_string(),
+        "3.10.0",
+        "We should prefer the versioned one when a version is requested"
+    );
+
+    let python = context
+        .run(|| {
+            find_python_installation(
+                &PythonRequest::parse("pypy"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })
+        .unwrap()
+        .unwrap();
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
         "3.10.1",
-        "We should prefer the generic executable over one with the version number"
+        "We should prefer the generic one when no version is requested"
     );
 
     let mut context = TestContext::new()?;
@@ -2142,20 +2154,126 @@ fn find_python_prefers_generic_executable_over_one_with_version() -> Result<()> 
         true,
         false,
     )?;
+    TestContext::create_mock_interpreter(
+        &context.tempdir.join("python"),
+        &PythonVersion::from_str("3.10.2").unwrap(),
+        ImplementationName::PyPy,
+        true,
+        false,
+    )?;
     context.add_to_search_path(context.tempdir.to_path_buf());
 
-    let python = context.run(|| {
-        find_python_installation(
-            &PythonRequest::parse("pypy@3.10"),
-            EnvironmentPreference::Any,
-            PythonPreference::OnlySystem,
-            &context.cache,
-        )
-    })??;
+    let python = context
+        .run(|| {
+            find_python_installation(
+                &PythonRequest::parse("pypy@3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })
+        .unwrap()
+        .unwrap();
     assert_eq!(
         python.interpreter().python_full_version().to_string(),
-        "3.10.0",
-        "We should prefer the generic name with a version over one the implementation name"
+        "3.10.1",
+        "We should prefer the implementation name over the generic name"
+    );
+
+    let python = context
+        .run(|| {
+            find_python_installation(
+                &PythonRequest::parse("default"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        python.interpreter().python_full_version().to_string(),
+        "3.10.2",
+        "We should prefer the generic name over the implementation name, but not the versioned name"
+    );
+
+    // We prefer `python` executables over `graalpy` executables in the same directory
+    // if they are both GraalPy
+    let mut context = TestContext::new()?;
+    TestContext::create_mock_interpreter(
+        &context.tempdir.join("python"),
+        &PythonVersion::from_str("3.10.0").unwrap(),
+        ImplementationName::GraalPy,
+        true,
+        false,
+    )?;
+    TestContext::create_mock_interpreter(
+        &context.tempdir.join("graalpy"),
+        &PythonVersion::from_str("3.10.1").unwrap(),
+        ImplementationName::GraalPy,
+        true,
+        false,
+    )?;
+    context.add_to_search_path(context.tempdir.to_path_buf());
+
+    let python = context
+        .run(|| {
+            find_python_installation(
+                &PythonRequest::parse("graalpy@3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        python.interpreter().python_full_version().to_string(),
+        "3.10.1",
+    );
+
+    // And `python` executables earlier in the search path will take precedence
+    context.reset_search_path();
+    context.add_python_interpreters(&[
+        (true, ImplementationName::GraalPy, "python", "3.10.2"),
+        (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
+    ])?;
+    let python = context
+        .run(|| {
+            find_python_installation(
+                &PythonRequest::parse("graalpy@3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        python.interpreter().python_full_version().to_string(),
+        "3.10.2",
+    );
+
+    // And `graalpy` executables earlier in the search path will take precedence
+    context.reset_search_path();
+    context.add_python_interpreters(&[
+        (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
+        (true, ImplementationName::GraalPy, "python", "3.10.2"),
+    ])?;
+    let python = context
+        .run(|| {
+            find_python_installation(
+                &PythonRequest::parse("graalpy@3.10"),
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        python.interpreter().python_full_version().to_string(),
+        "3.10.3",
     );
 
     Ok(())

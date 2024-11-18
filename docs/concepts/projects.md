@@ -235,8 +235,8 @@ Hello from example-lib!
 
 !!! tip
 
-Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
-backends such as `maturin` and `scikit-build-core`.
+    Changes to `lib.rs` or `main.cpp` will require running `--reinstall` when using binary build
+    backends such as `maturin` and `scikit-build-core`.
 
 ### Packaged applications
 
@@ -484,10 +484,67 @@ each other and resolves all optional dependencies together when creating the loc
 If optional dependencies declared in one extra are not compatible with those in another extra, uv
 will fail to resolve the requirements of the project with an error.
 
-!!! note
+To work around this, uv supports declaring conflicting extras. For example, consider two sets of
+optional dependencies that conflict with one another:
 
-    There is currently no way to declare conflicting optional dependencies. See
-    [astral.sh/uv#6981](https://github.com/astral-sh/uv/issues/6981) to track support.
+```toml title="pyproject.toml"
+[project.optional-dependencies]
+extra1 = ["numpy==2.1.2"]
+extra2 = ["numpy==2.0.0"]
+```
+
+If you run `uv lock` with the above dependencies, resolution will fail:
+
+```console
+$ uv lock
+  x No solution found when resolving dependencies:
+  `-> Because myproject[extra2] depends on numpy==2.0.0 and myproject[extra1] depends on numpy==2.1.2, we can conclude that myproject[extra1] and
+      myproject[extra2] are incompatible.
+      And because your project requires myproject[extra1] and myproject[extra2], we can conclude that your projects's requirements are unsatisfiable.
+```
+
+But if you specify that `extra1` and `extra2` are conflicting, uv will resolve them separately.
+Specify conflicts in the `tool.uv` section:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { extra = "extra1" },
+      { extra = "extra2" },
+    ],
+]
+```
+
+Now, running `uv lock` will succeed. Note though, that now you cannot install both `extra1` and
+`extra2` at the same time:
+
+```console
+$ uv sync --extra extra1 --extra extra2
+Resolved 3 packages in 14ms
+error: extra `extra1`, extra `extra2` are incompatible with the declared conflicts: {`myproject[extra1]`, `myproject[extra2]`}
+```
+
+This error occurs because installing both `extra1` and `extra2` would result in installing two
+different versions of a package into the same environment.
+
+The above strategy for dealing with conflicting extras also works with dependency groups:
+
+```toml title="pyproject.toml"
+[dependency-groups]
+group1 = ["numpy==2.1.2"]
+group2 = ["numpy==2.0.0"]
+
+[tool.uv]
+conflicts = [
+    [
+      { group = "group1" },
+      { group = "group2" },
+    ],
+]
+```
+
+The only difference with conflicting extras is that you need to use `group` instead of `extra`.
 
 ## Managing dependencies
 

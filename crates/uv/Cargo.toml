@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.4.28"
+version = "0.5.2"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -48,6 +48,7 @@ uv-settings = { workspace = true, features = ["schemars"] }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
 uv-tool = { workspace = true }
+uv-trampoline-builder = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-version = { workspace = true }
@@ -63,6 +64,7 @@ axoupdater = { workspace = true, features = [
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
+dotenvy = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
@@ -77,6 +79,7 @@ petgraph = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -91,6 +94,8 @@ tracing-subscriber = { workspace = true, features = ["json"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+version-ranges = { workspace = true }
+walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
 
@@ -101,6 +106,7 @@ base64 = { version = "0.22.1" }
 byteorder = { version = "1.5.0" }
 etcetera = { workspace = true }
 filetime = { version = "0.2.25" }
+flate2 = { workspace = true }
 ignore = { version = "0.4.23" }
 indoc = { version = "2.0.5" }
 insta = { version = "1.40.0", features = ["filters", "json"] }
@@ -108,8 +114,12 @@ predicates = { version = "3.1.2" }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 similar = { version = "2.6.0" }
+tar = { workspace = true }
 tempfile = { workspace = true }
 zip = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = [

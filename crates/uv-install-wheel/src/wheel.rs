@@ -16,6 +16,7 @@ use uv_cache_info::CacheInfo;
 use uv_fs::{relative_to, Simplified};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
+use uv_shell::escape_posix_for_single_quotes;
 use uv_trampoline_builder::windows_script_launcher;
 
 use crate::record::RecordEntry;
@@ -122,10 +123,11 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
             } else {
                 ""
             };
-            // Like Python's `shlex.quote`:
-            // > Use single quotes, and put single quotes into double quotes
-            // > The string $'b is then quoted as '$'"'"'b'
-            let executable = format!("{}'{}'", prefix, executable.replace('\'', r#"'"'"'"#));
+            let executable = format!(
+                "{}'{}'",
+                prefix,
+                escape_posix_for_single_quotes(&executable)
+            );
             return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
         }
     }
@@ -312,12 +314,14 @@ pub(crate) fn move_folder_recorded(
         let src = entry.path();
         // This is the base path for moving to the actual target for the data
         // e.g. for data it's without <..>.data/data/
-        let relative_to_data = src.strip_prefix(src_dir).expect("Prefix must no change");
+        let relative_to_data = src
+            .strip_prefix(src_dir)
+            .expect("walkdir prefix must not change");
         // This is the path stored in RECORD
         // e.g. for data it's with .data/data/
         let relative_to_site_packages = src
             .strip_prefix(site_packages)
-            .expect("Prefix must no change");
+            .expect("prefix must not change");
         let target = dest_dir.join(relative_to_data);
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
@@ -767,7 +771,7 @@ mod test {
             Wheel-Version: 1.0
             Generator: bdist_wheel (0.37.1)
             Root-Is-Purelib: false
-            Tag:        cp38-cp38-manylinux_2_17_x86_64    
+            Tag:        cp38-cp38-manylinux_2_17_x86_64
         "};
 
         let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();

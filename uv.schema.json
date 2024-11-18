@@ -76,6 +76,17 @@
         }
       ]
     },
+    "conflicts": {
+      "description": "A list sets of conflicting groups or extras.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SchemaConflicts"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "constraint-dependencies": {
       "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
       "type": [
@@ -357,6 +368,13 @@
       ],
       "format": "uri"
     },
+    "pypy-install-mirror": {
+      "description": "Mirror URL to use for downloading managed PyPy installations.\n\nBy default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/). This variable can be set to a mirror URL to use a different source for PyPy installations. The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "python-downloads": {
       "description": "Whether to allow Python downloads.",
       "anyOf": [
@@ -366,6 +384,13 @@
         {
           "type": "null"
         }
+      ]
+    },
+    "python-install-mirror": {
+      "description": "Mirror URL for downloading managed Python installations.\n\nBy default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone). This variable can be set to a mirror URL to use a different source for Python installations. The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": [
+        "string",
+        "null"
       ]
     },
     "python-preference": {
@@ -551,6 +576,35 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettingValue"
       }
+    },
+    "ConflictPackage": {
+      "description": "The actual conflicting data for a package.\n\nThat is, either an extra or a group name.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "Extra"
+          ],
+          "properties": {
+            "Extra": {
+              "$ref": "#/definitions/ExtraName"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Group"
+          ],
+          "properties": {
+            "Group": {
+              "$ref": "#/definitions/GroupName"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "ExcludeNewer": {
       "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",
@@ -744,16 +798,6 @@
             "boolean",
             "null"
           ]
-        },
-        "allow-insecure-host": {
-          "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/definitions/TrustedHost"
-          }
         },
         "annotation-style": {
           "description": "The style of the annotation comments included in the output file, used to indicate the source of each package.",
@@ -1311,6 +1355,43 @@
           ]
         }
       ]
+    },
+    "SchemaConflictItem": {
+      "description": "Like [`ConflictItem`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "type": "object",
+      "required": [
+        "conflict"
+      ],
+      "properties": {
+        "conflict": {
+          "$ref": "#/definitions/ConflictPackage"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PackageName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SchemaConflictSet": {
+      "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SchemaConflictItem"
+      }
+    },
+    "SchemaConflicts": {
+      "description": "Like [`Conflicts`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.\n\nN.B. `Conflicts` is still used for (de)serialization. Specifically, in the lock file, where the package name is required.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SchemaConflictSet"
+      }
     },
     "Source": {
       "description": "A `tool.uv.sources` value.",

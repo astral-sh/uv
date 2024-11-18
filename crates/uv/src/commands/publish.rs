@@ -10,18 +10,26 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 use url::Url;
-use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity, DEFAULT_RETRIES};
+use uv_cache::Cache;
+use uv_client::{
+    AuthIntegration, BaseClientBuilder, Connectivity, RegistryClientBuilder, DEFAULT_RETRIES,
+};
 use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
-use uv_publish::{check_trusted_publishing, files_for_publishing, upload, TrustedPublishResult};
+use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
+use uv_publish::{
+    check_trusted_publishing, files_for_publishing, upload, CheckUrlClient, TrustedPublishResult,
+};
 
 pub(crate) async fn publish(
     paths: Vec<String>,
     publish_url: Url,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
+    allow_insecure_host: &[TrustedHost],
     username: Option<String>,
     password: Option<String>,
+    check_url: Option<IndexUrl>,
+    cache: &Cache,
     connectivity: Connectivity,
     native_tls: bool,
     printer: Printer,
@@ -50,7 +58,7 @@ pub(crate) async fn publish(
         .retries(0)
         .keyring(keyring_provider)
         .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host)
+        .allow_insecure_host(allow_insecure_host.to_vec())
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
         // Set a very high timeout for uploads, connections are often 10x slower on upload than
@@ -60,6 +68,31 @@ pub(crate) async fn publish(
     let oidc_client = BaseClientBuilder::new()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .wrap_existing(&upload_client);
+
+    // Initialize the registry client.
+    let check_url_client = if let Some(index_url) = check_url {
+        let index_urls = IndexLocations::new(
+            vec![Index::from_index_url(index_url.clone())],
+            Vec::new(),
+            false,
+        )
+        .index_urls();
+        let registry_client_builder = RegistryClientBuilder::new(cache.clone())
+            .native_tls(native_tls)
+            .connectivity(connectivity)
+            .index_urls(index_urls)
+            .keyring(keyring_provider)
+            .allow_insecure_host(allow_insecure_host.to_vec());
+        Some(CheckUrlClient {
+            index_url,
+            registry_client_builder,
+            client: &upload_client,
+            index_capabilities: IndexCapabilities::default(),
+            cache,
+        })
+    } else {
+        None
+    };
 
     // If applicable, attempt obtaining a token for trusted publishing.
     let trusted_publishing_token = check_trusted_publishing(
@@ -121,6 +154,13 @@ pub(crate) async fn publish(
     }
 
     for (file, raw_filename, filename) in files {
+        if let Some(check_url_client) = &check_url_client {
+            if uv_publish::check_url(check_url_client, &file, &filename).await? {
+                writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
+                continue;
+            }
+        }
+
         let size = fs_err::metadata(&file)?.len();
         let (bytes, unit) = human_readable_bytes(size);
         writeln!(
@@ -139,6 +179,7 @@ pub(crate) async fn publish(
             DEFAULT_RETRIES,
             username.as_deref(),
             password.as_deref(),
+            check_url_client.as_ref(),
             // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
             Arc::new(reporter),
         )

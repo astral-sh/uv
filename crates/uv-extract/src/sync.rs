@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
+use tracing::warn;
 use zip::ZipArchive;
 
 use crate::vendor::{CloneableSeekableReader, HasLength};
@@ -25,6 +26,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
 
             // Determine the path of the file within the wheel.
             let Some(enclosed_name) = file.enclosed_name() else {
+                warn!("Skipping unsafe file name: {}", file.name());
                 return Ok(());
             };
 

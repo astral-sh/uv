@@ -920,14 +920,19 @@ pub fn add_dependency(
                 .all(Value::is_str)
                 .then(|| {
                     if deps.iter().tuple_windows().all(|(a, b)| {
-                        a.as_str().map(str::to_lowercase) <= b.as_str().map(str::to_lowercase)
+                        a.as_str()
+                            .map(str::to_lowercase)
+                            .as_deref()
+                            .map(split_specifiers)
+                            <= b.as_str()
+                                .map(str::to_lowercase)
+                                .as_deref()
+                                .map(split_specifiers)
                     }) {
                         Some(Sort::CaseInsensitive)
-                    } else if deps
-                        .iter()
-                        .tuple_windows()
-                        .all(|(a, b)| a.as_str() <= b.as_str())
-                    {
+                    } else if deps.iter().tuple_windows().all(|(a, b)| {
+                        a.as_str().map(split_specifiers) <= b.as_str().map(split_specifiers)
+                    }) {
                         Some(Sort::CaseSensitive)
                     } else {
                         None
@@ -952,6 +957,23 @@ pub fn add_dependency(
 
             let decor = value.decor_mut();
 
+            // If we're adding to the end of the list, treat trailing comments as leading comments
+            // on the added dependency.
+            //
+            // For example, given:
+            // ```toml
+            // dependencies = [
+            //     "anyio", # trailing comment
+            // ]
+            // ```
+            //
+            // If we add `flask` to the end, we want to retain the comment on `anyio`:
+            // ```toml
+            // dependencies = [
+            //     "anyio", # trailing comment
+            //     "flask",
+            // ]
+            // ```
             if index == deps.len() {
                 decor.set_prefix(deps.trailing().clone());
                 deps.set_trailing("");
@@ -974,7 +996,76 @@ pub fn add_dependency(
                     .unwrap()
                     .clone();
 
-                deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+                // However, if the prefix includes a comment, we don't want to duplicate it.
+                // Depending on the location of the comment, we either want to leave it as-is, or
+                // attach it to the entry that's being moved to the next line.
+                //
+                // For example, given:
+                // ```toml
+                // dependencies = [ # comment
+                //     "flask",
+                // ]
+                // ```
+                //
+                // If we add `anyio` to the beginning, we want to retain the comment on the open
+                // bracket:
+                // ```toml
+                // dependencies = [ # comment
+                //     "anyio",
+                //     "flask",
+                // ]
+                // ```
+                //
+                // However, given:
+                // ```toml
+                // dependencies = [
+                //     # comment
+                //     "flask",
+                // ]
+                // ```
+                //
+                // If we add `anyio` to the beginning, we want the comment to move down with the
+                // existing entry:
+                // entry:
+                // ```toml
+                // dependencies = [
+                //     "anyio",
+                //     # comment
+                //     "flask",
+                // ]
+                if let Some(prefix) = prefix.as_str() {
+                    // Treat anything before the first own-line comment as a prefix on the new
+                    // entry; anything after the first own-line comment is a prefix on the existing
+                    // entry.
+                    //
+                    // This is equivalent to using the first and last line content as the prefix for
+                    // the new entry, and the rest as the prefix for the existing entry.
+                    if let Some((first_line, rest)) = prefix.split_once(['\r', '\n']) {
+                        // Determine the appropriate newline character.
+                        let newline = {
+                            let mut chars = prefix[first_line.len()..].chars();
+                            match (chars.next(), chars.next()) {
+                                (Some('\r'), Some('\n')) => "\r\n",
+                                (Some('\r'), _) => "\r",
+                                (Some('\n'), _) => "\n",
+                                _ => "\n",
+                            }
+                        };
+                        let last_line = rest.lines().last().unwrap_or_default();
+                        let prefix = format!("{first_line}{newline}{last_line}");
+                        deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+
+                        let prefix = format!("{newline}{rest}");
+                        deps.get_mut(index + 1)
+                            .unwrap()
+                            .decor_mut()
+                            .set_prefix(prefix);
+                    } else {
+                        deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+                    }
+                } else {
+                    deps.get_mut(index).unwrap().decor_mut().set_prefix(prefix);
+                }
             }
 
             reformat_array_multiline(deps);
@@ -1196,4 +1287,37 @@ fn reformat_array_multiline(deps: &mut Array) {
         rv
     });
     deps.set_trailing_comma(true);
+}
+
+/// Split a requirement into the package name and its dependency specifiers.
+///
+/// E.g., given `flask>=1.0`, this function returns `("flask", ">=1.0")`. But given
+/// `Flask>=1.0`, this function returns `("Flask", ">=1.0")`.
+///
+/// Extras are retained, such that `flask[dotenv]>=1.0` returns `("flask[dotenv]", ">=1.0")`.
+fn split_specifiers(req: &str) -> (&str, &str) {
+    let (name, specifiers) = req
+        .find(['>', '<', '=', '~', '!', '@'])
+        .map_or((req, ""), |pos| {
+            let (name, specifiers) = req.split_at(pos);
+            (name, specifiers)
+        });
+    (name.trim(), specifiers.trim())
+}
+
+#[cfg(test)]
+mod test {
+    use super::split_specifiers;
+
+    #[test]
+    fn split() {
+        assert_eq!(split_specifiers("flask>=1.0"), ("flask", ">=1.0"));
+        assert_eq!(split_specifiers("Flask>=1.0"), ("Flask", ">=1.0"));
+        assert_eq!(
+            split_specifiers("flask[dotenv]>=1.0"),
+            ("flask[dotenv]", ">=1.0")
+        );
+        assert_eq!(split_specifiers("flask[dotenv]",), ("flask[dotenv]", ""));
+        assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
+    }
 }

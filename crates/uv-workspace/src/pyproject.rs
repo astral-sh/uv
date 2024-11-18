@@ -24,7 +24,9 @@ use uv_macros::OptionsMetadata;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{
+    Conflicts, RequirementSource, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
+};
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -97,6 +99,24 @@ impl PyProjectToml {
         } else {
             false
         }
+    }
+
+    /// Returns the set of conflicts for the project.
+    pub fn conflicts(&self) -> Conflicts {
+        let empty = Conflicts::empty();
+        let Some(project) = self.project.as_ref() else {
+            return empty;
+        };
+        let Some(tool) = self.tool.as_ref() else {
+            return empty;
+        };
+        let Some(tooluv) = tool.uv.as_ref() else {
+            return empty;
+        };
+        let Some(conflicting) = tooluv.conflicts.as_ref() else {
+            return empty;
+        };
+        conflicting.to_conflicts_with_package_name(&project.name)
     }
 }
 
@@ -230,7 +250,7 @@ pub struct ToolUv {
     ///
     /// See [Dependencies](../concepts/dependencies.md) for more.
     #[option(
-        default = "\"[]\"",
+        default = "{}",
         value_type = "dict",
         example = r#"
             [tool.uv.sources]
@@ -269,7 +289,7 @@ pub struct ToolUv {
     /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
     /// PyPI default index.
     #[option(
-        default = "\"[]\"",
+        default = "[]",
         value_type = "dict",
         example = r#"
             [[tool.uv.index]]
@@ -340,7 +360,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             dev-dependencies = ["ruff==0.5.0"]
@@ -374,7 +394,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
@@ -405,7 +425,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             # Ensure that the grpcio version is always less than 1.65, if it's requested by a
@@ -431,7 +451,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "str | list[str]",
         example = r#"
             # Resolve for macOS, but not for Linux or Windows.
@@ -439,6 +459,54 @@ pub struct ToolUv {
         "#
     )]
     pub environments: Option<SupportedEnvironments>,
+
+    /// Conflicting extras or groups may be declared here.
+    ///
+    /// It's useful to declare conflicts when, for example, two or more extras
+    /// have mutually incompatible dependencies. Extra `foo` might depend
+    /// on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
+    /// These extras cannot be activated at the same time. This usually isn't
+    /// a problem for pip-style workflows, but when using projects in uv that
+    /// support with universal resolution, it will try to produce a resolution
+    /// that satisfies both extras simultaneously.
+    ///
+    /// When this happens, resolution will fail, because one cannot install
+    /// both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
+    ///
+    /// To work around this, you may specify `foo` and `bar` as conflicting
+    /// extras (you can do the same with groups). When doing universal
+    /// resolution in project mode, these extras will get their own "forks"
+    /// distinct from one another in order to permit conflicting dependencies.
+    /// In exchange, if one tries to install from the lock file with both
+    /// conflicting extras activated, installation will fail.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(description = "A list sets of conflicting groups or extras.")
+    )]
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[list[dict]]",
+        example = r#"
+            # Require that `package[test1]` and `package[test2]`
+            # requirements are resolved in different forks so that they
+            # cannot conflict with one another.
+            conflicts = [
+                [
+                    { extra = "test1" },
+                    { extra = "test2" },
+                ]
+            ]
+
+            # Or, to declare conflicting groups:
+            conflicts = [
+                [
+                    { group = "test1" },
+                    { group = "test2" },
+                ]
+            ]
+        "#
+    )]
+    pub conflicts: Option<SchemaConflicts>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -511,7 +579,7 @@ pub struct ToolUvWorkspace {
     ///
     /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             members = ["member1", "path/to/member2", "libs/*"]
@@ -525,7 +593,7 @@ pub struct ToolUvWorkspace {
     ///
     /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             exclude = ["member1", "path/to/member2", "libs/*"]
@@ -731,23 +799,23 @@ impl TryFrom<SourcesWire> for Sources {
                     .zip(sources.iter().skip(1).map(Source::marker))
                 {
                     if !lhs.is_disjoint(&rhs) {
+                        let Some(left) = lhs.contents().map(|contents| contents.to_string()) else {
+                            return Err(SourceError::MissingMarkers);
+                        };
+
+                        let Some(right) = rhs.contents().map(|contents| contents.to_string())
+                        else {
+                            return Err(SourceError::MissingMarkers);
+                        };
+
                         let mut hint = lhs.negate();
                         hint.and(rhs.clone());
-
-                        let lhs = lhs
-                            .contents()
-                            .map(|contents| contents.to_string())
-                            .unwrap_or_else(|| "true".to_string());
-                        let rhs = rhs
-                            .contents()
-                            .map(|contents| contents.to_string())
-                            .unwrap_or_else(|| "true".to_string());
                         let hint = hint
                             .contents()
                             .map(|contents| contents.to_string())
                             .unwrap_or_else(|| "true".to_string());
 
-                        return Err(SourceError::OverlappingMarkers(lhs, rhs, hint));
+                        return Err(SourceError::OverlappingMarkers(left, right, hint));
                     }
                 }
 
@@ -1163,6 +1231,8 @@ pub enum SourceError {
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
+    #[error("When multiple sources are provided, each source must include a platform markers (e.g., `marker = \"sys_platform == 'linux'\"`)")]
+    MissingMarkers,
     #[error("Must provide at least one source")]
     EmptySources,
 }

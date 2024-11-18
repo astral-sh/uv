@@ -32,7 +32,7 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.37";
+pub const PACKSE_VERSION: &str = "0.3.39";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -67,6 +67,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"Caused by: .* \(os error 2\)",
         "Caused by: No such file or directory (os error 2)",
     ),
+    // Trim end-of-line whitespaces, to allow removing them on save.
+    (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
@@ -147,11 +149,11 @@ impl TestContext {
     #[must_use]
     pub fn with_filtered_python_sources(mut self) -> Self {
         self.filters.push((
-            "managed installations or system path".to_string(),
+            "managed installations or search path".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self.filters.push((
-            "managed installations, system path, or `py` launcher".to_string(),
+            "managed installations, search path, or registry".to_string(),
             "[PYTHON SOURCES]".to_string(),
         ));
         self
@@ -215,8 +217,9 @@ impl TestContext {
 
     /// Adds a filter that ignores platform information in a Python installation key.
     pub fn with_filtered_python_keys(mut self) -> Self {
+        // Filter platform keys
         self.filters.push((
-            r"((?:cpython|pypy)-\d+\.\d+(:?\.\d+)?[a-z]?(:?\+[a-z]+)?)-.*".to_string(),
+            r"((?:cpython|pypy)-\d+\.\d+(?:\.(?:\[X\]|\d+))?[a-z]?(?:\+[a-z]+)?)-.*".to_string(),
             "$1-[PLATFORM]".to_string(),
         ));
         self
@@ -477,7 +480,7 @@ impl TestContext {
 
         if cfg!(unix) {
             // Avoid locale issues in tests
-            command.env("LC_ALL", "C");
+            command.env(EnvVars::LC_ALL, "C");
         }
 
         if cfg!(all(windows, debug_assertions)) {
@@ -653,11 +656,20 @@ impl TestContext {
     pub fn python_install(&self) -> Command {
         let mut command = self.new_command();
         let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
         self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("install")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin.as_os_str())
+            .env(
+                EnvVars::PATH,
+                std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(
+                    &env::var(EnvVars::PATH).unwrap_or_default(),
+                )))
+                .unwrap(),
+            )
             .current_dir(&self.temp_dir);
         command
     }
@@ -666,11 +678,13 @@ impl TestContext {
     pub fn python_uninstall(&self) -> Command {
         let mut command = self.new_command();
         let managed = self.temp_dir.join("managed");
+        let bin = self.temp_dir.join("bin");
         self.add_shared_args(&mut command, true);
         command
             .arg("python")
             .arg("uninstall")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, managed)
+            .env(EnvVars::UV_PYTHON_BIN_DIR, bin)
             .current_dir(&self.temp_dir);
         command
     }
@@ -1275,21 +1289,6 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
 
     let status = output.status;
     (snapshot, output, status)
-}
-
-/// Recursively copy a directory and its contents.
-pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    fs_err::create_dir_all(&dst)?;
-    for entry in fs_err::read_dir(src.as_ref())? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            fs_err::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
 }
 
 /// Recursively copy a directory and its contents, skipping gitignored files.

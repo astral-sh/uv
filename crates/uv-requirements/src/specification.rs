@@ -338,6 +338,30 @@ impl RequirementsSpecification {
         }
     }
 
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints and overrides.
+    pub fn from_constraints(
+        requirements: Vec<Requirement>,
+        constraints: Vec<Requirement>,
+        overrides: Vec<Requirement>,
+    ) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            overrides: overrides
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            ..Self::default()
+        }
+    }
+
     /// Return true if the specification does not include any requirements to install.
     pub fn is_empty(&self) -> bool {
         self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()

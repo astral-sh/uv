@@ -23,10 +23,12 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionRequest,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
@@ -43,7 +45,7 @@ pub(crate) async fn build_frontend(
     project_dir: &Path,
     src: Option<PathBuf>,
     package: Option<PackageName>,
-    all: bool,
+    all_packages: bool,
     output_dir: Option<PathBuf>,
     sdist: bool,
     wheel: bool,
@@ -51,6 +53,7 @@ pub(crate) async fn build_frontend(
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     no_config: bool,
     python_preference: PythonPreference,
@@ -58,6 +61,7 @@ pub(crate) async fn build_frontend(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -65,7 +69,7 @@ pub(crate) async fn build_frontend(
         project_dir,
         src.as_deref(),
         package.as_ref(),
-        all,
+        all_packages,
         output_dir.as_deref(),
         sdist,
         wheel,
@@ -73,6 +77,7 @@ pub(crate) async fn build_frontend(
         &build_constraints,
         hash_checking,
         python.as_deref(),
+        install_mirrors,
         settings.as_ref(),
         no_config,
         python_preference,
@@ -80,6 +85,7 @@ pub(crate) async fn build_frontend(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
@@ -105,7 +111,7 @@ async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
     package: Option<&PackageName>,
-    all: bool,
+    all_packages: bool,
     output_dir: Option<&Path>,
     sdist: bool,
     wheel: bool,
@@ -113,6 +119,7 @@ async fn build_impl(
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettingsRef<'_>,
     no_config: bool,
     python_preference: PythonPreference,
@@ -120,6 +127,7 @@ async fn build_impl(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<BuildResult> {
@@ -128,7 +136,6 @@ async fn build_impl(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution: _,
         prerelease: _,
         dependency_metadata,
@@ -144,7 +151,8 @@ async fn build_impl(
 
     let client_builder = BaseClientBuilder::default()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -171,7 +179,7 @@ async fn build_impl(
     // Attempt to discover the workspace; on failure, save the error for later.
     let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
 
-    // If a `--package` or `--all` was provided, adjust the source directory.
+    // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
@@ -201,10 +209,10 @@ async fn build_impl(
         vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
             package.root(),
         )))]
-    } else if all {
+    } else if all_packages {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
-                "Cannot specify `--all` when building from a file"
+                "Cannot specify `--all-packages` when building from a file"
             ));
         }
 
@@ -212,7 +220,7 @@ async fn build_impl(
             Ok(ref workspace) => workspace,
             Err(err) => {
                 return Err(anyhow::Error::from(err)
-                    .context("`--all` was provided, but no workspace was found"));
+                    .context("`--all-packages` was provided, but no workspace was found"));
             }
         };
 
@@ -247,6 +255,7 @@ async fn build_impl(
             source.clone(),
             output_dir,
             python_request,
+            install_mirrors.clone(),
             no_config,
             workspace.as_ref(),
             python_preference,
@@ -342,6 +351,7 @@ async fn build_package(
     source: AnnotatedSource<'_>,
     output_dir: Option<&Path>,
     python_request: Option<&str>,
+    install_mirrors: PythonInstallMirrors,
     no_config: bool,
     workspace: Result<&Workspace, &WorkspaceError>,
     python_preference: PythonPreference,
@@ -388,15 +398,18 @@ async fn build_package(
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(source.directory(), no_config, false)
-            .await?
-            .and_then(PythonVersionFile::into_version);
+        interpreter_request = PythonVersionFile::discover(
+            source.directory(),
+            &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+        )
+        .await?
+        .and_then(PythonVersionFile::into_version);
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
-            interpreter_request = find_requires_python(workspace)?
+            interpreter_request = find_requires_python(workspace)
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
@@ -417,6 +430,8 @@ async fn build_package(
         client_builder,
         cache,
         Some(&PythonDownloadReporter::single(printer)),
+        install_mirrors.python_install_mirror,
+        install_mirrors.pypy_install_mirror,
     )
     .await?
     .into_interpreter();
@@ -438,7 +453,7 @@ async fn build_package(
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&interpreter.resolver_markers()),
+            Some(&interpreter.resolver_marker_environment()),
             hash_checking,
         )?
     } else {

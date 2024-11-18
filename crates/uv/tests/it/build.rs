@@ -1206,7 +1206,7 @@ fn workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `--all` was provided, but no workspace was found
+    error: `--all-packages` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
@@ -1447,103 +1447,40 @@ fn sha() -> Result<()> {
     project.child("src").child("__init__.py").touch()?;
     project.child("README").touch()?;
 
-    // Ignore an incorrect hash, if `--require-hashes` is not provided.
+    // Reject an incorrect hash.
     let constraints = project.child("constraints.txt");
     constraints.write_str("setuptools==68.2.2 --hash=sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2")?;
 
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
-    Building wheel from source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.8.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
-    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    error: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `setuptools==68.2.2`
+      Caused by: Hash mismatch for `setuptools==68.2.2`
+
+    Expected:
+      sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+
+    Computed:
+      sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
     "###);
 
     project
         .child("dist")
         .child("project-0.1.0.tar.gz")
-        .assert(predicate::path::is_file());
+        .assert(predicate::path::missing());
     project
         .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
-        .assert(predicate::path::is_file());
+        .assert(predicate::path::missing());
 
     fs_err::remove_dir_all(project.child("dist"))?;
 
-    // Reject an incorrect hash.
+    // Reject an incorrect hash with --requires-hashes.
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r###"
     success: false
     exit_code: 2
@@ -1552,7 +1489,6 @@ fn sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     error: Failed to install requirements from `build-system.requires`
-      Caused by: Failed to prepare distributions
       Caused by: Failed to download `setuptools==68.2.2`
       Caused by: Hash mismatch for `setuptools==68.2.2`
 
@@ -1599,6 +1535,8 @@ fn sha() -> Result<()> {
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::missing());
 
+    fs_err::remove_dir_all(project.child("dist"))?;
+
     // Accept a correct hash.
     let constraints = project.child("constraints.txt");
     constraints.write_str("setuptools==68.2.2 --hash=sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a")?;
@@ -1611,10 +1549,12 @@ fn sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     running egg_info
+    creating src/project.egg-info
     writing src/project.egg-info/PKG-INFO
     writing dependency_links to src/project.egg-info/dependency_links.txt
     writing requirements to src/project.egg-info/requires.txt
     writing top-level names to src/project.egg-info/top_level.txt
+    writing manifest file 'src/project.egg-info/SOURCES.txt'
     reading manifest file 'src/project.egg-info/SOURCES.txt'
     writing manifest file 'src/project.egg-info/SOURCES.txt'
     running sdist

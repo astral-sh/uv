@@ -11,12 +11,12 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::HashDigest;
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
-pub(crate) use crate::resolution::graph::ResolutionGraphNode;
-pub use crate::resolution::graph::{ConflictingDistributionError, ResolutionGraph};
+pub(crate) use crate::resolution::output::ResolutionGraphNode;
+pub use crate::resolution::output::{ConflictingDistributionError, ResolverOutput};
 pub(crate) use crate::resolution::requirements_txt::RequirementsTxtDist;
 
 mod display;
-mod graph;
+mod output;
 mod requirements_txt;
 
 /// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a
@@ -49,8 +49,8 @@ impl AnnotatedDist {
     /// Returns the [`IndexUrl`] of the distribution, if it is from a registry.
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.dist {
-            ResolvedDist::Installed(_) => None,
-            ResolvedDist::Installable(dist) => match dist {
+            ResolvedDist::Installed { .. } => None,
+            ResolvedDist::Installable { dist, .. } => match dist {
                 Dist::Built(dist) => match dist {
                     BuiltDist::Registry(dist) => Some(&dist.best_wheel().index),
                     BuiltDist::DirectUrl(_) => None,

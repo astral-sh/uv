@@ -477,49 +477,52 @@ fn executable_names_from_request() {
     case(
         "any",
         &[
-            "python", "python3", "cpython", "pypy", "graalpy", "cpython3", "pypy3", "graalpy3",
+            "python", "python3", "cpython", "cpython3", "pypy", "pypy3", "graalpy", "graalpy3",
         ],
     );
 
     case("default", &["python", "python3"]);
 
-    case("3", &["python", "python3"]);
+    case("3", &["python3", "python"]);
 
-    case("4", &["python", "python4"]);
+    case("4", &["python4", "python"]);
 
-    case("3.13", &["python", "python3", "python3.13"]);
+    case("3.13", &["python3.13", "python3", "python"]);
+
+    case("pypy", &["pypy", "pypy3", "python", "python3"]);
 
     case(
         "pypy@3.10",
         &[
-            "python",
-            "python3",
-            "python3.10",
-            "pypy",
-            "pypy3",
             "pypy3.10",
+            "pypy3",
+            "pypy",
+            "python3.10",
+            "python3",
+            "python",
         ],
     );
 
     case(
         "3.13t",
         &[
-            "python",
-            "python3",
-            "python3.13",
-            "pythont",
-            "python3t",
             "python3.13t",
+            "python3.13",
+            "python3t",
+            "python3",
+            "pythont",
+            "python",
         ],
     );
+    case("3t", &["python3t", "python3", "pythont", "python"]);
 
     case(
         "3.13.2",
-        &["python", "python3", "python3.13", "python3.13.2"],
+        &["python3.13.2", "python3.13", "python3", "python"],
     );
 
     case(
         "3.13rc2",
-        &["python", "python3", "python3.13", "python3.13rc2"],
+        &["python3.13rc2", "python3.13", "python3", "python"],
     );
 }

@@ -15,22 +15,26 @@ doctest = false
 [dependencies]
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
+uv-globfilter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-warnings = { workspace = true }
 
-csv = { workspace = true}
+csv = { workspace = true }
+flate2 = { workspace = true }
 fs-err = { workspace = true }
-glob = { workspace = true }
+globset = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 spdx = { workspace = true }
+tar = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
+version-ranges = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
 

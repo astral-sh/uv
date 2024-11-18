@@ -26,11 +26,11 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
-    PythonRequirement, Resolver, ResolverMarkers,
+    DerivationChainBuilder, ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest,
+    OptionsBuilder, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -132,6 +132,10 @@ impl<'a> BuildDispatch<'a> {
 impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
 
+    fn interpreter(&self) -> &Interpreter {
+        self.interpreter
+    }
+
     fn cache(&self) -> &Cache {
         self.cache
     }
@@ -170,7 +174,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
-        let markers = self.interpreter.resolver_markers();
+        let marker_env = self.interpreter.resolver_marker_environment();
         let tags = self.interpreter.tags()?;
 
         let resolver = Resolver::new(
@@ -181,7 +185,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
-            ResolverMarkers::specific_environment(markers),
+            ResolverEnvironment::specific(marker_env),
+            // Conflicting groups only make sense when doing
+            // universal resolution.
+            Conflicts::empty(),
             Some(tags),
             self.flat_index,
             self.index,
@@ -190,7 +197,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
-        let graph = resolver.resolve().await.with_context(|| {
+        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements
@@ -198,8 +205,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                     .map(|requirement| format!("`{requirement}`"))
                     .join(", ")
             )
-        })?;
-        Ok(Resolution::from(graph))
+        })?);
+        Ok(resolution)
     }
 
     #[instrument(
@@ -274,7 +281,30 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             preparer
                 .prepare(remote, self.in_flight)
                 .await
-                .context("Failed to prepare distributions")?
+                .map_err(|err| match err {
+                    uv_installer::PrepareError::DownloadAndBuild(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)
+                    }
+                    uv_installer::PrepareError::Download(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::Download(dist, chain, err)
+                    }
+                    uv_installer::PrepareError::Build(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::Build(dist, chain, err)
+                    }
+                    _ => err,
+                })?
         };
 
         // Remove any unnecessary packages.

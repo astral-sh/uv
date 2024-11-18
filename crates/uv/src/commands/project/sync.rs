@@ -4,36 +4,41 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
+
 use uv_auth::store_credentials;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
-    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound,
+    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
+use uv_distribution_types::{
+    DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
+};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
-    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+    ConflictPackage, LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl,
+    VerbatimParsedUrl,
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, Lock};
+use uv_resolver::{FlatIndex, InstallTarget};
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
-use uv_workspace::{DiscoveryOptions, InstallTarget, MemberDiscovery, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, validate_dependency_groups, ProjectError, SharedState,
+    default_dependency_groups, DependencyGroupsTarget, ProjectError, SharedState,
 };
-use crate::commands::{diagnostics, pip, project, ExitStatus};
+use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings};
 
@@ -43,6 +48,7 @@ pub(crate) async fn sync(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    all_packages: bool,
     package: Option<PackageName>,
     extras: ExtrasSpecification,
     dev: DevGroupsSpecification,
@@ -50,12 +56,15 @@ pub(crate) async fn sync(
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -80,12 +89,23 @@ pub(crate) async fn sync(
         VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
     };
 
-    // Identify the target.
-    let target = if let Some(package) = package.as_ref().filter(|_| frozen) {
-        InstallTarget::frozen_member(&project, package)
-    } else {
-        InstallTarget::from(&project)
-    };
+    // Validate that any referenced dependency groups are defined in the workspace.
+    if !frozen {
+        let target = match &project {
+            VirtualProject::Project(project) => {
+                if all_packages {
+                    DependencyGroupsTarget::Workspace(project.workspace())
+                } else {
+                    DependencyGroupsTarget::Project(project)
+                }
+            }
+            VirtualProject::NonProject(workspace) => DependencyGroupsTarget::Workspace(workspace),
+        };
+        target.validate(&dev)?;
+    }
+
+    // Determine the default groups to include.
+    let defaults = default_dependency_groups(project.pyproject_toml())?;
 
     // TODO(lucab): improve warning content
     // <https://github.com/astral-sh/uv/issues/7428>
@@ -95,18 +115,17 @@ pub(crate) async fn sync(
         warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
     }
 
-    // Determine the default groups to include.
-    validate_dependency_groups(project.pyproject_toml(), &dev)?;
-    let defaults = default_dependency_groups(project.pyproject_toml())?;
-
     // Discover or create the virtual environment.
     let venv = project::get_or_init_environment(
-        target.workspace(),
+        project.workspace(),
         python.as_deref().map(PythonRequest::parse),
+        install_mirrors,
         python_preference,
         python_downloads,
         connectivity,
         native_tls,
+        allow_insecure_host,
+        no_config,
         cache,
         printer,
     )
@@ -126,7 +145,7 @@ pub(crate) async fn sync(
 
     let lock = match do_safe_lock(
         mode,
-        target.workspace(),
+        project.workspace(),
         settings.as_ref().into(),
         LowerBound::Warn,
         &state,
@@ -134,38 +153,50 @@ pub(crate) async fn sync(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
-        ))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     };
 
+    // Identify the installation target.
+    let target = match &project {
+        VirtualProject::Project(project) => {
+            if all_packages {
+                InstallTarget::Workspace {
+                    workspace: project.workspace(),
+                    lock: &lock,
+                }
+            } else {
+                InstallTarget::Project {
+                    workspace: project.workspace(),
+                    // If `--frozen --package` is specified, and only the root `pyproject.toml` was
+                    // discovered, the child won't be present in the workspace; but we _know_ that
+                    // we want to install it, so we override the package name.
+                    name: package.as_ref().unwrap_or(project.project_name()),
+                    lock: &lock,
+                }
+            }
+        }
+        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
+            workspace,
+            lock: &lock,
+        },
+    };
+
     // Perform the sync operation.
-    do_sync(
+    match do_sync(
         target,
         &venv,
-        &lock,
         &extras,
         &dev.with_defaults(defaults),
         editable,
@@ -176,10 +207,20 @@ pub(crate) async fn sync(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(()) => {}
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     Ok(ExitStatus::Success)
 }
@@ -189,7 +230,6 @@ pub(crate) async fn sync(
 pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
-    lock: &Lock,
     extras: &ExtrasSpecification,
     dev: &DevGroupsManifest,
     editable: EditableMode,
@@ -200,6 +240,7 @@ pub(super) async fn do_sync(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), ProjectError> {
@@ -219,7 +260,6 @@ pub(super) async fn do_sync(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -233,30 +273,69 @@ pub(super) async fn do_sync(
     } = settings;
 
     // Validate that the Python version is supported by the lockfile.
-    if !lock
+    if !target
+        .lock()
         .requires_python()
         .contains(venv.interpreter().python_version())
     {
         return Err(ProjectError::LockedPythonIncompatibility(
             venv.interpreter().python_version().clone(),
-            lock.requires_python().clone(),
+            target.lock().requires_python().clone(),
         ));
     }
 
+    // Validate that we aren't trying to install extras or groups that
+    // are declared as conflicting. Note that we need to collect all
+    // extras and groups that match in a particular set, since extras
+    // can be declared as conflicting with groups. So if extra `x` and
+    // group `g` are declared as conflicting, then enabling both of
+    // those should result in an error.
+    let conflicts = target.lock().conflicts();
+    for set in conflicts.iter() {
+        let mut conflicts: Vec<ConflictPackage> = vec![];
+        for item in set.iter() {
+            if item
+                .extra()
+                .map(|extra| extras.contains(extra))
+                .unwrap_or(false)
+            {
+                conflicts.push(item.conflict().clone());
+            }
+            if item
+                .group()
+                .map(|group1| dev.iter().any(|group2| group1 == group2))
+                .unwrap_or(false)
+            {
+                conflicts.push(item.conflict().clone());
+            }
+        }
+        if conflicts.len() >= 2 {
+            return Err(ProjectError::ConflictIncompatibility(
+                set.clone(),
+                conflicts,
+            ));
+        }
+    }
+
     // Determine the markers to use for resolution.
-    let markers = venv.interpreter().resolver_markers();
+    let marker_env = venv.interpreter().resolver_marker_environment();
 
     // Validate that the platform is supported by the lockfile.
-    let environments = lock.supported_environments();
+    let environments = target.lock().supported_environments();
     if !environments.is_empty() {
-        if !environments.iter().any(|env| env.evaluate(&markers, &[])) {
+        if !environments
+            .iter()
+            .any(|env| env.evaluate(&marker_env, &[]))
+        {
             return Err(ProjectError::LockedPlatformIncompatibility(
                 // For error reporting, we use the "simplified"
                 // supported environments, because these correspond to
                 // what the end user actually wrote. The non-simplified
                 // environments, by contrast, are explicitly
                 // constrained by `requires-python`.
-                lock.simplified_supported_environments()
+                target
+                    .lock()
+                    .simplified_supported_environments()
                     .iter()
                     .filter_map(MarkerTree::contents)
                     .map(|env| format!("`{env}`"))
@@ -269,9 +348,8 @@ pub(super) async fn do_sync(
     let tags = venv.interpreter().tags()?;
 
     // Read the lockfile.
-    let resolution = lock.to_resolution(
-        target,
-        &markers,
+    let resolution = target.to_resolution(
+        &marker_env,
         tags,
         extras,
         dev,
@@ -363,7 +441,7 @@ pub(super) async fn do_sync(
     let site_packages = SitePackages::from_environment(venv)?;
 
     // Sync the environment.
-    pip::operations::install(
+    operations::install(
         &resolution,
         site_packages,
         modifications,
@@ -391,11 +469,9 @@ pub(super) async fn do_sync(
 }
 
 /// Filter out any virtual workspace members.
-fn apply_no_virtual_project(
-    resolution: uv_distribution_types::Resolution,
-) -> uv_distribution_types::Resolution {
+fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
     resolution.filter(|dist| {
-        let ResolvedDist::Installable(dist) = dist else {
+        let ResolvedDist::Installable { dist, .. } = dist else {
             return true;
         };
 
@@ -412,36 +488,38 @@ fn apply_no_virtual_project(
 }
 
 /// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(
-    resolution: uv_distribution_types::Resolution,
-    editable: EditableMode,
-) -> uv_distribution_types::Resolution {
+fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolution {
     match editable {
         // No modifications are necessary for editable mode; retain any editable distributions.
         EditableMode::Editable => resolution,
 
         // Filter out any editable distributions.
         EditableMode::NonEditable => resolution.map(|dist| {
-            let ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
-                DirectorySourceDist {
-                    name,
-                    install_path,
-                    editable: true,
-                    r#virtual: false,
-                    url,
-                },
-            ))) = dist
+            let ResolvedDist::Installable {
+                dist:
+                    Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                        name,
+                        install_path,
+                        editable: true,
+                        r#virtual: false,
+                        url,
+                    })),
+                version,
+            } = dist
             else {
-                return dist;
+                return None;
             };
 
-            ResolvedDist::Installable(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: false,
-                r#virtual: false,
-                url,
-            })))
+            Some(ResolvedDist::Installable {
+                dist: Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: false,
+                    r#virtual: false,
+                    url: url.clone(),
+                })),
+                version: version.clone(),
+            })
         }),
     }
 }

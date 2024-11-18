@@ -14,6 +14,7 @@ use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_static::EnvVars;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -40,6 +41,9 @@ pub struct Options {
 
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+
+    #[serde(flatten)]
+    pub install_mirrors: PythonInstallMirrors,
 
     #[serde(flatten)]
     pub publish: PublishOptions,
@@ -86,7 +90,8 @@ pub struct Options {
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're respected in both `pyproject.toml` and `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
@@ -95,6 +100,30 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub conflicts: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub workspace: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub sources: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub dev_dependencies: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub default_groups: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub managed: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub r#package: Option<serde::de::IgnoredAny>,
 }
 
 impl Options {
@@ -224,6 +253,22 @@ pub struct GlobalOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
+    /// Allow insecure connections to host.
+    ///
+    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
+    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
+    ///
+    /// WARNING: Hosts included in this list will not be verified against the system's certificate
+    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
+    /// bypasses SSL verification and could expose you to MITM attacks.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            allow-insecure-host = ["localhost:8080"]
+        "#
+    )]
+    pub allow_insecure_host: Option<Vec<TrustedHost>>,
 }
 
 /// Settings relevant to all installer operations.
@@ -236,7 +281,6 @@ pub struct InstallerOptions {
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewer>,
     pub link_mode: Option<LinkMode>,
@@ -261,7 +305,6 @@ pub struct ResolverOptions {
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
@@ -413,22 +456,6 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-    /// Allow insecure connections to host.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            allow-insecure-host = ["localhost:8080"]
-        "#
-    )]
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// The strategy to use when selecting between the different compatible versions for a given
     /// package requirement.
     ///
@@ -507,7 +534,7 @@ pub struct ResolverInstallerOptions {
     /// are already installed.
     #[option(
         default = "[]",
-        value_type = "Vec<PackageName>",
+        value_type = "list[str]",
         example = r#"
         no-build-isolation-package = ["package1", "package2"]
     "#
@@ -651,6 +678,61 @@ pub struct ResolverInstallerOptions {
         "#
     )]
     pub no_binary_package: Option<Vec<PackageName>>,
+}
+
+/// Shared settings, relevant to all operations that might create managed python installations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct PythonInstallMirrors {
+    /// Mirror URL for downloading managed Python installations.
+    ///
+    /// By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
+    /// This variable can be set to a mirror URL to use a different source for Python installations.
+    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
+        "#
+    )]
+    pub python_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed PyPy installations.
+    ///
+    /// By default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).
+    /// This variable can be set to a mirror URL to use a different source for PyPy installations.
+    /// The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+    ///
+    /// Distributions can be read from a
+    /// local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            pypy-install-mirror = "https://downloads.python.org/pypy"
+        "#
+    )]
+    pub pypy_install_mirror: Option<String>,
+}
+
+impl Default for PythonInstallMirrors {
+    fn default() -> Self {
+        PythonInstallMirrors::resolve(None, None)
+    }
+}
+
+impl PythonInstallMirrors {
+    pub fn resolve(python_mirror: Option<String>, pypy_mirror: Option<String>) -> Self {
+        let python_mirror_env = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
+        let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
+        PythonInstallMirrors {
+            python_install_mirror: python_mirror_env.or(python_mirror),
+            pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
+        }
+    }
 }
 
 /// Settings that are specific to the `uv pip` command-line interface.
@@ -825,22 +907,6 @@ pub struct PipOptions {
         "#
     )]
     pub keyring_provider: Option<KeyringProviderType>,
-    /// Allow insecure connections to host.
-    ///
-    /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-    /// `localhost:8080`), or a URL (e.g., `https://localhost`).
-    ///
-    /// WARNING: Hosts included in this list will not be verified against the system's certificate
-    /// store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-    /// bypasses SSL verification and could expose you to MITM attacks.
-    #[option(
-        default = "[]",
-        value_type = "list[str]",
-        example = r#"
-            allow-insecure-host = ["localhost:8080"]
-        "#
-    )]
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     /// Don't build source distributions.
     ///
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
@@ -905,7 +971,7 @@ pub struct PipOptions {
     /// are already installed.
     #[option(
         default = "[]",
-        value_type = "Vec<PackageName>",
+        value_type = "list[str]",
         example = r#"
             no-build-isolation-package = ["package1", "package2"]
         "#
@@ -1282,7 +1348,7 @@ pub struct PipOptions {
     /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
     /// include them.
     #[option(
-        default = "false",
+        default = "true",
         value_type = "bool",
         example = r#"
             verify-hashes = true
@@ -1352,7 +1418,6 @@ impl From<ResolverInstallerOptions> for ResolverOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             dependency_metadata: value.dependency_metadata,
@@ -1382,7 +1447,6 @@ impl From<ResolverInstallerOptions> for InstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             config_settings: value.config_settings,
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
@@ -1416,7 +1480,6 @@ pub struct ToolOptions {
     pub find_links: Option<Vec<PipFindLinks>>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
-    pub allow_insecure_host: Option<Vec<TrustedHost>>,
     pub resolution: Option<ResolutionMode>,
     pub prerelease: Option<PrereleaseMode>,
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
@@ -1443,7 +1506,6 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             dependency_metadata: value.dependency_metadata,
@@ -1472,7 +1534,6 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             find_links: value.find_links,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
-            allow_insecure_host: value.allow_insecure_host,
             resolution: value.resolution,
             prerelease: value.prerelease,
             dependency_metadata: value.dependency_metadata,
@@ -1543,6 +1604,11 @@ pub struct OptionsWire {
     no_binary_package: Option<Vec<PackageName>>,
 
     // #[serde(flatten)]
+    // install_mirror: PythonInstallMirrors,
+    python_install_mirror: Option<String>,
+    pypy_install_mirror: Option<String>,
+
+    // #[serde(flatten)]
     // publish: PublishOptions
     publish_url: Option<Url>,
     trusted_publishing: Option<TrustedPublishing>,
@@ -1551,24 +1617,21 @@ pub struct OptionsWire {
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`, and the documentation lives on that struct.
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
-    // `crates/uv-workspace/src/pyproject.rs`.
-    #[allow(dead_code)]
+    // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
+    // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
+    conflicts: Option<serde::de::IgnoredAny>,
     workspace: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     sources: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     managed: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     r#package: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     default_groups: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
     dev_dependencies: Option<serde::de::IgnoredAny>,
 }
 
@@ -1582,6 +1645,8 @@ impl From<OptionsWire> for Options {
             preview,
             python_preference,
             python_downloads,
+            python_install_mirror,
+            pypy_install_mirror,
             concurrent_downloads,
             concurrent_builds,
             concurrent_installs,
@@ -1616,14 +1681,15 @@ impl From<OptionsWire> for Options {
             override_dependencies,
             constraint_dependencies,
             environments,
+            conflicts,
             publish_url,
             trusted_publishing,
-            workspace: _,
-            sources: _,
-            managed: _,
-            package: _,
-            default_groups: _,
-            dev_dependencies: _,
+            workspace,
+            sources,
+            default_groups,
+            dev_dependencies,
+            managed,
+            package,
         } = value;
 
         Self {
@@ -1638,6 +1704,8 @@ impl From<OptionsWire> for Options {
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,
+                // Used twice for backwards compatibility
+                allow_insecure_host: allow_insecure_host.clone(),
             },
             top_level: ResolverInstallerOptions {
                 index,
@@ -1647,7 +1715,6 @@ impl From<OptionsWire> for Options {
                 find_links,
                 index_strategy,
                 keyring_provider,
-                allow_insecure_host,
                 resolution,
                 prerelease,
                 dependency_metadata,
@@ -1667,15 +1734,26 @@ impl From<OptionsWire> for Options {
                 no_binary,
                 no_binary_package,
             },
-            publish: PublishOptions {
-                publish_url,
-                trusted_publishing,
-            },
             pip,
             cache_keys,
             override_dependencies,
             constraint_dependencies,
             environments,
+            install_mirrors: PythonInstallMirrors::resolve(
+                python_install_mirror,
+                pypy_install_mirror,
+            ),
+            conflicts,
+            publish: PublishOptions {
+                publish_url,
+                trusted_publishing,
+            },
+            workspace,
+            sources,
+            dev_dependencies,
+            default_groups,
+            managed,
+            package,
         }
     }
 }

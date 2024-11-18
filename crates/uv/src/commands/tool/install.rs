@@ -7,7 +7,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, Upgrade};
+use uv_configuration::{Concurrency, TrustedHost, Upgrade};
 use uv_distribution_types::UnresolvedRequirementSpecification;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -17,7 +17,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::{ResolverInstallerOptions, ToolOptions};
+use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
@@ -25,11 +25,13 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
-    EnvironmentSpecification,
+    EnvironmentSpecification, ProjectError,
 };
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::tool::Target;
-use crate::commands::{reporters::PythonDownloadReporter, tool::common::install_executables};
+use crate::commands::{
+    diagnostics, reporters::PythonDownloadReporter, tool::common::install_executables,
+};
 use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -41,6 +43,7 @@ pub(crate) async fn install(
     from: Option<String>,
     with: &[RequirementsSource],
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     force: bool,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
@@ -49,12 +52,14 @@ pub(crate) async fn install(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -70,6 +75,8 @@ pub(crate) async fn install(
         &client_builder,
         &cache,
         Some(&reporter),
+        install_mirrors.python_install_mirror,
+        install_mirrors.pypy_install_mirror,
     )
     .await?
     .into_interpreter();
@@ -79,7 +86,8 @@ pub(crate) async fn install(
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Parse the input requirement.
     let target = Target::parse(&package, from.as_deref());
@@ -111,6 +119,7 @@ pub(crate) async fn install(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -180,6 +189,7 @@ pub(crate) async fn install(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -229,6 +239,7 @@ pub(crate) async fn install(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -342,7 +353,7 @@ pub(crate) async fn install(
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
-        let environment = update_environment(
+        let environment = match update_environment(
             environment,
             spec,
             &settings,
@@ -352,11 +363,20 @@ pub(crate) async fn install(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             &cache,
             printer,
         )
-        .await?
-        .into_environment();
+        .await
+        {
+            Ok(update) => update.into_environment(),
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         // At this point, we updated the existing environment, so we should remove any of its
         // existing executables.
@@ -368,7 +388,7 @@ pub(crate) async fn install(
     } else {
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
-        let resolution = resolve_environment(
+        let resolution = match resolve_environment(
             EnvironmentSpecification::from(spec),
             &interpreter,
             settings.as_ref().into(),
@@ -377,10 +397,20 @@ pub(crate) async fn install(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             &cache,
             printer,
         )
-        .await?;
+        .await
+        {
+            Ok(resolution) => resolution,
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         let environment = installed_tools.create_environment(&from.name, interpreter)?;
 
@@ -391,7 +421,7 @@ pub(crate) async fn install(
         }
 
         // Sync the environment with the resolved requirements.
-        sync_environment(
+        match sync_environment(
             environment,
             &resolution.into(),
             settings.as_ref().into(),
@@ -400,6 +430,7 @@ pub(crate) async fn install(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             &cache,
             printer,
         )
@@ -408,7 +439,15 @@ pub(crate) async fn install(
             // If we failed to sync, remove the newly created environment.
             debug!("Failed to sync environment; removing `{}`", from.name);
             let _ = installed_tools.remove_environment(&from.name);
-        })?
+        }) {
+            Ok(environment) => environment,
+            Err(ProjectError::Operation(err)) => {
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+            }
+            Err(err) => return Err(err.into()),
+        }
     };
 
     install_executables(

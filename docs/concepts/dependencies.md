@@ -140,7 +140,7 @@ A revision (i.e., commit), tag, or branch may also be included:
 
 ```console
 $ uv add git+https://github.com/encode/httpx --tag 0.27.0
-$ uv add git+https://github.com/encode/httpx --branch main
+$ uv add git+https://github.com/encode/httpx --branch master
 $ uv add git+https://github.com/encode/httpx --rev 326b9431c761e1ef1e00b9f760d1f654c8db48c6
 ```
 
@@ -389,6 +389,11 @@ To add an optional dependency, use the `--optional <extra>` option:
 $ uv add httpx --optional network
 ```
 
+!!! note
+
+    If you have optional dependencies that conflict with one another, resolution will fail
+    unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
+
 ## Development dependencies
 
 Unlike optional dependencies, development dependencies are local-only and will _not_ be included in
@@ -455,8 +460,8 @@ to resolve the requirements of the project with an error.
 
 !!! note
 
-    There is currently no way to declare conflicting dependency groups. See
-    [astral.sh/uv#6981](https://github.com/astral-sh/uv/issues/6981) to track support.
+    If you have dependency groups that conflict with one another, resolution will fail
+    unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
 
 ### Default groups
 

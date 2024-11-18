@@ -76,6 +76,7 @@ pub enum Arch {
     #[serde(alias = "arm64")]
     Aarch64,
     Armv6L,
+    #[serde(alias = "armv8l")]
     Armv7L,
     #[serde(alias = "ppc64le")]
     Powerpc64Le,
@@ -116,8 +117,10 @@ impl Arch {
             }
             // manylinux 1
             Self::X86 | Self::X86_64 => Some(5),
+            // manylinux_2_31
+            Self::Riscv64 => Some(31),
             // unsupported
-            Self::Armv6L | Self::Riscv64 => None,
+            Self::Armv6L => None,
         }
     }
 }

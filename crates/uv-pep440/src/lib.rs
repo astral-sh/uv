@@ -24,11 +24,12 @@
 #![warn(missing_docs)]
 
 #[cfg(feature = "version-ranges")]
-pub use version_ranges_specifier::{VersionRangesSpecifier, VersionRangesSpecifierError};
+pub use version_ranges::{release_specifier_to_range, release_specifiers_to_ranges};
 pub use {
     version::{
-        LocalSegment, Operator, OperatorParseError, Prerelease, PrereleaseKind, Version,
-        VersionParseError, VersionPattern, VersionPatternParseError, MIN_VERSION,
+        LocalSegment, LocalVersion, LocalVersionSlice, Operator, OperatorParseError, Prerelease,
+        PrereleaseKind, Version, VersionParseError, VersionPattern, VersionPatternParseError,
+        MIN_VERSION,
     },
     version_specifier::{
         VersionSpecifier, VersionSpecifierBuildError, VersionSpecifiers,
@@ -42,4 +43,4 @@ mod version_specifier;
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "version-ranges")]
-mod version_ranges_specifier;
+mod version_ranges;
