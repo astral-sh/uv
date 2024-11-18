@@ -799,23 +799,23 @@ impl TryFrom<SourcesWire> for Sources {
                     .zip(sources.iter().skip(1).map(Source::marker))
                 {
                     if !lhs.is_disjoint(&rhs) {
+                        let Some(left) = lhs.contents().map(|contents| contents.to_string()) else {
+                            return Err(SourceError::MissingMarkers);
+                        };
+
+                        let Some(right) = rhs.contents().map(|contents| contents.to_string())
+                        else {
+                            return Err(SourceError::MissingMarkers);
+                        };
+
                         let mut hint = lhs.negate();
                         hint.and(rhs.clone());
-
-                        let lhs = lhs
-                            .contents()
-                            .map(|contents| contents.to_string())
-                            .unwrap_or_else(|| "true".to_string());
-                        let rhs = rhs
-                            .contents()
-                            .map(|contents| contents.to_string())
-                            .unwrap_or_else(|| "true".to_string());
                         let hint = hint
                             .contents()
                             .map(|contents| contents.to_string())
                             .unwrap_or_else(|| "true".to_string());
 
-                        return Err(SourceError::OverlappingMarkers(lhs, rhs, hint));
+                        return Err(SourceError::OverlappingMarkers(left, right, hint));
                     }
                 }
 
@@ -1231,6 +1231,8 @@ pub enum SourceError {
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
+    #[error("When multiple sources are provided, each source must include a platform markers (e.g., `marker = \"sys_platform == 'linux'\"`)")]
+    MissingMarkers,
     #[error("Must provide at least one source")]
     EmptySources,
 }
