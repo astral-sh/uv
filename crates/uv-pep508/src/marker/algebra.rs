@@ -50,7 +50,7 @@ use std::ops::Bound;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
 
-use itertools::Either;
+use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
 use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
@@ -753,16 +753,15 @@ impl Edges {
     ///
     /// Only for use when the `key` is a `PythonVersion`. Normalizes to `PythonFullVersion`.
     fn from_python_versions(versions: Vec<Version>, negated: bool) -> Result<Edges, NodeId> {
-        let mut range = Ranges::empty();
-
-        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
-        // seem efficient.
-        for version in versions {
-            let specifier = VersionSpecifier::equals_version(version.clone());
-            let specifier = python_version_to_full_version(specifier)?;
-            let pubgrub_specifier = release_specifier_to_range(normalize_specifier(specifier));
-            range = range.union(&pubgrub_specifier);
-        }
+        let mut range: Ranges<Version> = versions
+            .into_iter()
+            .map(|version| {
+                let specifier = VersionSpecifier::equals_version(version.clone());
+                let specifier = python_version_to_full_version(specifier)?;
+                Ok(release_specifier_to_range(normalize_specifier(specifier)))
+            })
+            .flatten_ok()
+            .collect::<Result<Ranges<_>, NodeId>>()?;
 
         if negated {
             range = range.complement();
@@ -774,14 +773,16 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &Vec<Version>, negated: bool) -> Edges {
-        let mut range = Ranges::empty();
-
-        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
-        // seem efficient.
-        for version in versions {
-            range = range.union(&Ranges::singleton(version.clone()));
-        }
+    fn from_versions(versions: &[Version], negated: bool) -> Edges {
+        let mut range: Ranges<Version> = versions
+            .iter()
+            .map(|version| {
+                (
+                    Bound::Included(version.clone()),
+                    Bound::Included(version.clone()),
+                )
+            })
+            .collect();
 
         if negated {
             range = range.complement();
