@@ -292,70 +292,11 @@ fn write_hashed(
     })
 }
 
-/// TODO(konsti): Wire this up with actual settings and remove this struct.
-///
-/// Which files to include in the wheel
-pub struct WheelSettings {
-    /// The directory that contains the module directory, usually `src`, or an empty path when
-    /// using the flat layout over the src layout.
-    module_root: PathBuf,
-    data: WheelDataIncludes,
-}
-
-impl Default for WheelSettings {
-    fn default() -> Self {
-        Self {
-            module_root: PathBuf::from("src"),
-            data: WheelDataIncludes::default(),
-        }
-    }
-}
-
-/// Data includes for wheels.
-///
-/// Each entry is a list of globs. File and directories matching a glob will be copied to the
-/// matching directory in the wheel in
-/// `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this data
-/// is moved to its target location, as defined by
-/// <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>:
-/// - `data`: Installed over the virtualenv environment root. Warning: This may override existing
-///   files!
-/// - `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
-///   `<venv>\Scripts` on Windows. This directory is added to PATH when the virtual environment is
-///   activated or when using `uv run`, so this data type can be used to install additional
-///   binaries. Consider using `project.scripts` instead for starting Python code.
-/// - `headers`: Installed to the include directory, where compilers building Python packages with
-///   this package as built requirement will search for header files.
-/// - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended to
-///   uses these two options.
-#[derive(Default)]
-pub struct WheelDataIncludes {
-    purelib: Option<Vec<String>>,
-    platlib: Option<Vec<String>>,
-    headers: Option<Vec<String>>,
-    scripts: Option<Vec<String>>,
-    data: Option<Vec<String>>,
-}
-
-impl WheelDataIncludes {
-    fn iter(&self) -> impl Iterator<Item = (&'static str, Option<&[String]>)> {
-        [
-            ("purelib", self.purelib.as_deref()),
-            ("platlib", self.platlib.as_deref()),
-            ("headers", self.headers.as_deref()),
-            ("scripts", self.scripts.as_deref()),
-            ("data", self.data.as_deref()),
-        ]
-        .into_iter()
-    }
-}
-
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
     source_tree: &Path,
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
-    wheel_settings: WheelSettings,
     uv_version: &str,
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
@@ -378,10 +319,14 @@ pub fn build_wheel(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding content files to {}", wheel_path.user_display());
-    if wheel_settings.module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(wheel_settings.module_root));
+    let module_root = pyproject_toml
+        .wheel_settings()
+        .and_then(|wheel_settings| wheel_settings.module_root.as_deref())
+        .unwrap_or_else(|| Path::new("src"));
+    if module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(module_root.to_path_buf()));
     }
-    let strip_root = source_tree.join(wheel_settings.module_root);
+    let strip_root = source_tree.join(module_root);
     let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
@@ -435,24 +380,27 @@ pub fn build_wheel(
     }
 
     // Add the data files
-    for (name, includes) in wheel_settings.data.iter() {
-        if let Some(includes) = &includes {
-            debug!("Adding {name} data files");
-            let data_dir = format!(
-                "{}-{}.data/{}/",
-                pyproject_toml.name().as_dist_info_name(),
-                pyproject_toml.version(),
-                name
-            );
+    for (name, directory) in pyproject_toml
+        .wheel_settings()
+        .and_then(|wheel_settings| wheel_settings.data.clone())
+        .unwrap_or_default()
+        .iter()
+    {
+        debug!("Adding {name} data files from: `{directory}`");
+        let data_dir = format!(
+            "{}-{}.data/{}/",
+            pyproject_toml.name().as_dist_info_name(),
+            pyproject_toml.version(),
+            name
+        );
 
-            wheel_subdir_from_globs(
-                source_tree,
-                &data_dir,
-                includes,
-                &mut wheel_writer,
-                &format!("tool.uv.wheel.data.{name}"),
-            )?;
-        }
+        wheel_subdir_from_globs(
+            &source_tree.join(directory),
+            &data_dir,
+            &["**".to_string()],
+            &mut wheel_writer,
+            &format!("tool.uv.wheel.data.{name}"),
+        )?;
     }
 
     debug!("Adding metadata files to: `{}`", wheel_path.user_display());
@@ -656,6 +604,24 @@ pub fn build_source_dist(
             field: "project.license-files".to_string(),
             source: err,
         })?;
+        include_globs.push(glob);
+    }
+
+    // Include the data files
+    for (name, directory) in pyproject_toml
+        .wheel_settings()
+        .and_then(|wheel_settings| wheel_settings.data.clone())
+        .unwrap_or_default()
+        .iter()
+    {
+        let glob =
+            parse_portable_glob(&format!("{}/**", globset::escape(directory))).map_err(|err| {
+                Error::PortableGlob {
+                    field: format!("tool.uv.wheel.data.{name}"),
+                    source: err,
+                }
+            })?;
+        trace!("Including data ({name}) at: `{directory}`");
         include_globs.push(glob);
     }
 
@@ -1065,7 +1031,15 @@ mod tests {
     fn built_by_uv_building() {
         let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
         let src = TempDir::new().unwrap();
-        for dir in ["src", "tests", "data-dir", "third-party-licenses"] {
+        for dir in [
+            "src",
+            "tests",
+            "data-dir",
+            "third-party-licenses",
+            "assets",
+            "header",
+            "scripts",
+        ] {
             copy_dir_all(built_by_uv.join(dir), src.path().join(dir)).unwrap();
         }
         for dir in [
@@ -1080,14 +1054,7 @@ mod tests {
 
         // Build a wheel from the source tree
         let direct_output_dir = TempDir::new().unwrap();
-        build_wheel(
-            src.path(),
-            direct_output_dir.path(),
-            None,
-            WheelSettings::default(),
-            "1.0.0+test",
-        )
-        .unwrap();
+        build_wheel(src.path(), direct_output_dir.path(), None, "1.0.0+test").unwrap();
 
         let wheel = zip::ZipArchive::new(
             File::open(
@@ -1133,7 +1100,6 @@ mod tests {
             &sdist_tree.path().join("built_by_uv-0.1.0"),
             indirect_output_dir.path(),
             None,
-            WheelSettings::default(),
             "1.0.0+test",
         )
         .unwrap();
@@ -1147,19 +1113,22 @@ mod tests {
 
         // Check the contained files and directories
         assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
-        built_by_uv-0.1.0/LICENSE-APACHE
-        built_by_uv-0.1.0/LICENSE-MIT
-        built_by_uv-0.1.0/PKG-INFO
-        built_by_uv-0.1.0/README.md
-        built_by_uv-0.1.0/pyproject.toml
-        built_by_uv-0.1.0/src/built_by_uv
-        built_by_uv-0.1.0/src/built_by_uv/__init__.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
-        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
-    ");
+            built_by_uv-0.1.0/LICENSE-APACHE
+            built_by_uv-0.1.0/LICENSE-MIT
+            built_by_uv-0.1.0/PKG-INFO
+            built_by_uv-0.1.0/README.md
+            built_by_uv-0.1.0/assets/data.csv
+            built_by_uv-0.1.0/header/built_by_uv.h
+            built_by_uv-0.1.0/pyproject.toml
+            built_by_uv-0.1.0/scripts/whoami.sh
+            built_by_uv-0.1.0/src/built_by_uv
+            built_by_uv-0.1.0/src/built_by_uv/__init__.py
+            built_by_uv-0.1.0/src/built_by_uv/arithmetic
+            built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
+            built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
+            built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
+            built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
+        ");
 
         let wheel = zip::ZipArchive::new(
             File::open(
@@ -1175,20 +1144,26 @@ mod tests {
         assert_eq!(indirect_wheel_contents, direct_wheel_contents);
 
         assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
-        built_by_uv-0.1.0.dist-info/
-        built_by_uv-0.1.0.dist-info/METADATA
-        built_by_uv-0.1.0.dist-info/RECORD
-        built_by_uv-0.1.0.dist-info/WHEEL
-        built_by_uv-0.1.0.dist-info/licenses/
-        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
-        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
-        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
-        built_by_uv/
-        built_by_uv/__init__.py
-        built_by_uv/arithmetic/
-        built_by_uv/arithmetic/__init__.py
-        built_by_uv/arithmetic/circle.py
-        built_by_uv/arithmetic/pi.txt
-    ");
+            built_by_uv-0.1.0.data/data/
+            built_by_uv-0.1.0.data/data/data.csv
+            built_by_uv-0.1.0.data/headers/
+            built_by_uv-0.1.0.data/headers/built_by_uv.h
+            built_by_uv-0.1.0.data/scripts/
+            built_by_uv-0.1.0.data/scripts/whoami.sh
+            built_by_uv-0.1.0.dist-info/
+            built_by_uv-0.1.0.dist-info/METADATA
+            built_by_uv-0.1.0.dist-info/RECORD
+            built_by_uv-0.1.0.dist-info/WHEEL
+            built_by_uv-0.1.0.dist-info/licenses/
+            built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
+            built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
+            built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
+            built_by_uv/
+            built_by_uv/__init__.py
+            built_by_uv/arithmetic/
+            built_by_uv/arithmetic/__init__.py
+            built_by_uv/arithmetic/circle.py
+            built_by_uv/arithmetic/pi.txt
+        ");
     }
 }
