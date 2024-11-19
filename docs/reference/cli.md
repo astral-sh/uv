@@ -2711,11 +2711,47 @@ uv tree [OPTIONS]
 
 <li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
 
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+
 <li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
 
 <li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
 
 <li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
 </ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -5463,11 +5499,47 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
 
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+
 <li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
 
 <li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
 
 <li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
 </ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -5826,11 +5898,47 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
 
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+
 <li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
 
 <li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
 
 <li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
 </ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
@@ -6228,11 +6336,47 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <li><code>x86_64-manylinux_2_31</code>:  An <code>x86_64</code> target for the <code>manylinux_2_31</code> platform</li>
 
+<li><code>x86_64-manylinux_2_32</code>:  An <code>x86_64</code> target for the <code>manylinux_2_32</code> platform</li>
+
+<li><code>x86_64-manylinux_2_33</code>:  An <code>x86_64</code> target for the <code>manylinux_2_33</code> platform</li>
+
+<li><code>x86_64-manylinux_2_34</code>:  An <code>x86_64</code> target for the <code>manylinux_2_34</code> platform</li>
+
+<li><code>x86_64-manylinux_2_35</code>:  An <code>x86_64</code> target for the <code>manylinux_2_35</code> platform</li>
+
+<li><code>x86_64-manylinux_2_36</code>:  An <code>x86_64</code> target for the <code>manylinux_2_36</code> platform</li>
+
+<li><code>x86_64-manylinux_2_37</code>:  An <code>x86_64</code> target for the <code>manylinux_2_37</code> platform</li>
+
+<li><code>x86_64-manylinux_2_38</code>:  An <code>x86_64</code> target for the <code>manylinux_2_38</code> platform</li>
+
+<li><code>x86_64-manylinux_2_39</code>:  An <code>x86_64</code> target for the <code>manylinux_2_39</code> platform</li>
+
+<li><code>x86_64-manylinux_2_40</code>:  An <code>x86_64</code> target for the <code>manylinux_2_40</code> platform</li>
+
 <li><code>aarch64-manylinux_2_17</code>:  An ARM64 target for the <code>manylinux_2_17</code> platform</li>
 
 <li><code>aarch64-manylinux_2_28</code>:  An ARM64 target for the <code>manylinux_2_28</code> platform</li>
 
 <li><code>aarch64-manylinux_2_31</code>:  An ARM64 target for the <code>manylinux_2_31</code> platform</li>
+
+<li><code>aarch64-manylinux_2_32</code>:  An ARM64 target for the <code>manylinux_2_32</code> platform</li>
+
+<li><code>aarch64-manylinux_2_33</code>:  An ARM64 target for the <code>manylinux_2_33</code> platform</li>
+
+<li><code>aarch64-manylinux_2_34</code>:  An ARM64 target for the <code>manylinux_2_34</code> platform</li>
+
+<li><code>aarch64-manylinux_2_35</code>:  An ARM64 target for the <code>manylinux_2_35</code> platform</li>
+
+<li><code>aarch64-manylinux_2_36</code>:  An ARM64 target for the <code>manylinux_2_36</code> platform</li>
+
+<li><code>aarch64-manylinux_2_37</code>:  An ARM64 target for the <code>manylinux_2_37</code> platform</li>
+
+<li><code>aarch64-manylinux_2_38</code>:  An ARM64 target for the <code>manylinux_2_38</code> platform</li>
+
+<li><code>aarch64-manylinux_2_39</code>:  An ARM64 target for the <code>manylinux_2_39</code> platform</li>
+
+<li><code>aarch64-manylinux_2_40</code>:  An ARM64 target for the <code>manylinux_2_40</code> platform</li>
 </ul>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
 
