@@ -357,8 +357,6 @@ pub fn build_wheel(
                 entry.file_type(),
             ));
         }
-
-        entry.path();
     }
 
     // Add the license files
@@ -402,6 +400,63 @@ pub fn build_wheel(
             &format!("tool.uv.wheel.data.{name}"),
         )?;
     }
+
+    debug!("Adding metadata files to: `{}`", wheel_path.user_display());
+    let dist_info_dir = write_dist_info(
+        &mut wheel_writer,
+        &pyproject_toml,
+        &filename,
+        source_tree,
+        uv_version,
+    )?;
+    wheel_writer.close(&dist_info_dir)?;
+
+    Ok(filename)
+}
+
+/// Build a wheel from the source tree and place it in the output directory.
+pub fn build_editable(
+    source_tree: &Path,
+    wheel_dir: &Path,
+    metadata_directory: Option<&Path>,
+    uv_version: &str,
+) -> Result<WheelFilename, Error> {
+    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
+    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    pyproject_toml.check_build_system("1.0.0+test");
+
+    check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
+
+    let filename = WheelFilename {
+        name: pyproject_toml.name().clone(),
+        version: pyproject_toml.version().clone(),
+        build_tag: None,
+        python_tag: vec!["py3".to_string()],
+        abi_tag: vec!["none".to_string()],
+        platform_tag: vec!["any".to_string()],
+    };
+
+    let wheel_path = wheel_dir.join(filename.to_string());
+    debug!("Writing wheel at {}", wheel_path.user_display());
+    let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
+
+    debug!("Adding pth file to {}", wheel_path.user_display());
+    let module_root = pyproject_toml
+        .wheel_settings()
+        .and_then(|wheel_settings| wheel_settings.module_root.as_deref())
+        .unwrap_or_else(|| Path::new("src"));
+    if module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(module_root.to_path_buf()));
+    }
+    let src_root = source_tree.join(module_root);
+    let module_root = src_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
+    if !module_root.join("__init__.py").is_file() {
+        return Err(Error::MissingModule(module_root));
+    }
+    wheel_writer.write_bytes(
+        &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
+        src_root.as_os_str().as_encoded_bytes(),
+    )?;
 
     debug!("Adding metadata files to: `{}`", wheel_path.user_display());
     let dist_info_dir = write_dist_info(

@@ -31,10 +31,17 @@ pub(crate) fn build_wheel(
 }
 
 pub(crate) fn build_editable(
-    _wheel_directory: &Path,
-    _metadata_directory: Option<&Path>,
+    wheel_directory: &Path,
+    metadata_directory: Option<&Path>,
 ) -> Result<ExitStatus> {
-    todo!()
+    let filename = uv_build_backend::build_editable(
+        &env::current_dir()?,
+        wheel_directory,
+        metadata_directory,
+        uv_version::version(),
+    )?;
+    println!("{filename}");
+    Ok(ExitStatus::Success)
 }
 
 /// Not used from Python code, exists for symmetry with PEP 517.
