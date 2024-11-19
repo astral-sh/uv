@@ -25,7 +25,7 @@ use uv_warnings::warn_user_once;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
-use crate::Connectivity;
+use crate::{Connectivity, WrappedReqwestError};
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -461,6 +461,20 @@ impl RetryableStrategy for UvRetryableStrategy {
 ///
 /// These cases should be safe to retry with [`Retryable::Transient`].
 pub(crate) fn is_extended_transient_error(err: &dyn Error) -> bool {
+    // First, look for `WrappedReqwestError`, which wraps `reqwest::Error` but doesn't always
+    // include it in the source.
+    if let Some(err) = find_source::<WrappedReqwestError>(&err) {
+        if let Some(io) = find_source::<std::io::Error>(&err) {
+            if io.kind() == std::io::ErrorKind::ConnectionReset
+                || io.kind() == std::io::ErrorKind::UnexpectedEof
+            {
+                return true;
+            }
+        }
+    }
+
+    // Next, look for `reqwest_middleware::Error`, which wraps `reqwest::Error`, but also includes
+    // errors from the middleware stack.
     if let Some(err) = find_source::<reqwest_middleware::Error>(&err) {
         if let Some(io) = find_source::<std::io::Error>(&err) {
             if io.kind() == std::io::ErrorKind::ConnectionReset
@@ -471,6 +485,7 @@ pub(crate) fn is_extended_transient_error(err: &dyn Error) -> bool {
         }
     }
 
+    // Finally, look for `reqwest::Error`, which is the most common error type.
     if let Some(err) = find_source::<reqwest::Error>(&err) {
         if let Some(io) = find_source::<std::io::Error>(&err) {
             if io.kind() == std::io::ErrorKind::ConnectionReset
