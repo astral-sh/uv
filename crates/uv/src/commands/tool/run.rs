@@ -478,6 +478,7 @@ async fn get_or_create_environment(
             source: RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: None,
+                conflict: None,
             },
             origin: None,
         },
@@ -491,6 +492,7 @@ async fn get_or_create_environment(
                     version.clone(),
                 )),
                 index: None,
+                conflict: None,
             },
             origin: None,
         },
@@ -502,6 +504,7 @@ async fn get_or_create_environment(
             source: RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: None,
+                conflict: None,
             },
             origin: None,
         },

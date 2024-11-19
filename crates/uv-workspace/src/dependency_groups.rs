@@ -1,3 +1,4 @@
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
@@ -101,6 +102,13 @@ impl FlatDependencyGroups {
         group: &GroupName,
     ) -> Option<&Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
         self.0.get(group)
+    }
+
+    pub fn entry(
+        &mut self,
+        group: GroupName,
+    ) -> Entry<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
+        self.0.entry(group)
     }
 }
 

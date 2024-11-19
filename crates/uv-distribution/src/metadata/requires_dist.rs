@@ -7,7 +7,7 @@ use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::dependency_groups::FlatDependencyGroups;
-use uv_workspace::pyproject::ToolUvSources;
+use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
 
 #[derive(Debug, Clone)]
@@ -111,6 +111,7 @@ impl RequiresDist {
             SourceStrategy::Disabled => &empty,
         };
 
+        // Collect the dependency groups.
         let dependency_groups = {
             // First, collect `tool.uv.dev_dependencies`
             let dev_dependencies = project_workspace
@@ -130,85 +131,90 @@ impl RequiresDist {
                 .flatten()
                 .collect::<BTreeMap<_, _>>();
 
-            // Resolve any `include-group` entries in `dependency-groups`.
-            let dependency_groups =
+            // Flatten the dependency groups.
+            let mut dependency_groups =
                 FlatDependencyGroups::from_dependency_groups(&dependency_groups)
-                    .map_err(|err| err.with_dev_dependencies(dev_dependencies))?
-                    .into_iter()
-                    .chain(
-                        // Only add the `dev` group if `dev-dependencies` is defined.
-                        dev_dependencies
-                            .into_iter()
-                            .map(|requirements| (DEV_DEPENDENCIES.clone(), requirements.clone())),
-                    )
-                    .map(|(name, requirements)| {
-                        let requirements = match source_strategy {
-                            SourceStrategy::Enabled => requirements
-                                .into_iter()
-                                .flat_map(|requirement| {
-                                    let group_name = name.clone();
-                                    let requirement_name = requirement.name.clone();
-                                    LoweredRequirement::from_requirement(
-                                        requirement,
-                                        &metadata.name,
-                                        project_workspace.project_root(),
-                                        project_sources,
-                                        project_indexes,
-                                        locations,
-                                        project_workspace.workspace(),
-                                        lower_bound,
-                                        git_member,
-                                    )
-                                    .map(move |requirement| {
-                                        match requirement {
-                                            Ok(requirement) => Ok(requirement.into_inner()),
-                                            Err(err) => Err(MetadataError::GroupLoweringError(
-                                                group_name.clone(),
-                                                requirement_name.clone(),
-                                                Box::new(err),
-                                            )),
-                                        }
-                                    })
-                                })
-                                .collect::<Result<Vec<_>, _>>(),
-                            SourceStrategy::Disabled => Ok(requirements
-                                .into_iter()
-                                .map(uv_pypi_types::Requirement::from)
-                                .collect()),
-                        }?;
-                        Ok::<(GroupName, Vec<uv_pypi_types::Requirement>), MetadataError>((
-                            name,
-                            requirements,
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
 
-            // Merge any overlapping groups.
-            let mut map = BTreeMap::new();
-            for (name, dependencies) in dependency_groups {
-                match map.entry(name) {
-                    std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert(dependencies);
-                    }
-                    std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        entry.get_mut().extend(dependencies);
-                    }
-                }
+            // Add the `dev` group, if `dev-dependencies` is defined.
+            if let Some(dev_dependencies) = dev_dependencies {
+                dependency_groups
+                    .entry(DEV_DEPENDENCIES.clone())
+                    .or_insert_with(Vec::new)
+                    .extend(dev_dependencies.clone());
             }
-            map
+
+            dependency_groups
         };
 
+        // Now that we've resolved the dependency groups, we can validate that each source references
+        // a valid extra or group, if present.
+        Self::validate_sources(project_sources, &metadata, &dependency_groups)?;
+
+        // Lower the dependency groups.
+        let dependency_groups = dependency_groups
+            .into_iter()
+            .map(|(name, requirements)| {
+                let requirements = match source_strategy {
+                    SourceStrategy::Enabled => requirements
+                        .into_iter()
+                        .flat_map(|requirement| {
+                            let requirement_name = requirement.name.clone();
+                            let group = name.clone();
+                            let extra = None;
+                            LoweredRequirement::from_requirement(
+                                requirement,
+                                &metadata.name,
+                                project_workspace.project_root(),
+                                project_sources,
+                                project_indexes,
+                                extra,
+                                Some(&group),
+                                locations,
+                                project_workspace.workspace(),
+                                lower_bound,
+                                git_member,
+                            )
+                            .map(
+                                move |requirement| match requirement {
+                                    Ok(requirement) => Ok(requirement.into_inner()),
+                                    Err(err) => Err(MetadataError::GroupLoweringError(
+                                        group.clone(),
+                                        requirement_name.clone(),
+                                        Box::new(err),
+                                    )),
+                                },
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>(),
+                    SourceStrategy::Disabled => Ok(requirements
+                        .into_iter()
+                        .map(uv_pypi_types::Requirement::from)
+                        .collect()),
+                }?;
+                Ok::<(GroupName, Vec<uv_pypi_types::Requirement>), MetadataError>((
+                    name,
+                    requirements,
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
+
+        // Lower the requirements.
         let requires_dist = metadata.requires_dist.into_iter();
         let requires_dist = match source_strategy {
             SourceStrategy::Enabled => requires_dist
                 .flat_map(|requirement| {
                     let requirement_name = requirement.name.clone();
+                    let extra = requirement.marker.top_level_extra_name();
+                    let group = None;
                     LoweredRequirement::from_requirement(
                         requirement,
                         &metadata.name,
                         project_workspace.project_root(),
                         project_sources,
                         project_indexes,
+                        extra.as_ref(),
+                        group,
                         locations,
                         project_workspace.workspace(),
                         lower_bound,
@@ -235,6 +241,64 @@ impl RequiresDist {
             dependency_groups,
             provides_extras: metadata.provides_extras,
         })
+    }
+
+    /// Validate the sources for a given [`uv_pypi_types::RequiresDist`].
+    ///
+    /// If a source is requested with an `extra` or `group`, ensure that the relevant dependency is
+    /// present in the relevant `project.optional-dependencies` or `dependency-groups` section.
+    fn validate_sources(
+        sources: &BTreeMap<PackageName, Sources>,
+        metadata: &uv_pypi_types::RequiresDist,
+        dependency_groups: &FlatDependencyGroups,
+    ) -> Result<(), MetadataError> {
+        for (name, sources) in sources {
+            for source in sources.iter() {
+                if let Some(extra) = source.extra() {
+                    // If the extra doesn't exist at all, error.
+                    if !metadata.provides_extras.contains(extra) {
+                        return Err(MetadataError::MissingSourceExtra(
+                            name.clone(),
+                            extra.clone(),
+                        ));
+                    }
+
+                    // If there is no such requirement with the extra, error.
+                    if !metadata.requires_dist.iter().any(|requirement| {
+                        requirement.name == *name
+                            && requirement.marker.top_level_extra_name().as_ref() == Some(extra)
+                    }) {
+                        return Err(MetadataError::IncompleteSourceExtra(
+                            name.clone(),
+                            extra.clone(),
+                        ));
+                    }
+                }
+
+                if let Some(group) = source.group() {
+                    // If the group doesn't exist at all, error.
+                    let Some(dependencies) = dependency_groups.get(group) else {
+                        return Err(MetadataError::MissingSourceGroup(
+                            name.clone(),
+                            group.clone(),
+                        ));
+                    };
+
+                    // If there is no such requirement with the group, error.
+                    if !dependencies
+                        .iter()
+                        .any(|requirement| requirement.name == *name)
+                    {
+                        return Err(MetadataError::IncompleteSourceGroup(
+                            name.clone(),
+                            group.clone(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -383,7 +447,28 @@ mod test {
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |                                                ^^^
-        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `index`, `workspace`, `marker`
+        unknown field `ref`, expected one of `git`, `subdirectory`, `rev`, `tag`, `branch`, `url`, `path`, `editable`, `index`, `workspace`, `marker`, `extra`, `group`
+        "###);
+    }
+
+    #[tokio::test]
+    async fn extra_and_group() {
+        let input = indoc! {r#"
+            [project]
+            name = "foo"
+            version = "0.0.0"
+            dependencies = []
+
+            [tool.uv.sources]
+            tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
+        "#};
+
+        assert_snapshot!(format_err(input).await, @r###"
+        error: TOML parse error at line 7, column 8
+          |
+        7 | tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
+          |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        cannot specify both `extra` and `group`
         "###);
     }
 

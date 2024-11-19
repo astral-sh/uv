@@ -3757,6 +3757,7 @@ fn normalize_requirement(
         RequirementSource::Registry {
             specifier,
             mut index,
+            conflict,
         } => {
             if let Some(index) = index.as_mut() {
                 redact_credentials(index);
@@ -3765,7 +3766,11 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 marker: requirement.marker,
-                source: RequirementSource::Registry { specifier, index },
+                source: RequirementSource::Registry {
+                    specifier,
+                    index,
+                    conflict,
+                },
                 origin: None,
             })
         }
