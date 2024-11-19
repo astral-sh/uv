@@ -5,6 +5,11 @@ development. You can use uv to manage PyTorch projects and PyTorch dependencies 
 Python versions and environments, even controlling for the choice of accelerator (e.g., CPU-only vs.
 CUDA).
 
+!!! note
+
+    Some of the features outlined in this guide require uv version 0.5.3 or later. If you're using an
+    older version of uv, we recommend upgrading prior to configuring PyTorch.
+
 ## Installing PyTorch
 
 From a packaging perspective, PyTorch has a few uncommon characteristics:
