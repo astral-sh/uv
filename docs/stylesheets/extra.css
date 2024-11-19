@@ -123,6 +123,18 @@ See https://github.com/astral-sh/uv/issues/5130 */
   }
 }
 
+
+/* Always take the full screen for content, require scrolling to see the footer
+This stops the size of the nav from jumping around when you visit a page without
+a lot of content (i.e., an overview page). We don't apply this to sma screens
+because the nav is in a hamburger menu anyway
+*/
+@media screen and (min-width: 76.25em) {
+  .md-main {
+    min-height: 100vh;
+  }
+}
+
 /* Tweak the formatting of the primary nav on a large screen */
 @media screen and (min-width: 76.25em) {
   .md-nav--primary .md-nav {
