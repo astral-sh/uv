@@ -59,6 +59,8 @@ pub enum ValidationError {
 pub(crate) struct PyProjectToml {
     /// Project metadata
     project: Project,
+    /// uv-specific configuration
+    tool: Option<Tool>,
     /// Build-related data
     build_system: BuildSystem,
 }
@@ -82,6 +84,10 @@ impl PyProjectToml {
 
     pub(crate) fn license_files(&self) -> Option<&[String]> {
         self.project.license_files.as_deref()
+    }
+
+    pub(crate) fn wheel_settings(&self) -> Option<&WheelSettings> {
+        self.tool.as_ref()?.uv.as_ref()?.wheel.as_ref()
     }
 
     /// Warn if the `[build-system]` table looks suspicious.
@@ -677,6 +683,78 @@ struct BuildSystem {
     build_backend: Option<String>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
     backend_path: Option<Vec<String>>,
+}
+
+/// The `tool` section as specified in PEP 517.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct Tool {
+    /// uv-specific configuration
+    uv: Option<ToolUv>,
+}
+
+/// The `tool.uv` section with build configuration.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct ToolUv {
+    /// Configuration for building source dists with the uv build backend
+    #[allow(dead_code)]
+    source_dist: Option<serde::de::IgnoredAny>,
+    /// Configuration for building wheels with the uv build backend
+    wheel: Option<WheelSettings>,
+}
+
+/// The `tool.uv.wheel` section with wheel build configuration.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct WheelSettings {
+    /// The directory that contains the module directory, usually `src`, or an empty path when
+    /// using the flat layout over the src layout.
+    pub(crate) module_root: Option<PathBuf>,
+    /// Data includes for wheels.
+    pub(crate) data: Option<WheelDataIncludes>,
+}
+
+/// Data includes for wheels.
+///
+/// Each entry is a directory, whose contents are copied to the matching directory in the wheel in
+/// `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this data
+/// is moved to its target location, as defined by
+/// <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>:
+/// - `data`: Installed over the virtualenv environment root. Warning: This may override existing
+///   files!
+/// - `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
+///   `<venv>\Scripts` on Windows. This directory is added to PATH when the virtual environment is
+///   activated or when using `uv run`, so this data type can be used to install additional
+///   binaries. Consider using `project.scripts` instead for starting Python code.
+/// - `headers`: Installed to the include directory, where compilers building Python packages with
+///   this package as built requirement will search for header files.
+/// - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended to
+///   uses these two options.
+#[derive(Default, Deserialize, Debug, Clone)]
+// `deny_unknown_fields` to catch typos such as `header` vs `headers`.
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub(crate) struct WheelDataIncludes {
+    purelib: Option<String>,
+    platlib: Option<String>,
+    headers: Option<String>,
+    scripts: Option<String>,
+    data: Option<String>,
+}
+
+impl WheelDataIncludes {
+    /// Yield all data directories name and corresponding paths.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&'static str, &str)> {
+        [
+            ("purelib", self.purelib.as_deref()),
+            ("platlib", self.platlib.as_deref()),
+            ("headers", self.headers.as_deref()),
+            ("scripts", self.scripts.as_deref()),
+            ("data", self.data.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(name, value)| Some((name, value?)))
+    }
 }
 
 #[cfg(test)]

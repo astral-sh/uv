@@ -292,29 +292,11 @@ fn write_hashed(
     })
 }
 
-/// TODO(konsti): Wire this up with actual settings and remove this struct.
-///
-/// Which files to include in the wheel
-pub struct WheelSettings {
-    /// The directory that contains the module directory, usually `src`, or an empty path when
-    /// using the flat layout over the src layout.
-    module_root: PathBuf,
-}
-
-impl Default for WheelSettings {
-    fn default() -> Self {
-        Self {
-            module_root: PathBuf::from("src"),
-        }
-    }
-}
-
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
     source_tree: &Path,
     wheel_dir: &Path,
     metadata_directory: Option<&Path>,
-    wheel_settings: WheelSettings,
     uv_version: &str,
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
@@ -337,10 +319,14 @@ pub fn build_wheel(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding content files to {}", wheel_path.user_display());
-    if wheel_settings.module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(wheel_settings.module_root));
+    let module_root = pyproject_toml
+        .wheel_settings()
+        .and_then(|wheel_settings| wheel_settings.module_root.as_deref())
+        .unwrap_or_else(|| Path::new("src"));
+    if module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(module_root.to_path_buf()));
     }
-    let strip_root = source_tree.join(wheel_settings.module_root);
+    let strip_root = source_tree.join(module_root);
     let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
@@ -375,77 +361,46 @@ pub fn build_wheel(
         entry.path();
     }
 
+    // Add the license files
     if let Some(license_files) = &pyproject_toml.license_files() {
-        let license_files_globs: Vec<_> = license_files
-            .iter()
-            .map(|license_files| {
-                trace!("Including license files at: `{license_files}`");
-                parse_portable_glob(license_files)
-            })
-            .collect::<Result<_, _>>()
-            .map_err(|err| Error::PortableGlob {
-                field: "project.license-files".to_string(),
-                source: err,
-            })?;
-        let license_files_matcher =
-            GlobDirFilter::from_globs(&license_files_globs).map_err(|err| {
-                Error::GlobSetTooLarge {
-                    field: "project.license-files".to_string(),
-                    source: err,
-                }
-            })?;
-
+        debug!("Adding license files");
         let license_dir = format!(
             "{}-{}.dist-info/licenses/",
             pyproject_toml.name().as_dist_info_name(),
             pyproject_toml.version()
         );
 
-        wheel_writer.write_directory(&license_dir)?;
+        wheel_subdir_from_globs(
+            source_tree,
+            &license_dir,
+            license_files,
+            &mut wheel_writer,
+            "project.license-files",
+        )?;
+    }
 
-        for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
-            // TODO(konsti): This should be prettier.
-            let relative = entry
-                .path()
-                .strip_prefix(source_tree)
-                .expect("walkdir starts with root");
+    // Add the data files
+    for (name, directory) in pyproject_toml
+        .wheel_settings()
+        .and_then(|wheel_settings| wheel_settings.data.clone())
+        .unwrap_or_default()
+        .iter()
+    {
+        debug!("Adding {name} data files from: `{directory}`");
+        let data_dir = format!(
+            "{}-{}.data/{}/",
+            pyproject_toml.name().as_dist_info_name(),
+            pyproject_toml.version(),
+            name
+        );
 
-            // Fast path: Don't descend into a directory that can't be included.
-            license_files_matcher.match_directory(relative)
-        }) {
-            let entry = entry.map_err(|err| Error::WalkDir {
-                root: source_tree.to_path_buf(),
-                err,
-            })?;
-            // TODO(konsti): This should be prettier.
-            let relative = entry
-                .path()
-                .strip_prefix(source_tree)
-                .expect("walkdir starts with root");
-
-            if !license_files_matcher.match_path(relative) {
-                trace!("Excluding {}", relative.user_display());
-                continue;
-            };
-
-            let relative_licenses = Path::new(&license_dir)
-                .join(relative)
-                .portable_display()
-                .to_string();
-
-            if entry.file_type().is_dir() {
-                wheel_writer.write_directory(&relative_licenses)?;
-            } else if entry.file_type().is_file() {
-                debug!("Adding license file: `{}`", relative.user_display());
-                wheel_writer.write_file(&relative_licenses, entry.path())?;
-            } else {
-                // TODO(konsti): We may want to support symlinks, there is support for installing them.
-                return Err(Error::UnsupportedFileType(
-                    entry.path().to_path_buf(),
-                    entry.file_type(),
-                ));
-            }
-        }
+        wheel_subdir_from_globs(
+            &source_tree.join(directory),
+            &data_dir,
+            &["**".to_string()],
+            &mut wheel_writer,
+            &format!("tool.uv.wheel.data.{name}"),
+        )?;
     }
 
     debug!("Adding metadata files to: `{}`", wheel_path.user_display());
@@ -459,6 +414,81 @@ pub fn build_wheel(
     wheel_writer.close(&dist_info_dir)?;
 
     Ok(filename)
+}
+
+/// Add the files and directories matching from the source tree matching any of the globs in the
+/// wheel subdirectory.
+fn wheel_subdir_from_globs(
+    src: &Path,
+    target: &str,
+    globs: &[String],
+    wheel_writer: &mut ZipDirectoryWriter,
+    // For error messages
+    globs_field: &str,
+) -> Result<(), Error> {
+    let license_files_globs: Vec<_> = globs
+        .iter()
+        .map(|license_files| {
+            trace!("Including license files at: `{license_files}`");
+            parse_portable_glob(license_files)
+        })
+        .collect::<Result<_, _>>()
+        .map_err(|err| Error::PortableGlob {
+            field: globs_field.to_string(),
+            source: err,
+        })?;
+    let license_files_matcher =
+        GlobDirFilter::from_globs(&license_files_globs).map_err(|err| Error::GlobSetTooLarge {
+            field: globs_field.to_string(),
+            source: err,
+        })?;
+
+    wheel_writer.write_directory(target)?;
+
+    for entry in WalkDir::new(src).into_iter().filter_entry(|entry| {
+        // TODO(konsti): This should be prettier.
+        let relative = entry
+            .path()
+            .strip_prefix(src)
+            .expect("walkdir starts with root");
+
+        // Fast path: Don't descend into a directory that can't be included.
+        license_files_matcher.match_directory(relative)
+    }) {
+        let entry = entry.map_err(|err| Error::WalkDir {
+            root: src.to_path_buf(),
+            err,
+        })?;
+        // TODO(konsti): This should be prettier.
+        let relative = entry
+            .path()
+            .strip_prefix(src)
+            .expect("walkdir starts with root");
+
+        if !license_files_matcher.match_path(relative) {
+            trace!("Excluding {}", relative.user_display());
+            continue;
+        };
+
+        let relative_licenses = Path::new(target)
+            .join(relative)
+            .portable_display()
+            .to_string();
+
+        if entry.file_type().is_dir() {
+            wheel_writer.write_directory(&relative_licenses)?;
+        } else if entry.file_type().is_file() {
+            debug!("Adding {} file: `{}`", globs_field, relative.user_display());
+            wheel_writer.write_file(&relative_licenses, entry.path())?;
+        } else {
+            // TODO(konsti): We may want to support symlinks, there is support for installing them.
+            return Err(Error::UnsupportedFileType(
+                entry.path().to_path_buf(),
+                entry.file_type(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// TODO(konsti): Wire this up with actual settings and remove this struct.
@@ -574,6 +604,24 @@ pub fn build_source_dist(
             field: "project.license-files".to_string(),
             source: err,
         })?;
+        include_globs.push(glob);
+    }
+
+    // Include the data files
+    for (name, directory) in pyproject_toml
+        .wheel_settings()
+        .and_then(|wheel_settings| wheel_settings.data.clone())
+        .unwrap_or_default()
+        .iter()
+    {
+        let glob =
+            parse_portable_glob(&format!("{}/**", globset::escape(directory))).map_err(|err| {
+                Error::PortableGlob {
+                    field: format!("tool.uv.wheel.data.{name}"),
+                    source: err,
+                }
+            })?;
+        trace!("Including data ({name}) at: `{directory}`");
         include_globs.push(glob);
     }
 
@@ -983,7 +1031,15 @@ mod tests {
     fn built_by_uv_building() {
         let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
         let src = TempDir::new().unwrap();
-        for dir in ["src", "tests", "data-dir", "third-party-licenses"] {
+        for dir in [
+            "src",
+            "tests",
+            "data-dir",
+            "third-party-licenses",
+            "assets",
+            "header",
+            "scripts",
+        ] {
             copy_dir_all(built_by_uv.join(dir), src.path().join(dir)).unwrap();
         }
         for dir in [
@@ -998,14 +1054,7 @@ mod tests {
 
         // Build a wheel from the source tree
         let direct_output_dir = TempDir::new().unwrap();
-        build_wheel(
-            src.path(),
-            direct_output_dir.path(),
-            None,
-            WheelSettings::default(),
-            "1.0.0+test",
-        )
-        .unwrap();
+        build_wheel(src.path(), direct_output_dir.path(), None, "1.0.0+test").unwrap();
 
         let wheel = zip::ZipArchive::new(
             File::open(
@@ -1051,7 +1100,6 @@ mod tests {
             &sdist_tree.path().join("built_by_uv-0.1.0"),
             indirect_output_dir.path(),
             None,
-            WheelSettings::default(),
             "1.0.0+test",
         )
         .unwrap();
@@ -1065,19 +1113,22 @@ mod tests {
 
         // Check the contained files and directories
         assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
-        built_by_uv-0.1.0/LICENSE-APACHE
-        built_by_uv-0.1.0/LICENSE-MIT
-        built_by_uv-0.1.0/PKG-INFO
-        built_by_uv-0.1.0/README.md
-        built_by_uv-0.1.0/pyproject.toml
-        built_by_uv-0.1.0/src/built_by_uv
-        built_by_uv-0.1.0/src/built_by_uv/__init__.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
-        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
-    ");
+            built_by_uv-0.1.0/LICENSE-APACHE
+            built_by_uv-0.1.0/LICENSE-MIT
+            built_by_uv-0.1.0/PKG-INFO
+            built_by_uv-0.1.0/README.md
+            built_by_uv-0.1.0/assets/data.csv
+            built_by_uv-0.1.0/header/built_by_uv.h
+            built_by_uv-0.1.0/pyproject.toml
+            built_by_uv-0.1.0/scripts/whoami.sh
+            built_by_uv-0.1.0/src/built_by_uv
+            built_by_uv-0.1.0/src/built_by_uv/__init__.py
+            built_by_uv-0.1.0/src/built_by_uv/arithmetic
+            built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
+            built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
+            built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
+            built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
+        ");
 
         let wheel = zip::ZipArchive::new(
             File::open(
@@ -1093,20 +1144,26 @@ mod tests {
         assert_eq!(indirect_wheel_contents, direct_wheel_contents);
 
         assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
-        built_by_uv-0.1.0.dist-info/
-        built_by_uv-0.1.0.dist-info/METADATA
-        built_by_uv-0.1.0.dist-info/RECORD
-        built_by_uv-0.1.0.dist-info/WHEEL
-        built_by_uv-0.1.0.dist-info/licenses/
-        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
-        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
-        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
-        built_by_uv/
-        built_by_uv/__init__.py
-        built_by_uv/arithmetic/
-        built_by_uv/arithmetic/__init__.py
-        built_by_uv/arithmetic/circle.py
-        built_by_uv/arithmetic/pi.txt
-    ");
+            built_by_uv-0.1.0.data/data/
+            built_by_uv-0.1.0.data/data/data.csv
+            built_by_uv-0.1.0.data/headers/
+            built_by_uv-0.1.0.data/headers/built_by_uv.h
+            built_by_uv-0.1.0.data/scripts/
+            built_by_uv-0.1.0.data/scripts/whoami.sh
+            built_by_uv-0.1.0.dist-info/
+            built_by_uv-0.1.0.dist-info/METADATA
+            built_by_uv-0.1.0.dist-info/RECORD
+            built_by_uv-0.1.0.dist-info/WHEEL
+            built_by_uv-0.1.0.dist-info/licenses/
+            built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
+            built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
+            built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
+            built_by_uv/
+            built_by_uv/__init__.py
+            built_by_uv/arithmetic/
+            built_by_uv/arithmetic/__init__.py
+            built_by_uv/arithmetic/circle.py
+            built_by_uv/arithmetic/pi.txt
+        ");
     }
 }
