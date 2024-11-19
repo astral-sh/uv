@@ -243,7 +243,7 @@ pub(crate) async fn run(
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.index.as_deref())
+                    .and_then(|uv| uv.top_level.index.as_deref())
                     .unwrap_or(&empty),
                 SourceStrategy::Disabled => &empty,
             };
