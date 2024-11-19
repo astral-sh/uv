@@ -8,7 +8,6 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
 
-use uv_distribution_types::Index;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -275,7 +274,6 @@ pub struct ToolUv {
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
-    pub index: Option<Vec<Index>>,
 }
 
 #[derive(Debug, Error)]
