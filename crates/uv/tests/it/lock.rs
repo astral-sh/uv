@@ -18068,7 +18068,7 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
       |
     9 |         iniconfig = [
       |                     ^
-    When multiple sources are provided, each source must include a platform markers (e.g., `marker = "sys_platform == 'linux'"`)
+    When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
     "###);
 
     Ok(())
