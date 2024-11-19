@@ -147,7 +147,7 @@ albatross
 Since `seeds` was excluded in the `pyproject.toml`, the workspace has two members total: `albatross`
 (the root) and `bird-feeder`.
 
-## When (not) to use workspaces
+## Summary of use cases
 
 Workspaces are intended to facilitate the development of multiple interconnected packages within a
 single repository. As a codebase grows in complexity, it can be helpful to split it into smaller,
@@ -163,6 +163,8 @@ Other common use cases for workspaces include:
   etc.).
 - A library with a plugin system, where each plugin is a separate workspace package with a
   dependency on the root.
+
+## When _not_ to use workspaces
 
 Workspaces are _not_ suited for cases in which members have conflicting requirements, or desire a
 separate virtual environment for each member. In this case, path dependencies are often preferable.
