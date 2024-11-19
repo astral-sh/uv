@@ -195,7 +195,7 @@ impl<'a> FlatIndexClient<'a> {
         let response = self
             .client
             .cached_client()
-            .get_cacheable(
+            .get_cacheable_with_retry(
                 flat_index_request,
                 &cache_entry,
                 cache_control,
