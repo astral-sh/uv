@@ -621,15 +621,15 @@ impl CachedClient {
             let result = self
                 .get_cacheable(fresh_req, cache_entry, cache_control, &response_callback)
                 .await;
-            if let Some(err) = result
+            if result
                 .as_ref()
                 .err()
-                .filter(|err| is_extended_transient_error(err))
+                .is_some_and(|err| is_extended_transient_error(err))
             {
                 let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
                     debug!(
-                        "Transient failure while handling response from {}; retrying: {err}",
+                        "Transient failure while handling response from {}; retrying...",
                         req.url(),
                     );
                     let duration = execute_after
@@ -670,15 +670,15 @@ impl CachedClient {
             let result = self
                 .skip_cache(fresh_req, cache_entry, &response_callback)
                 .await;
-            if let Some(err) = result
+            if result
                 .as_ref()
                 .err()
-                .filter(|err| is_extended_transient_error(err))
+                .is_some_and(|err| is_extended_transient_error(err))
             {
                 let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
                     debug!(
-                        "Transient failure while handling response from {}; retrying: {err}",
+                        "Transient failure while handling response from {}; retrying...",
                         req.url(),
                     );
                     let duration = execute_after
