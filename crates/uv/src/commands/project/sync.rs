@@ -176,21 +176,41 @@ pub(crate) async fn sync(
                     workspace: project.workspace(),
                     lock: &lock,
                 }
-            } else {
+            } else if let Some(package) = package.as_ref() {
                 InstallTarget::Project {
                     workspace: project.workspace(),
-                    // If `--frozen --package` is specified, and only the root `pyproject.toml` was
-                    // discovered, the child won't be present in the workspace; but we _know_ that
-                    // we want to install it, so we override the package name.
-                    name: package.as_ref().unwrap_or(project.project_name()),
+                    name: package,
+                    lock: &lock,
+                }
+            } else {
+                // By default, install the root package.
+                InstallTarget::Project {
+                    workspace: project.workspace(),
+                    name: project.project_name(),
                     lock: &lock,
                 }
             }
         }
-        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-            workspace,
-            lock: &lock,
-        },
+        VirtualProject::NonProject(workspace) => {
+            if all_packages {
+                InstallTarget::NonProjectWorkspace {
+                    workspace,
+                    lock: &lock,
+                }
+            } else if let Some(package) = package.as_ref() {
+                InstallTarget::Project {
+                    workspace,
+                    name: package,
+                    lock: &lock,
+                }
+            } else {
+                // By default, install the entire workspace.
+                InstallTarget::NonProjectWorkspace {
+                    workspace,
+                    lock: &lock,
+                }
+            }
+        }
     };
 
     // Perform the sync operation.
