@@ -263,7 +263,8 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
             }
 
             if self.hashes {
-                let hashes = package.hashes();
+                let mut hashes = package.hashes();
+                hashes.sort_unstable();
                 if !hashes.is_empty() {
                     for hash in &hashes {
                         writeln!(f, " \\")?;
