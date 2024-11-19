@@ -7,6 +7,11 @@ requires-python = ">=3.12"
 dependencies = ["anyio>=4,<5"]
 license-files = ["LICENSE*", "third-party-licenses/*"]
 
+[tool.uv.wheel.data]
+scripts = "scripts"
+data = "assets"
+headers = "header"
+
 [build-system]
 requires = ["uv>=0.4.15,<5"]
 build-backend = "uv"

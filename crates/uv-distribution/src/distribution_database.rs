@@ -556,9 +556,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = self
             .client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &http_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -578,7 +581,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(|client| async {
                     client
                         .cached_client()
-                        .skip_cache(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,
@@ -710,9 +713,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = self
             .client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &http_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -732,7 +738,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(|client| async {
                     client
                         .cached_client()
-                        .skip_cache(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,

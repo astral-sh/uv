@@ -467,6 +467,74 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+#[test]
+fn sync_legacy_non_project_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=4"]
+        "#,
+        )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
 /// Sync development dependencies in a (legacy) non-project workspace root.
 #[test]
 fn sync_legacy_non_project_group() -> Result<()> {
@@ -4272,6 +4340,73 @@ fn sync_all_groups() -> Result<()> {
 
     ----- stderr -----
     error: Group `foo` is not defined in any project's `dependency-group` table
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        cu118 = ["jinja2==3.1.2"]
+        cu124 = ["jinja2==3.1.3"]
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+        conflicts = [
+            [
+                { extra = "cu118" },
+                { extra = "cu124" },
+            ],
+        ]
+
+        [tool.uv.sources]
+        jinja2 = [
+            { index = "torch-cu118", extra = "cu118" },
+            { index = "torch-cu124", extra = "cu124" },
+        ]
+
+        [[tool.uv.index]]
+        name = "torch-cu118"
+        url = "https://download.pytorch.org/whl/cu118"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "torch-cu124"
+        url = "https://download.pytorch.org/whl/cu124"
+        explicit = true
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
     "###);
 
     Ok(())

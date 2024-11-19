@@ -5757,7 +5757,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
 
-<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
+<p>May also be set with the <code>UV_NO_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -6134,7 +6134,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirement <REQUIREMENT>|--editable <EDITAB
 
 <p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
 
-<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
+<p>May also be set with the <code>UV_NO_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -7729,7 +7729,7 @@ uv build [OPTIONS] [SRC]
 
 <p>By default, uv will verify any available hashes in the requirements file, but will not require that all requirements have an associated hash. To enforce hash validation, use <code>--require-hashes</code>.</p>
 
-<p>May also be set with the <code>UV_VERIFY_HASHES</code> environment variable.</p>
+<p>May also be set with the <code>UV_NO_VERIFY_HASHES</code> environment variable.</p>
 </dd><dt><code>--offline</code></dt><dd><p>Disable network access.</p>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
@@ -7996,7 +7996,7 @@ uv publish [OPTIONS] [FILES]...
 
 </dd><dt><code>--token</code>, <code>-t</code> <i>token</i></dt><dd><p>The token for the upload.</p>
 
-<p>Using a token is equivalent to passing <code>__token__</code> as <code>--username</code> and the token as <code>--password</code>. password.</p>
+<p>Using a token is equivalent to passing <code>__token__</code> as <code>--username</code> and the token as <code>--password</code> password.</p>
 
 <p>May also be set with the <code>UV_PUBLISH_TOKEN</code> environment variable.</p>
 </dd><dt><code>--trusted-publishing</code> <i>trusted-publishing</i></dt><dd><p>Configure using trusted publishing through GitHub Actions.</p>

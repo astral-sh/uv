@@ -4,7 +4,7 @@ use crate::commands::ExitStatus;
 use anyhow::Result;
 use std::env;
 use std::path::Path;
-use uv_build_backend::{SourceDistSettings, WheelSettings};
+use uv_build_backend::SourceDistSettings;
 
 pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
     let filename = uv_build_backend::build_source_dist(
@@ -24,7 +24,6 @@ pub(crate) fn build_wheel(
         &env::current_dir()?,
         wheel_directory,
         metadata_directory,
-        WheelSettings::default(),
         uv_version::version(),
     )?;
     println!("{filename}");

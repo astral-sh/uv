@@ -32,9 +32,7 @@ pub use yanks::AllowedYanks;
 /// `ConflictItemRef`. i.e., We can avoid allocs on lookups.
 type FxHashbrownSet<T> = hashbrown::HashSet<T, rustc_hash::FxBuildHasher>;
 
-mod bare;
 mod candidate_selector;
-
 mod dependency_mode;
 mod dependency_provider;
 mod error;

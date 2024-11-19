@@ -7,7 +7,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, TrustedHost, Upgrade};
+use uv_configuration::{Concurrency, Reinstall, TrustedHost, Upgrade};
 use uv_distribution_types::UnresolvedRequirementSpecification;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -142,6 +142,7 @@ pub(crate) async fn install(
                         version.clone(),
                     )),
                     index: None,
+                    conflict: None,
                 },
                 origin: None,
             }
@@ -159,6 +160,7 @@ pub(crate) async fn install(
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::empty(),
                     index: None,
+                    conflict: None,
                 },
                 origin: None,
             }
@@ -217,6 +219,18 @@ pub(crate) async fn install(
             upgrade: settings
                 .upgrade
                 .combine(Upgrade::package(from.name.clone())),
+            ..settings
+        }
+    } else {
+        settings
+    };
+
+    // If the user passed `--force`, it implies `--reinstall-package <from>`
+    let settings = if force {
+        ResolverInstallerSettings {
+            reinstall: settings
+                .reinstall
+                .combine(Reinstall::package(from.name.clone())),
             ..settings
         }
     } else {
@@ -310,10 +324,7 @@ pub(crate) async fn install(
         .as_ref()
         .filter(|_| {
             // And the user didn't request a reinstall or upgrade...
-            !force
-                && !target.is_latest()
-                && settings.reinstall.is_none()
-                && settings.upgrade.is_none()
+            !target.is_latest() && settings.reinstall.is_none() && settings.upgrade.is_none()
         })
         .is_some()
     {

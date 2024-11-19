@@ -654,9 +654,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let req = Self::request(url.clone(), client.unmanaged)?;
         let revision = client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &cache_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &cache_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -672,7 +675,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .managed(|client| async move {
                     client
                         .cached_client()
-                        .skip_cache(Self::request(url.clone(), client)?, &cache_entry, download)
+                        .skip_cache_with_retry(
+                            Self::request(url.clone(), client)?,
+                            &cache_entry,
+                            download,
+                        )
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,
@@ -1584,7 +1591,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
                     }
                 }
-                Ok(revision.with_hashes(hashes))
+                Ok(revision.clone().with_hashes(hashes))
             }
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
@@ -1593,7 +1600,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .managed(|client| async move {
                 client
                     .cached_client()
-                    .skip_cache(Self::request(url.clone(), client)?, &cache_entry, download)
+                    .skip_cache_with_retry(
+                        Self::request(url.clone(), client)?,
+                        &cache_entry,
+                        download,
+                    )
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,

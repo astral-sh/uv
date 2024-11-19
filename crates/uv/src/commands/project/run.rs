@@ -243,7 +243,7 @@ pub(crate) async fn run(
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.indexes.as_deref())
+                    .and_then(|uv| uv.index.as_deref())
                     .unwrap_or(&empty),
                 SourceStrategy::Disabled => &empty,
             };
@@ -428,7 +428,7 @@ pub(crate) async fn run(
 
         script_interpreter
     } else {
-        let project = if let Some(package) = package {
+        let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
@@ -678,7 +678,14 @@ pub(crate) async fn run(
                                 workspace: project.workspace(),
                                 lock: result.lock(),
                             }
+                        } else if let Some(package) = package.as_ref() {
+                            InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: package,
+                                lock: result.lock(),
+                            }
                         } else {
+                            // By default, install the root package.
                             InstallTarget::Project {
                                 workspace: project.workspace(),
                                 name: project.project_name(),
@@ -686,10 +693,26 @@ pub(crate) async fn run(
                             }
                         }
                     }
-                    VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-                        workspace,
-                        lock: result.lock(),
-                    },
+                    VirtualProject::NonProject(workspace) => {
+                        if all_packages {
+                            InstallTarget::NonProjectWorkspace {
+                                workspace,
+                                lock: result.lock(),
+                            }
+                        } else if let Some(package) = package.as_ref() {
+                            InstallTarget::Project {
+                                workspace,
+                                name: package,
+                                lock: result.lock(),
+                            }
+                        } else {
+                            // By default, install the entire workspace.
+                            InstallTarget::NonProjectWorkspace {
+                                workspace,
+                                lock: result.lock(),
+                            }
+                        }
+                    }
                 };
 
                 let install_options = InstallOptions::default();
