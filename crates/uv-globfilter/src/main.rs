@@ -54,7 +54,7 @@ fn main() {
             .to_path_buf();
 
         if !include_matcher.match_path(&relative) || exclude_matcher.is_match(&relative) {
-            trace!("Excluding: {}", relative.display());
+            trace!("Excluding: `{}`", relative.display());
             continue;
         };
         println!("{}", relative.display());

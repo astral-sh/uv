@@ -484,7 +484,12 @@ fn wheel_subdir_from_globs(
     let license_files_globs: Vec<_> = globs
         .iter()
         .map(|license_files| {
-            trace!("Including license files at: `{license_files}`");
+            trace!(
+                "Including {} at `{}` with `{}`",
+                globs_field,
+                src.user_display(),
+                license_files
+            );
             parse_portable_glob(license_files)
         })
         .collect::<Result<_, _>>()
@@ -521,7 +526,7 @@ fn wheel_subdir_from_globs(
             .expect("walkdir starts with root");
 
         if !license_files_matcher.match_path(relative) {
-            trace!("Excluding {}", relative.user_display());
+            trace!("Excluding: `{}`", relative.user_display());
             continue;
         };
 
@@ -735,7 +740,7 @@ pub fn build_source_dist(
             .expect("walkdir starts with root");
 
         if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
-            trace!("Excluding {}", relative.user_display());
+            trace!("Excluding: `{}`", relative.user_display());
             continue;
         };
 
@@ -1159,13 +1164,6 @@ mod tests {
         )
         .unwrap();
 
-        // Check that we write deterministic wheels.
-        let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
-        assert_eq!(
-            fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
-            fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap()
-        );
-
         // Check the contained files and directories
         assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
             built_by_uv-0.1.0/LICENSE-APACHE
@@ -1220,5 +1218,12 @@ mod tests {
             built_by_uv/arithmetic/circle.py
             built_by_uv/arithmetic/pi.txt
         ");
+
+        // Check that we write deterministic wheels.
+        let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
+        assert_eq!(
+            fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
+            fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap()
+        );
     }
 }
