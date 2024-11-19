@@ -2850,8 +2850,7 @@ fn run_script_explicit_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `script`
-      Caused by: Is a directory (os error 21)
+    error: failed to read from file `script`: Is a directory (os error 21)
     "###);
 
     Ok(())

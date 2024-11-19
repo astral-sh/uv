@@ -98,7 +98,7 @@ either = { version = "1.13.0" }
 encoding_rs_io = { version = "0.1.7" }
 etcetera = { version = "0.8.0" }
 flate2 = { version = "1.0.33", default-features = false }
-fs-err = { version = "2.11.0" }
+fs-err = { version = "3.0.0" }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }

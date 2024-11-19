@@ -1022,8 +1022,15 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        // Simplified for windows compatibility.
-        assert_snapshot!(err.to_string().replace('\\', "/"), @"failed to open file `/do/not/read/Readme.md`");
+        // Strip away OS specific part.
+        let err = err
+            .to_string()
+            .replace('\\', "/")
+            .split_once(':')
+            .unwrap()
+            .0
+            .to_string();
+        assert_snapshot!(err, @"failed to open file `/do/not/read/Readme.md`");
     }
 
     #[test]

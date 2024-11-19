@@ -1067,10 +1067,10 @@ fn path_with_trailing_space_gives_proper_error() {
     let path_with_trailing_slash = format!("{} ", context.cache_dir.path().display());
     let mut filters = context.filters();
     // Windows translates error messages, for example i get:
-    // "Caused by: Das System kann den angegebenen Pfad nicht finden. (os error 3)"
+    // ": Das System kann den angegebenen Pfad nicht finden. (os error 3)"
     filters.push((
-        r"Caused by: .* \(os error 3\)",
-        "Caused by: The system cannot find the path specified. (os error 3)",
+        r"CACHEDIR.TAG`: .* \(os error 3\)",
+        "CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)",
     ));
     uv_snapshot!(filters, std::process::Command::new(crate::common::get_bin())
         .arg("venv")
@@ -1080,8 +1080,7 @@ fn path_with_trailing_space_gives_proper_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`
-      Caused by: The system cannot find the path specified. (os error 3)
+    error: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
     "###
     );
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.
