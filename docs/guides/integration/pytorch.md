@@ -1,6 +1,10 @@
 # Installing PyTorch with uv
 
-[PyTorch](https://pytorch.org/) is a popular open-source deep learning framework that has first-class support for acceleration via GPUs. Installation, however, can be complex, as you won't find all the wheels for PyTorch on PyPI and you have to manage this through external indexes. This guide aims to help you set up a `pyproject.toml` file using `uv` [indexes features](../../configuration/indexes.md).
+[PyTorch](https://pytorch.org/) is a popular open-source deep learning framework that has
+first-class support for acceleration via GPUs. Installation, however, can be complex, as you won't
+find all the wheels for PyTorch on PyPI and you have to manage this through external indexes. This
+guide aims to help you set up a `pyproject.toml` file using `uv`
+[indexes features](../../configuration/indexes.md).
 
 !!! info "Available PyTorch indexes"
 
@@ -16,8 +20,11 @@
     * https://download.pytorch.org/whl/cpu
     * https://download.pytorch.org/whl/rocm6.2 (AMD GPUs, only available on Linux)
 
-
-The [PyTorch website](https://pytorch.org/get-started/locally/) offers a simple interface to determine what `pip` command you should run to install PyTorch. This guide should help you do the same with `uv`. If the following instructions fail, you might want to check the link for any difference, and open an issue to report the discrepancy. In this case, or if you run into any other issue, please refer to [Getting Help](../../getting-started/help.md).
+The [PyTorch website](https://pytorch.org/get-started/locally/) offers a simple interface to
+determine what `pip` command you should run to install PyTorch. This guide should help you do the
+same with `uv`. If the following instructions fail, you might want to check the link for any
+difference, and open an issue to report the discrepancy. In this case, or if you run into any other
+issue, please refer to [Getting Help](../../getting-started/help.md).
 
 ## Initialise a project
 
@@ -31,10 +38,10 @@ uv init
 
     Make sure to use a Python version that is supported by PyTorch. You can find the compatibility matrix [here](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
 
-
 ## Add PyTorch indexes
 
-Open the `pyproject.toml` file, and create a custom index matching the channel you want to use (CPU, NVIDIA or AMD), to instruct `uv` where to find the PyTorch wheels.
+Open the `pyproject.toml` file, and create a custom index matching the channel you want to use (CPU,
+NVIDIA or AMD), to instruct `uv` where to find the PyTorch wheels.
 
 === "CPU-only"
 
@@ -81,11 +88,16 @@ Open the `pyproject.toml` file, and create a custom index matching the channel y
     explicit = true
     ```
 
-Note the `explicit` option: this prevents packages from being installed from that index unless explicitly pinned to it (see the step below). This means that only PyTorch will be installed from this index, while all other packages will be looked up on PyPI (the default index).
+Note the `explicit` option: this prevents packages from being installed from that index unless
+explicitly pinned to it (see the step below). This means that only PyTorch will be installed from
+this index, while all other packages will be looked up on PyPI (the default index).
 
 ## Pin PyTorch to the custom index
 
-Now you need to pin specific PyTorch versions to the appropriate indexes. The `tool.uv.sources` table in the `pyproject.toml` is a mapping that matches a package to a list of indexes inside of which to look. Note that you need to create a new entry for every library you want to install. In other words, if your project depends on both PyTorch and torchvision, you need to do as follows:
+Now you need to pin specific PyTorch versions to the appropriate indexes. The `tool.uv.sources`
+table in the `pyproject.toml` is a mapping that matches a package to a list of indexes inside of
+which to look. Note that you need to create a new entry for every library you want to install. In
+other words, if your project depends on both PyTorch and torchvision, you need to do as follows:
 
 === "CPU-only"
 
@@ -159,7 +171,8 @@ Now you need to pin specific PyTorch versions to the appropriate indexes. The `t
 
 ## Add PyTorch to your dependencies
 
-Finally, we can add PyTorch to the `project.dependencies` section of the `pyproject.toml`. To install PyTorch and torchvision, run:
+Finally, we can add PyTorch to the `project.dependencies` section of the `pyproject.toml`. To
+install PyTorch and torchvision, run:
 
 ```sh
 uv add torch torchvision
@@ -177,7 +190,8 @@ dependencies = [
 ]
 ```
 
-This will install PyTorch 2.5.0 and torchvision 0.19 on macOS, and PyTorch 2.5.0+cu124 with torchvision 0.20.0+cu124 on Linux and Windows.
+This will install PyTorch 2.5.0 and torchvision 0.19 on macOS, and PyTorch 2.5.0+cu124 with
+torchvision 0.20.0+cu124 on Linux and Windows.
 
 !!! warning "PyTorch on Intel Macs"
 
