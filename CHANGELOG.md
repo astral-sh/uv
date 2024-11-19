@@ -1,5 +1,82 @@
 # Changelog
 
+## 0.5.3
+
+This release includes support for conflicting optional dependencies and dependency groups in the uv resolver, including the ability to specify dependency sources (like index assignment) on a per-extra or per-group basis.
+
+For example, you can now select CPU-only vs. GPU-enabled PyTorch builds at runtime by defining conflicting extras in a `pyproject.toml`, and assigning different extras to different PyTorch indexes:
+
+```toml
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12.0"
+
+[project.optional-dependencies]
+# Include `torch` whenever `--extra cpu` or `--extra gpu` is provided.
+cpu = ["torch>=2.5.1"]
+gpu = ["torch>=2.5.1"]
+
+[tool.uv]
+# But allow `cpu` and `gpu` to choose conflicting versions of `torch`.
+conflicts = [[{ extra = "cpu" }, { extra = "gpu" }]]
+
+[tool.uv.sources]
+torch = [
+  # With `--extra cpu`, pull PyTorch from the CPU-only index.
+  { index = "pytorch-cpu", extra = "cpu", marker = "platform_system != 'Darwin'" },
+  # With `--extra gpu`, pull PyTorch from the GPU-enabled index.
+  { index = "pytorch-gpu", extra = "gpu" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-gpu"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+```
+
+See the [PyTorch](https://docs.astral.sh/uv/guides/integration/pytorch/) documentation for more.
+
+### Enhancements
+
+- Allow conflicting extras in explicit index assignments ([#9160](https://github.com/astral-sh/uv/pull/9160))
+- Support overrides and constraints in PEP 723 scripts ([#9162](https://github.com/astral-sh/uv/pull/9162))
+- Update `uv tool install --force` to imply `--reinstall-package <name>` ([#9074](https://github.com/astral-sh/uv/pull/9074))
+- Turn `--verify-hashes` on by default ([#9170](https://github.com/astral-sh/uv/pull/9170))
+
+### Performance
+
+- Enable `zlib-rs` on all platforms ([#9202](https://github.com/astral-sh/uv/pull/9202))
+
+### Bug fixes
+
+- Allow apostrophe in virtual environment name ([#8984](https://github.com/astral-sh/uv/pull/8984))
+- Automatically retry body errors when processing response ([#9213](https://github.com/astral-sh/uv/pull/9213))
+- Detect nested workspace inside the current workspace and members with identical names ([#9094](https://github.com/astral-sh/uv/pull/9094))
+- Only install the specified project with `--frozen --package` in legacy non-`[project]` workspaces ([#9215](https://github.com/astral-sh/uv/pull/9215))
+- Respect `[[tool.uv.index]]` in PEP 723 scripts ([#9208](https://github.com/astral-sh/uv/pull/9208))
+- Show derivation markers for resolutions with project name ([#9136](https://github.com/astral-sh/uv/pull/9136))
+- Sort distributions when computing hash ([#9185](https://github.com/astral-sh/uv/pull/9185))
+- Include trampolines in source distributions on Windows ([#9172](https://github.com/astral-sh/uv/pull/9172))
+
+### Documentation
+
+- Add `--index <name>=<url>` syntax to index documentation ([#9139](https://github.com/astral-sh/uv/pull/9139))
+- Add documentation for using uv with PyTorch ([#9210](https://github.com/astral-sh/uv/pull/9210))
+
+### Error messages
+
+- Add a dedicated error for `include = "dev"` with `tool.uv.dev-dependencies` ([#9173](https://github.com/astral-sh/uv/pull/9173))
+- Avoid showing disjoint marker error with `true` ([#9169](https://github.com/astral-sh/uv/pull/9169))
+- Improve error message when `git` is not found ([#9206](https://github.com/astral-sh/uv/pull/9206))
+- Include extras and dependency groups in derivation chains ([#9113](https://github.com/astral-sh/uv/pull/9113))
+- Include version constraints in derivation chains ([#9112](https://github.com/astral-sh/uv/pull/9112))
+
 ## 0.5.2
 
 ### Enhancements
@@ -256,7 +333,7 @@ Previously, uv used a single `tool.uv.dev-dependencies` list for declaration of 
 
 For compatibility, and to simplify usage for people that do not need multiple groups, uv special-cases the group named `dev`. The `dev` group is equivalent to `tool.uv.dev-dependencies`. The contents of `tool.uv.dev-dependencies` will merged into the `dev` group in uv's resolver. The `--dev`, `--only-dev`, and `--no-dev` flags remain as aliases for the corresponding `--group` options. Support for `tool.uv.dev-dependencies` remains in this release, but will display warnings in a future release.
 
-uv syncs the `dev` group by default — this matches the exististing behavior for `tool.uv.dev-dependencies`. The default groups can be changed with the `tool.uv.default-groups` setting.
+uv syncs the `dev` group by default — this matches the existing behavior for `tool.uv.dev-dependencies`. The default groups can be changed with the `tool.uv.default-groups` setting.
 
 Thank you to Stephen Rosen who authored PEP 735.
 
