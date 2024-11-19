@@ -30,6 +30,22 @@ the source code are reflected immediately, without re-installation.
 
 ## Project packaging
 
+As discussed in [build systems](#build-systems), a Python project must be built to be installed.
+This process is generally referred to as "packaging".
+
+You probably need a package if you want to:
+
+- Add commands to the project
+- Distribute the project to others
+- Use a `src` and `test` layout
+- Write a library
+
+You probably _do not_ need a package if you are:
+
+- Writing scripts
+- Building a simple application
+- Using a flat layout
+
 While uv usually uses the declaration of a [build system](#build-systems) to determine if a project
 should be packaged, uv also allows overriding this behavior with the
 [`tool.uv.package`](../../reference/settings.md#package) setting.
