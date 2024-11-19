@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{env, iter};
-use tracing::debug;
+use tracing::{debug, trace};
 use url::Url;
 use uv_auth::AuthMiddleware;
 use uv_configuration::{KeyringProviderType, TrustedHost};
@@ -468,6 +468,9 @@ pub(crate) fn is_extended_transient_error(err: &dyn Error) -> bool {
             {
                 return true;
             }
+            trace!("Cannot retry error: not one of connection reset or unexpected eof");
+        } else {
+            trace!("Cannot retry error: not an IO error");
         }
     }
 
@@ -478,9 +481,13 @@ pub(crate) fn is_extended_transient_error(err: &dyn Error) -> bool {
             {
                 return true;
             }
+            trace!("Cannot retry error: not one of connection reset or unexpected eof");
+        } else {
+            trace!("Cannot retry error: not an IO error");
         }
     }
 
+    trace!("Cannot retry error: not a reqwest error");
     false
 }
 
