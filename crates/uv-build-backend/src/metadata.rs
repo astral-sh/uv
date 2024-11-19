@@ -721,6 +721,17 @@ pub(crate) struct WheelSettings {
     /// The directory that contains the module directory, usually `src`, or an empty path when
     /// using the flat layout over the src layout.
     pub(crate) module_root: Option<PathBuf>,
+
+    /// Glob expressions which files and directories to exclude from the previous source
+    /// distribution includes.
+    ///
+    /// Excludes are not anchored, which means that `__pycache__` excludes all directories named
+    /// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
+    /// `/dist` will exclude only `<project root>/dist`.
+    ///
+    /// The glob syntax is the reduced portable glob from
+    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
+    pub(crate) exclude: Option<Vec<String>>,
     /// Data includes for wheels.
     pub(crate) data: Option<WheelDataIncludes>,
 }

@@ -4,7 +4,7 @@ use crate::metadata::{PyProjectToml, ValidationError};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
-use globset::{Glob, GlobSetBuilder};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use std::fs::FileType;
@@ -318,6 +318,20 @@ pub fn build_wheel(
     debug!("Writing wheel at {}", wheel_path.user_display());
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
+    // Wheel excludes
+    // TODO(konstin): The must be stronger than the source dist excludes, otherwise we can get more
+    // files in source tree -> wheel than for source tree -> source dist -> wheel.
+    let default_excludes: &[String] = &[
+        "__pycache__".to_string(),
+        "*.pyc".to_string(),
+        "*.pyo".to_string(),
+    ];
+    let excludes = pyproject_toml
+        .wheel_settings()
+        .and_then(|settings| settings.exclude.as_deref())
+        .unwrap_or(default_excludes);
+    let exclude_matcher = build_exclude_matcher(excludes)?;
+
     debug!("Adding content files to {}", wheel_path.user_display());
     let module_root = pyproject_toml
         .wheel_settings()
@@ -331,7 +345,10 @@ pub fn build_wheel(
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
     }
-    for entry in WalkDir::new(module_root) {
+    for entry in WalkDir::new(module_root)
+        .into_iter()
+        .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
+    {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
             err,
@@ -340,9 +357,11 @@ pub fn build_wheel(
         let relative_path = entry
             .path()
             .strip_prefix(&strip_root)
-            .expect("walkdir starts with root")
-            .user_display()
-            .to_string();
+            .expect("walkdir starts with root");
+        if exclude_matcher.is_match(relative_path) {
+            trace!("Excluding from module: `{}`", relative_path.user_display());
+        }
+        let relative_path = relative_path.user_display().to_string();
 
         debug!("Adding to wheel: `{relative_path}`");
 
@@ -497,7 +516,7 @@ fn wheel_subdir_from_globs(
             field: globs_field.to_string(),
             source: err,
         })?;
-    let license_files_matcher =
+    let matcher =
         GlobDirFilter::from_globs(&license_files_globs).map_err(|err| Error::GlobSetTooLarge {
             field: globs_field.to_string(),
             source: err,
@@ -513,7 +532,7 @@ fn wheel_subdir_from_globs(
             .expect("walkdir starts with root");
 
         // Fast path: Don't descend into a directory that can't be included.
-        license_files_matcher.match_directory(relative)
+        matcher.match_directory(relative)
     }) {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: src.to_path_buf(),
@@ -525,8 +544,8 @@ fn wheel_subdir_from_globs(
             .strip_prefix(src)
             .expect("walkdir starts with root");
 
-        if !license_files_matcher.match_path(relative) {
-            trace!("Excluding: `{}`", relative.user_display());
+        if !matcher.match_path(relative) {
+            trace!("Excluding {}: `{}`", globs_field, relative.user_display());
             continue;
         };
 
@@ -691,26 +710,7 @@ pub fn build_source_dist(
             source: err,
         })?;
 
-    let mut exclude_builder = GlobSetBuilder::new();
-    for exclude in settings.exclude {
-        // Excludes are unanchored
-        let exclude = if let Some(exclude) = exclude.strip_prefix("/") {
-            exclude.to_string()
-        } else {
-            format!("**/{exclude}").to_string()
-        };
-        let glob = parse_portable_glob(&exclude).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.source-dist.exclude".to_string(),
-            source: err,
-        })?;
-        exclude_builder.add(glob);
-    }
-    let exclude_matcher = exclude_builder
-        .build()
-        .map_err(|err| Error::GlobSetTooLarge {
-            field: "tool.uv.source-dist.exclude".to_string(),
-            source: err,
-        })?;
+    let exclude_matcher = build_exclude_matcher(&settings.exclude)?;
 
     // TODO(konsti): Add files linked by pyproject.toml
 
@@ -751,6 +751,31 @@ pub fn build_source_dist(
         .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
 
     Ok(filename)
+}
+
+/// Build a globset matcher for excludes.
+fn build_exclude_matcher(excludes: &[String]) -> Result<GlobSet, Error> {
+    let mut exclude_builder = GlobSetBuilder::new();
+    for exclude in excludes {
+        // Excludes are unanchored
+        let exclude = if let Some(exclude) = exclude.strip_prefix("/") {
+            exclude.to_string()
+        } else {
+            format!("**/{exclude}").to_string()
+        };
+        let glob = parse_portable_glob(&exclude).map_err(|err| Error::PortableGlob {
+            field: "tool.uv.source-dist.exclude".to_string(),
+            source: err,
+        })?;
+        exclude_builder.add(glob);
+    }
+    let exclude_matcher = exclude_builder
+        .build()
+        .map_err(|err| Error::GlobSetTooLarge {
+            field: "tool.uv.source-dist.exclude".to_string(),
+            source: err,
+        })?;
+    Ok(exclude_matcher)
 }
 
 /// Add a file or a directory to a source distribution.
@@ -1111,6 +1136,12 @@ mod tests {
         ] {
             fs_err::copy(built_by_uv.join(dir), src.path().join(dir)).unwrap();
         }
+
+        // Add some files to be excluded
+        let module_root = src.path().join("src").join("built_by_uv");
+        fs_err::create_dir_all(module_root.join("__pycache__")).unwrap();
+        File::create(module_root.join("__pycache__").join("compiled.pyc")).unwrap();
+        File::create(module_root.join("arithmetic").join("circle.pyc")).unwrap();
 
         // Build a wheel from the source tree
         let direct_output_dir = TempDir::new().unwrap();
