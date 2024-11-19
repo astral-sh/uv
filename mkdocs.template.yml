@@ -116,6 +116,7 @@ nav:
       - GitLab CI/CD: guides/integration/gitlab.md
       - Pre-commit: guides/integration/pre-commit.md
       - FastAPI: guides/integration/fastapi.md
+      - PyTorch: guides/integration/pytorch.md
       - Alternative indexes: guides/integration/alternative-indexes.md
       - Dependency bots: guides/integration/dependency-bots.md
   - The pip interface:
