@@ -8,4 +8,5 @@ Learn how to integrate uv with other software:
 - [Using in GitHub Actions](./github.md)
 - [Using in GitLab CI/CD](./gitlab.md)
 - [Using with alternative package indexes](./alternative-indexes.md)
+- [Installing PyTorch](./pytorch.md)
 - [Building a FastAPI application](./fastapi.md)
