@@ -220,10 +220,14 @@ impl RequirementsTxt {
             error: err,
         })?;
         if data == Self::default() {
-            warn_user!(
-                "Requirements file {} does not contain any dependencies",
-                requirements_txt.user_display()
-            );
+            if requirements_txt == Path::new("-") {
+                warn_user!("No dependencies found in stdin");
+            } else {
+                warn_user!(
+                    "Requirements file {} does not contain any dependencies",
+                    requirements_txt.user_display()
+                );
+            }
         }
 
         Ok(data)
