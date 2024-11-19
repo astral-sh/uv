@@ -1,4 +1,104 @@
-# Specifying dependencies
+# Managing dependencies
+
+uv is capable of adding, updating, and removing dependencies using the CLI.
+
+## Adding dependencies
+
+To add a dependency:
+
+```console
+$ uv add httpx
+```
+
+uv supports adding [editable dependencies](./dependencies.md#editable-dependencies),
+[development dependencies](./dependencies.md#development-dependencies),
+[optional dependencies](./dependencies.md#optional-dependencies), and alternative
+[dependency sources](./dependencies.md#dependency-sources). See the
+[dependency specification](./dependencies.md) documentation for more details.
+
+uv will raise an error if the dependency cannot be resolved, e.g.:
+
+```console
+$ uv add 'httpx>9999'
+error: Because only httpx<=9999 is available and example==0.1.0 depends on httpx>9999, we can conclude that example==0.1.0 cannot be used.
+And because only example==0.1.0 is available and you require example, we can conclude that the requirements are unsatisfiable.
+```
+
+## Removing dependencies
+
+To remove a dependency:
+
+```console
+$ uv remove httpx
+```
+
+## Updating dependencies
+
+To update an existing dependency, e.g., to add a lower bound to the `httpx` version:
+
+```console
+$ uv add 'httpx>0.1.0'
+```
+
+!!! note
+
+    "Updating" a dependency refers to changing the constraints for the dependency in the
+    `pyproject.toml`. The locked version of the dependency will only change if necessary to
+    satisfy the new constraints. To force the package version to update to the latest within
+    the constraints, use `--upgrade-package <name>`, e.g.:
+
+    ```console
+    $ uv add 'httpx>0.1.0' --upgrade-package httpx
+    ```
+
+    See the [lockfile](./sync.md#upgrading-locked-package-versions) section for more details on upgrading
+    package versions.
+
+Or, to change the bounds for `httpx`:
+
+```console
+$ uv add 'httpx<0.2.0'
+```
+
+To add a dependency source, e.g., to use `httpx` from GitHub during development:
+
+```console
+$ uv add git+https://github.com/encode/httpx
+```
+
+## Platform-specific dependencies
+
+To ensure that a dependency is only installed on a specific platform or on specific Python versions,
+use Python's standardized
+[environment markers](https://peps.python.org/pep-0508/#environment-markers) syntax.
+
+For example, to install `jax` on Linux, but not on Windows or macOS:
+
+```console
+$ uv add 'jax; sys_platform == "linux"'
+```
+
+The resulting `pyproject.toml` will then include the environment marker in the dependency
+definition:
+
+```toml title="pyproject.toml" hl_lines="6"
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["jax; sys_platform == 'linux'"]
+```
+
+Similarly, to include `numpy` on Python 3.11 and later:
+
+```console
+$ uv add 'numpy; python_version >= "3.11"'
+```
+
+See Python's [environment marker](https://peps.python.org/pep-0508/#environment-markers)
+documentation for a complete enumeration of the available markers and operators.
+
+## Dependency tables
 
 In uv, project dependencies are declared across two `pyproject.toml` tables: `project.dependencies`
 and `tool.uv.sources`.
@@ -60,11 +160,6 @@ If the project only requires packages from standard package indexes, then `proje
 sufficient. If the project depends on packages from Git, remote URLs, or local sources,
 `tool.uv.sources` can be used to enrich the dependency metadata without ejecting from the
 standards-compliant `project.dependencies` table.
-
-!!! tip
-
-    See the [projects](./projects.md#managing-dependencies) documentation to add, remove, or update
-    dependencies from the `pyproject.toml` from the CLI.
 
 ## Dependency sources
 
@@ -190,7 +285,7 @@ A `subdirectory` may be specified if the package isn't in the repository root.
 
 To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source
 distribution (typically ending in `.tar.gz` or `.zip`; see
-[here](../concepts/resolution.md#source-distribution) for all supported formats).
+[here](../../concepts/resolution.md#source-distribution) for all supported formats).
 
 For example:
 
@@ -217,8 +312,9 @@ archive root.
 ### Path
 
 To add a path source, provide the path of a wheel (ending in `.whl`), a source distribution
-(typically ending in `.tar.gz` or `.zip`; see [here](../concepts/resolution.md#source-distribution)
-for all supported formats), or a directory containing a `pyproject.toml`.
+(typically ending in `.tar.gz` or `.zip`; see
+[here](../../concepts/resolution.md#source-distribution) for all supported formats), or a directory
+containing a `pyproject.toml`.
 
 For example:
 
@@ -391,7 +487,7 @@ $ uv add httpx --optional network
 !!! note
 
     If you have optional dependencies that conflict with one another, resolution will fail
-    unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
+    unless you explicitly [declare them as conflicting](./config.md#conflicting-dependencies).
 
 Sources can also be declared as applying only to a specific optional dependency. For example, to
 pull `torch` from different PyTorch indexes based on an optional `cpu` or `gpu` extra:
@@ -490,7 +586,7 @@ to resolve the requirements of the project with an error.
 !!! note
 
     If you have dependency groups that conflict with one another, resolution will fail
-    unless you explicitly [declare them as conflicting](./projects.md#optional-dependencies).
+    unless you explicitly [declare them as conflicting](./config.md#conflicting-dependencies).
 
 ### Default groups
 
@@ -528,7 +624,7 @@ Dependencies declared in this section will be combined with the contents in the
 
 ## Build dependencies
 
-If a project is structured as [Python package](./projects.md#build-systems), it may declare
+If a project is structured as [Python package](./config.md#build-systems), it may declare
 dependencies that are required to build the project, but not required to run it. These dependencies
 are specified in the `[build-system]` table under `build-system.requires`, following
 [PEP 518](https://peps.python.org/pep-0518/).

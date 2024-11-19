@@ -281,7 +281,7 @@ The sources to use when resolving dependencies.
 during development. A dependency source can be a Git repository, a URL, a local path, or an
 alternative registry.
 
-See [Dependencies](../concepts/dependencies.md) for more.
+See [Dependencies](../concepts/projects/dependencies.md) for more.
 
 **Default value**: `{}`
 

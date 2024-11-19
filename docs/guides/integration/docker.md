@@ -161,7 +161,7 @@ RUN uv run some_script.py
 !!! tip
 
     Alternatively, the
-    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#configuring-the-project-environment-path) can
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects/config.md#project-environment-path) can
     be set before syncing to install to the system Python environment and skip environment activation
     entirely.
 
@@ -366,7 +366,7 @@ _contents_ are not copied into the image until the final `uv sync` command.
 
 !!! tip
 
-    If you're using a [workspace](../../concepts/workspaces.md), then use the
+    If you're using a [workspace](../../concepts/projects/workspaces.md), then use the
     `--no-install-workspace` flag which excludes the project _and_ any workspace members.
 
     If you want to remove specific packages from the sync, use `--no-install-package <name>`.
