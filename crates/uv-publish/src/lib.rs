@@ -378,7 +378,6 @@ pub async fn upload(
     // Retry loop
     let mut attempt = 0;
     loop {
-        attempt += 1;
         let (request, idx) = build_request(
             file,
             raw_filename,
@@ -397,6 +396,7 @@ pub async fn upload(
         if attempt < retries && UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
             reporter.on_download_complete(idx);
             warn_user!("Transient request failure for {}, retrying", registry);
+            attempt += 1;
             continue;
         }
 

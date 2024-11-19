@@ -397,7 +397,7 @@ impl RegistryClient {
             .instrument(info_span!("parse_simple_api", package = %package_name))
         };
         self.cached_client()
-            .get_cacheable(
+            .get_cacheable_with_retry(
                 simple_request,
                 cache_entry,
                 cache_control,
@@ -589,7 +589,7 @@ impl RegistryClient {
                     .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
-                            filename,
+                            filename.clone(),
                             url.to_string(),
                             Box::new(err),
                         ))
@@ -602,7 +602,7 @@ impl RegistryClient {
                 .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
             Ok(self
                 .cached_client()
-                .get_serde(req, &cache_entry, cache_control, response_callback)
+                .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
                 .await?)
         } else {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
@@ -668,7 +668,7 @@ impl RegistryClient {
                         self.uncached_client(url).clone(),
                         response,
                         url.clone(),
-                        headers,
+                        headers.clone(),
                     )
                     .await
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
@@ -690,7 +690,7 @@ impl RegistryClient {
 
             let result = self
                 .cached_client()
-                .get_serde(
+                .get_serde_with_retry(
                     req,
                     &cache_entry,
                     cache_control,
@@ -748,7 +748,7 @@ impl RegistryClient {
         };
 
         self.cached_client()
-            .get_serde(req, &cache_entry, cache_control, read_metadata_stream)
+            .get_serde_with_retry(req, &cache_entry, cache_control, read_metadata_stream)
             .await
             .map_err(crate::Error::from)
     }
