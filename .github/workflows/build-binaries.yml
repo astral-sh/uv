@@ -154,7 +154,7 @@ jobs:
 
   windows:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: windows-latest
+    runs-on: windows-latest-large
     strategy:
       matrix:
         platform:
@@ -207,7 +207,7 @@ jobs:
 
   linux:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest-4
     strategy:
       matrix:
         target:
@@ -355,7 +355,7 @@ jobs:
   # Like `linux-arm`.
   linux-s390x:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest-4
     strategy:
       matrix:
         platform:
