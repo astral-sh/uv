@@ -189,17 +189,16 @@ fn built_by_uv_editable() -> Result<()> {
     uv_snapshot!(Command::new(context.interpreter())
         .arg("-m")
         .arg("pytest")
+        // Avoid showing absolute paths
         .arg("--no-header")
+        // Otherwise, the header has a different length on windows
+        .arg("--quiet")
         .current_dir(built_by_uv), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    ============================= test session starts ==============================
-    collected 2 items
-
-    tests/test_package.py ..                                                 [100%]
-
-    ============================== 2 passed in [TIME] ===============================
+    ..                                                                       [100%]
+    2 passed in [TIME]
 
     ----- stderr -----
     "###);
