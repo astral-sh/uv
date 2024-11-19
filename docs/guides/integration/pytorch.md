@@ -15,8 +15,8 @@ CUDA).
 From a packaging perspective, PyTorch has a few uncommon characteristics:
 
 - Many PyTorch wheels are hosted on a dedicated index, rather than the Python Package Index (PyPI).
-  As such, installing PyTorch typically often configuring a project to use the PyTorch index.
-- PyTorch includes distinct builds for each accelerator (e.g., CPU-only, CUDA). Since there's no
+  As such, installing PyTorch often requires configuring a project to use the PyTorch index.
+- PyTorch produces distinct builds for each accelerator (e.g., CPU-only, CUDA). Since there's no
   standardized mechanism for specifying these accelerators when publishing or installing, PyTorch
   encodes them in the local version specifier. As such, PyTorch versions will often look like
   `2.5.1+cpu`, `2.5.1+cu121`, etc.
