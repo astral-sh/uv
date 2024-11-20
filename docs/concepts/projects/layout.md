@@ -2,41 +2,29 @@
 
 ## The `pyproject.toml`
 
-Python project metadata is defined in a `pyproject.toml` file. uv requires this file to identify the
-root directory of a project.
+Python project metadata is defined in a
+[`pyproject.toml`](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) file. uv
+requires this file to identify the root directory of a project.
 
 !!! tip
 
     `uv init` can be used to create a new project. See [Creating projects](./init.md) for
     details.
 
-A minimal project definition includes a name, version, and description:
+A minimal project definition includes a name and version:
 
 ```toml title="pyproject.toml"
 [project]
 name = "example"
 version = "0.1.0"
-description = "Add your description here"
 ```
 
-It's recommended, but not required, to include a Python version requirement in the `[project]`
-section:
+Additional project metadata and configuration includes:
 
-```toml title="pyproject.toml"
-requires-python = ">=3.12"
-```
-
-Including a Python version requirement defines the Python syntax that is allowed in the project and
-affects selection of dependency versions (they must support the same Python version range).
-
-The `pyproject.toml` also lists dependencies of the project in the `project.dependencies` and
-`project.optional-dependencies` fields. uv supports modifying the project's dependencies from the
-command line with `uv add` and `uv remove`. uv also supports extending the standard dependency
-definitions with [package sources](./dependencies.md) in `tool.uv.sources`.
-
-!!! tip
-
-    See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/) for more details on getting started with a `pyproject.toml`.
+- [Python version requirement](./config.md#python-version-requirement)
+- [Dependencies](./dependencies.md)
+- [Build system](./config.md#build-systems)
+- [Entry points (commands)](./config.md#entry-points)
 
 ## The project environment
 

@@ -1,6 +1,19 @@
 # Managing dependencies
 
-uv is capable of adding, updating, and removing dependencies using the CLI.
+Dependencies of the project are defined in several tables:
+
+- [`project.dependencies`](./dependencies.md#project-dependencies): Published dependencies.
+- [`project.optional-dependencies`](./dependencies.md#optional-dependencies): Published optional
+  dependencies, or "extras".
+- [`dependency-groups`](./dependencies.md#dependency-groups): Local dependencies for development.
+
+!!! note
+
+    The `project.dependencies` and `project.optional-dependencies` tables can be used even if
+    project isn't going to be published. `dependency-groups` are a recently standardized feature
+    and may not be supported by all tools yet.
+
+uv supports modifying the project's dependencies with `uv add` and `uv remove`.
 
 ## Adding dependencies
 
