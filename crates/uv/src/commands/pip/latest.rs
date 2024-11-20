@@ -1,3 +1,4 @@
+use tracing::debug;
 use uv_client::{RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
@@ -10,7 +11,7 @@ use uv_warnings::warn_user_once;
 ///
 /// The returned distribution is guaranteed to be compatible with the provided tags and Python
 /// requirement.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,
@@ -27,6 +28,8 @@ impl<'env> LatestClient<'env> {
         package: &PackageName,
         index: Option<&IndexUrl>,
     ) -> anyhow::Result<Option<DistFilename>, uv_client::Error> {
+        debug!("Fetching latest version of: `{package}`");
+
         let archives = match self.client.simple(package, index, self.capabilities).await {
             Ok(archives) => archives,
             Err(err) => {

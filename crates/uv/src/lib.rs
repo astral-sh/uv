@@ -615,6 +615,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.keyring_provider,
                 globals.allow_insecure_host,
                 globals.connectivity,
+                globals.concurrency,
                 args.settings.strict,
                 args.settings.exclude_newer,
                 args.settings.python.as_deref(),
