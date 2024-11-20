@@ -11,6 +11,7 @@ use uv_distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
 };
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_python::PythonInstallationKey;
 use uv_static::EnvVars;
 
@@ -525,6 +526,44 @@ impl uv_publish::Reporter for PublishReporter {
 
     fn on_download_complete(&self, id: usize) {
         self.reporter.on_download_complete(id);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct LatestVersionReporter {
+    progress: ProgressBar,
+}
+
+impl From<Printer> for LatestVersionReporter {
+    fn from(printer: Printer) -> Self {
+        let progress = ProgressBar::with_draw_target(None, printer.target());
+        progress.set_style(
+            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
+        );
+        progress.set_message("Fetching latest versions...");
+        Self { progress }
+    }
+}
+
+impl LatestVersionReporter {
+    #[must_use]
+    pub(crate) fn with_length(self, length: u64) -> Self {
+        self.progress.set_length(length);
+        self
+    }
+
+    pub(crate) fn on_fetch_progress(&self) {
+        self.progress.inc(1);
+    }
+
+    pub(crate) fn on_fetch_version(&self, name: &PackageName, version: &Version) {
+        self.progress.set_message(format!("{name} v{version}"));
+        self.progress.inc(1);
+    }
+
+    pub(crate) fn on_fetch_complete(&self) {
+        self.progress.set_message("");
+        self.progress.finish_and_clear();
     }
 }
 

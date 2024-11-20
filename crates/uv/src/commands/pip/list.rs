@@ -27,6 +27,7 @@ use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
 
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
+use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
@@ -78,7 +79,7 @@ pub(crate) async fn pip_list(
         .collect_vec();
 
     // Determine the latest version for each package.
-    let latest = if outdated {
+    let latest = if outdated && !results.is_empty() {
         let capabilities = IndexCapabilities::default();
 
         // Initialize the registry client.
@@ -110,6 +111,8 @@ pub(crate) async fn pip_list(
             requires_python: &requires_python,
         };
 
+        let reporter = LatestVersionReporter::from(printer).with_length(results.len() as u64);
+
         // Fetch the latest version for each package.
         let mut fetches = futures::stream::iter(&results)
             .map(|dist| async {
@@ -120,8 +123,14 @@ pub(crate) async fn pip_list(
 
         let mut map = FxHashMap::default();
         while let Some((package, version)) = fetches.next().await.transpose()? {
+            if let Some(version) = version.as_ref() {
+                reporter.on_fetch_version(package, version.version());
+            } else {
+                reporter.on_fetch_progress();
+            }
             map.insert(package, version);
         }
+        reporter.on_fetch_complete();
         map
     } else {
         FxHashMap::default()
