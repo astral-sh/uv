@@ -3,8 +3,7 @@ use std::fmt::Write;
 
 use anstream::println;
 use anyhow::Result;
-use futures::stream::FuturesUnordered;
-use futures::TryStreamExt;
+use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
@@ -15,7 +14,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
 use uv_client::{Connectivity, RegistryClientBuilder};
-use uv_configuration::{IndexStrategy, KeyringProviderType, TrustedHost};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, TrustedHost};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name};
 use uv_fs::Simplified;
@@ -44,6 +43,7 @@ pub(crate) async fn pip_list(
     keyring_provider: KeyringProviderType,
     allow_insecure_host: Vec<TrustedHost>,
     connectivity: Connectivity,
+    concurrency: Concurrency,
     strict: bool,
     exclude_newer: Option<ExcludeNewer>,
     python: Option<&str>,
@@ -111,15 +111,18 @@ pub(crate) async fn pip_list(
         };
 
         // Fetch the latest version for each package.
-        results
-            .iter()
+        let mut fetches = futures::stream::iter(&results)
             .map(|dist| async {
                 let latest = client.find_latest(dist.name(), None).await?;
                 Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((dist.name(), latest))
             })
-            .collect::<FuturesUnordered<_>>()
-            .try_collect::<FxHashMap<_, _>>()
-            .await?
+            .buffer_unordered(concurrency.downloads);
+
+        let mut map = FxHashMap::default();
+        while let Some((package, version)) = fetches.next().await.transpose()? {
+            map.insert(package, version);
+        }
+        map
     } else {
         FxHashMap::default()
     };

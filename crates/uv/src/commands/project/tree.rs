@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use anstream::print;
-use anyhow::Result;
-use futures::{stream, StreamExt};
+use anyhow::{Error, Result};
+use futures::StreamExt;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -11,7 +11,6 @@ use uv_configuration::{
     Concurrency, DevGroupsSpecification, LowerBound, TargetTriple, TrustedHost,
 };
 use uv_distribution_types::IndexCapabilities;
-use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
@@ -182,21 +181,34 @@ pub(crate) async fn tree(
         };
 
         // Fetch the latest version for each package.
-        stream::iter(lock.packages())
-            .filter_map(|package| async {
-                let index = package.index(workspace.install_path()).ok()??;
-                let filename = client
-                    .find_latest(package.name(), Some(&index))
-                    .await
-                    .ok()??;
-                if filename.version() == package.version() {
-                    None
-                } else {
-                    Some((package.clone(), filename.into_version()))
-                }
-            })
-            .collect::<PackageMap<Version>>()
-            .await
+        let mut fetches = futures::stream::iter(lock.packages().iter().filter_map(|package| {
+            // Filter to packages that are derived from a registry.
+            let index = match package.index(workspace.install_path()) {
+                Ok(Some(index)) => index,
+                Ok(None) => return None,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(Ok((package, index)))
+        }))
+        .map(|result| async move {
+            let (package, index) = result?;
+            let Some(filename) = client.find_latest(package.name(), Some(&index)).await? else {
+                return Ok(None);
+            };
+            if filename.version() == package.version() {
+                return Ok(None);
+            }
+            Ok::<Option<_>, Error>(Some((package, filename.into_version())))
+        })
+        .buffer_unordered(concurrency.downloads);
+
+        let mut map = PackageMap::default();
+        while let Some(entry) = fetches.next().await.transpose()? {
+            if let Some((package, version)) = entry {
+                map.insert(package.clone(), version);
+            }
+        }
+        map
     } else {
         PackageMap::default()
     };
