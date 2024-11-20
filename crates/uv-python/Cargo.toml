@@ -45,6 +45,7 @@ owo-colors = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
 rmp-serde = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }

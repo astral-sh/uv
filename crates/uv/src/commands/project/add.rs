@@ -176,8 +176,8 @@ pub(crate) async fn add(
             &client_builder,
             cache,
             Some(&reporter),
-            install_mirrors.python_install_mirror,
-            install_mirrors.pypy_install_mirror,
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
         )
         .await?
         .into_interpreter();
