@@ -1323,9 +1323,9 @@ impl ExportSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
-    pub(crate) constraint: Vec<PathBuf>,
-    pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) build_constraint: Vec<PathBuf>,
+    pub(crate) constraints: Vec<PathBuf>,
+    pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
@@ -1338,12 +1338,12 @@ impl PipCompileSettings {
     pub(crate) fn resolve(args: PipCompileArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipCompileArgs {
             src_file,
-            constraint,
-            r#override,
+            constraints,
+            overrides,
             extra,
             all_extras,
             no_all_extras,
-            build_constraint,
+            build_constraints,
             refresh,
             no_deps,
             deps,
@@ -1422,15 +1422,15 @@ impl PipCompileSettings {
 
         Self {
             src_file,
-            constraint: constraint
+            constraints: constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            build_constraint: build_constraint
+            build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            r#override: r#override
+            overrides: overrides
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -1478,8 +1478,8 @@ impl PipCompileSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
-    pub(crate) constraint: Vec<PathBuf>,
-    pub(crate) build_constraint: Vec<PathBuf>,
+    pub(crate) constraints: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: bool,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -1490,8 +1490,8 @@ impl PipSyncSettings {
     pub(crate) fn resolve(args: Box<PipSyncArgs>, filesystem: Option<FilesystemOptions>) -> Self {
         let PipSyncArgs {
             src_file,
-            constraint,
-            build_constraint,
+            constraints,
+            build_constraints,
             installer,
             refresh,
             require_hashes,
@@ -1521,11 +1521,11 @@ impl PipSyncSettings {
 
         Self {
             src_file,
-            constraint: constraint
+            constraints: constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            build_constraint: build_constraint
+            build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -1563,11 +1563,11 @@ impl PipSyncSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipInstallSettings {
     pub(crate) package: Vec<String>,
-    pub(crate) requirement: Vec<PathBuf>,
-    pub(crate) editable: Vec<String>,
-    pub(crate) constraint: Vec<PathBuf>,
-    pub(crate) r#override: Vec<PathBuf>,
-    pub(crate) build_constraint: Vec<PathBuf>,
+    pub(crate) requirements: Vec<PathBuf>,
+    pub(crate) editables: Vec<String>,
+    pub(crate) constraints: Vec<PathBuf>,
+    pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: bool,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
@@ -1581,11 +1581,11 @@ impl PipInstallSettings {
     pub(crate) fn resolve(args: PipInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipInstallArgs {
             package,
-            requirement,
+            requirements,
             editable,
-            constraint,
-            r#override,
-            build_constraint,
+            constraints,
+            overrides,
+            build_constraints,
             extra,
             all_extras,
             no_all_extras,
@@ -1648,17 +1648,17 @@ impl PipInstallSettings {
 
         Self {
             package,
-            requirement,
-            editable,
-            constraint: constraint
+            requirements,
+            editables: editable,
+            constraints: constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            r#override: r#override
+            overrides: overrides
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
-            build_constraint: build_constraint
+            build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -1702,7 +1702,7 @@ impl PipInstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
-    pub(crate) requirement: Vec<PathBuf>,
+    pub(crate) requirements: Vec<PathBuf>,
     pub(crate) settings: PipSettings,
 }
 
@@ -1711,7 +1711,7 @@ impl PipUninstallSettings {
     pub(crate) fn resolve(args: PipUninstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PipUninstallArgs {
             package,
-            requirement,
+            requirements,
             python,
             keyring_provider,
             system,
@@ -1725,7 +1725,7 @@ impl PipUninstallSettings {
 
         Self {
             package,
-            requirement,
+            requirements,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -1954,7 +1954,7 @@ pub(crate) struct BuildSettings {
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
     pub(crate) build_logs: bool,
-    pub(crate) build_constraint: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -1972,7 +1972,7 @@ impl BuildSettings {
             all_packages,
             sdist,
             wheel,
-            build_constraint,
+            build_constraints,
             require_hashes,
             no_require_hashes,
             verify_hashes,
@@ -1998,7 +1998,7 @@ impl BuildSettings {
             sdist,
             wheel,
             build_logs: flag(build_logs, no_build_logs).unwrap_or(true),
-            build_constraint: build_constraint
+            build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),

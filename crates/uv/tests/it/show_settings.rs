@@ -71,9 +71,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -224,9 +224,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -378,9 +378,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -564,9 +564,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -719,9 +719,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -854,9 +854,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -1032,9 +1032,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -1215,9 +1215,9 @@ fn resolve_index_url() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -1451,9 +1451,9 @@ fn resolve_find_links() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -1628,9 +1628,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -1769,9 +1769,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -1950,9 +1950,9 @@ fn resolve_top_level() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -2155,9 +2155,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -2286,9 +2286,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -2417,9 +2417,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -2550,9 +2550,9 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -2863,9 +2863,9 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -3022,9 +3022,9 @@ fn resolve_both() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -3298,9 +3298,9 @@ fn resolve_config_file() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -3552,9 +3552,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -3686,9 +3686,9 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -3839,9 +3839,9 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -3984,9 +3984,9 @@ fn index_priority() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -4167,9 +4167,9 @@ fn index_priority() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -4356,9 +4356,9 @@ fn index_priority() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -4540,9 +4540,9 @@ fn index_priority() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -4731,9 +4731,9 @@ fn index_priority() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -4915,9 +4915,9 @@ fn index_priority() -> anyhow::Result<()> {
         src_file: [
             "requirements.in",
         ],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
         environments: SupportedEnvironments(
@@ -5110,13 +5110,13 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
     PipInstallSettings {
         package: [],
-        requirement: [
+        requirements: [
             "requirements.in",
         ],
-        editable: [],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        editables: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         dry_run: false,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
@@ -5235,13 +5235,13 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
     PipInstallSettings {
         package: [],
-        requirement: [
+        requirements: [
             "requirements.in",
         ],
-        editable: [],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        editables: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         dry_run: false,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
@@ -5358,13 +5358,13 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
     PipInstallSettings {
         package: [],
-        requirement: [
+        requirements: [
             "requirements.in",
         ],
-        editable: [],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        editables: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         dry_run: false,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
@@ -5483,13 +5483,13 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
     PipInstallSettings {
         package: [],
-        requirement: [
+        requirements: [
             "requirements.in",
         ],
-        editable: [],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        editables: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         dry_run: false,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
@@ -5606,13 +5606,13 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
     PipInstallSettings {
         package: [],
-        requirement: [
+        requirements: [
             "requirements.in",
         ],
-        editable: [],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        editables: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         dry_run: false,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
@@ -5730,13 +5730,13 @@ fn verify_hashes() -> anyhow::Result<()> {
     }
     PipInstallSettings {
         package: [],
-        requirement: [
+        requirements: [
             "requirements.in",
         ],
-        editable: [],
-        constraint: [],
-        override: [],
-        build_constraint: [],
+        editables: [],
+        constraints: [],
+        overrides: [],
+        build_constraints: [],
         dry_run: false,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
