@@ -1,5 +1,5 @@
-use either::Either;
 use std::borrow::Cow;
+
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -40,23 +40,6 @@ impl DevMode {
             DevMode::Include | DevMode::Only => group == &*DEV_DEPENDENCIES,
         }
     }
-
-    /// Iterate over the group names to include.
-    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
-        <&Self as IntoIterator>::into_iter(self)
-    }
-}
-
-impl<'a> IntoIterator for &'a DevMode {
-    type Item = &'a GroupName;
-    type IntoIter = Either<std::iter::Empty<&'a GroupName>, std::iter::Once<&'a GroupName>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            DevMode::Exclude => Either::Left(std::iter::empty()),
-            DevMode::Include | DevMode::Only => Either::Right(std::iter::once(&*DEV_DEPENDENCIES)),
-        }
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -70,31 +53,6 @@ pub struct DevGroupsSpecification {
     ///
     /// Requested via the `--group` and `--only-group` options.
     groups: Option<GroupsSpecification>,
-}
-
-#[derive(Debug, Clone)]
-pub enum IncludeGroups {
-    /// Include dependencies from the specified groups.
-    Some(Vec<GroupName>),
-    /// A marker indicates including dependencies from all groups.
-    All,
-}
-
-impl IncludeGroups {
-    pub fn contains(&self, group: &GroupName) -> bool {
-        match self {
-            IncludeGroups::Some(groups) => groups.contains(group),
-            IncludeGroups::All => true,
-        }
-    }
-
-    #[allow(clippy::iter_without_into_iter)]
-    pub fn iter(&self) -> std::slice::Iter<GroupName> {
-        match self {
-            IncludeGroups::Some(groups) => groups.iter(),
-            IncludeGroups::All => [].iter(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -167,7 +125,7 @@ impl GroupsSpecification {
     pub fn names(&self) -> impl Iterator<Item = &GroupName> {
         match self {
             GroupsSpecification::Include { include, exclude } => {
-                include.iter().chain(exclude.iter())
+                include.names().chain(exclude.iter())
             }
             GroupsSpecification::Only { include, exclude } => include.iter().chain(exclude.iter()),
         }
@@ -183,27 +141,30 @@ impl GroupsSpecification {
             GroupsSpecification::Only { include, .. } => include.contains(group),
         }
     }
-
-    /// Iterate over the group names to include.
-    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
-        <&Self as IntoIterator>::into_iter(self)
-    }
 }
 
-impl<'a> IntoIterator for &'a GroupsSpecification {
-    type Item = &'a GroupName;
-    type IntoIter = std::slice::Iter<'a, GroupName>;
+#[derive(Debug, Clone)]
+pub enum IncludeGroups {
+    /// Include dependencies from the specified groups.
+    Some(Vec<GroupName>),
+    /// A marker indicates including dependencies from all groups.
+    All,
+}
 
-    fn into_iter(self) -> Self::IntoIter {
+impl IncludeGroups {
+    /// Returns `true` if the specification includes the given group.
+    pub fn contains(&self, group: &GroupName) -> bool {
         match self {
-            GroupsSpecification::Include {
-                include,
-                exclude: _,
-            } => include.iter(),
-            GroupsSpecification::Only {
-                include,
-                exclude: _,
-            } => include.iter(),
+            IncludeGroups::Some(groups) => groups.contains(group),
+            IncludeGroups::All => true,
+        }
+    }
+
+    /// Iterate over all groups referenced in the [`IncludeGroups`].
+    pub fn names(&self) -> std::slice::Iter<GroupName> {
+        match self {
+            IncludeGroups::Some(groups) => groups.iter(),
+            IncludeGroups::All => [].iter(),
         }
     }
 }
@@ -311,27 +272,6 @@ impl DevGroupsSpecification {
                 .groups
                 .as_ref()
                 .map_or(false, |groups| groups.contains(group))
-    }
-
-    /// Returns an [`Iterator`] over the group names to include.
-    pub fn iter(&self) -> impl Iterator<Item = &GroupName> {
-        <&Self as IntoIterator>::into_iter(self)
-    }
-}
-
-impl<'a> IntoIterator for &'a DevGroupsSpecification {
-    type Item = &'a GroupName;
-    type IntoIter = std::iter::Chain<
-        std::iter::Flatten<std::option::IntoIter<&'a DevMode>>,
-        std::iter::Flatten<std::option::IntoIter<&'a GroupsSpecification>>,
-    >;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.dev
-            .as_ref()
-            .into_iter()
-            .flatten()
-            .chain(self.groups.as_ref().into_iter().flatten())
     }
 }
 

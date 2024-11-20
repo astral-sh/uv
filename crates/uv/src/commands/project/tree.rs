@@ -60,10 +60,10 @@ pub(crate) async fn tree(
 ) -> Result<ExitStatus> {
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
-    let target = DependencyGroupsTarget::Workspace(&workspace);
 
     // Validate that any referenced dependency groups are defined in the workspace.
     if !frozen {
+        let target = DependencyGroupsTarget::Workspace(&workspace);
         target.validate(&dev)?;
     }
 
