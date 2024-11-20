@@ -4,6 +4,7 @@ theme:
   logo: assets/logo-letter.svg
   favicon: assets/favicon.ico
   features:
+    - navigation.path
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.instant.progress

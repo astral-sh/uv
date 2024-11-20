@@ -201,3 +201,12 @@ h3.cli-reference {
 .toclink:hover {
   color: var(--md-accent-fg-color) !important;
 }
+
+
+/* Omit the first breadcrumb item, which is the "Introduction" */
+.md-path__list > .md-path__item:first-of-type {
+  display: none;
+}
+.md-path__list > .md-path__item:nth-of-type(2):before {
+  display: none;
+}
