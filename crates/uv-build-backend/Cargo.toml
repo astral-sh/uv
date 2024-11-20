@@ -23,7 +23,7 @@ uv-pypi-types = { workspace = true }
 uv-warnings = { workspace = true }
 
 csv = { workspace = true }
-flate2 = { workspace = true }
+flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true }
 globset = { workspace = true }
 itertools = { workspace = true }

@@ -106,7 +106,7 @@ base64 = { version = "0.22.1" }
 byteorder = { version = "1.5.0" }
 etcetera = { workspace = true }
 filetime = { version = "0.2.25" }
-flate2 = { workspace = true }
+flate2 = { workspace = true, default-features = false }
 ignore = { version = "0.4.23" }
 indoc = { version = "2.0.5" }
 insta = { version = "1.40.0", features = ["filters", "json"] }
