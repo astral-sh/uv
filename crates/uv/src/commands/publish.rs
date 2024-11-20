@@ -11,9 +11,7 @@ use std::time::Duration;
 use tracing::info;
 use url::Url;
 use uv_cache::Cache;
-use uv_client::{
-    AuthIntegration, BaseClientBuilder, Connectivity, RegistryClientBuilder, DEFAULT_RETRIES,
-};
+use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
@@ -176,7 +174,6 @@ pub(crate) async fn publish(
             &filename,
             &publish_url,
             &upload_client,
-            DEFAULT_RETRIES,
             username.as_deref(),
             password.as_deref(),
             check_url_client.as_ref(),
