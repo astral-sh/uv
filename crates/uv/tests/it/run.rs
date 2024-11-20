@@ -1336,6 +1336,32 @@ fn run_group() -> Result<()> {
     Audited 5 packages in [TIME]
     "###);
 
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-group").arg("bar").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "###);
+
     uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("--no-project").arg("main.py"), @r###"
     success: true
     exit_code: 0
@@ -1370,6 +1396,18 @@ fn run_group() -> Result<()> {
 
     ----- stderr -----
     warning: `--group dev` has no effect when used alongside `--no-project`
+    "###);
+
+    uv_snapshot!(context.filters(), context.run().arg("--all-groups").arg("--no-project").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    imported `anyio`
+    imported `iniconfig`
+    imported `typing_extensions`
+
+    ----- stderr -----
+    warning: `--all-groups` has no effect when used alongside `--no-project`
     "###);
 
     uv_snapshot!(context.filters(), context.run().arg("--dev").arg("--no-project").arg("main.py"), @r###"

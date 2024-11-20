@@ -866,6 +866,37 @@ fn group() -> Result<()> {
     Resolved 6 packages in [TIME]
     "###);
 
+    uv_snapshot!(context.filters(), context.tree().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── typing-extensions v4.10.0
+    ├── iniconfig v2.0.0 (group: bar)
+    ├── sniffio v1.3.1 (group: dev)
+    └── anyio v4.3.0 (group: foo)
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tree().arg("--all-groups").arg("--no-group").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── typing-extensions v4.10.0
+    ├── sniffio v1.3.1 (group: dev)
+    └── anyio v4.3.0 (group: foo)
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "###);
+
     Ok(())
 }
 

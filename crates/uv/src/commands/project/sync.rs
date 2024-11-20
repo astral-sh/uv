@@ -323,7 +323,7 @@ pub(super) async fn do_sync(
             }
             if item
                 .group()
-                .map(|group1| dev.iter().any(|group2| group1 == group2))
+                .map(|group| dev.contains(group))
                 .unwrap_or(false)
             {
                 conflicts.push(item.conflict().clone());

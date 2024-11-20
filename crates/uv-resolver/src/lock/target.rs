@@ -209,78 +209,29 @@ impl<'env> InstallTarget<'env> {
             }
 
             // Add any dev dependencies.
-            for group in dev.iter() {
-                for dep in dist.dependency_groups.get(group).into_iter().flatten() {
-                    if !dep.complexified_marker.evaluate(marker_env, &[]) {
-                        continue;
+            for (group, dep) in dist
+                .dependency_groups
+                .iter()
+                .filter_map(|(group, deps)| {
+                    if dev.contains(group) {
+                        Some(deps.iter().map(move |dep| (group, dep)))
+                    } else {
+                        None
                     }
-
-                    let dep_dist = self.lock().find_by_id(&dep.package_id);
-
-                    // Add the package to the graph.
-                    let dep_index = match inverse.entry(&dep.package_id) {
-                        Entry::Vacant(entry) => {
-                            let index = petgraph.add_node(self.package_to_node(
-                                dep_dist,
-                                tags,
-                                build_options,
-                                install_options,
-                            )?);
-                            entry.insert(index);
-                            index
-                        }
-                        Entry::Occupied(entry) => {
-                            let index = *entry.get();
-                            index
-                        }
-                    };
-
-                    petgraph.add_edge(
-                        index,
-                        dep_index,
-                        Edge::Dev(group.clone(), dep.complexified_marker.clone()),
-                    );
-
-                    // Push its dependencies on the queue.
-                    if seen.insert((&dep.package_id, None)) {
-                        queue.push_back((dep_dist, None));
-                    }
-                    for extra in &dep.extra {
-                        if seen.insert((&dep.package_id, Some(extra))) {
-                            queue.push_back((dep_dist, Some(extra)));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add any dependency groups that are exclusive to the workspace root (e.g., dev
-        // dependencies in (legacy) non-project workspace roots).
-        let groups = self
-            .groups()
-            .map_err(|err| LockErrorKind::DependencyGroup { err })?;
-        for group in dev.iter() {
-            for dependency in groups.get(group).into_iter().flatten() {
-                if !dependency.marker.evaluate(marker_env, &[]) {
+                })
+                .flatten()
+            {
+                if !dep.complexified_marker.evaluate(marker_env, &[]) {
                     continue;
                 }
 
-                let root_name = &dependency.name;
-                let dist = self
-                    .lock()
-                    .find_by_markers(root_name, marker_env)
-                    .map_err(|_| LockErrorKind::MultipleRootPackages {
-                        name: root_name.clone(),
-                    })?
-                    .ok_or_else(|| LockErrorKind::MissingRootPackage {
-                        name: root_name.clone(),
-                    })?;
+                let dep_dist = self.lock().find_by_id(&dep.package_id);
 
                 // Add the package to the graph.
-                let index = match inverse.entry(&dist.id) {
+                let dep_index = match inverse.entry(&dep.package_id) {
                     Entry::Vacant(entry) => {
                         let index = petgraph.add_node(self.package_to_node(
-                            dist,
+                            dep_dist,
                             tags,
                             build_options,
                             install_options,
@@ -294,21 +245,87 @@ impl<'env> InstallTarget<'env> {
                     }
                 };
 
-                // Add the edge.
                 petgraph.add_edge(
-                    root,
                     index,
-                    Edge::Dev(group.clone(), dependency.marker.clone()),
+                    dep_index,
+                    Edge::Dev(group.clone(), dep.complexified_marker.clone()),
                 );
 
                 // Push its dependencies on the queue.
-                if seen.insert((&dist.id, None)) {
-                    queue.push_back((dist, None));
+                if seen.insert((&dep.package_id, None)) {
+                    queue.push_back((dep_dist, None));
                 }
-                for extra in &dependency.extras {
-                    if seen.insert((&dist.id, Some(extra))) {
-                        queue.push_back((dist, Some(extra)));
+                for extra in &dep.extra {
+                    if seen.insert((&dep.package_id, Some(extra))) {
+                        queue.push_back((dep_dist, Some(extra)));
                     }
+                }
+            }
+        }
+
+        // Add any dependency groups that are exclusive to the workspace root (e.g., dev
+        // dependencies in (legacy) non-project workspace roots).
+        let groups = self
+            .groups()
+            .map_err(|err| LockErrorKind::DependencyGroup { err })?;
+        for (group, dependency) in groups
+            .iter()
+            .filter_map(|(group, deps)| {
+                if dev.contains(group) {
+                    Some(deps.iter().map(move |dep| (group, dep)))
+                } else {
+                    None
+                }
+            })
+            .flatten()
+        {
+            if !dependency.marker.evaluate(marker_env, &[]) {
+                continue;
+            }
+
+            let root_name = &dependency.name;
+            let dist = self
+                .lock()
+                .find_by_markers(root_name, marker_env)
+                .map_err(|_| LockErrorKind::MultipleRootPackages {
+                    name: root_name.clone(),
+                })?
+                .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                    name: root_name.clone(),
+                })?;
+
+            // Add the package to the graph.
+            let index = match inverse.entry(&dist.id) {
+                Entry::Vacant(entry) => {
+                    let index = petgraph.add_node(self.package_to_node(
+                        dist,
+                        tags,
+                        build_options,
+                        install_options,
+                    )?);
+                    entry.insert(index);
+                    index
+                }
+                Entry::Occupied(entry) => {
+                    let index = *entry.get();
+                    index
+                }
+            };
+
+            // Add the edge.
+            petgraph.add_edge(
+                root,
+                index,
+                Edge::Dev(group.clone(), dependency.marker.clone()),
+            );
+
+            // Push its dependencies on the queue.
+            if seen.insert((&dist.id, None)) {
+                queue.push_back((dist, None));
+            }
+            for extra in &dependency.extras {
+                if seen.insert((&dist.id, Some(extra))) {
+                    queue.push_back((dist, Some(extra)));
                 }
             }
         }
