@@ -11,11 +11,12 @@ use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::RequestBuilder;
-use reqwest_retry::{Retryable, RetryableStrategy};
+use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
@@ -365,7 +366,6 @@ pub async fn upload(
     filename: &DistFilename,
     registry: &Url,
     client: &BaseClient,
-    retries: u32,
     username: Option<&str>,
     password: Option<&str>,
     check_url_client: Option<&CheckUrlClient<'_>>,
@@ -375,8 +375,9 @@ pub async fn upload(
         .await
         .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
 
-    // Retry loop
-    let mut attempt = 0;
+    let mut n_past_retries = 0;
+    let start_time = SystemTime::now();
+    let retry_policy = client.retry_policy();
     loop {
         let (request, idx) = build_request(
             file,
@@ -393,11 +394,18 @@ pub async fn upload(
         .map_err(|err| PublishError::PublishPrepare(file.to_path_buf(), Box::new(err)))?;
 
         let result = request.send().await;
-        if attempt < retries && UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
-            reporter.on_download_complete(idx);
-            warn_user!("Transient request failure for {}, retrying", registry);
-            attempt += 1;
-            continue;
+        if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
+            let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+            if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                warn_user!("Transient failure while handling response for {registry}; retrying...",);
+                reporter.on_download_complete(idx);
+                let duration = execute_after
+                    .duration_since(SystemTime::now())
+                    .unwrap_or_else(|_| Duration::default());
+                tokio::time::sleep(duration).await;
+                n_past_retries += 1;
+                continue;
+            }
         }
 
         let response = result.map_err(|err| {
