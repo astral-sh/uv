@@ -86,8 +86,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
-        python_install_mirror: Option<String>,
-        pypy_install_mirror: Option<String>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or_else(|| &PythonRequest::Default);
 
@@ -132,8 +132,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
-        python_install_mirror: Option<String>,
-        pypy_install_mirror: Option<String>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
@@ -145,7 +145,7 @@ impl PythonInstallation {
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(
+            .fetch_with_retry(
                 &client,
                 installations_dir,
                 &cache_dir,

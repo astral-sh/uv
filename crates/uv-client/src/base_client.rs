@@ -408,11 +408,6 @@ impl BaseClient {
         self.connectivity
     }
 
-    /// The number of retries to attempt on transient errors.
-    pub fn retries(&self) -> u32 {
-        self.retries
-    }
-
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
         ExponentialBackoff::builder().build_with_max_retries(self.retries)
@@ -460,7 +455,7 @@ impl RetryableStrategy for UvRetryableStrategy {
 /// Check for additional transient error kinds not supported by the default retry strategy in `reqwest_retry`.
 ///
 /// These cases should be safe to retry with [`Retryable::Transient`].
-pub(crate) fn is_extended_transient_error(err: &dyn Error) -> bool {
+pub fn is_extended_transient_error(err: &dyn Error) -> bool {
     trace!("Attempting to retry error: {err:?}");
 
     if let Some(err) = find_source::<WrappedReqwestError>(&err) {

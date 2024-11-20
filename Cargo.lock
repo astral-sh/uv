@@ -5297,6 +5297,7 @@ dependencies = [
  "regex",
  "reqwest",
  "reqwest-middleware",
+ "reqwest-retry",
  "rmp-serde",
  "same-file",
  "schemars",

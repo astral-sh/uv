@@ -231,13 +231,13 @@ pub(crate) async fn install(
             (
                 download.key(),
                 download
-                    .fetch(
+                    .fetch_with_retry(
                         &client,
                         installations_dir,
                         &cache_dir,
                         reinstall,
-                        python_install_mirror.clone(),
-                        pypy_install_mirror.clone(),
+                        python_install_mirror.as_deref(),
+                        pypy_install_mirror.as_deref(),
                         Some(&reporter),
                     )
                     .await,
