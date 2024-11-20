@@ -28,7 +28,7 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
-use uv_distribution::RequiresDist;
+use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Resolution};
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
@@ -464,15 +464,12 @@ impl SourceBuild {
                                 .map(|project| &project.name)
                                 .or(package_name)
                             {
-                                // TODO(charlie): Add a type to lower requirements without providing
-                                // empty extras.
-                                let requires_dist = uv_pypi_types::RequiresDist {
+                                let build_requires = uv_pypi_types::BuildRequires {
                                     name: name.clone(),
                                     requires_dist: build_system.requires,
-                                    provides_extras: vec![],
                                 };
-                                let requires_dist = RequiresDist::from_project_maybe_workspace(
-                                    requires_dist,
+                                let build_requires = BuildRequires::from_project_maybe_workspace(
+                                    build_requires,
                                     install_path,
                                     None,
                                     locations,
@@ -481,7 +478,7 @@ impl SourceBuild {
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
-                                requires_dist.requires_dist
+                                build_requires.requires_dist
                             } else {
                                 build_system
                                     .requires
@@ -909,15 +906,12 @@ async fn create_pep517_build_environment(
     let extra_requires = match source_strategy {
         SourceStrategy::Enabled => {
             if let Some(package_name) = package_name {
-                // TODO(charlie): Add a type to lower requirements without providing
-                // empty extras.
-                let requires_dist = uv_pypi_types::RequiresDist {
+                let build_requires = uv_pypi_types::BuildRequires {
                     name: package_name.clone(),
                     requires_dist: extra_requires,
-                    provides_extras: vec![],
                 };
-                let requires_dist = RequiresDist::from_project_maybe_workspace(
-                    requires_dist,
+                let build_requires = BuildRequires::from_project_maybe_workspace(
+                    build_requires,
                     install_path,
                     None,
                     locations,
@@ -926,7 +920,7 @@ async fn create_pep517_build_environment(
                 )
                 .await
                 .map_err(Error::Lowering)?;
-                requires_dist.requires_dist
+                build_requires.requires_dist
             } else {
                 extra_requires.into_iter().map(Requirement::from).collect()
             }
