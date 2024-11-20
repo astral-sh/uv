@@ -5007,7 +5007,7 @@ dependencies = [
 name = "uv-globfilter"
 version = "0.1.0"
 dependencies = [
- "fs-err 2.11.0",
+ "fs-err 3.0.0",
  "globset",
  "insta",
  "regex",

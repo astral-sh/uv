@@ -19,7 +19,7 @@ tracing = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
-fs-err = "2.11.0"
+fs-err = { workspace = true }
 insta = "1.41.1"
 tempfile = "3.14.0"
 
