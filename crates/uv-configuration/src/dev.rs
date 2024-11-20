@@ -33,7 +33,7 @@ impl DevMode {
         }
     }
 
-    /// Returns `true` if the group is `dev`.
+    /// Returns `true` if the group is `dev`, and development dependencies should be included.
     pub fn contains(&self, group: &GroupName) -> bool {
         match self {
             DevMode::Exclude => false,
@@ -333,7 +333,6 @@ impl DevGroupsManifest {
         if self.spec.only() {
             return false;
         }
-
         self.defaults
             .iter()
             .filter(|default| {

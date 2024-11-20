@@ -612,21 +612,20 @@ pub(crate) async fn run(
                         .flatten();
                 }
             } else {
-                let target = match &project {
-                    VirtualProject::Project(project) => {
-                        if all_packages {
-                            DependencyGroupsTarget::Workspace(project.workspace())
-                        } else {
-                            DependencyGroupsTarget::Project(project)
-                        }
-                    }
-                    VirtualProject::NonProject(workspace) => {
-                        DependencyGroupsTarget::Workspace(workspace)
-                    }
-                };
-
                 // Validate that any referenced dependency groups are defined in the workspace.
                 if !frozen {
+                    let target = match &project {
+                        VirtualProject::Project(project) => {
+                            if all_packages {
+                                DependencyGroupsTarget::Workspace(project.workspace())
+                            } else {
+                                DependencyGroupsTarget::Project(project)
+                            }
+                        }
+                        VirtualProject::NonProject(workspace) => {
+                            DependencyGroupsTarget::Workspace(workspace)
+                        }
+                    };
                     target.validate(&dev)?;
                 }
 

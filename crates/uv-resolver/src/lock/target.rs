@@ -212,7 +212,7 @@ impl<'env> InstallTarget<'env> {
             for (group, dep) in dist
                 .dependency_groups
                 .iter()
-                .flat_map(|(group, deps)| {
+                .filter_map(|(group, deps)| {
                     if dev.contains(group) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
@@ -270,7 +270,7 @@ impl<'env> InstallTarget<'env> {
             .map_err(|err| LockErrorKind::DependencyGroup { err })?;
         for (group, dependency) in groups
             .iter()
-            .flat_map(|(group, deps)| {
+            .filter_map(|(group, deps)| {
                 if dev.contains(group) {
                     Some(deps.iter().map(move |dep| (group, dep)))
                 } else {
