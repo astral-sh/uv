@@ -4386,6 +4386,10 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
         name = "torch-cu124"
         url = "https://download.pytorch.org/whl/cu124"
         explicit = true
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -4403,10 +4407,11 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + jinja2==3.1.3
      + markupsafe==2.1.5
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
     Ok(())
