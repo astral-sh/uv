@@ -577,9 +577,15 @@
         "$ref": "#/definitions/ConfigSettingValue"
       }
     },
-    "ConflictPackage": {
-      "description": "The actual conflicting data for a package.\n\nThat is, either an extra or a group name.",
+    "ConflictKind": {
+      "description": "The actual conflicting data for a package.\n\nThat is, either an extra or a group name, or the entire project itself.",
       "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Project"
+          ]
+        },
         {
           "type": "object",
           "required": [
@@ -1360,11 +1366,11 @@
       "description": "Like [`ConflictItem`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
       "type": "object",
       "required": [
-        "conflict"
+        "kind"
       ],
       "properties": {
-        "conflict": {
-          "$ref": "#/definitions/ConflictPackage"
+        "kind": {
+          "$ref": "#/definitions/ConflictKind"
         },
         "package": {
           "anyOf": [
