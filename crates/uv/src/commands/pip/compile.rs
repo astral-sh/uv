@@ -582,14 +582,24 @@ fn cmd(
 
             // Skip any index URLs, unless requested.
             if !include_index_url {
-                if arg.starts_with("--extra-index-url=") || arg.starts_with("--index-url=") {
+                if arg.starts_with("--extra-index-url=")
+                    || arg.starts_with("--index-url=")
+                    || arg.starts_with("-i=")
+                    || arg.starts_with("--index=")
+                    || arg.starts_with("--default-index=")
+                {
                     // Reset state; skip this iteration.
                     *skip_next = None;
                     return Some(None);
                 }
 
                 // Mark the next item as (to be) skipped.
-                if arg == "--index-url" || arg == "--extra-index-url" {
+                if arg == "--index-url"
+                    || arg == "--extra-index-url"
+                    || arg == "-i"
+                    || arg == "--index"
+                    || arg == "--default-index"
+                {
                     *skip_next = Some(true);
                     return Some(None);
                 }
