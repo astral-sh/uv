@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.5.4
+
+### Enhancements
+
+- Accept either singular or plural values for CLI requirements ([#9196](https://github.com/astral-sh/uv/pull/9196))
+- Add `--all-groups` to `uv sync`, `uv run`, `uv export`, and `uv tree` ([#8892](https://github.com/astral-sh/uv/pull/8892))
+- Add a progress bar to `uv tree --outdated` and `uv pip list --outdated` ([#9284](https://github.com/astral-sh/uv/pull/9284))
+- Add retries for Python downloads ([#9274](https://github.com/astral-sh/uv/pull/9274))
+- Use exponential backoff for publish retries ([#9276](https://github.com/astral-sh/uv/pull/9276))
+- Add manylinux target triples up to glibc 2.40 ([#9234](https://github.com/astral-sh/uv/pull/9234))
+
+### Performance
+
+- Parallelize network requests in `uv tree --outdated` ([#9280](https://github.com/astral-sh/uv/pull/9280))
+- Use `zlib-rs` on all platforms ([#9264](https://github.com/astral-sh/uv/pull/9264))
+
+### Bug fixes
+
+- Avoid validating extra and group sources in `build-system.requires` ([#9273](https://github.com/astral-sh/uv/pull/9273))
+- Catch retries with wrapped `reqwest` errors ([#9253](https://github.com/astral-sh/uv/pull/9253))
+- Sort hashes in `uv export` output ([#9237](https://github.com/astral-sh/uv/pull/9237))
+- Strip `--index` and `--default-index` from command header ([#9288](https://github.com/astral-sh/uv/pull/9288))
+
+### Documentation
+
+- Add breadcrumbs to the documentation ([#9242](https://github.com/astral-sh/uv/pull/9242))
+- Add minimum version to PyTorch guide ([#9247](https://github.com/astral-sh/uv/pull/9247))
+- Add support for anchor redirects with client-side js ([#9212](https://github.com/astral-sh/uv/pull/9212))
+- Improve content on project configuration ([#9235](https://github.com/astral-sh/uv/pull/9235))
+- Improve the project creation documentation ([#9236](https://github.com/astral-sh/uv/pull/9236))
+- Move the integration guides into the "Guides" section as a collapsed group ([#9245](https://github.com/astral-sh/uv/pull/9245))
+- Reorganize the project concept documentation ([#9121](https://github.com/astral-sh/uv/pull/9121))
+- Use the full screen height for the main content to stabilize the nav ([#9153](https://github.com/astral-sh/uv/pull/9153))
+
+### Error messages
+
+- Add dedicated warning for empty stdin ([#9256](https://github.com/astral-sh/uv/pull/9256))
+
 ## 0.5.3
 
 This release includes support for conflicting optional dependencies and dependency groups in the uv resolver, including the ability to specify dependency sources (like index assignment) on a per-extra or per-group basis.
