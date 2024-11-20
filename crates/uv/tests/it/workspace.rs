@@ -1690,14 +1690,14 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
     // TODO(zanieb): This error message is bad?
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: Failed to build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
-      Caused by: Failed to parse entry: `anyio`
-      Caused by: Package is not included as workspace package in `tool.uv.workspace`
+      × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
+      ├─▶ Failed to parse entry: `anyio`
+      ╰─▶ Package is not included as workspace package in `tool.uv.workspace`
     "###
     );
 
@@ -1883,8 +1883,6 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
         [project]
         name = "git-with-root"
         version = "0.1.0"
-        description = "Add your description here"
-        readme = "README.md"
         requires-python = ">=3.12"
         dependencies = [
             "workspace-member-in-subdir",

@@ -29,15 +29,16 @@ use uv_install_wheel::linker::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
-use uv_pypi_types::ResolverMarkerEnvironment;
+use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::PythonEnvironment;
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
 use uv_resolver::{
-    DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverEnvironment,
+    DependencyMode, DerivationChainBuilder, Exclusions, FlatIndex, InMemoryIndex, Manifest,
+    Options, Preference, Preferences, PythonRequirement, Resolver, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -104,6 +105,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     tags: Option<&Tags>,
     resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    conflicts: Conflicts,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
@@ -112,7 +114,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     options: Options,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
-) -> Result<ResolutionGraph, Error> {
+) -> Result<ResolverOutput, Error> {
     let start = std::time::Instant::now();
 
     // Resolve the requirements from the provided sources.
@@ -290,6 +292,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             options,
             &python_requirement,
             resolver_env,
+            conflicts,
             tags,
             flat_index,
             index,
@@ -460,7 +463,34 @@ pub(crate) async fn install(
         let wheels = preparer
             .prepare(remote.clone(), in_flight)
             .await
-            .context("Failed to prepare distributions")?;
+            .map_err(Error::from)
+            .map_err(|err| match err {
+                // Attach resolution context to the error.
+                Error::Prepare(uv_installer::PrepareError::Download(dist, chain, err)) => {
+                    debug_assert!(chain.is_empty());
+                    let chain =
+                        DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                            .unwrap_or_default();
+                    Error::Prepare(uv_installer::PrepareError::Download(dist, chain, err))
+                }
+                Error::Prepare(uv_installer::PrepareError::Build(dist, chain, err)) => {
+                    debug_assert!(chain.is_empty());
+                    let chain =
+                        DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                            .unwrap_or_default();
+                    Error::Prepare(uv_installer::PrepareError::Build(dist, chain, err))
+                }
+                Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)) => {
+                    debug_assert!(chain.is_empty());
+                    let chain =
+                        DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                            .unwrap_or_default();
+                    Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
+                        dist, chain, err,
+                    ))
+                }
+                _ => err,
+            })?;
 
         logger.on_prepare(wheels.len(), start, printer)?;
 
@@ -734,8 +764,8 @@ pub(crate) fn diagnose_environment(
     for diagnostic in site_packages.diagnostics(markers)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
-            .packages()
-            .any(|package| diagnostic.includes(package))
+            .distributions()
+            .any(|dist| diagnostic.includes(dist.name()))
         {
             writeln!(
                 printer.stderr(),
@@ -751,6 +781,9 @@ pub(crate) fn diagnose_environment(
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
+    #[error("Failed to prepare distributions")]
+    Prepare(#[from] uv_installer::PrepareError),
+
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
 

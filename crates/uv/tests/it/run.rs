@@ -7,11 +7,11 @@ use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::str::contains;
 use std::path::Path;
-
+use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 
-use crate::common::{copy_dir_all, uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, TestContext};
 
 #[test]
 fn run_with_python_version() -> Result<()> {
@@ -248,7 +248,7 @@ fn run_no_args() -> Result<()> {
 
     The following commands are available in the environment:
 
-    - pydoc
+    - pydoc.bat
     - python
     - pythonw
 
@@ -649,6 +649,126 @@ fn run_pep723_script_metadata() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "###);
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with a `[[tool.uv.index]]`.
+#[test]
+fn run_pep723_script_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "idna>=2",
+        # ]
+        #
+        # [[tool.uv.index]]
+        # name = "test"
+        # url = "https://test.pypi.org/simple"
+        # explicit = true
+        #
+        # [tool.uv.sources]
+        # idna = { index = "test" }
+        # ///
+
+        import idna
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==2.7
+    "###);
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with `tool.uv` constraints.
+#[test]
+fn run_pep723_script_constraints() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio>=3",
+        # ]
+        #
+        # [tool.uv]
+        # constraint-dependencies = ["idna<=3"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.0
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Run a PEP 723-compatible script with `tool.uv` overrides.
+#[test]
+fn run_pep723_script_overrides() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio>=3",
+        # ]
+        #
+        # [tool.uv]
+        # override-dependencies = ["idna<=2"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `main.py`
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==2.0
+     + sniffio==1.3.1
     "###);
 
     Ok(())
@@ -1105,7 +1225,7 @@ fn run_with_editable() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Audited 3 packages in [TIME]
-      × Invalid `--with` requirement
+      × Failed to resolve `--with` requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     "###);
 
@@ -2768,8 +2888,7 @@ fn run_script_explicit_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to read from file `script`
-      Caused by: Is a directory (os error 21)
+    error: failed to read from file `script`: Is a directory (os error 21)
     "###);
 
     Ok(())

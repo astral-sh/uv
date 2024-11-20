@@ -1,4 +1,55 @@
 ## Project metadata
+### [`conflicts`](#conflicts) {: #conflicts }
+
+Conflicting extras or groups may be declared here.
+
+It's useful to declare conflicts when, for example, two or more extras
+have mutually incompatible dependencies. Extra `foo` might depend
+on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
+These extras cannot be activated at the same time. This usually isn't
+a problem for pip-style workflows, but when using projects in uv that
+support with universal resolution, it will try to produce a resolution
+that satisfies both extras simultaneously.
+
+When this happens, resolution will fail, because one cannot install
+both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
+
+To work around this, you may specify `foo` and `bar` as conflicting
+extras (you can do the same with groups). When doing universal
+resolution in project mode, these extras will get their own "forks"
+distinct from one another in order to permit conflicting dependencies.
+In exchange, if one tries to install from the lock file with both
+conflicting extras activated, installation will fail.
+
+**Default value**: `[]`
+
+**Type**: `list[list[dict]]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Require that `package[test1]` and `package[test2]`
+# requirements are resolved in different forks so that they
+# cannot conflict with one another.
+conflicts = [
+    [
+        { extra = "test1" },
+        { extra = "test2" },
+    ]
+]
+
+# Or, to declare conflicting groups:
+conflicts = [
+    [
+        { group = "test1" },
+        { group = "test2" },
+    ]
+]
+```
+
+---
+
 ### [`constraint-dependencies`](#constraint-dependencies) {: #constraint-dependencies }
 
 Constraints to apply when resolving the project's dependencies.
@@ -230,7 +281,7 @@ The sources to use when resolving dependencies.
 during development. A dependency source can be a Git repository, a URL, a local path, or an
 alternative registry.
 
-See [Dependencies](../concepts/dependencies.md) for more.
+See [Dependencies](../concepts/projects/dependencies.md) for more.
 
 **Default value**: `{}`
 
@@ -1001,7 +1052,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -1226,6 +1277,37 @@ The URL for publishing packages to the Python package index (by default:
 
 ---
 
+### [`pypy-install-mirror`](#pypy-install-mirror) {: #pypy-install-mirror }
+
+Mirror URL to use for downloading managed PyPy installations.
+
+By default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).
+This variable can be set to a mirror URL to use a different source for PyPy installations.
+The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+
+Distributions can be read from a
+local directory by using the `file://` URL scheme.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    pypy-install-mirror = "https://downloads.python.org/pypy"
+    ```
+=== "uv.toml"
+
+    ```toml
+    pypy-install-mirror = "https://downloads.python.org/pypy"
+    ```
+
+---
+
 ### [`python-downloads`](#python-downloads) {: #python-downloads }
 
 Whether to allow Python downloads.
@@ -1250,6 +1332,36 @@ Whether to allow Python downloads.
 
     ```toml
     python-downloads = "manual"
+    ```
+
+---
+
+### [`python-install-mirror`](#python-install-mirror) {: #python-install-mirror }
+
+Mirror URL for downloading managed Python installations.
+
+By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
+This variable can be set to a mirror URL to use a different source for Python installations.
+The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+
+Distributions can be read from a local directory by using the `file://` URL scheme.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
+    ```
+=== "uv.toml"
+
+    ```toml
+    python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
     ```
 
 ---
@@ -2246,7 +2358,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -2992,7 +3104,7 @@ Unlike `--require-hashes`, `--verify-hashes` does not require that all requireme
 hashes; instead, it will limit itself to verifying the hashes of those requirements that do
 include them.
 
-**Default value**: `false`
+**Default value**: `true`
 
 **Type**: `bool`
 

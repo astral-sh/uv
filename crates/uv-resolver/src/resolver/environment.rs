@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use uv_pep508::{MarkerEnvironment, MarkerTree};
-use uv_pypi_types::ResolverMarkerEnvironment;
+use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
 
+use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
 use crate::resolver::ForkState;
 use crate::PythonRequirement;
-use crate::ResolveError;
 
 /// Represents one or more marker environments for a resolution.
 ///
@@ -57,7 +57,7 @@ use crate::ResolveError;
 /// explicitly by the resolver. (Perhaps a future refactor can incorporate
 /// `requires-python` into this type as well, but it's not totally clear at
 /// time of writing if that's a good idea or not.)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResolverEnvironment {
     kind: Kind,
 }
@@ -69,7 +69,7 @@ pub struct ResolverEnvironment {
 /// analysis on this type, and instead try to encapsulate the case analysis via
 /// higher level routines on `ResolverEnvironment` itself. (This goal may prove
 /// intractable, so don't treat it like gospel.)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum Kind {
     /// We're solving for one specific marker environment only.
     ///
@@ -94,6 +94,8 @@ enum Kind {
         initial_forks: Arc<[MarkerTree]>,
         /// The markers associated with this resolver fork.
         markers: MarkerTree,
+        /// Conflicting group exclusions.
+        exclude: Arc<crate::FxHashbrownSet<ConflictItem>>,
     },
 }
 
@@ -131,6 +133,7 @@ impl ResolverEnvironment {
         let kind = Kind::Universal {
             initial_forks: initial_forks.into(),
             markers: MarkerTree::TRUE,
+            exclude: Arc::new(crate::FxHashbrownSet::default()),
         };
         ResolverEnvironment { kind }
     }
@@ -149,32 +152,41 @@ impl ResolverEnvironment {
 
     /// Returns `false` only when this environment is a fork and it is disjoint
     /// with the given marker.
-    pub(crate) fn included(&self, marker: &MarkerTree) -> bool {
+    pub(crate) fn included_by_marker(&self, marker: &MarkerTree) -> bool {
         match self.kind {
             Kind::Specific { .. } => true,
             Kind::Universal { ref markers, .. } => !markers.is_disjoint(marker),
         }
     }
 
+    /// Returns true if the dependency represented by this forker may be
+    /// included in the given resolver environment.
+    pub(crate) fn included_by_group(&self, group: ConflictItemRef<'_>) -> bool {
+        match self.kind {
+            Kind::Specific { .. } => true,
+            Kind::Universal { ref exclude, .. } => !exclude.contains(&group),
+        }
+    }
+
+    /// Returns the bounding Python versions that can satisfy this
+    /// resolver environment's marker, if it's constrained.
+    pub(crate) fn requires_python(&self) -> Option<RequiresPythonRange> {
+        let marker = self.try_markers().unwrap_or(&MarkerTree::TRUE);
+        crate::marker::requires_python(marker)
+    }
+
     /// Narrow this environment given the forking markers.
     ///
-    /// This should be used when generating forking states in the resolver. In
-    /// effect, this "forks" this environment (which itself may be a fork) by
-    /// intersecting it with the markers given.
+    /// This effectively intersects any markers in this environment with the
+    /// markers given, and returns the new resulting environment.
     ///
-    /// This may return `None` when the marker intersection results in a marker
-    /// that can never be true for the given Python requirement. In this case,
-    /// the corresponding fork should be dropped.
+    /// This is also useful in tests to generate a "forked" marker environment.
     ///
     /// # Panics
     ///
     /// This panics if the resolver environment corresponds to one and only one
     /// specific marker environment. i.e., "pip"-style resolution.
-    pub(crate) fn narrow_environment(
-        &self,
-        python_requirement: &PythonRequirement,
-        rhs: &MarkerTree,
-    ) -> Option<ResolverEnvironment> {
+    fn narrow_environment(&self, rhs: MarkerTree) -> ResolverEnvironment {
         match self.kind {
             Kind::Specific { .. } => {
                 unreachable!("environment narrowing only happens in universal resolution")
@@ -182,25 +194,55 @@ impl ResolverEnvironment {
             Kind::Universal {
                 ref initial_forks,
                 markers: ref lhs,
+                ref exclude,
             } => {
-                let mut lhs = lhs.clone();
-                lhs.and(rhs.clone());
-                let python_marker = python_requirement.to_marker_tree();
-                // If the new combined marker is disjoint with the given
-                // Python requirement, then this fork shouldn't exist.
-                if lhs.is_disjoint(&python_marker) {
-                    tracing::debug!(
-                        "Skipping split {lhs:?} \
-                         because of Python requirement {python_marker:?}",
-                    );
-                    return None;
+                let mut markers = lhs.clone();
+                markers.and(rhs);
+                let kind = Kind::Universal {
+                    initial_forks: Arc::clone(initial_forks),
+                    markers,
+                    exclude: Arc::clone(exclude),
+                };
+                ResolverEnvironment { kind }
+            }
+        }
+    }
+
+    /// Returns a new resolver environment with the given groups excluded from
+    /// it.
+    ///
+    /// When a group is excluded from a resolver environment,
+    /// `ResolverEnvironment::included_by_group` will return false. The idea
+    /// is that a dependency with a corresponding group should be excluded by
+    /// forks in the resolver with this environment.
+    ///
+    /// # Panics
+    ///
+    /// This panics if the resolver environment corresponds to one and only one
+    /// specific marker environment. i.e., "pip"-style resolution.
+    pub(crate) fn exclude_by_group(
+        &self,
+        items: impl IntoIterator<Item = ConflictItem>,
+    ) -> ResolverEnvironment {
+        match self.kind {
+            Kind::Specific { .. } => {
+                unreachable!("environment narrowing only happens in universal resolution")
+            }
+            Kind::Universal {
+                ref initial_forks,
+                ref markers,
+                ref exclude,
+            } => {
+                let mut exclude: crate::FxHashbrownSet<_> = (**exclude).clone();
+                for item in items {
+                    exclude.insert(item);
                 }
                 let kind = Kind::Universal {
-                    initial_forks: initial_forks.clone(),
-                    markers: lhs,
+                    initial_forks: Arc::clone(initial_forks),
+                    markers: markers.clone(),
+                    exclude: Arc::new(exclude),
                 };
-
-                Some(ResolverEnvironment { kind })
+                ResolverEnvironment { kind }
             }
         }
     }
@@ -215,7 +257,9 @@ impl ResolverEnvironment {
     /// configuration.
     pub(crate) fn initial_forked_states(&self, init: ForkState) -> Vec<ForkState> {
         let Kind::Universal {
-            ref initial_forks, ..
+            ref initial_forks,
+            markers: ref _markers,
+            exclude: ref _exclude,
         } = self.kind
         else {
             return vec![init];
@@ -226,7 +270,10 @@ impl ResolverEnvironment {
         initial_forks
             .iter()
             .rev()
-            .filter_map(|initial_fork| init.clone().with_env(&initial_fork))
+            .map(|initial_fork| {
+                init.clone()
+                    .with_env(self.narrow_environment(initial_fork.clone()))
+            })
             .collect()
     }
 
@@ -244,7 +291,7 @@ impl ResolverEnvironment {
         &self,
         python_requirement: &PythonRequirement,
     ) -> Option<PythonRequirement> {
-        Some(python_requirement.narrow(&self.requires_python_range()?)?)
+        python_requirement.narrow(&self.requires_python_range()?)
     }
 
     /// Returns a message formatted for end users representing a fork in the
@@ -314,6 +361,105 @@ impl std::fmt::Display for ResolverEnvironment {
     }
 }
 
+/// The different forking possibilities.
+///
+/// Upon seeing a dependency, when determining whether to fork, three
+/// different cases are possible:
+///
+/// 1. Forking cannot be ruled out.
+/// 2. The dependency is excluded by the "parent" fork.
+/// 3. The dependency is unconditional and thus cannot provoke new forks.
+///
+/// This enum encapsulates those possibilities. In the first case, a helper is
+/// returned to help management the nuts and bolts of forking.
+#[derive(Debug)]
+pub(crate) enum ForkingPossibility<'d> {
+    Possible(Forker<'d>),
+    DependencyAlwaysExcluded,
+    NoForkingPossible,
+}
+
+impl<'d> ForkingPossibility<'d> {
+    pub(crate) fn new(
+        env: &ResolverEnvironment,
+        dep: &'d PubGrubDependency,
+    ) -> ForkingPossibility<'d> {
+        let marker = dep.package.marker().unwrap_or(&MarkerTree::TRUE);
+        if !env.included_by_marker(marker) {
+            ForkingPossibility::DependencyAlwaysExcluded
+        } else if marker.is_true() {
+            ForkingPossibility::NoForkingPossible
+        } else {
+            let forker = Forker {
+                package: &dep.package,
+                marker: marker.clone(),
+            };
+            ForkingPossibility::Possible(forker)
+        }
+    }
+}
+
+/// An encapsulation of forking based on a single dependency.
+#[derive(Debug)]
+pub(crate) struct Forker<'d> {
+    package: &'d PubGrubPackage,
+    marker: MarkerTree,
+}
+
+impl<'d> Forker<'d> {
+    /// Attempt a fork based on the given resolver environment.
+    ///
+    /// If a fork is possible, then a new forker and at least one new
+    /// resolver environment is returned. In some cases, it is possible for
+    /// more resolver environments to be returned. (For example, when the
+    /// negation of this forker's markers has overlap with the given resolver
+    /// environment.)
+    pub(crate) fn fork(
+        &self,
+        env: &ResolverEnvironment,
+    ) -> Option<(Forker<'d>, Vec<ResolverEnvironment>)> {
+        if !env.included_by_marker(&self.marker) {
+            return None;
+        }
+
+        let Kind::Universal {
+            markers: ref env_marker,
+            ..
+        } = env.kind
+        else {
+            panic!("resolver must be in universal mode for forking")
+        };
+
+        let mut envs = vec![];
+        {
+            let not_marker = self.marker.negate();
+            if !env_marker.is_disjoint(&not_marker) {
+                envs.push(env.narrow_environment(not_marker));
+            }
+        }
+        // Note also that we push this one last for historical reasons.
+        // Changing the order of forks can change the output in some
+        // ways. While it's probably fine, we try to avoid changing the
+        // output.
+        envs.push(env.narrow_environment(self.marker.clone()));
+
+        let mut remaining_marker = self.marker.clone();
+        remaining_marker.and(env_marker.negate());
+        let remaining_forker = Forker {
+            package: self.package,
+            marker: remaining_marker,
+        };
+        Some((remaining_forker, envs))
+    }
+
+    /// Returns true if the dependency represented by this forker may be
+    /// included in the given resolver environment.
+    pub(crate) fn included(&self, env: &ResolverEnvironment) -> bool {
+        let marker = self.package.marker().unwrap_or(&MarkerTree::TRUE);
+        env.included_by_marker(marker)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::ops::Bound;
@@ -352,8 +498,7 @@ mod tests {
 
     fn requires_python_range_lower(lower_version_bound: &str) -> RequiresPythonRange {
         let lower = LowerBound::new(Bound::Included(version(lower_version_bound)));
-        let range = RequiresPythonRange::new(lower, UpperBound::default());
-        range
+        RequiresPythonRange::new(lower, UpperBound::default())
     }
 
     fn marker(marker: &str) -> MarkerTree {
@@ -413,8 +558,7 @@ mod tests {
     fn narrow_python_requirement_forking_no_op() {
         let pyreq = python_requirement("3.10");
         let resolver_env = ResolverEnvironment::universal(vec![])
-            .narrow_environment(&pyreq, &marker("python_version >= '3.10'"))
-            .unwrap();
+            .narrow_environment(marker("python_version >= '3.10'"));
         assert_eq!(
             resolver_env.narrow_python_requirement(&pyreq),
             Some(python_requirement("3.10")),
@@ -428,8 +572,7 @@ mod tests {
     fn narrow_python_requirement_forking_stricter() {
         let pyreq = python_requirement("3.10");
         let resolver_env = ResolverEnvironment::universal(vec![])
-            .narrow_environment(&pyreq, &marker("python_version >= '3.11'"))
-            .unwrap();
+            .narrow_environment(marker("python_version >= '3.11'"));
         let expected = {
             let range = requires_python_range_lower("3.11");
             let requires_python = requires_python_lower("3.10").narrow(&range).unwrap();
@@ -448,8 +591,7 @@ mod tests {
     fn narrow_python_requirement_forking_relaxed() {
         let pyreq = python_requirement("3.11");
         let resolver_env = ResolverEnvironment::universal(vec![])
-            .narrow_environment(&pyreq, &marker("python_version >= '3.10'"))
-            .unwrap();
+            .narrow_environment(marker("python_version >= '3.10'"));
         assert_eq!(
             resolver_env.narrow_python_requirement(&pyreq),
             Some(python_requirement("3.11")),

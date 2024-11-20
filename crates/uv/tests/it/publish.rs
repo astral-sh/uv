@@ -1,4 +1,5 @@
 use crate::common::{uv_snapshot, TestContext};
+use assert_fs::fixture::{FileTouch, PathChild};
 use uv_static::EnvVars;
 
 #[test]
@@ -159,6 +160,40 @@ fn skip_existing_redirect() {
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
     error: `uv publish` does not support `--skip-existing` because there is not a reliable way to identify when an upload fails due to an existing distribution. Instead, use `--check-url` to provide the URL to the simple API for your index. uv will check the index for existing distributions before attempting uploads.
+    "###
+    );
+}
+
+#[test]
+fn dubious_filenames() {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("not-a-wheel.whl").touch().unwrap();
+    context.temp_dir.child("data.tar.gz").touch().unwrap();
+    context
+        .temp_dir
+        .child("not-sdist-1-2-3-asdf.zip")
+        .touch()
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg("https://test.pypi.org/legacy/")
+        .arg(context.temp_dir.join("*")), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv publish` is experimental and may change without warning
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/data.tar.gz`
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
+    warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
+    error: No files found to publish
     "###
     );
 }

@@ -23,7 +23,7 @@ use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
-use uv_pypi_types::{Requirement, SupportedEnvironments};
+use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,
@@ -54,6 +54,7 @@ pub(crate) async fn pip_compile(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
+    conflicts: Conflicts,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
@@ -251,15 +252,20 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the environment for the resolution.
-    let (tags, resolver_env) = if universal {
+    let (tags, resolver_env, conflicting_groups) = if universal {
         (
             None,
             ResolverEnvironment::universal(environments.into_markers()),
+            conflicts,
         )
     } else {
         let (tags, marker_env) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (Some(tags), ResolverEnvironment::specific(marker_env))
+        (
+            Some(tags),
+            ResolverEnvironment::specific(marker_env),
+            Conflicts::empty(),
+        )
     };
 
     // Generate, but don't enforce hashes for the requirements.
@@ -394,6 +400,7 @@ pub(crate) async fn pip_compile(
         tags.as_deref(),
         resolver_env.clone(),
         python_requirement,
+        conflicting_groups,
         &client,
         &flat_index,
         &top_level_index,
@@ -406,19 +413,11 @@ pub(crate) async fn pip_compile(
     .await
     {
         Ok(resolution) => resolution,
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::FetchAndBuild(dist, err))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(err) => return Err(err.into()),
     };
 
     // Write the resolved dependencies to the output channel.

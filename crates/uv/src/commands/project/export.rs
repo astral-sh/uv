@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::path::{Path, PathBuf};
+use uv_settings::PythonInstallMirrors;
 
 use uv_cache::Cache;
 use uv_client::Connectivity;
@@ -21,7 +22,7 @@ use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
     default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
 };
-use crate::commands::{diagnostics, pip, ExitStatus, OutputWriter, SharedState};
+use crate::commands::{diagnostics, ExitStatus, OutputWriter, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -42,6 +43,7 @@ pub(crate) async fn export(
     frozen: bool,
     include_header: bool,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -107,6 +109,7 @@ pub(crate) async fn export(
             connectivity,
             native_tls,
             allow_insecure_host,
+            install_mirrors,
             no_config,
             cache,
             printer,
@@ -142,23 +145,10 @@ pub(crate) async fn export(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
-        ))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     };

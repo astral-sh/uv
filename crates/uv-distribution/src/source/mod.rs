@@ -36,7 +36,7 @@ use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_metadata::read_archive_metadata;
 use uv_pep440::release_specifiers_to_ranges;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
+use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use uv_types::{BuildContext, SourceBuildTrait};
 use zip::ZipArchive;
 
@@ -641,8 +641,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
+                let algorithms = hashes.algorithms();
                 let hashes = self
-                    .download_archive(response, source, ext, entry.path(), hashes)
+                    .download_archive(response, source, ext, entry.path(), &algorithms)
                     .await?;
 
                 Ok(revision.with_hashes(hashes))
@@ -653,9 +654,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let req = Self::request(url.clone(), client.unmanaged)?;
         let revision = client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &cache_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &cache_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -671,7 +675,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .managed(|client| async move {
                     client
                         .cached_client()
-                        .skip_cache(Self::request(url.clone(), client)?, &cache_entry, download)
+                        .skip_cache_with_retry(
+                            Self::request(url.clone(), client)?,
+                            &cache_entry,
+                            download,
+                        )
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,
@@ -928,8 +936,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Unzip the archive to a temporary directory.
         debug!("Unpacking source distribution: {source}");
         let entry = cache_shard.shard(revision.id()).entry(SOURCE);
+        let algorithms = hashes.algorithms();
         let hashes = self
-            .persist_archive(&resource.path, resource.ext, entry.path(), hashes)
+            .persist_archive(&resource.path, resource.ext, entry.path(), &algorithms)
             .await?;
 
         // Include the hashes and cache info in the revision.
@@ -1525,11 +1534,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-extracting missing source distribution: {source}");
+
+        // Take the union of the requested and existing hash algorithms.
+        let algorithms = {
+            let mut algorithms = hashes.algorithms();
+            for digest in revision.hashes() {
+                algorithms.push(digest.algorithm());
+            }
+            algorithms.sort();
+            algorithms.dedup();
+            algorithms
+        };
+
         let hashes = self
-            .persist_archive(&resource.path, resource.ext, entry.path(), hashes)
+            .persist_archive(&resource.path, resource.ext, entry.path(), &algorithms)
             .await?;
-        if hashes != revision.hashes() {
-            return Err(Error::CacheHeal(source.to_string()));
+        for existing in revision.hashes() {
+            if !hashes.contains(existing) {
+                return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
+            }
         }
         Ok(revision.with_hashes(hashes))
     }
@@ -1549,13 +1572,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_entry = entry.shard().entry(HTTP_REVISION);
         let download = |response| {
             async {
+                // Take the union of the requested and existing hash algorithms.
+                let algorithms = {
+                    let mut algorithms = hashes.algorithms();
+                    for digest in revision.hashes() {
+                        algorithms.push(digest.algorithm());
+                    }
+                    algorithms.sort();
+                    algorithms.dedup();
+                    algorithms
+                };
+
                 let hashes = self
-                    .download_archive(response, source, ext, entry.path(), hashes)
+                    .download_archive(response, source, ext, entry.path(), &algorithms)
                     .await?;
-                if hashes != revision.hashes() {
-                    return Err(Error::CacheHeal(source.to_string()));
+                for existing in revision.hashes() {
+                    if !hashes.contains(existing) {
+                        return Err(Error::CacheHeal(source.to_string(), existing.algorithm()));
+                    }
                 }
-                Ok(revision.with_hashes(hashes))
+                Ok(revision.clone().with_hashes(hashes))
             }
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
@@ -1564,7 +1600,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .managed(|client| async move {
                 client
                     .cached_client()
-                    .skip_cache(Self::request(url.clone(), client)?, &cache_entry, download)
+                    .skip_cache_with_retry(
+                        Self::request(url.clone(), client)?,
+                        &cache_entry,
+                        download,
+                    )
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback(err) => err,
@@ -1581,7 +1621,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        hashes: HashPolicy<'_>,
+        algorithms: &[HashAlgorithm],
     ) -> Result<Vec<HashDigest>, Error> {
         let temp_dir = tempfile::tempdir_in(
             self.build_context
@@ -1595,8 +1635,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .into_async_read();
 
         // Create a hasher for each hash algorithm.
-        let algorithms = hashes.algorithms();
-        let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+        let mut hashers = algorithms
+            .iter()
+            .copied()
+            .map(Hasher::from)
+            .collect::<Vec<_>>();
         let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
         // Download and unzip the source distribution into a temporary directory.
@@ -1605,7 +1648,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         drop(span);
 
         // If necessary, exhaust the reader to compute the hash.
-        if !hashes.is_none() {
+        if !algorithms.is_empty() {
             hasher.finish().await.map_err(Error::HashExhaustion)?;
         }
 
@@ -1640,7 +1683,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         path: &Path,
         ext: SourceDistExtension,
         target: &Path,
-        hashes: HashPolicy<'_>,
+        algorithms: &[HashAlgorithm],
     ) -> Result<Vec<HashDigest>, Error> {
         debug!("Unpacking for build: {}", path.display());
 
@@ -1655,15 +1698,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?;
 
         // Create a hasher for each hash algorithm.
-        let algorithms = hashes.algorithms();
-        let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+        let mut hashers = algorithms
+            .iter()
+            .copied()
+            .map(Hasher::from)
+            .collect::<Vec<_>>();
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         // Unzip the archive into a temporary directory.
         uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path()).await?;
 
         // If necessary, exhaust the reader to compute the hash.
-        if !hashes.is_none() {
+        if !algorithms.is_empty() {
             hasher.finish().await.map_err(Error::HashExhaustion)?;
         }
 

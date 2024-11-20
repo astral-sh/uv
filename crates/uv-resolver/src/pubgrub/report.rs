@@ -736,7 +736,7 @@ impl PubGrubReportFormatter<'_> {
         }
 
         // Add hints due to an index returning an unauthorized response.
-        for index in index_locations.indexes() {
+        for index in index_locations.allowed_indexes() {
             if index_capabilities.unauthorized(&index.url) {
                 hints.insert(PubGrubHint::UnauthorizedIndex {
                     index: index.url.clone(),

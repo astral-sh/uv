@@ -13,15 +13,19 @@ use uv_configuration::{
     ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, TrustedHost,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution_types::{DirectorySourceDist, Dist, Index, ResolvedDist, SourceDist};
+use uv_distribution_types::{
+    DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
+};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
-    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+    ConflictPackage, LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl,
+    VerbatimParsedUrl,
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, InstallTarget};
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
@@ -52,6 +56,7 @@ pub(crate) async fn sync(
     install_options: InstallOptions,
     modifications: Modifications,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     settings: ResolverInstallerSettings,
@@ -114,6 +119,7 @@ pub(crate) async fn sync(
     let venv = project::get_or_init_environment(
         project.workspace(),
         python.as_deref().map(PythonRequest::parse),
+        install_mirrors,
         python_preference,
         python_downloads,
         connectivity,
@@ -154,23 +160,10 @@ pub(crate) async fn sync(
     .await
     {
         Ok(result) => result.into_lock(),
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
-        ))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     };
@@ -183,25 +176,45 @@ pub(crate) async fn sync(
                     workspace: project.workspace(),
                     lock: &lock,
                 }
-            } else {
+            } else if let Some(package) = package.as_ref() {
                 InstallTarget::Project {
                     workspace: project.workspace(),
-                    // If `--frozen --package` is specified, and only the root `pyproject.toml` was
-                    // discovered, the child won't be present in the workspace; but we _know_ that
-                    // we want to install it, so we override the package name.
-                    name: package.as_ref().unwrap_or(project.project_name()),
+                    name: package,
+                    lock: &lock,
+                }
+            } else {
+                // By default, install the root package.
+                InstallTarget::Project {
+                    workspace: project.workspace(),
+                    name: project.project_name(),
                     lock: &lock,
                 }
             }
         }
-        VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-            workspace,
-            lock: &lock,
-        },
+        VirtualProject::NonProject(workspace) => {
+            if all_packages {
+                InstallTarget::NonProjectWorkspace {
+                    workspace,
+                    lock: &lock,
+                }
+            } else if let Some(package) = package.as_ref() {
+                InstallTarget::Project {
+                    workspace,
+                    name: package,
+                    lock: &lock,
+                }
+            } else {
+                // By default, install the entire workspace.
+                InstallTarget::NonProjectWorkspace {
+                    workspace,
+                    lock: &lock,
+                }
+            }
+        }
     };
 
     // Perform the sync operation.
-    do_sync(
+    match do_sync(
         target,
         &venv,
         &extras,
@@ -218,7 +231,16 @@ pub(crate) async fn sync(
         cache,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(()) => {}
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    }
 
     Ok(ExitStatus::Success)
 }
@@ -280,6 +302,39 @@ pub(super) async fn do_sync(
             venv.interpreter().python_version().clone(),
             target.lock().requires_python().clone(),
         ));
+    }
+
+    // Validate that we aren't trying to install extras or groups that
+    // are declared as conflicting. Note that we need to collect all
+    // extras and groups that match in a particular set, since extras
+    // can be declared as conflicting with groups. So if extra `x` and
+    // group `g` are declared as conflicting, then enabling both of
+    // those should result in an error.
+    let conflicts = target.lock().conflicts();
+    for set in conflicts.iter() {
+        let mut conflicts: Vec<ConflictPackage> = vec![];
+        for item in set.iter() {
+            if item
+                .extra()
+                .map(|extra| extras.contains(extra))
+                .unwrap_or(false)
+            {
+                conflicts.push(item.conflict().clone());
+            }
+            if item
+                .group()
+                .map(|group| dev.contains(group))
+                .unwrap_or(false)
+            {
+                conflicts.push(item.conflict().clone());
+            }
+        }
+        if conflicts.len() >= 2 {
+            return Err(ProjectError::ConflictIncompatibility(
+                set.clone(),
+                conflicts,
+            ));
+        }
     }
 
     // Determine the markers to use for resolution.
@@ -434,11 +489,9 @@ pub(super) async fn do_sync(
 }
 
 /// Filter out any virtual workspace members.
-fn apply_no_virtual_project(
-    resolution: uv_distribution_types::Resolution,
-) -> uv_distribution_types::Resolution {
+fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
     resolution.filter(|dist| {
-        let ResolvedDist::Installable(dist) = dist else {
+        let ResolvedDist::Installable { dist, .. } = dist else {
             return true;
         };
 
@@ -455,36 +508,38 @@ fn apply_no_virtual_project(
 }
 
 /// If necessary, convert any editable requirements to non-editable.
-fn apply_editable_mode(
-    resolution: uv_distribution_types::Resolution,
-    editable: EditableMode,
-) -> uv_distribution_types::Resolution {
+fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolution {
     match editable {
         // No modifications are necessary for editable mode; retain any editable distributions.
         EditableMode::Editable => resolution,
 
         // Filter out any editable distributions.
         EditableMode::NonEditable => resolution.map(|dist| {
-            let ResolvedDist::Installable(Dist::Source(SourceDist::Directory(
-                DirectorySourceDist {
-                    name,
-                    install_path,
-                    editable: true,
-                    r#virtual: false,
-                    url,
-                },
-            ))) = dist
+            let ResolvedDist::Installable {
+                dist:
+                    Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                        name,
+                        install_path,
+                        editable: true,
+                        r#virtual: false,
+                        url,
+                    })),
+                version,
+            } = dist
             else {
-                return dist;
+                return None;
             };
 
-            ResolvedDist::Installable(Dist::Source(SourceDist::Directory(DirectorySourceDist {
-                name,
-                install_path,
-                editable: false,
-                r#virtual: false,
-                url,
-            })))
+            Some(ResolvedDist::Installable {
+                dist: Dist::Source(SourceDist::Directory(DirectorySourceDist {
+                    name: name.clone(),
+                    install_path: install_path.clone(),
+                    editable: false,
+                    r#virtual: false,
+                    url: url.clone(),
+                })),
+                version: version.clone(),
+            })
         }),
     }
 }

@@ -17,11 +17,13 @@ use uv_git::GIT;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
+    VersionRequest,
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
+use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
@@ -45,6 +47,7 @@ pub(crate) async fn init(
     author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -64,6 +67,7 @@ pub(crate) async fn init(
             init_script(
                 path,
                 python,
+                install_mirrors,
                 connectivity,
                 python_preference,
                 python_downloads,
@@ -127,6 +131,7 @@ pub(crate) async fn init(
                 author_from,
                 no_pin_python,
                 python,
+                install_mirrors,
                 no_workspace,
                 python_preference,
                 python_downloads,
@@ -174,6 +179,7 @@ pub(crate) async fn init(
 async fn init_script(
     script_path: &Path,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     connectivity: Connectivity,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -232,6 +238,7 @@ async fn init_script(
 
     let requires_python = init_script_python_requirement(
         python.as_deref(),
+        install_mirrors,
         &CWD,
         no_pin_python,
         python_preference,
@@ -265,6 +272,7 @@ async fn init_project(
     author_from: Option<AuthorFrom>,
     no_pin_python: bool,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -409,12 +417,14 @@ async fn init_project(
                 } else {
                     let interpreter = PythonInstallation::find_or_download(
                         Some(python_request),
-                        EnvironmentPreference::Any,
+                        EnvironmentPreference::OnlySystem,
                         python_preference,
                         python_downloads,
                         &client_builder,
                         cache,
                         Some(&reporter),
+                        install_mirrors.python_install_mirror.as_deref(),
+                        install_mirrors.pypy_install_mirror.as_deref(),
                     )
                     .await?
                     .into_interpreter();
@@ -431,12 +441,14 @@ async fn init_project(
             python_request => {
                 let interpreter = PythonInstallation::find_or_download(
                     Some(&python_request),
-                    EnvironmentPreference::Any,
+                    EnvironmentPreference::OnlySystem,
                     python_preference,
                     python_downloads,
                     &client_builder,
                     cache,
                     Some(&reporter),
+                    install_mirrors.python_install_mirror.as_deref(),
+                    install_mirrors.pypy_install_mirror.as_deref(),
                 )
                 .await?
                 .into_interpreter();
@@ -457,8 +469,29 @@ async fn init_project(
                 (requires_python, python_request)
             }
         }
+    } else if let Ok(virtualenv) = PythonEnvironment::from_root(path.join(".venv"), cache) {
+        // (2) An existing Python environment in the target directory
+        debug!("Using Python version from existing virtual environment in project");
+        let interpreter = virtualenv.into_interpreter();
+
+        let requires_python =
+            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+
+        // Pin to the minor version.
+        let python_request = if no_pin_python {
+            None
+        } else {
+            Some(PythonRequest::Version(VersionRequest::MajorMinor(
+                interpreter.python_major(),
+                interpreter.python_minor(),
+                PythonVariant::Default,
+            )))
+        };
+
+        (requires_python, python_request)
     } else if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
-        // (2) `requires-python` from the workspace
+        // (3) `requires-python` from the workspace
+        debug!("Using Python version from project workspace");
         let python_request = PythonRequest::Version(VersionRequest::Range(
             requires_python.specifiers().clone(),
             PythonVariant::Default,
@@ -470,12 +503,14 @@ async fn init_project(
         } else {
             let interpreter = PythonInstallation::find_or_download(
                 Some(&python_request),
-                EnvironmentPreference::Any,
+                EnvironmentPreference::OnlySystem,
                 python_preference,
                 python_downloads,
                 &client_builder,
                 cache,
                 Some(&reporter),
+                install_mirrors.python_install_mirror.as_deref(),
+                install_mirrors.pypy_install_mirror.as_deref(),
             )
             .await?
             .into_interpreter();
@@ -489,15 +524,17 @@ async fn init_project(
 
         (requires_python, python_request)
     } else {
-        // (3) Default to the system Python
+        // (4) Default to the system Python
         let interpreter = PythonInstallation::find_or_download(
             None,
-            EnvironmentPreference::Any,
+            EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
             &client_builder,
             cache,
             Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
         )
         .await?
         .into_interpreter();

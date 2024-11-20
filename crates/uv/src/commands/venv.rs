@@ -24,7 +24,8 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
-use uv_shell::Shell;
+use uv_settings::PythonInstallMirrors;
+use uv_shell::{shlex_posix, shlex_windows, Shell};
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
@@ -42,6 +43,7 @@ pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
+    install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     link_mode: LinkMode,
@@ -68,6 +70,7 @@ pub(crate) async fn venv(
         project_dir,
         path,
         python_request,
+        install_mirrors,
         link_mode,
         index_locations,
         index_strategy,
@@ -125,6 +128,7 @@ async fn venv_impl(
     project_dir: &Path,
     path: Option<PathBuf>,
     python_request: Option<&str>,
+    install_mirrors: PythonInstallMirrors,
     link_mode: LinkMode,
     index_locations: &IndexLocations,
     index_strategy: IndexStrategy,
@@ -205,6 +209,8 @@ async fn venv_impl(
         &client_builder,
         cache,
         Some(&reporter),
+        install_mirrors.python_install_mirror.as_deref(),
+        install_mirrors.pypy_install_mirror.as_deref(),
     )
     .await
     .into_diagnostic()?;
@@ -414,38 +420,4 @@ async fn venv_impl(
     }
 
     Ok(ExitStatus::Success)
-}
-
-/// Quote a path, if necessary, for safe use in a POSIX-compatible shell command.
-fn shlex_posix(executable: impl AsRef<Path>) -> String {
-    // Convert to a display path.
-    let executable = executable.as_ref().portable_display().to_string();
-
-    // Like Python's `shlex.quote`:
-    // > Use single quotes, and put single quotes into double quotes
-    // > The string $'b is then quoted as '$'"'"'b'
-    if executable.contains(' ') {
-        format!("'{}'", executable.replace('\'', r#"'"'"'"#))
-    } else {
-        executable
-    }
-}
-
-/// Quote a path, if necessary, for safe use in `PowerShell` and `cmd`.
-fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
-    // Convert to a display path.
-    let executable = executable.as_ref().user_display().to_string();
-
-    // Wrap the executable in quotes (and a `&` invocation on PowerShell), if it contains spaces.
-    if executable.contains(' ') {
-        if shell == Shell::Powershell {
-            // For PowerShell, wrap in a `&` invocation.
-            format!("& \"{executable}\"")
-        } else {
-            // Otherwise, assume `cmd`, which doesn't need the `&`.
-            format!("\"{executable}\"")
-        }
-    } else {
-        executable
-    }
 }

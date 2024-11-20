@@ -11,7 +11,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, TrustedHost};
-use uv_distribution_types::Resolution;
+use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
 
 /// A [`PythonEnvironment`] stored in the cache.
@@ -58,27 +58,29 @@ impl CachedEnvironment {
         };
 
         // Resolve the requirements with the interpreter.
-        let graph = resolve_environment(
-            spec,
-            &interpreter,
-            settings.as_ref().into(),
-            state,
-            resolve,
-            connectivity,
-            concurrency,
-            native_tls,
-            allow_insecure_host,
-            cache,
-            printer,
-        )
-        .await?;
-        let resolution = Resolution::from(graph);
+        let resolution = Resolution::from(
+            resolve_environment(
+                spec,
+                &interpreter,
+                settings.as_ref().into(),
+                state,
+                resolve,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+            )
+            .await?,
+        );
 
         // Hash the resolution by hashing the generated lockfile.
         // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
         // dependency), skip this step.
         let resolution_hash = {
-            let distributions = resolution.distributions().collect::<Vec<_>>();
+            let mut distributions = resolution.distributions().collect::<Vec<_>>();
+            distributions.sort_unstable_by_key(|dist| dist.name());
             hash_digest(&distributions)
         };
 

@@ -22,6 +22,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 
+pub mod comma;
 pub mod compat;
 pub mod options;
 pub mod version;
@@ -1262,9 +1263,12 @@ pub struct PipSyncArgs {
 
     /// Require a matching hash for each requirement.
     ///
-    /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
-    /// with a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements
-    /// must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash.
+    ///
+    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
+    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
+    /// specified via direct URL.
     ///
     /// Hash-checking mode introduces a number of additional constraints:
     ///
@@ -1283,20 +1287,20 @@ pub struct PipSyncArgs {
     #[arg(long, overrides_with("require_hashes"), hide = true)]
     pub no_require_hashes: bool,
 
-    /// Validate any hashes provided in the requirements file.
-    ///
-    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
-    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
-    /// include them.
-    #[arg(
-        long,
-        env = EnvVars::UV_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_verify_hashes"),
-    )]
+    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
     pub verify_hashes: bool,
 
-    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    /// Disable validation of hashes in the requirements file.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash. To enforce hash validation, use
+    /// `--require-hashes`.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_VERIFY_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
     pub no_verify_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.
@@ -1545,9 +1549,12 @@ pub struct PipInstallArgs {
 
     /// Require a matching hash for each requirement.
     ///
-    /// Hash-checking mode is all or nothing. If enabled, _all_ requirements must be provided
-    /// with a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements
-    /// must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash.
+    ///
+    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
+    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
+    /// specified via direct URL.
     ///
     /// Hash-checking mode introduces a number of additional constraints:
     ///
@@ -1566,20 +1573,20 @@ pub struct PipInstallArgs {
     #[arg(long, overrides_with("require_hashes"), hide = true)]
     pub no_require_hashes: bool,
 
-    /// Validate any hashes provided in the requirements file.
-    ///
-    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
-    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
-    /// include them.
-    #[arg(
-        long,
-        env = EnvVars::UV_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_verify_hashes"),
-    )]
+    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
     pub verify_hashes: bool,
 
-    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    /// Disable validation of hashes in the requirements file.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash. To enforce hash validation, use
+    /// `--require-hashes`.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_VERIFY_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
     pub no_verify_hashes: bool,
 
     /// The Python interpreter into which packages should be installed.
@@ -1926,6 +1933,9 @@ pub struct PipListArgs {
     #[arg(long, overrides_with("strict"), hide = true)]
     pub no_strict: bool,
 
+    #[command(flatten)]
+    pub fetch: FetchArgs,
+
     /// The Python interpreter for which packages should be listed.
     ///
     /// By default, uv lists packages in a virtual environment but will show
@@ -2107,7 +2117,7 @@ pub struct PipTreeArgs {
     )]
     pub system: bool,
 
-    #[arg(long, overrides_with("system"))]
+    #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
 
     #[command(flatten)]
@@ -2173,12 +2183,14 @@ pub struct BuildArgs {
     #[arg(long, short, env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub build_constraint: Vec<Maybe<PathBuf>>,
 
-    /// Require a matching hash for each build requirement.
+    /// Require a matching hash for each requirement.
     ///
-    /// Hash-checking mode is all or nothing. If enabled, _all_ build requirements must be provided
-    /// with a corresponding hash or set of hashes via the `--build-constraint` argument.
-    /// Additionally, if enabled, _all_ requirements must either be pinned to exact versions
-    /// (e.g., `==1.0.0`), or be specified via direct URL.
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash.
+    ///
+    /// When `--require-hashes` is enabled, _all_ requirements must include a hash or set of hashes,
+    /// and _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be
+    /// specified via direct URL.
     ///
     /// Hash-checking mode introduces a number of additional constraints:
     ///
@@ -2197,20 +2209,20 @@ pub struct BuildArgs {
     #[arg(long, overrides_with("require_hashes"), hide = true)]
     pub no_require_hashes: bool,
 
-    /// Validate any hashes provided in the build constraints file.
-    ///
-    /// Unlike `--require-hashes`, `--verify-hashes` does not require that all requirements have
-    /// hashes; instead, it will limit itself to verifying the hashes of those requirements that do
-    /// include them.
-    #[arg(
-        long,
-        env = EnvVars::UV_VERIFY_HASHES,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with("no_verify_hashes"),
-    )]
+    #[arg(long, overrides_with("no_verify_hashes"), hide = true)]
     pub verify_hashes: bool,
 
-    #[arg(long, overrides_with("verify_hashes"), hide = true)]
+    /// Disable validation of hashes in the requirements file.
+    ///
+    /// By default, uv will verify any available hashes in the requirements file, but will not
+    /// require that all requirements have an associated hash. To enforce hash validation, use
+    /// `--require-hashes`.
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_VERIFY_HASHES,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("verify_hashes"),
+    )]
     pub no_verify_hashes: bool,
 
     /// The Python interpreter to use for the build environment.
@@ -2677,16 +2689,16 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified by the project.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed as editables.
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the project environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified by the project.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     ///
@@ -2806,12 +2818,18 @@ pub struct SyncArgs {
     ///
     /// May be provided more than once.
     ///
+    /// When multiple extras or groups are specified that appear in
+    /// `tool.uv.conflicts`, uv will report an error.
+    ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
+    ///
+    /// When two or more extras are declared as conflicting in
+    /// `tool.uv.conflicts`, using this flag will always result in an error.
     ///
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
@@ -2842,6 +2860,9 @@ pub struct SyncArgs {
     pub only_dev: bool,
 
     /// Include dependencies from the specified dependency group.
+    ///
+    /// When multiple extras or groups are specified that appear in
+    /// `tool.uv.conflicts`, uv will report an error.
     ///
     /// May be provided multiple times.
     #[arg(long, conflicts_with("only_group"))]
@@ -3641,16 +3662,16 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed as editables
     ///
     /// When used in a project, these dependencies will be layered on top of
     /// the uv tool's environment in a separate, ephemeral environment. These
     /// dependencies are allowed to conflict with those specified.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with all packages listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
@@ -3702,10 +3723,6 @@ pub struct ToolInstallArgs {
     #[arg(short, long)]
     pub editable: bool,
 
-    /// Include the given packages as editables.
-    #[arg(long, value_delimiter = ',')]
-    pub with_editable: Vec<String>,
-
     /// The package to install commands from.
     ///
     /// This option is provided for parity with `uv tool run`, but is redundant with `package`.
@@ -3713,8 +3730,12 @@ pub struct ToolInstallArgs {
     pub from: Option<String>,
 
     /// Include the following extra requirements.
-    #[arg(long, value_delimiter = ',')]
-    pub with: Vec<String>,
+    #[arg(long)]
+    pub with: Vec<comma::CommaSeparatedRequirements>,
+
+    /// Include the given packages as editables.
+    #[arg(long)]
+    pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
@@ -3957,6 +3978,22 @@ pub struct PythonInstallArgs {
     ///
     /// See `uv help python` to view supported request formats.
     pub targets: Vec<String>,
+
+    /// Set the URL to use as the source for downloading Python installations.
+    ///
+    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    pub mirror: Option<String>,
+
+    /// Set the URL to use as the source for downloading PyPy installations.
+    ///
+    /// The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
+    pub pypy_mirror: Option<String>,
 
     /// Reinstall the requested Python version, if it's already installed.
     ///
@@ -4722,6 +4759,49 @@ pub struct ResolverInstallerArgs {
     pub no_sources: bool,
 }
 
+/// Arguments that are used by commands that need to fetch from the Simple API.
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct FetchArgs {
+    #[command(flatten)]
+    pub index_args: IndexArgs,
+
+    /// The strategy to use when resolving against multiple index URLs.
+    ///
+    /// By default, uv will stop at the first index on which a given package is available, and
+    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
+    /// same name to an alternate index.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_INDEX_STRATEGY,
+        help_heading = "Index options"
+    )]
+    pub index_strategy: Option<IndexStrategy>,
+
+    /// Attempt to use `keyring` for authentication for index URLs.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_KEYRING_PROVIDER,
+        help_heading = "Index options"
+    )]
+    pub keyring_provider: Option<KeyringProviderType>,
+
+    /// Limit candidate packages to those that were uploaded prior to the given date.
+    ///
+    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
+    /// format (e.g., `2006-12-02`) in your system's configured time zone.
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
+    pub exclude_newer: Option<ExcludeNewer>,
+}
+
 #[derive(Args)]
 pub struct DisplayTreeArgs {
     /// Maximum display depth of the dependency tree
@@ -4782,8 +4862,8 @@ pub struct PublishArgs {
 
     /// The token for the upload.
     ///
-    /// Using a token is equivalent to passing `__token__` as `--username` and the token as `--password`.
-    /// password.
+    /// Using a token is equivalent to passing `__token__` as `--username` and the token as
+    /// `--password` password.
     #[arg(
         short,
         long,

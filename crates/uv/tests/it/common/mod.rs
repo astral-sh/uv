@@ -67,6 +67,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"Caused by: .* \(os error 2\)",
         "Caused by: No such file or directory (os error 2)",
     ),
+    // Trim end-of-line whitespaces, to allow removing them on save.
+    (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
@@ -1287,21 +1289,6 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
 
     let status = output.status;
     (snapshot, output, status)
-}
-
-/// Recursively copy a directory and its contents.
-pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    fs_err::create_dir_all(&dst)?;
-    for entry in fs_err::read_dir(src.as_ref())? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            fs_err::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
 }
 
 /// Recursively copy a directory and its contents, skipping gitignored files.

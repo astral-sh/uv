@@ -24,6 +24,7 @@ use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLeve
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_fs::CWD;
+use uv_pypi_types::Conflicts;
 use uv_requirements::RequirementsSource;
 use uv_scripts::{Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
@@ -332,6 +333,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 args.environments,
+                Conflicts::empty(),
                 args.settings.extras,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
@@ -732,6 +734,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 build_constraints,
                 args.hash_checking,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 cli.top_level.no_config,
                 globals.python_preference,
@@ -776,6 +779,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &project_dir,
                 args.path,
                 args.settings.python.as_deref(),
+                args.settings.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings.link_mode,
@@ -904,6 +908,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 args.show_resolution || globals.verbose > 0,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 invocation_source,
                 args.isolated,
@@ -954,6 +959,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.from,
                 &requirements,
                 args.python,
+                args.install_mirrors,
                 args.force,
                 args.options,
                 args.settings,
@@ -999,6 +1005,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             Box::pin(commands::tool_upgrade(
                 args.name,
                 args.python,
+                args.install_mirrors,
                 globals.connectivity,
                 args.args,
                 args.filesystem,
@@ -1070,6 +1077,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.targets,
                 args.reinstall,
                 args.force,
+                args.python_install_mirror,
+                args.pypy_install_mirror,
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,
@@ -1272,6 +1281,7 @@ async fn run_project(
                 args.author_from,
                 args.no_pin_python,
                 args.python,
+                args.install_mirrors,
                 args.no_workspace,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1330,6 +1340,7 @@ async fn run_project(
                 args.dev,
                 args.editable,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1368,6 +1379,7 @@ async fn run_project(
                 args.install_options,
                 args.modifications,
                 args.python,
+                args.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
@@ -1398,6 +1410,7 @@ async fn run_project(
                 args.frozen,
                 args.dry_run,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1450,6 +1463,7 @@ async fn run_project(
                 args.extras,
                 args.package,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 args.script,
                 globals.python_preference,
@@ -1483,7 +1497,7 @@ async fn run_project(
                 Pep723Item::Remote(_) => unreachable!("`uv remove` does not support remote files"),
             });
 
-            commands::remove(
+            Box::pin(commands::remove(
                 project_dir,
                 args.locked,
                 args.frozen,
@@ -1492,6 +1506,7 @@ async fn run_project(
                 args.dependency_type,
                 args.package,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 script,
                 globals.python_preference,
@@ -1503,7 +1518,7 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
-            )
+            ))
             .await
         }
         ProjectCommand::Tree(args) => {
@@ -1529,6 +1544,7 @@ async fn run_project(
                 args.python_version,
                 args.python_platform,
                 args.python,
+                args.install_mirrors,
                 args.resolver,
                 globals.python_preference,
                 globals.python_downloads,
@@ -1565,6 +1581,7 @@ async fn run_project(
                 args.frozen,
                 args.include_header,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 globals.python_preference,
                 globals.python_downloads,

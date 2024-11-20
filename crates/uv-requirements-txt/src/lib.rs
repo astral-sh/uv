@@ -220,10 +220,14 @@ impl RequirementsTxt {
             error: err,
         })?;
         if data == Self::default() {
-            warn_user!(
-                "Requirements file {} does not contain any dependencies",
-                requirements_txt.user_display()
-            );
+            if requirements_txt == Path::new("-") {
+                warn_user!("No dependencies found in stdin");
+            } else {
+                warn_user!(
+                    "Requirements file {} does not contain any dependencies",
+                    requirements_txt.user_display()
+                );
+            }
         }
 
         Ok(data)
@@ -1406,13 +1410,19 @@ mod test {
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (missing_txt.as_str(), "<MISSING_TXT>"),
+            // Windows translates error messages, for example i get:
+            // "Das System kann den angegebenen Pfad nicht finden. (os error 3)"
+            (
+                r": .* \(os error 2\)",
+                ": The system cannot find the path specified. (os error 2)",
+            ),
         ];
         insta::with_settings!({
             filters => filters,
         }, {
             insta::assert_snapshot!(errors, @r###"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
-            failed to read from file `<MISSING_TXT>`
+            failed to read from file `<MISSING_TXT>`: The system cannot find the path specified. (os error 2)
             "###);
         });
 

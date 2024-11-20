@@ -113,6 +113,8 @@ pub(crate) async fn install(
     targets: Vec<String>,
     reinstall: bool,
     force: bool,
+    python_install_mirror: Option<String>,
+    pypy_install_mirror: Option<String>,
     python_downloads: PythonDownloads,
     native_tls: bool,
     connectivity: Connectivity,
@@ -229,11 +231,13 @@ pub(crate) async fn install(
             (
                 download.key(),
                 download
-                    .fetch(
+                    .fetch_with_retry(
                         &client,
                         installations_dir,
                         &cache_dir,
                         reinstall,
+                        python_install_mirror.as_deref(),
+                        pypy_install_mirror.as_deref(),
                         Some(&reporter),
                     )
                     .await,

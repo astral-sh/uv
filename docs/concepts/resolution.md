@@ -86,7 +86,7 @@ uv supports both [platform-specific](#platform-specific-resolution) and
 uv's lockfile (`uv.lock`) is created with a universal resolution and is portable across platforms.
 This ensures that dependencies are locked for everyone working on the project, regardless of
 operating system, architecture, and Python version. The uv lockfile is created and modified by
-[project](../concepts/projects.md) commands such as `uv lock`, `uv sync`, and `uv add`.
+[project](../concepts/projects/index.md) commands such as `uv lock`, `uv sync`, and `uv add`.
 
 universal resolution is also available in uv's pip interface, i.e.,
 [`uv pip compile`](../pip/compile.md), with the `--universal` flag. The resulting requirements file
@@ -355,9 +355,10 @@ code.
 
 Lower bounds are particularly critical when writing a library. It's important to declare the lowest
 version for each dependency that your library works with, and to validate that the bounds are
-correct — testing with [`--resolution lowest` or `resolution lowest-direct`](#resolution-strategy).
-Otherwise, a user may receive an old, incompatible version of one of your library's dependencies and
-the library will fail with an unexpected error.
+correct — testing with
+[`--resolution lowest` or `--resolution lowest-direct`](#resolution-strategy). Otherwise, a user may
+receive an old, incompatible version of one of your library's dependencies and the library will fail
+with an unexpected error.
 
 ## Reproducible resolutions
 

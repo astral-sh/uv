@@ -15,6 +15,7 @@ doctest = false
 [dependencies]
 uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
+uv-globfilter = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
@@ -24,7 +25,6 @@ uv-warnings = { workspace = true }
 csv = { workspace = true }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
-glob = { workspace = true }
 globset = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true }
@@ -43,5 +43,5 @@ workspace = true
 
 [dev-dependencies]
 indoc = { version = "2.0.5" }
-insta = { version = "1.40.0" }
+insta = { version = "1.40.0", features = ["filters"] }
 tempfile = { version = "3.12.0" }

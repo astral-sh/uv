@@ -1,4 +1,5 @@
 pub use base_url::*;
+pub use conflicts::*;
 pub use direct_url::*;
 pub use lenient_requirement::*;
 pub use marker_environment::*;
@@ -10,6 +11,7 @@ pub use simple_json::*;
 pub use supported_environments::*;
 
 mod base_url;
+mod conflicts;
 mod direct_url;
 mod lenient_requirement;
 mod marker_environment;

@@ -16,8 +16,8 @@ use uv_pep508::{
 };
 
 use crate::{
-    Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
-    ParsedUrlError, VerbatimParsedUrl,
+    ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
+    ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -192,11 +192,13 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
             None => RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: None,
+                conflict: None,
             },
             // The most popular case: just a name, a version range and maybe extras.
             Some(VersionOrUrl::VersionSpecifier(specifier)) => RequirementSource::Registry {
                 specifier,
                 index: None,
+                conflict: None,
             },
             Some(VersionOrUrl::Url(url)) => {
                 RequirementSource::from_parsed_url(url.parsed_url, url.verbatim)
@@ -229,7 +231,9 @@ impl Display for Requirement {
             )?;
         }
         match &self.source {
-            RequirementSource::Registry { specifier, index } => {
+            RequirementSource::Registry {
+                specifier, index, ..
+            } => {
                 write!(f, "{specifier}")?;
                 if let Some(index) = index {
                     write!(f, " (index: {index})")?;
@@ -283,6 +287,8 @@ pub enum RequirementSource {
         specifier: VersionSpecifiers,
         /// Choose a version from the index at the given URL.
         index: Option<Url>,
+        /// The conflict item associated with the source, if any.
+        conflict: Option<ConflictItem>,
     },
     // TODO(konsti): Track and verify version specifier from `project.dependencies` matches the
     // version in remote location.
@@ -513,7 +519,9 @@ impl Display for RequirementSource {
     /// rather than for inclusion in a `requirements.txt` file.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Registry { specifier, index } => {
+            Self::Registry {
+                specifier, index, ..
+            } => {
                 write!(f, "{specifier}")?;
                 if let Some(index) = index {
                     write!(f, " (index: {index})")?;
@@ -571,6 +579,7 @@ enum RequirementSourceWire {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
         index: Option<Url>,
+        conflict: Option<ConflictItem>,
     },
 }
 
@@ -580,11 +589,16 @@ impl From<RequirementSource> for RequirementSourceWire {
             RequirementSource::Registry {
                 specifier,
                 mut index,
+                conflict,
             } => {
                 if let Some(index) = index.as_mut() {
                     redact_credentials(index);
                 }
-                Self::Registry { specifier, index }
+                Self::Registry {
+                    specifier,
+                    index,
+                    conflict,
+                }
             }
             RequirementSource::Url {
                 subdirectory,
@@ -686,9 +700,15 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
     fn try_from(wire: RequirementSourceWire) -> Result<RequirementSource, RequirementError> {
         match wire {
-            RequirementSourceWire::Registry { specifier, index } => {
-                Ok(Self::Registry { specifier, index })
-            }
+            RequirementSourceWire::Registry {
+                specifier,
+                index,
+                conflict,
+            } => Ok(Self::Registry {
+                specifier,
+                index,
+                conflict,
+            }),
             RequirementSourceWire::Git { git } => {
                 let mut repository = Url::parse(&git)?;
 
@@ -798,4 +818,51 @@ pub fn redact_credentials(url: &mut Url) {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::path::PathBuf;
+
+    use uv_pep508::{MarkerTree, VerbatimUrl};
+
+    use crate::{Requirement, RequirementSource};
+
+    #[test]
+    fn roundtrip() {
+        let requirement = Requirement {
+            name: "foo".parse().unwrap(),
+            extras: vec![],
+            marker: MarkerTree::TRUE,
+            source: RequirementSource::Registry {
+                specifier: ">1,<2".parse().unwrap(),
+                index: None,
+                conflict: None,
+            },
+            origin: None,
+        };
+
+        let raw = toml::to_string(&requirement).unwrap();
+        let deserialized: Requirement = toml::from_str(&raw).unwrap();
+        assert_eq!(requirement, deserialized);
+
+        let path = if cfg!(windows) {
+            "C:\\home\\ferris\\foo"
+        } else {
+            "/home/ferris/foo"
+        };
+        let requirement = Requirement {
+            name: "foo".parse().unwrap(),
+            extras: vec![],
+            marker: MarkerTree::TRUE,
+            source: RequirementSource::Directory {
+                install_path: PathBuf::from(path),
+                editable: false,
+                r#virtual: false,
+                url: VerbatimUrl::from_absolute_path(path).unwrap(),
+            },
+            origin: None,
+        };
+
+        let raw = toml::to_string(&requirement).unwrap();
+        let deserialized: Requirement = toml::from_str(&raw).unwrap();
+        assert_eq!(requirement, deserialized);
+    }
+}

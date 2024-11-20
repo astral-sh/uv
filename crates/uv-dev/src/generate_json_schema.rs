@@ -82,8 +82,8 @@ pub(crate) fn main(args: &Args) -> Result<()> {
 const REPLACEMENTS: &[(&str, &str)] = &[
     // Use the fully-resolved URL rather than the relative Markdown path.
     (
-        "(../concepts/dependencies.md)",
-        "(https://docs.astral.sh/uv/concepts/dependencies/)",
+        "(../concepts/projects/dependencies.md)",
+        "(https://docs.astral.sh/uv/concepts/projects/dependencies/)",
     ),
 ];
 
@@ -107,4 +107,24 @@ fn generate() -> String {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::env;
+
+    use anyhow::Result;
+
+    use uv_static::EnvVars;
+
+    use crate::generate_all::Mode;
+
+    use super::{main, Args};
+
+    #[test]
+    fn test_generate_json_schema() -> Result<()> {
+        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
+            Mode::Write
+        } else {
+            Mode::Check
+        };
+        main(&Args { mode })
+    }
+}

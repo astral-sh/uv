@@ -20,7 +20,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_pep508::PackageName;
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
 };
@@ -400,6 +400,7 @@ pub(crate) async fn pip_install(
         Some(&tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
+        Conflicts::empty(),
         &client,
         &flat_index,
         &state.index,
@@ -411,24 +412,16 @@ pub(crate) async fn pip_install(
     )
     .await
     {
-        Ok(resolution) => Resolution::from(resolution),
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
+        Ok(graph) => Resolution::from(graph),
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::FetchAndBuild(dist, err))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(err) => return Err(err.into()),
     };
 
     // Sync the environment.
-    operations::install(
+    match operations::install(
         &resolution,
         site_packages,
         modifications,
@@ -450,7 +443,15 @@ pub(crate) async fn pip_install(
         dry_run,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(_) => {}
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+    }
 
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;

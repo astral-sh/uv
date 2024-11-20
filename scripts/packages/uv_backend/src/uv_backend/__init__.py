@@ -1,2 +1,0 @@
-def greet():
-    print("Hello 👋")

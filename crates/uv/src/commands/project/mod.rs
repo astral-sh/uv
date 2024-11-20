@@ -22,7 +22,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
@@ -31,10 +31,11 @@ use uv_python::{
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolutionGraph,
-    ResolverEnvironment,
+    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_scripts::Pep723Item;
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
@@ -79,6 +80,27 @@ pub(crate) enum ProjectError {
 
     #[error("The current Python platform is not compatible with the lockfile's supported environments: {0}")]
     LockedPlatformIncompatibility(String),
+
+    #[error(
+        "{} are incompatible with the declared conflicts: {{{}}}",
+        _1.iter().map(|conflict| {
+            match conflict {
+                ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
+                ConflictPackage::Group(ref group) => format!("group `{group}`"),
+            }
+        }).collect::<Vec<String>>().join(", "),
+        _0
+            .iter()
+            .map(|item| {
+                match item.conflict() {
+                    ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
+                    ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(", "),
+    )]
+    ConflictIncompatibility(ConflictSet, Vec<ConflictPackage>),
 
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
     RequestedPythonProjectIncompatibility(Version, RequiresPython),
@@ -533,6 +555,7 @@ impl ProjectInterpreter {
         connectivity: Connectivity,
         native_tls: bool,
         allow_insecure_host: &[TrustedHost],
+        install_mirrors: PythonInstallMirrors,
         no_config: bool,
         cache: &Cache,
         printer: Printer,
@@ -627,6 +650,8 @@ impl ProjectInterpreter {
             &client_builder,
             cache,
             Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
         )
         .await?;
 
@@ -671,6 +696,7 @@ impl ProjectInterpreter {
 pub(crate) async fn get_or_init_environment(
     workspace: &Workspace,
     python: Option<PythonRequest>,
+    install_mirrors: PythonInstallMirrors,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
@@ -689,6 +715,7 @@ pub(crate) async fn get_or_init_environment(
         connectivity,
         native_tls,
         allow_insecure_host,
+        install_mirrors,
         no_config,
         cache,
         printer,
@@ -928,7 +955,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
     }
 }
 
-/// Run dependency resolution for an interpreter, returning the [`ResolutionGraph`].
+/// Run dependency resolution for an interpreter, returning the [`ResolverOutput`].
 pub(crate) async fn resolve_environment<'a>(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
@@ -941,7 +968,7 @@ pub(crate) async fn resolve_environment<'a>(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
-) -> Result<ResolutionGraph, ProjectError> {
+) -> Result<ResolverOutput, ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
     let ResolverSettingsRef {
@@ -1091,6 +1118,7 @@ pub(crate) async fn resolve_environment<'a>(
         Some(tags),
         ResolverEnvironment::specific(marker_env),
         python_requirement,
+        Conflicts::empty(),
         &client,
         &flat_index,
         &state.index,
@@ -1116,7 +1144,7 @@ pub(crate) async fn sync_environment(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<PythonEnvironment> {
+) -> Result<PythonEnvironment, ProjectError> {
     let InstallerSettingsRef {
         index_locations,
         index_strategy,
@@ -1269,7 +1297,7 @@ pub(crate) async fn update_environment(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
-) -> anyhow::Result<EnvironmentUpdate> {
+) -> Result<EnvironmentUpdate, ProjectError> {
     warn_on_requirements_txt_setting(&spec, settings.as_ref().into());
 
     let ResolverInstallerSettings {
@@ -1433,6 +1461,7 @@ pub(crate) async fn update_environment(
         Some(tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
+        Conflicts::empty(),
         &client,
         &flat_index,
         &state.index,
@@ -1485,6 +1514,7 @@ pub(crate) async fn update_environment(
 /// Determine the [`RequiresPython`] requirement for a new PEP 723 script.
 pub(crate) async fn init_script_python_requirement(
     python: Option<&str>,
+    install_mirrors: PythonInstallMirrors,
     directory: &Path,
     no_pin_python: bool,
     python_preference: PythonPreference,
@@ -1521,6 +1551,8 @@ pub(crate) async fn init_script_python_requirement(
         client_builder,
         cache,
         Some(reporter),
+        install_mirrors.python_install_mirror.as_deref(),
+        install_mirrors.pypy_install_mirror.as_deref(),
     )
     .await?
     .into_interpreter();

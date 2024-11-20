@@ -60,7 +60,7 @@ impl<T> ForkMap<T> {
         };
         values
             .iter()
-            .filter(|entry| env.included(&entry.marker))
+            .filter(|entry| env.included_by_marker(&entry.marker))
             .map(|entry| &entry.value)
             .collect()
     }

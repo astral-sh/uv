@@ -30,7 +30,7 @@ fn sync() -> Result<()> {
     )?;
 
     // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -41,7 +41,7 @@ fn sync() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     assert!(context.temp_dir.child("uv.lock").exists());
 
@@ -467,6 +467,74 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+#[test]
+fn sync_legacy_non_project_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["foo", "bar"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=1"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions>=4"]
+        "#,
+        )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
 /// Sync development dependencies in a (legacy) non-project workspace root.
 #[test]
 fn sync_legacy_non_project_group() -> Result<()> {
@@ -688,20 +756,20 @@ fn sync_build_isolation_package() -> Result<()> {
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.sync().arg("--no-build-isolation-package").arg("source-distribution"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+          ModuleNotFoundError: No module named 'hatchling'
 
+      help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
     "###);
 
     // Install `hatchling` for `source-distribution`.
@@ -779,39 +847,39 @@ fn sync_build_isolation_extra() -> Result<()> {
         .collect::<Vec<_>>();
     uv_snapshot!(&filters, context.sync().arg("--extra").arg("compile"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+          ModuleNotFoundError: No module named 'hatchling'
 
+      help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "###);
 
     // Running `uv sync` with `--all-extras` should also fail.
     uv_snapshot!(&filters, context.sync().arg("--all-extras"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+          ModuleNotFoundError: No module named 'hatchling'
 
+      help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "###);
 
     // Install the build dependencies.
@@ -2052,20 +2120,18 @@ fn no_install_project_no_build() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to validate existing lockfile: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     Resolved 4 packages in [TIME]
     error: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     "###);
 
     // But it's fine to combine `--no-install-project` with `--no-build`. We shouldn't error, since
     // we aren't building the project.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-install-project").arg("--no-build").arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to validate existing lockfile: Distribution `project==0.1.0 @ editable+.` can't be installed because it is marked as `--no-build` but has no binary distribution
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -2912,6 +2978,8 @@ fn no_binary() -> Result<()> {
         "#,
     )?;
 
+    context.lock().assert().success();
+
     uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("iniconfig"), @r###"
     success: true
     exit_code: 0
@@ -2941,7 +3009,7 @@ fn no_binary_error() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["django_allauth==0.51.0"]
+        dependencies = ["odrive"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -2951,14 +3019,14 @@ fn no_binary_error() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("odrive"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 31 packages in [TIME]
+    error: Distribution `odrive==0.6.8 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-binary` but has no source distribution
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -2985,6 +3053,8 @@ fn no_build() -> Result<()> {
         "#,
     )?;
 
+    context.lock().assert().success();
+
     uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("iniconfig"), @r###"
     success: true
     exit_code: 0
@@ -2996,6 +3066,42 @@ fn no_build() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn no_build_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["django_allauth==0.51.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 19 packages in [TIME]
+    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     "###);
 
     assert!(context.temp_dir.child("uv.lock").exists());
@@ -4289,6 +4395,271 @@ fn sync_all_groups() -> Result<()> {
 
     ----- stderr -----
     error: Group `foo` is not defined in any project's `dependency-group` table
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        cu118 = ["jinja2==3.1.2"]
+        cu124 = ["jinja2==3.1.3"]
+
+        [tool.uv]
+        constraint-dependencies = ["markupsafe<3"]
+        conflicts = [
+            [
+                { extra = "cu118" },
+                { extra = "cu124" },
+            ],
+        ]
+
+        [tool.uv.sources]
+        jinja2 = [
+            { index = "torch-cu118", extra = "cu118" },
+            { index = "torch-cu124", extra = "cu124" },
+        ]
+
+        [[tool.uv.index]]
+        name = "torch-cu118"
+        url = "https://download.pytorch.org/whl/cu118"
+        explicit = true
+
+        [[tool.uv.index]]
+        name = "torch-cu124"
+        url = "https://download.pytorch.org/whl/cu124"
+        explicit = true
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("cu124").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_derivation_chain() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["wsgiref"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "wsgiref"
+        version = "0.1.2"
+        dependencies = []
+        "#,
+    )?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"/.*/src", "/[TMP]/src"),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.sync(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download and build `wsgiref==0.1.2`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 5, in <module>
+            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+              print "Setuptools version",version,"or greater has been installed."
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+
+      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_derivation_chain_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        optional-dependencies = { wsgi = ["wsgiref"] }
+
+        [[tool.uv.dependency-metadata]]
+        name = "wsgiref"
+        version = "0.1.2"
+        dependencies = []
+        "#,
+    )?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"/.*/src", "/[TMP]/src"),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.sync().arg("--extra").arg("wsgi"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download and build `wsgiref==0.1.2`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 5, in <module>
+            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+              print "Setuptools version",version,"or greater has been installed."
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+
+      help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_derivation_chain_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        wsgi = ["wsgiref"]
+
+        [[tool.uv.dependency-metadata]]
+        name = "wsgiref"
+        version = "0.1.2"
+        dependencies = []
+        "#,
+    )?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"/.*/src", "/[TMP]/src"),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.sync().arg("--group").arg("wsgi"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download and build `wsgiref==0.1.2`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 5, in <module>
+            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+              print "Setuptools version",version,"or greater has been installed."
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+
+      help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
     "###);
 
     Ok(())

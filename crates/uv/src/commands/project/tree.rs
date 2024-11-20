@@ -15,16 +15,17 @@ use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
+use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, DependencyGroupsTarget, ProjectInterpreter,
+    default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
 };
-use crate::commands::{project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -45,6 +46,7 @@ pub(crate) async fn tree(
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -82,6 +84,7 @@ pub(crate) async fn tree(
                 connectivity,
                 native_tls,
                 allow_insecure_host,
+                install_mirrors,
                 no_config,
                 cache,
                 printer,
@@ -104,7 +107,7 @@ pub(crate) async fn tree(
     let state = SharedState::default();
 
     // Update the lockfile, if necessary.
-    let lock = project::lock::do_safe_lock(
+    let lock = match do_safe_lock(
         mode,
         &workspace,
         settings.as_ref(),
@@ -118,8 +121,16 @@ pub(crate) async fn tree(
         cache,
         printer,
     )
-    .await?
-    .into_lock();
+    .await
+    {
+        Ok(result) => result.into_lock(),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     // Determine the markers to use for resolution.
     let markers = (!universal).then(|| {

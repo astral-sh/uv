@@ -52,6 +52,7 @@ pub use crate::any::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
 pub use crate::dependency_metadata::*;
+pub use crate::derivation::*;
 pub use crate::diagnostic::*;
 pub use crate::error::*;
 pub use crate::file::*;
@@ -74,6 +75,7 @@ mod any;
 mod buildable;
 mod cached;
 mod dependency_metadata;
+mod derivation;
 mod diagnostic;
 mod error;
 mod file;
@@ -166,14 +168,21 @@ impl std::fmt::Display for InstalledVersion<'_> {
 /// Either a built distribution, a wheel, or a source distribution that exists at some location.
 ///
 /// The location can be an index, URL or path (wheel), or index, URL, path or Git repository (source distribution).
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Dist {
     Built(BuiltDist),
     Source(SourceDist),
 }
 
+/// A reference to a built or source distribution.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum DistRef<'a> {
+    Built(&'a BuiltDist),
+    Source(&'a SourceDist),
+}
+
 /// A wheel, with its three possible origins (index, url, path)
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum BuiltDist {
     Registry(RegistryBuiltDist),
@@ -182,7 +191,7 @@ pub enum BuiltDist {
 }
 
 /// A source distribution, with its possible origins (index, url, path, git)
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum SourceDist {
     Registry(RegistrySourceDist),
@@ -193,7 +202,7 @@ pub enum SourceDist {
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistryBuiltWheel {
     pub filename: WheelFilename,
     pub file: Box<File>,
@@ -201,7 +210,7 @@ pub struct RegistryBuiltWheel {
 }
 
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistryBuiltDist {
     /// All wheels associated with this distribution. It is guaranteed
     /// that there is at least one wheel.
@@ -231,7 +240,7 @@ pub struct RegistryBuiltDist {
 }
 
 /// A built distribution (wheel) that exists at an arbitrary URL.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectUrlBuiltDist {
     /// We require that wheel urls end in the full wheel filename, e.g.
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
@@ -243,7 +252,7 @@ pub struct DirectUrlBuiltDist {
 }
 
 /// A built distribution (wheel) that exists in a local directory.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
     /// The absolute path to the wheel which we use for installing.
@@ -253,7 +262,7 @@ pub struct PathBuiltDist {
 }
 
 /// A source distribution that exists in a registry, like `PyPI`.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistrySourceDist {
     pub name: PackageName,
     pub version: Version,
@@ -272,7 +281,7 @@ pub struct RegistrySourceDist {
 }
 
 /// A source distribution that exists at an arbitrary URL.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectUrlSourceDist {
     /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
@@ -288,7 +297,7 @@ pub struct DirectUrlSourceDist {
 }
 
 /// A source distribution that exists in a Git repository.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GitSourceDist {
     pub name: PackageName,
     /// The URL without the revision and subdirectory fragment.
@@ -300,7 +309,7 @@ pub struct GitSourceDist {
 }
 
 /// A source distribution that exists in a local archive (e.g., a `.tar.gz` file).
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PathSourceDist {
     pub name: PackageName,
     /// The absolute path to the distribution which we use for installing.
@@ -312,7 +321,7 @@ pub struct PathSourceDist {
 }
 
 /// A source distribution that exists in a local directory.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
     /// The absolute path to the distribution which we use for installing.
@@ -512,11 +521,32 @@ impl Dist {
         }
     }
 
+    /// Returns the version of the distribution, if it is known.
     pub fn version(&self) -> Option<&Version> {
         match self {
             Self::Built(wheel) => Some(wheel.version()),
             Self::Source(source_dist) => source_dist.version(),
         }
+    }
+
+    /// Convert this distribution into a reference.
+    pub fn as_ref(&self) -> DistRef {
+        match self {
+            Self::Built(dist) => DistRef::Built(dist),
+            Self::Source(dist) => DistRef::Source(dist),
+        }
+    }
+}
+
+impl<'a> From<&'a SourceDist> for DistRef<'a> {
+    fn from(dist: &'a SourceDist) -> Self {
+        DistRef::Source(dist)
+    }
+}
+
+impl<'a> From<&'a BuiltDist> for DistRef<'a> {
+    fn from(dist: &'a BuiltDist) -> Self {
+        DistRef::Built(dist)
     }
 }
 

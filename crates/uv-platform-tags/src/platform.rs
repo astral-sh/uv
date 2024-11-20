@@ -117,8 +117,10 @@ impl Arch {
             }
             // manylinux 1
             Self::X86 | Self::X86_64 => Some(5),
+            // manylinux_2_31
+            Self::Riscv64 => Some(31),
             // unsupported
-            Self::Armv6L | Self::Riscv64 => None,
+            Self::Armv6L => None,
         }
     }
 }

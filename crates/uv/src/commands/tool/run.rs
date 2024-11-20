@@ -26,6 +26,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
@@ -33,7 +34,6 @@ use uv_warnings::warn_user;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::pip::operations;
 use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
@@ -69,6 +69,7 @@ pub(crate) async fn run(
     with: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     invocation_source: ToolRunCommand,
     isolated: bool,
@@ -112,6 +113,7 @@ pub(crate) async fn run(
         with,
         show_resolution,
         python.as_deref(),
+        install_mirrors,
         &settings,
         isolated,
         python_preference,
@@ -127,14 +129,14 @@ pub(crate) async fn run(
 
     let (from, environment) = match result {
         Ok(resolution) => resolution,
-        Err(ProjectError::Operation(operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution_context(&err, "tool");
-            return Ok(ExitStatus::Failure);
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::with_context("tool")
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(ProjectError::Requirements(err)) => {
-            let err = miette::Report::msg(format!("{err}")).context("Invalid `--with` requirement");
+            let err = miette::Report::msg(format!("{err}"))
+                .context("Failed to resolve `--with` requirement");
             eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
         }
@@ -236,9 +238,30 @@ pub(crate) async fn run(
     // signal handlers after the command completes.
     let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
-    let status = handle.wait().await.context("Child process disappeared")?;
+    // Exit based on the result of the command.
+    #[cfg(unix)]
+    let status = {
+        use tokio::select;
+        use tokio::signal::unix::{signal, SignalKind};
 
-    // Exit based on the result of the command
+        let mut term_signal = signal(SignalKind::terminate())?;
+        loop {
+            select! {
+                result = handle.wait() => {
+                    break result;
+                },
+
+                // `SIGTERM`
+                _ = term_signal.recv() => {
+                    let _ = terminate_process(&mut handle);
+                }
+            };
+        }
+    }?;
+
+    #[cfg(not(unix))]
+    let status = handle.wait().await?;
+
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
@@ -255,6 +278,15 @@ pub(crate) async fn run(
         }
         Ok(ExitStatus::Failure)
     }
+}
+
+#[cfg(unix)]
+fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+
+    let pid = child.id().context("Failed to get child process ID")?;
+    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
 }
 
 /// Return the entry points for the specified package.
@@ -397,6 +429,7 @@ async fn get_or_create_environment(
     with: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
+    install_mirrors: PythonInstallMirrors,
     settings: &ResolverInstallerSettings,
     isolated: bool,
     python_preference: PythonPreference,
@@ -426,6 +459,8 @@ async fn get_or_create_environment(
         &client_builder,
         cache,
         Some(&reporter),
+        install_mirrors.python_install_mirror.as_deref(),
+        install_mirrors.pypy_install_mirror.as_deref(),
     )
     .await?
     .into_interpreter();
@@ -443,6 +478,7 @@ async fn get_or_create_environment(
             source: RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: None,
+                conflict: None,
             },
             origin: None,
         },
@@ -456,6 +492,7 @@ async fn get_or_create_environment(
                     version.clone(),
                 )),
                 index: None,
+                conflict: None,
             },
             origin: None,
         },
@@ -467,6 +504,7 @@ async fn get_or_create_environment(
             source: RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: None,
+                conflict: None,
             },
             origin: None,
         },

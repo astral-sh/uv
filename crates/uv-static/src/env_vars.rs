@@ -167,8 +167,9 @@ impl EnvVars {
     /// Equivalent to the `--token` argument for self update. A GitHub token for authentication.
     pub const UV_GITHUB_TOKEN: &'static str = "UV_GITHUB_TOKEN";
 
-    /// Equivalent to the `--verify-hashes` argument. Verifies included hashes.
-    pub const UV_VERIFY_HASHES: &'static str = "UV_VERIFY_HASHES";
+    /// Equivalent to the `--no-verify-hashes` argument. Disables hash verification for
+    /// `requirements.txt` files.
+    pub const UV_NO_VERIFY_HASHES: &'static str = "UV_NO_VERIFY_HASHES";
 
     /// Equivalent to the `--allow-insecure-host` argument.
     pub const UV_INSECURE_HOST: &'static str = "UV_INSECURE_HOST";
@@ -195,7 +196,7 @@ impl EnvVars {
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
 
     /// Specifies the path to the directory to use for a project virtual environment.
-    /// See the [project documentation](../concepts/projects.md#configuring-the-project-environment-path)
+    /// See the [project documentation](../concepts/projects/config.md#project-environment-path)
     /// for more details.
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
 
@@ -541,7 +542,7 @@ impl EnvVars {
     pub const UV_INSTALLER_GHE_BASE_URL: &'static str = "UV_INSTALLER_GHE_BASE_URL";
 
     /// The directory in which to install uv using the standalone installer and `self update` feature.
-    /// Defaults to `~/.cargo/bin`.
+    /// Defaults to `~/.local/bin`.
     pub const UV_INSTALL_DIR: &'static str = "UV_INSTALL_DIR";
 
     /// Used ephemeral environments like CI to install uv to a specific path while preventing

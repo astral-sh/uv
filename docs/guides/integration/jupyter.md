@@ -6,8 +6,8 @@ with a project, or as a standalone tool.
 
 ## Using Jupyter within a project
 
-If you're working within a [project](../../concepts/projects.md), you can start a Jupyter server
-with access to the project's virtual environment via the following:
+If you're working within a [project](../../concepts/projects/index.md), you can start a Jupyter
+server with access to the project's virtual environment via the following:
 
 ```console
 $ uv run --with jupyter jupyter lab
@@ -96,8 +96,8 @@ an isolated environment.
 ## Using Jupyter with a non-project environment
 
 If you need to run Jupyter in a virtual environment that isn't associated with a
-[project](../../concepts/projects.md) (e.g., has no `pyproject.toml` or `uv.lock`), you can do so by
-adding Jupyter to the environment directly. For example:
+[project](../../concepts/projects/index.md) (e.g., has no `pyproject.toml` or `uv.lock`), you can do
+so by adding Jupyter to the environment directly. For example:
 
 ```console
 $ uv venv --seed

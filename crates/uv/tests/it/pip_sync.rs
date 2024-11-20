@@ -12,10 +12,9 @@ use predicates::Predicate;
 use url::Url;
 
 use crate::common::{
-    copy_dir_all, download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter,
-    TestContext,
+    download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter, TestContext,
 };
-use uv_fs::Simplified;
+use uv_fs::{copy_dir_all, Simplified};
 use uv_static::EnvVars;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
@@ -3565,20 +3564,19 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
         .arg(":all:")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download and build `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Computed:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
     "###
     );
 
@@ -3659,20 +3657,19 @@ fn require_hashes_source_only_binary() -> Result<()> {
         .arg(":all:")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3692,20 +3689,19 @@ fn require_hashes_wrong_digest() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3725,20 +3721,19 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+          Computed:
+            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     "###
     );
 
@@ -3898,20 +3893,19 @@ fn require_hashes_wheel_url() -> Result<()> {
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -3953,20 +3947,19 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -4062,20 +4055,19 @@ fn require_hashes_re_download() -> Result<()> {
         .arg("--reinstall")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio==4.0.0`
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -4154,20 +4146,19 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to download `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
 
-    Expected:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Expected:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-    Computed:
-      sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
+          Computed:
+            sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
     "###
     );
 
@@ -4431,20 +4422,19 @@ fn require_hashes_repeated_hash() -> Result<()> {
         .arg("--require-hashes")
         .arg("--reinstall"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-    Expected:
-      md5:520d85e19168705cdf0223621b18831a
+          Expected:
+            md5:520d85e19168705cdf0223621b18831a
 
-    Computed:
-      md5:420d85e19168705cdf0223621b18831a
+          Computed:
+            md5:420d85e19168705cdf0223621b18831a
     "###
     );
 
@@ -4563,20 +4553,19 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:123
+          Expected:
+            sha256:123
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4593,20 +4582,19 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+          Expected:
+            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4684,20 +4672,19 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:123
+          Expected:
+            sha256:123
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4713,20 +4700,19 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+          Expected:
+            sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4794,21 +4780,20 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
         .arg("--find-links")
         .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/invalid-hash/simple-html/example-a-961b4c22/index.html"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download and build `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-      sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+          Expected:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+            sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
 
-    Computed:
-      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+          Computed:
+            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
     "###
     );
 
@@ -4890,20 +4875,19 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:123
+          Expected:
+            sha256:123
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -4920,20 +4904,19 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
+          Expected:
+            sha256:8838f9d005ff0432b258ba648d9cabb1cbdf06ac29d14f788b02edae544032ea
 
-    Computed:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          Computed:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "###
     );
 
@@ -5004,21 +4987,20 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
         .arg("--index-url")
         .arg("https://astral-test.github.io/astral-test-hash/invalid-hash/simple-html/"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `example-a-961b4c22==1.0.0`
-      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download and build `example-a-961b4c22==1.0.0`
+      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
 
-    Expected:
-      sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-      sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+          Expected:
+            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+            sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
 
-    Computed:
-      sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+          Computed:
+            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
     "###
     );
 
@@ -5092,20 +5074,19 @@ fn require_hashes_url_invalid() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
 
-    Expected:
-      sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Expected:
+            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
-    Computed:
-      sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Computed:
+            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "###
     );
 
@@ -5126,20 +5107,19 @@ fn require_hashes_url_ignore() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
 
-    Expected:
-      sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Expected:
+            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
-    Computed:
-      sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+          Computed:
+            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "###
     );
 
@@ -5487,16 +5467,15 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to download and build `requests==1.2.0`
-      Caused by: Failed to resolve requirements from `setup.py` build
-      Caused by: No solution found when resolving: `setuptools>=40.8.0`
-      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 

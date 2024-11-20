@@ -14,7 +14,7 @@ use uv_python::{
     PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
-use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
+use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 
 use crate::commands::pip::loggers::{
@@ -33,6 +33,7 @@ use crate::settings::ResolverInstallerSettings;
 pub(crate) async fn upgrade(
     name: Vec<PackageName>,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     connectivity: Connectivity,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
@@ -84,6 +85,8 @@ pub(crate) async fn upgrade(
                 &client_builder,
                 cache,
                 Some(&reporter),
+                install_mirrors.python_install_mirror.as_deref(),
+                install_mirrors.pypy_install_mirror.as_deref(),
             )
             .await?
             .into_interpreter(),

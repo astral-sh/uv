@@ -6,6 +6,9 @@ Ok(
     Lock {
         version: 1,
         fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
         supported_environments: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(

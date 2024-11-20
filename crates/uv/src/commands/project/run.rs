@@ -5,7 +5,6 @@ use std::fmt::Write;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anstream::eprint;
 use anyhow::{anyhow, bail, Context};
 use futures::StreamExt;
 use itertools::Itertools;
@@ -13,6 +12,7 @@ use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
 use url::Url;
+
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
@@ -25,7 +25,6 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
-
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -33,6 +32,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{InstallTarget, Lock};
 use uv_scripts::Pep723Item;
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
@@ -40,7 +40,6 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::lock::LockMode;
@@ -73,6 +72,7 @@ pub(crate) async fn run(
     dev: DevGroupsSpecification,
     editable: EditableMode,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -203,6 +203,8 @@ pub(crate) async fn run(
             &client_builder,
             cache,
             Some(&download_reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
         )
         .await?
         .into_interpreter();
@@ -241,7 +243,7 @@ pub(crate) async fn run(
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.indexes.as_deref())
+                    .and_then(|uv| uv.top_level.index.as_deref())
                     .unwrap_or(&empty),
                 SourceStrategy::Disabled => &empty,
             };
@@ -272,7 +274,49 @@ pub(crate) async fn run(
                     .map_ok(LoweredRequirement::into_inner)
                 })
                 .collect::<Result<_, _>>()?;
-            let spec = RequirementsSpecification::from_requirements(requirements);
+            let constraints = script
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.constraint_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .flat_map(|requirement| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
+                    )
+                    .map_ok(LoweredRequirement::into_inner)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let overrides = script
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.override_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .flat_map(|requirement| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
+                    )
+                    .map_ok(LoweredRequirement::into_inner)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let spec =
+                RequirementsSpecification::from_constraints(requirements, constraints, overrides);
             let result = CachedEnvironment::get_or_create(
                 EnvironmentSpecification::from(spec),
                 interpreter,
@@ -299,23 +343,10 @@ pub(crate) async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    diagnostics::no_solution_context(&err, "script");
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                ))) => {
-                    diagnostics::fetch_and_build(dist, err);
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::Build(dist, err),
-                ))) => {
-                    diagnostics::build(dist, err);
-                    return Ok(ExitStatus::Failure);
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -397,7 +428,7 @@ pub(crate) async fn run(
 
         script_interpreter
     } else {
-        let project = if let Some(package) = package {
+        let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
@@ -524,6 +555,8 @@ pub(crate) async fn run(
                     &client_builder,
                     cache,
                     Some(&download_reporter),
+                    install_mirrors.python_install_mirror.as_deref(),
+                    install_mirrors.pypy_install_mirror.as_deref(),
                 )
                 .await?
                 .into_interpreter();
@@ -554,6 +587,7 @@ pub(crate) async fn run(
                 project::get_or_init_environment(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
+                    install_mirrors,
                     python_preference,
                     python_downloads,
                     connectivity,
@@ -629,23 +663,10 @@ pub(crate) async fn run(
                 .await
                 {
                     Ok(result) => result,
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::NoSolution(err),
-                    ))) => {
-                        diagnostics::no_solution(&err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::fetch_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -658,7 +679,14 @@ pub(crate) async fn run(
                                 workspace: project.workspace(),
                                 lock: result.lock(),
                             }
+                        } else if let Some(package) = package.as_ref() {
+                            InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: package,
+                                lock: result.lock(),
+                            }
                         } else {
+                            // By default, install the root package.
                             InstallTarget::Project {
                                 workspace: project.workspace(),
                                 name: project.project_name(),
@@ -666,15 +694,31 @@ pub(crate) async fn run(
                             }
                         }
                     }
-                    VirtualProject::NonProject(workspace) => InstallTarget::NonProjectWorkspace {
-                        workspace,
-                        lock: result.lock(),
-                    },
+                    VirtualProject::NonProject(workspace) => {
+                        if all_packages {
+                            InstallTarget::NonProjectWorkspace {
+                                workspace,
+                                lock: result.lock(),
+                            }
+                        } else if let Some(package) = package.as_ref() {
+                            InstallTarget::Project {
+                                workspace,
+                                name: package,
+                                lock: result.lock(),
+                            }
+                        } else {
+                            // By default, install the entire workspace.
+                            InstallTarget::NonProjectWorkspace {
+                                workspace,
+                                lock: result.lock(),
+                            }
+                        }
+                    }
                 };
 
                 let install_options = InstallOptions::default();
 
-                project::sync::do_sync(
+                match project::sync::do_sync(
                     target,
                     &venv,
                     &extras,
@@ -695,7 +739,16 @@ pub(crate) async fn run(
                     cache,
                     printer,
                 )
-                .await?;
+                .await
+                {
+                    Ok(()) => {}
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    }
+                    Err(err) => return Err(err.into()),
+                }
 
                 lock = Some(result.into_lock());
             }
@@ -732,6 +785,8 @@ pub(crate) async fn run(
                     &client_builder,
                     cache,
                     Some(&download_reporter),
+                    install_mirrors.python_install_mirror.as_deref(),
+                    install_mirrors.pypy_install_mirror.as_deref(),
                 )
                 .await?;
 
@@ -832,29 +887,10 @@ pub(crate) async fn run(
 
                 let environment = match result {
                     Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::NoSolution(err),
-                    ))) => {
-                        diagnostics::no_solution_context(&err, "`--with`");
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::fetch_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
-                        let err = miette::Report::msg(format!("{err}"))
-                            .context("Invalid `--with` requirement");
-                        eprint!("{err:?}");
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::with_context("`--with`")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -927,7 +963,11 @@ pub(crate) async fn run(
             .map(|entry| entry.path())
             .filter(|path| is_executable(path))
             .map(|path| {
-                if cfg!(windows) {
+                if cfg!(windows)
+                    && path
+                        .extension()
+                        .is_some_and(|exe| exe == std::env::consts::EXE_EXTENSION)
+                {
                     // Remove the extensions.
                     path.with_extension("")
                 } else {
@@ -997,9 +1037,30 @@ pub(crate) async fn run(
     // signal handlers after the command completes.
     let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
-    let status = handle.wait().await.context("Child process disappeared")?;
+    // Exit based on the result of the command.
+    #[cfg(unix)]
+    let status = {
+        use tokio::select;
+        use tokio::signal::unix::{signal, SignalKind};
 
-    // Exit based on the result of the command
+        let mut term_signal = signal(SignalKind::terminate())?;
+        loop {
+            select! {
+                result = handle.wait() => {
+                    break result;
+                },
+
+                // `SIGTERM`
+                _ = term_signal.recv() => {
+                    let _ = terminate_process(&mut handle);
+                }
+            };
+        }
+    }?;
+
+    #[cfg(not(unix))]
+    let status = handle.wait().await?;
+
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
@@ -1016,6 +1077,15 @@ pub(crate) async fn run(
         }
         Ok(ExitStatus::Failure)
     }
+}
+
+#[cfg(unix)]
+fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+
+    let pid = child.id().context("Failed to get child process ID")?;
+    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
