@@ -6,6 +6,7 @@ use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
 use crate::resolver::ForkState;
+use crate::universal_marker::UniversalMarker;
 use crate::PythonRequirement;
 
 /// Represents one or more marker environments for a resolution.
@@ -328,6 +329,26 @@ impl ResolverEnvironment {
                     None
                 } else {
                     Some(markers)
+                }
+            }
+        }
+    }
+
+    /// Creates a universal marker expression corresponding to the fork that is
+    /// represented by this resolver environment. A universal marker includes
+    /// not just the standard PEP 508 marker, but also a marker based on
+    /// conflicting extras/groups.
+    ///
+    /// This returns `None` when this does not correspond to a fork.
+    pub(crate) fn try_universal_markers(&self) -> Option<UniversalMarker> {
+        match self.kind {
+            Kind::Specific { .. } => None,
+            Kind::Universal { ref markers, .. } => {
+                if markers.is_true() {
+                    None
+                } else {
+                    // FIXME: Support conflicts.
+                    Some(UniversalMarker::new(markers.clone(), MarkerTree::TRUE))
                 }
             }
         }

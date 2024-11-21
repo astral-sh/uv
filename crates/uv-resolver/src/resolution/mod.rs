@@ -7,13 +7,13 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
 use uv_pypi_types::HashDigest;
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
 pub(crate) use crate::resolution::output::ResolutionGraphNode;
 pub use crate::resolution::output::{ConflictingDistributionError, ResolverOutput};
 pub(crate) use crate::resolution::requirements_txt::RequirementsTxtDist;
+use crate::universal_marker::UniversalMarker;
 
 mod display;
 mod output;
@@ -36,7 +36,7 @@ pub(crate) struct AnnotatedDist {
     /// That is, when doing a traversal over all of the distributions in a
     /// resolution, this marker corresponds to the disjunction of all paths to
     /// this distribution in the resolution graph.
-    pub(crate) marker: MarkerTree,
+    pub(crate) marker: UniversalMarker,
 }
 
 impl AnnotatedDist {

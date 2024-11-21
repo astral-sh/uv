@@ -28,7 +28,8 @@ use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, LockVersion, Options, OptionsBuilder, PythonRequirement,
-    RequiresPython, ResolverEnvironment, ResolverManifest, SatisfiesResult, VERSION,
+    RequiresPython, ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    VERSION,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
@@ -588,7 +589,18 @@ async fn do_lock(
             // the environment changed, e.g. the python bound check above can lead to different forking.
             let resolver_env = ResolverEnvironment::universal(
                 forks_lock
-                    .map(|lock| lock.fork_markers().to_vec())
+                    .map(|lock| {
+                        // TODO(ag): Consider whether we should be capturing
+                        // conflicting extras/groups for every fork. If
+                        // we did, then we'd be able to use them here,
+                        // which would in turn flow into construction of
+                        // `ResolverEnvironment`.
+                        lock.fork_markers()
+                            .iter()
+                            .map(UniversalMarker::pep508)
+                            .cloned()
+                            .collect()
+                    })
                     .unwrap_or_else(|| {
                         environments
                             .cloned()

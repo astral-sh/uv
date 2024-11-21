@@ -19,7 +19,8 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
 use crate::graph_ops::marker_reachability;
-use crate::lock::{Package, PackageId, Source};
+use crate::lock::{LockErrorKind, Package, PackageId, Source};
+use crate::universal_marker::UniversalMarker;
 use crate::{InstallTarget, LockError};
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
@@ -39,6 +40,9 @@ impl<'lock> RequirementsTxtExport<'lock> {
         hashes: bool,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
+        if !target.lock().conflicts().is_empty() {
+            return Err(LockErrorKind::ConflictsNotAllowedInRequirementsTxt.into());
+        }
         let size_guess = target.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
@@ -64,7 +68,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Add an edge from the root.
                 let index = inverse[&dist.id];
-                petgraph.add_edge(root, index, MarkerTree::TRUE);
+                petgraph.add_edge(root, index, UniversalMarker::TRUE);
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
@@ -110,7 +114,17 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 petgraph.add_edge(
                     root,
                     dep_index,
-                    dep.simplified_marker.as_simplified_marker_tree().clone(),
+                    UniversalMarker::new(
+                        dep.simplified_marker.as_simplified_marker_tree().clone(),
+                        // OK because we've verified above that we do not have any
+                        // conflicting extras/groups.
+                        //
+                        // So why use `UniversalMarker`? Because that's what
+                        // `marker_reachability` wants and it (probably) isn't
+                        // worth inventing a new abstraction so that it can accept
+                        // graphs with either `MarkerTree` or `UniversalMarker`.
+                        MarkerTree::TRUE,
+                    ),
                 );
 
                 // Push its dependencies on the queue.
@@ -154,7 +168,12 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 petgraph.add_edge(
                     index,
                     dep_index,
-                    dep.simplified_marker.as_simplified_marker_tree().clone(),
+                    UniversalMarker::new(
+                        dep.simplified_marker.as_simplified_marker_tree().clone(),
+                        // See note above for other `UniversalMarker::new` for
+                        // why this is OK.
+                        MarkerTree::TRUE,
+                    ),
                 );
 
                 // Push its dependencies on the queue.
@@ -187,7 +206,13 @@ impl<'lock> RequirementsTxtExport<'lock> {
             })
             .map(|(index, package)| Requirement {
                 package,
-                marker: reachability.remove(&index).unwrap_or_default(),
+                // As above, we've verified that there are no conflicting extras/groups
+                // specified, so it's safe to completely ignore the conflict marker.
+                marker: reachability
+                    .remove(&index)
+                    .unwrap_or_default()
+                    .pep508()
+                    .clone(),
             })
             .collect::<Vec<_>>();
 
