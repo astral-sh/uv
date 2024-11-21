@@ -1212,7 +1212,10 @@ fn sync_group() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = ["typing-extensions"]
 
+        [tool.uv]
+
         [dependency-groups]
+        dev = ["iniconfig"]
         foo = ["anyio"]
         bar = ["requests"]
         "#,
@@ -1226,9 +1229,10 @@ fn sync_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Resolved 10 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
      + typing-extensions==4.10.0
     "###);
 
@@ -1238,7 +1242,7 @@ fn sync_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
@@ -1252,13 +1256,14 @@ fn sync_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Prepared 4 packages in [TIME]
-    Uninstalled 3 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
     Installed 4 packages in [TIME]
      - anyio==4.3.0
      + certifi==2024.2.2
      + charset-normalizer==3.3.2
+     - iniconfig==2.0.0
      + requests==2.31.0
      - sniffio==1.3.1
      - typing-extensions==4.10.0
@@ -1271,9 +1276,10 @@ fn sync_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Resolved 10 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
+     + iniconfig==2.0.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
     "###);
@@ -1284,8 +1290,8 @@ fn sync_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Audited 8 packages in [TIME]
+    Resolved 10 packages in [TIME]
+    Audited 9 packages in [TIME]
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--all-groups").arg("--no-group").arg("bar"), @r###"
@@ -1294,12 +1300,68 @@ fn sync_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
+    Resolved 10 packages in [TIME]
     Uninstalled 4 packages in [TIME]
      - certifi==2024.2.2
      - charset-normalizer==3.3.2
      - requests==2.31.0
      - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups").arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     - iniconfig==2.0.0
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 7 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     + iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--dev").arg("--no-group").arg("dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--no-dev"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Audited 1 package in [TIME]
     "###);
 
     Ok(())
