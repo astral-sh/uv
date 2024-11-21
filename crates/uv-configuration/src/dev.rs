@@ -267,11 +267,32 @@ impl DevGroupsSpecification {
 
     /// Returns `true` if the group is included in the specification.
     pub fn contains(&self, group: &GroupName) -> bool {
-        self.dev.as_ref().map_or(false, |dev| dev.contains(group))
-            || self
-                .groups
-                .as_ref()
-                .map_or(false, |groups| groups.contains(group))
+        if group == &*DEV_DEPENDENCIES {
+            match self.dev.as_ref() {
+                None => {}
+                Some(DevMode::Exclude) => {
+                    // If `--no-dev` was provided, always exclude dev.
+                    return false;
+                }
+                Some(DevMode::Only) => {
+                    // If `--only-dev` was provided, always include dev.
+                    return true;
+                }
+                Some(DevMode::Include) => {
+                    // If `--no-group dev` was provided, exclude dev.
+                    return match self.groups.as_ref() {
+                        Some(GroupsSpecification::Include { exclude, .. }) => {
+                            !exclude.contains(group)
+                        }
+                        _ => true,
+                    };
+                }
+            }
+        }
+
+        self.groups
+            .as_ref()
+            .map_or(false, |groups| groups.contains(group))
     }
 }
 
