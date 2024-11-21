@@ -91,7 +91,7 @@ unoptimized builds — the release builds do not have this problem. We
 during testing. We recommend bumping the stack size from the default of 1MB to 2MB, for example:
 
 ```powershell
-$Env:UV_STACK_SIZE = '2000000'
+$Env:UV_STACK_SIZE = '3000000'
 ```
 
 ## Running inside a Docker container
