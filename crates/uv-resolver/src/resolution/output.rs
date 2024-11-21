@@ -174,33 +174,12 @@ impl ResolverOutput {
         // Extract the `Requires-Python` range, if provided.
         let requires_python = python.target().clone();
 
-        let fork_markers = if let [resolution] = resolutions {
-            resolution
-                .env
-                .try_markers()
-                .map(|_| {
-                    resolutions
-                        .iter()
-                        .map(|resolution| {
-                            resolution
-                                .env
-                                .try_markers()
-                                .expect("A non-forking resolution exists in forking mode")
-                                .clone()
-                        })
-                        .collect()
-                })
-                .unwrap_or_else(Vec::new)
+        let fork_markers: Vec<MarkerTree> = if let [resolution] = resolutions {
+            resolution.env.try_markers().cloned().into_iter().collect()
         } else {
             resolutions
                 .iter()
-                .map(|resolution| {
-                    resolution
-                        .env
-                        .try_markers()
-                        .cloned()
-                        .unwrap_or(MarkerTree::TRUE)
-                })
+                .map(|resolution| resolution.env.try_markers().cloned().unwrap_or_default())
                 .collect()
         };
 
