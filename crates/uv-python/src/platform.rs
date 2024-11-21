@@ -203,9 +203,9 @@ impl From<&uv_platform_tags::Os> for Os {
             uv_platform_tags::Os::Haiku { .. } => Self(target_lexicon::OperatingSystem::Haiku),
             uv_platform_tags::Os::Illumos { .. } => Self(target_lexicon::OperatingSystem::Illumos),
             uv_platform_tags::Os::Macos { .. } => Self(target_lexicon::OperatingSystem::Darwin),
-            uv_platform_tags::Os::Manylinux { .. } | uv_platform_tags::Os::Musllinux { .. } => {
-                Self(target_lexicon::OperatingSystem::Linux)
-            }
+            uv_platform_tags::Os::Manylinux { .. }
+            | uv_platform_tags::Os::Musllinux { .. }
+            | uv_platform_tags::Os::Android { .. } => Self(target_lexicon::OperatingSystem::Linux),
             uv_platform_tags::Os::NetBsd { .. } => Self(target_lexicon::OperatingSystem::Netbsd),
             uv_platform_tags::Os::OpenBsd { .. } => Self(target_lexicon::OperatingSystem::Openbsd),
             uv_platform_tags::Os::Windows => Self(target_lexicon::OperatingSystem::Windows),

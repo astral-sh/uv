@@ -50,6 +50,7 @@ pub enum Os {
     Dragonfly { release: String },
     Illumos { release: String, arch: String },
     Haiku { release: String },
+    Android { api_level: u16 },
 }
 
 impl fmt::Display for Os {
@@ -65,6 +66,7 @@ impl fmt::Display for Os {
             Self::Dragonfly { .. } => write!(f, "DragonFly"),
             Self::Illumos { .. } => write!(f, "Illumos"),
             Self::Haiku { .. } => write!(f, "Haiku"),
+            Self::Android { .. } => write!(f, "Android"),
         }
     }
 }
