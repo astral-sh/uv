@@ -54,7 +54,6 @@ pub(crate) async fn pip_compile(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
-    conflicts: Conflicts,
     extras: ExtrasSpecification,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
@@ -252,20 +251,15 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the environment for the resolution.
-    let (tags, resolver_env, conflicting_groups) = if universal {
+    let (tags, resolver_env) = if universal {
         (
             None,
             ResolverEnvironment::universal(environments.into_markers()),
-            conflicts,
         )
     } else {
         let (tags, marker_env) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (
-            Some(tags),
-            ResolverEnvironment::specific(marker_env),
-            Conflicts::empty(),
-        )
+        (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
     // Generate, but don't enforce hashes for the requirements.
@@ -400,7 +394,7 @@ pub(crate) async fn pip_compile(
         tags.as_deref(),
         resolver_env.clone(),
         python_requirement,
-        conflicting_groups,
+        Conflicts::empty(),
         &client,
         &flat_index,
         &top_level_index,
