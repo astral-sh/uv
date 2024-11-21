@@ -382,7 +382,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             preferences.insert(
                                 package.name.clone(),
                                 package.index.clone(),
-                                resolution.env.try_markers().cloned(),
+                                resolution
+                                    .env
+                                    .try_markers()
+                                    .cloned()
+                                    .unwrap_or(MarkerTree::TRUE),
                                 version.clone(),
                             );
                         }

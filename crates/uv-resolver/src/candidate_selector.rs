@@ -138,23 +138,12 @@ impl CandidateSelector {
     ) -> Option<Candidate> {
         // In the branches, we "sort" the preferences by marker-matching through an iterator that
         // first has the matching half and then the mismatching half.
-        let preferences_match =
-            preferences
-                .get(package_name)
-                .filter(|(marker, _index, _version)| {
-                    // `.unwrap_or(true)` because the universal marker is considered matching.
-                    marker
-                        .map(|marker| env.included_by_marker(marker))
-                        .unwrap_or(true)
-                });
-        let preferences_mismatch =
-            preferences
-                .get(package_name)
-                .filter(|(marker, _index, _version)| {
-                    marker
-                        .map(|marker| !env.included_by_marker(marker))
-                        .unwrap_or(false)
-                });
+        let preferences_match = preferences
+            .get(package_name)
+            .filter(|(marker, _index, _version)| env.included_by_marker(marker));
+        let preferences_mismatch = preferences
+            .get(package_name)
+            .filter(|(marker, _index, _version)| !env.included_by_marker(marker));
         let preferences = preferences_match.chain(preferences_mismatch).filter_map(
             |(marker, source, version)| {
                 // If the package is mapped to an explicit index, only consider preferences that
@@ -178,7 +167,7 @@ impl CandidateSelector {
     /// Return the first preference that satisfies the current range and is allowed.
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
-        preferences: impl Iterator<Item = (Option<&'a MarkerTree>, &'a Version)>,
+        preferences: impl Iterator<Item = (&'a MarkerTree, &'a Version)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
@@ -226,7 +215,7 @@ impl CandidateSelector {
                     AllowPrerelease::No => false,
                     // If the pre-release is "global" (i.e., provided via a lockfile, rather than
                     // a fork), accept it unless pre-releases are completely banned.
-                    AllowPrerelease::IfNecessary => marker.is_none(),
+                    AllowPrerelease::IfNecessary => marker.is_true(),
                 };
                 if !allow {
                     continue;
