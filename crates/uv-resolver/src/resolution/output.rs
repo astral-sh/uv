@@ -33,8 +33,6 @@ use crate::{
     VersionsResponse,
 };
 
-pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
-
 /// The output of a successful resolution.
 ///
 /// Includes a complete resolution graph in which every node represents a pinned package and every
@@ -119,24 +117,10 @@ impl ResolverOutput {
         // Add the root node.
         let root_index = graph.add_node(ResolutionGraphNode::Root);
 
-        let mut package_markers: FxHashMap<PackageName, MarkersForDistribution> =
-            FxHashMap::default();
-
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
             // Add every package to the graph.
             for (package, version) in &resolution.nodes {
-                if package.is_base() {
-                    // For packages with diverging versions, store which version comes from which
-                    // fork.
-                    if let Some(markers) = resolution.env.try_markers() {
-                        package_markers
-                            .entry(package.name.clone())
-                            .or_default()
-                            .push(markers.clone());
-                    }
-                }
-
                 if !seen.insert((package, version)) {
                     // Insert each node only once.
                     continue;
