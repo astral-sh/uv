@@ -7,7 +7,7 @@ field of the `pyproject.toml`.
 
 It is recommended to set a `requires-python` value:
 
-```toml title="pyproject.toml"
+```toml title="pyproject.toml" hl_lines="4"
 [project]
 name = "example"
 version = "0.1.0"
