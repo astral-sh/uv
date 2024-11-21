@@ -3772,7 +3772,7 @@ fn preferences_dependent_forking() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 8 packages in [TIME]
     "###
     );
 

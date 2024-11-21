@@ -32,6 +32,7 @@ pub use marker::{
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
     MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    LoweredMarkerValueString, LoweredMarkerValueVersion, LoweredMarkerValueExtra, LoweredMarkerExpression
 };
 pub use origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
@@ -206,21 +207,6 @@ impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         self.marker.evaluate(env, extras)
-    }
-
-    /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
-    /// if there is potentially an environment that could activate this requirement.
-    ///
-    /// Note that unlike [`Self::evaluate_markers`] this does not perform any checks for bogus
-    /// expressions but will simply return true. As caller you should separately perform a check
-    /// with an environment and forward all warnings.
-    pub fn evaluate_extras_and_python_version(
-        &self,
-        extras: &HashSet<ExtraName>,
-        python_versions: &[Version],
-    ) -> bool {
-        self.marker
-            .evaluate_extras_and_python_version(extras, python_versions)
     }
 
     /// Returns whether the markers apply for the given environment.

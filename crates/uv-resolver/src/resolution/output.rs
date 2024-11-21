@@ -16,7 +16,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
-use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
+use uv_pep508::{LoweredMarkerValueString, LoweredMarkerValueVersion, MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{
     Conflicts, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
 };
@@ -626,8 +626,8 @@ impl ResolverOutput {
         /// values based on the current marker environment.
         #[derive(Debug, Eq, Hash, PartialEq)]
         enum MarkerParam {
-            Version(MarkerValueVersion),
-            String(MarkerValueString),
+            Version(LoweredMarkerValueVersion),
+            String(LoweredMarkerValueString),
         }
 
         /// Add all marker parameters from the given tree to the given set.
@@ -717,14 +717,14 @@ impl ResolverOutput {
                 MarkerParam::Version(value_version) => {
                     let from_env = marker_env.get_version(&value_version);
                     MarkerExpression::Version {
-                        key: value_version,
+                        key: value_version.into(),
                         specifier: VersionSpecifier::equals_version(from_env.clone()),
                     }
                 }
                 MarkerParam::String(value_string) => {
                     let from_env = marker_env.get_string(&value_string);
                     MarkerExpression::String {
-                        key: value_string,
+                        key: value_string.into(),
                         operator: MarkerOperator::Equal,
                         value: from_env.to_string(),
                     }

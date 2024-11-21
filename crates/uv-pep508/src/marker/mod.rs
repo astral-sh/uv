@@ -11,6 +11,7 @@
 
 mod algebra;
 mod environment;
+mod lowered;
 pub(crate) mod parse;
 mod simplify;
 mod tree;
@@ -22,6 +23,7 @@ pub use tree::{
     MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
     StringMarkerTree, StringVersion, VersionMarkerTree,
 };
+pub use lowered::{LoweredMarkerValueString, LoweredMarkerValueVersion, LoweredMarkerValueExtra, LoweredMarkerExpression};
 
 /// `serde` helpers for [`MarkerTree`].
 pub mod ser {

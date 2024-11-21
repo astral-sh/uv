@@ -1,0 +1,14 @@
+[project]
+name = "test-project"
+version = "0.1.0"
+description = "My test project"
+readme = "README.md"
+
+dependencies = [
+    "ipykernel ; sys_platform == 'linux'"
+]
+
+[tool.uv]
+environments = [
+    "sys_platform == 'linux'"
+]
