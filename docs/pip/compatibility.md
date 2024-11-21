@@ -465,10 +465,10 @@ the ordering of requirements in input files for `uv pip compile`.
 
 ## Installing a package from a specified directory
 
-UV does not reinstall already installed packages by default.
+uv does not reinstall already installed packages by default.
 
 Consequently, it will not behave like `pip install <folder>`, reinstalling every time. This is
-expected behavior, as UV anticipates that you might want to update to a newer version.
+expected behavior, as uv anticipates that you might want to update to a newer version.
 
 For packages under development, [editable installs](packages.md#editable-packages) are recommended.
 Alternatively, you can force a reinstall with the --reinstall flag or by setting the
