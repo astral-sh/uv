@@ -462,6 +462,7 @@ def get_operating_system_and_architecture():
         from .packaging._musllinux import _get_musl_version
 
         musl_version = _get_musl_version(sys.executable)
+        glibc_version = _get_glibc_version()
 
         if musl_version:
             operating_system = {
@@ -469,23 +470,20 @@ def get_operating_system_and_architecture():
                 "major": musl_version[0],
                 "minor": musl_version[1],
             }
+        elif glibc_version != (-1, -1):
+            operating_system = {
+                "name": "manylinux",
+                "major": glibc_version[0],
+                "minor": glibc_version[1],
+            }
+        elif hasattr(sys, "getandroidapilevel"):
+            operating_system = {
+                "name": "android",
+                "api_level": sys.getandroidapilevel(),
+            }
         else:
-            glibc_version = _get_glibc_version()
-
-            if glibc_version != (0, 0):
-                operating_system = {
-                    "name": "manylinux",
-                    "major": glibc_version[0],
-                    "minor": glibc_version[1],
-                }
-            elif hasattr(sys, "getandroidapilevel"):
-                operating_system = {
-                    "name": "android",
-                    "api_level": sys.getandroidapilevel(),
-                }
-            else:
-                print(json.dumps({"result": "error", "kind": "libc_not_found"}))
-                sys.exit(0)
+            print(json.dumps({"result": "error", "kind": "libc_not_found"}))
+            sys.exit(0)
     elif operating_system == "win":
         operating_system = {
             "name": "windows",
