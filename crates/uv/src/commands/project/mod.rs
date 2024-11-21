@@ -935,8 +935,8 @@ pub(crate) async fn resolve_names(
 pub(crate) struct EnvironmentSpecification<'lock> {
     /// The requirements to include in the environment.
     requirements: RequirementsSpecification,
-    /// The lockfile from which to extract preferences.
-    lock: Option<&'lock Lock>,
+    /// The lockfile from which to extract preferences, along with the install path.
+    lock: Option<(&'lock Lock, &'lock Path)>,
 }
 
 impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
@@ -950,7 +950,7 @@ impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
 
 impl<'lock> EnvironmentSpecification<'lock> {
     #[must_use]
-    pub(crate) fn with_lock(self, lock: Option<&'lock Lock>) -> Self {
+    pub(crate) fn with_lock(self, lock: Option<(&'lock Lock, &'lock Path)>) -> Self {
         Self { lock, ..self }
     }
 }
@@ -1057,7 +1057,8 @@ pub(crate) async fn resolve_environment<'a>(
     // If an existing lockfile exists, build up a set of preferences.
     let LockedRequirements { preferences, git } = spec
         .lock
-        .map(|lock| read_lock_requirements(lock, &upgrade))
+        .map(|(lock, install_path)| read_lock_requirements(lock, install_path, &upgrade))
+        .transpose()?
         .unwrap_or_default();
 
     // Populate the Git resolver.

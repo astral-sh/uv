@@ -64,10 +64,4 @@ impl<T> ForkMap<T> {
             .map(|entry| &entry.value)
             .collect()
     }
-    //
-    // /// Returns the single value associated with a package, if the value is compatible with all
-    // /// forks.
-    // pub fn entries(&self, package_name: &PackageName) -> &[Entry<T>] {
-    //     self.0.get(package_name).map(Vec::as_slice).unwrap_or_default()
-    // }
 }

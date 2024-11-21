@@ -333,14 +333,6 @@ impl ResolverEnvironment {
         }
     }
 
-    /// Returns `true` if this resolver environment has conflicts.
-    pub(crate) fn has_conflicts(&self) -> bool {
-        match self.kind {
-            Kind::Specific { .. } => false,
-            Kind::Universal { ref exclude, .. } => !exclude.is_empty(),
-        }
-    }
-
     /// Returns a requires-python version range derived from the marker
     /// expression describing this resolver environment.
     ///

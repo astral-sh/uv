@@ -138,24 +138,32 @@ impl CandidateSelector {
     ) -> Option<Candidate> {
         // In the branches, we "sort" the preferences by marker-matching through an iterator that
         // first has the matching half and then the mismatching half.
-        let preferences_match = preferences.get(package_name).filter(|(marker, _index, _version)| {
-            // `.unwrap_or(true)` because the universal marker is considered matching.
-            marker
-                .map(|marker| env.included_by_marker(marker))
-                .unwrap_or(true)
-        });
-        let preferences_mismatch = preferences.get(package_name).filter(|(marker,_index, _version)| {
-            marker
-                .map(|marker| !env.included_by_marker(marker))
-                .unwrap_or(false)
-        });
-        let preferences = preferences_match.chain(preferences_mismatch).filter_map(|(marker, source, version)| {
-            if source == index {
-                Some((marker, version))
-            } else {
-                None
-            }
-        });
+        let preferences_match =
+            preferences
+                .get(package_name)
+                .filter(|(marker, _index, _version)| {
+                    // `.unwrap_or(true)` because the universal marker is considered matching.
+                    marker
+                        .map(|marker| env.included_by_marker(marker))
+                        .unwrap_or(true)
+                });
+        let preferences_mismatch =
+            preferences
+                .get(package_name)
+                .filter(|(marker, _index, _version)| {
+                    marker
+                        .map(|marker| !env.included_by_marker(marker))
+                        .unwrap_or(false)
+                });
+        let preferences = preferences_match.chain(preferences_mismatch).filter_map(
+            |(marker, source, version)| {
+                // If the package is mapped to an explicit index, only consider preferences that
+                // match the index.
+                index
+                    .map_or(true, |index| source == Some(index))
+                    .then_some((marker, version))
+            },
+        );
         self.get_preferred_from_iter(
             preferences,
             package_name,

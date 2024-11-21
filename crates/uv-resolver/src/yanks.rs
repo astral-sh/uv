@@ -45,7 +45,7 @@ impl AllowedYanks {
             allowed_yanks
                 .entry(name.clone())
                 .or_default()
-                .extend(preferences.map(|(_markers, version)| version.clone()));
+                .extend(preferences.map(|(.., version)| version.clone()));
         }
 
         Self(Arc::new(allowed_yanks))

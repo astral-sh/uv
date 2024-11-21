@@ -59,22 +59,6 @@ impl Indexes {
         self.0.contains_key(name)
     }
 
-    // /// Returns the explicit index used for a package, if it's known to be used for all forks.
-    // pub(crate) fn contains_many(&self, name: &PackageName) -> bool {
-    //     match self.0.entries(name) {
-    //         [] => false,
-    //         [index] => index. index.conflict.is_none(),
-    //         _ => false,
-    //
-    //     }
-    //     let entry = self.0.get(name)?;
-    //     if entry.conflict.is_none() {
-    //         Some(&entry.index)
-    //     } else {
-    //         None
-    //     }
-    // }
-
     /// Return the explicit index used for a package in the given fork.
     pub(crate) fn get(&self, name: &PackageName, env: &ResolverEnvironment) -> Vec<&IndexUrl> {
         let entries = self.0.get(name, env);
