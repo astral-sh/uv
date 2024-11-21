@@ -2451,6 +2451,39 @@ mod test {
         assert!(m("sys_platform == 'win32' and sys_platform != 'win32'").is_false());
     }
 
+    /// This tests the difference between simplifying extras and simplifying
+    /// other stringly-valued marker attributes.
+    ///
+    /// In particular, this demonstrates that `extra != "foo"` would actually
+    /// be more clearly written as `"foo" not in extras`. And similarly, `extra
+    /// == "foo"` would be written as `"foo" in extras`. This is different from
+    /// other attributes, like `sys_platform`, where the test is just string
+    /// equality. That is, `extra` is a set where as `sys_platform` is just a
+    /// single value.
+    #[test]
+    fn test_simplification_extra_versus_other() {
+        // Here, the `extra != 'foo'` cannot be simplified out, because
+        // `extra == 'foo'` can be true even when `extra == 'bar`' is true.
+        assert_simplifies(
+            r#"extra != "foo" and (extra == "bar" or extra == "baz")"#,
+            "(extra == 'bar' and extra != 'foo') or (extra == 'baz' and extra != 'foo')",
+        );
+        // But here, the `sys_platform != 'foo'` can be simplified out, because
+        // it is strictly disjoint with
+        // `sys_platform == "bar" or sys_platform == "baz"`.
+        assert_simplifies(
+            r#"sys_platform != "foo" and (sys_platform == "bar" or sys_platform == "baz")"#,
+            "sys_platform == 'bar' or sys_platform == 'baz'",
+        );
+
+        // Another case I experimented with and wanted to verify.
+        assert_simplifies(
+            r#"(extra != "bar" and (extra == "foo" or extra == "baz"))
+            or ((extra != "foo" and extra != "bar") and extra == "baz")"#,
+            "(extra != 'bar' and extra == 'baz') or (extra != 'bar' and extra == 'foo')",
+        );
+    }
+
     #[test]
     fn test_marker_negation() {
         assert_eq!(
