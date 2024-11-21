@@ -2765,8 +2765,12 @@ fn run_gui_script_explicit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Reading inline script metadata from `script`
+    Resolved in [TIME]
+    Audited in [TIME]
     Using executable: pythonw.exe
     "###);
+
 
     Ok(())
 }
