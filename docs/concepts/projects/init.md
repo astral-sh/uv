@@ -223,7 +223,7 @@ Creating a project with an extension module requires choosing an alternative bui
 supports creating projects with the following build systems that support building extension modules:
 
 - [`maturin`](https://www.maturin.rs) for projects with Rust
-- [`scikit-build`](https://scikit-build.readthedocs.io/en/latest/) for projects with C, C++,
+- [`scikit-build-core`](https://github.com/scikit-build/scikit-build-core) for projects with C, C++,
   FORTRAN, Cython
 
 Specify the build system with the `--build-backend` flag:
@@ -255,7 +255,7 @@ example-ext
 
 !!! note
 
-    If using `scikit-build`, you'll see CMake configuration and a `main.cpp` file instead.
+    If using `scikit-build-core`, you'll see CMake configuration and a `main.cpp` file instead.
 
 The Rust library defines a simple function:
 
