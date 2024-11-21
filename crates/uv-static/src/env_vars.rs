@@ -237,7 +237,7 @@ impl EnvVars {
     /// Use to disable line wrapping for diagnostics.
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";
 
-    /// Use to control the stack size used by uv. Typically more relevant for Windows in debug mode.
+    /// Use to increase the stack size used by uv in debug builds on Windows.
     pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
 
     /// Generates the environment variable key for the HTTP Basic authentication username.
