@@ -2771,7 +2771,6 @@ fn run_gui_script_explicit() -> Result<()> {
     Using executable: pythonw.exe
     "###);
 
-
     Ok(())
 }
 
