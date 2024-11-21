@@ -2784,17 +2784,14 @@ fn run_gui_script_not_supported() -> Result<()> {
         print("Hello")
     "#})?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Reading inline script metadata from `script`
-    Resolved in [TIME]
-    Audited in [TIME]
-    Using executable: pythonw.exe
-    "###);
+    error: `--gui-script` is only supported on Windows. Did you mean `--script`?
+    ");
     
     Ok(())
 }
