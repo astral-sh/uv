@@ -219,15 +219,14 @@ Most Python projects are "pure Python", meaning they do not define modules in ot
 C, C++, FORTRAN, or Rust. However, projects with extension modules are often used for performance
 sensitive code.
 
-Creating a project with an extension module requires an choosing an alternative build backend. uv
-supports creating projects with the following build backends that support building extension
-modules:
+Creating a project with an extension module requires choosing an alternative build system. uv
+supports creating projects with the following build systems that support building extension modules:
 
 - [`maturin`](https://www.maturin.rs) for projects with Rust
 - [`scikit-build`](https://scikit-build.readthedocs.io/en/latest/) for projects with C, C++,
   FORTRAN, Cython
 
-Using `maturin` is recommended for combining Rust and Python:
+Specify the build system with the `--build-backend` flag:
 
 ```console
 $ uv init --build-backend maturin example-ext
@@ -253,6 +252,10 @@ example-ext
         ├── __init__.py
         └── _core.pyi
 ```
+
+!!! note
+
+    If using `scikit-build`, you'll see CMake configuration and a `main.cpp` file instead.
 
 The Rust library defines a simple function:
 
