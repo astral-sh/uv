@@ -299,7 +299,7 @@ Equivalent to the `--resolution` command-line argument. For example, if set to
 
 ### `UV_STACK_SIZE`
 
-Use to control the stack size used by uv. Typically more relevant for Windows in debug mode.
+Use to increase the stack size used by uv in debug builds on Windows.
 
 ### `UV_SYSTEM_PYTHON`
 
