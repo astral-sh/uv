@@ -51,7 +51,7 @@ fn collect_dnf(
                     let current = path.len();
                     for version in excluded {
                         path.push(MarkerExpression::Version {
-                            key: marker.key().clone(),
+                            key: marker.key(),
                             specifier: VersionSpecifier::not_equals_version(version.clone()),
                         });
                     }
@@ -64,7 +64,7 @@ fn collect_dnf(
                 // Detect whether the range for this edge can be simplified as a star inequality.
                 if let Some(specifier) = star_range_inequality(&range) {
                     path.push(MarkerExpression::Version {
-                        key: marker.key().clone(),
+                        key: marker.key(),
                         specifier,
                     });
 
@@ -77,7 +77,7 @@ fn collect_dnf(
                     let current = path.len();
                     for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
                         path.push(MarkerExpression::Version {
-                            key: marker.key().clone(),
+                            key: marker.key(),
                             specifier,
                         });
                     }
@@ -94,7 +94,7 @@ fn collect_dnf(
                     let current = path.len();
                     for value in excluded {
                         path.push(MarkerExpression::String {
-                            key: marker.key().clone(),
+                            key: marker.key(),
                             operator: MarkerOperator::NotEqual,
                             value: value.clone(),
                         });
@@ -109,7 +109,7 @@ fn collect_dnf(
                     let current = path.len();
                     for (operator, value) in MarkerOperator::from_bounds(bounds) {
                         path.push(MarkerExpression::String {
-                            key: marker.key().clone(),
+                            key: marker.key(),
                             operator,
                             value: value.clone(),
                         });
@@ -129,7 +129,7 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::String {
-                    key: marker.key().clone(),
+                    key: marker.key(),
                     value: marker.value().to_owned(),
                     operator,
                 };
@@ -148,7 +148,7 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::String {
-                    key: marker.key().clone(),
+                    key: marker.key(),
                     value: marker.value().to_owned(),
                     operator,
                 };

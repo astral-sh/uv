@@ -150,12 +150,12 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
             };
 
             // Check for `in` and `not in` expressions
-            if let Some(expr) = parse_version_in_expr(key.clone(), operator, &value, reporter) {
+            if let Some(expr) = parse_version_in_expr(key, operator, &value, reporter) {
                 return Ok(Some(expr));
             }
 
             // Otherwise, it's a normal version expression
-            parse_version_expr(key.clone(), operator, &value, reporter)
+            parse_version_expr(key, operator, &value, reporter)
         }
         // The only sound choice for this is `<env key> <op> <string>`
         MarkerValue::MarkerEnvString(key) => {
@@ -215,7 +215,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
             match r_value {
                 // The only sound choice for this is `<quoted PEP 440 version> <version op>` <version key>
                 MarkerValue::MarkerEnvVersion(key) => {
-                    parse_inverted_version_expr(&l_string, operator, key.clone(), reporter)
+                    parse_inverted_version_expr(&l_string, operator, key, reporter)
                 }
                 // '...' == <env key>
                 MarkerValue::MarkerEnvString(key) => Some(MarkerExpression::String {
