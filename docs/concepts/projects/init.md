@@ -219,9 +219,8 @@ Most Python projects are "pure Python", meaning they do not define modules in ot
 C, C++, FORTRAN, or Rust. However, projects with extension modules are often used for performance
 sensitive code.
 
-Creating a project with an extension module requires an choosing an alternative build system. uv
-supports creating projects with the following build systems that support building extension
-modules:
+Creating a project with an extension module requires choosing an alternative build system. uv
+supports creating projects with the following build systems that support building extension modules:
 
 - [`maturin`](https://www.maturin.rs) for projects with Rust
 - [`scikit-build`](https://scikit-build.readthedocs.io/en/latest/) for projects with C, C++,
