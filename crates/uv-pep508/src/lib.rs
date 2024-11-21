@@ -200,8 +200,6 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
-type MarkerWarning = (MarkerWarningKind, String);
-
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
@@ -221,15 +219,6 @@ impl<T: Pep508Url> Requirement<T> {
     ) -> bool {
         self.marker
             .evaluate_extras_and_python_version(extras, python_versions)
-    }
-
-    /// Returns whether the markers apply for the given environment.
-    pub fn evaluate_markers_and_report(
-        &self,
-        env: &MarkerEnvironment,
-        extras: &[ExtraName],
-    ) -> (bool, Vec<MarkerWarning>) {
-        self.marker.evaluate_collect_warnings(env, extras)
     }
 
     /// Return the requirement with an additional marker added, to require the given extra.
