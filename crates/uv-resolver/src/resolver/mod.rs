@@ -381,6 +381,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         for (package, version) in &resolution.nodes {
                             preferences.insert(
                                 package.name.clone(),
+                                package.index.clone(),
                                 resolution.env.try_markers().cloned(),
                                 version.clone(),
                             );
@@ -669,14 +670,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         diverging_packages: &'a [PackageName],
     ) -> impl Iterator<Item = Result<ForkState, ResolveError>> + 'a {
         debug!(
-            "Splitting resolution on {}=={} over {} into {} resolution with separate markers",
+            "Splitting resolution on {}=={} over {} into {} resolution{} with separate markers",
             current_state.next,
             version,
             diverging_packages
                 .iter()
                 .map(ToString::to_string)
                 .join(", "),
-            forks.len()
+            forks.len(),
+            if forks.len() == 1 { "" } else { "s" }
         );
         assert!(forks.len() >= 2);
         // This is a somewhat tortured technique to ensure
@@ -1075,6 +1077,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             preferences,
             &self.installed_packages,
             &self.exclusions,
+            index,
             env,
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
@@ -1934,6 +1937,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.preferences,
                     &self.installed_packages,
                     &self.exclusions,
+                    None,
                     &env,
                 ) else {
                     return Ok(None);

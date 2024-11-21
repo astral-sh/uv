@@ -563,7 +563,8 @@ async fn do_lock(
 
             // If an existing lockfile exists, build up a set of preferences.
             let LockedRequirements { preferences, git } = versions_lock
-                .map(|lock| read_lock_requirements(lock, upgrade))
+                .map(|lock| read_lock_requirements(lock, workspace.install_path(), upgrade))
+                .transpose()?
                 .unwrap_or_default();
 
             // Populate the Git resolver.

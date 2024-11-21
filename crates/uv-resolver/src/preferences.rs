@@ -1,16 +1,17 @@
+use std::path::Path;
 use std::str::FromStr;
 
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use uv_distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
+use uv_distribution_types::{IndexUrl, InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{HashDigest, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
-use crate::ResolverEnvironment;
+use crate::{LockError, ResolverEnvironment};
 
 #[derive(thiserror::Error, Debug)]
 pub enum PreferenceError {
@@ -25,6 +26,8 @@ pub struct Preference {
     version: Version,
     /// The markers on the requirement itself (those after the semicolon).
     marker: MarkerTree,
+    /// The index URL of the package, if any.
+    index: Option<IndexUrl>,
     /// If coming from a package with diverging versions, the markers of the forks this preference
     /// is part of, otherwise `None`.
     fork_markers: Vec<MarkerTree>,
@@ -60,6 +63,7 @@ impl Preference {
             marker: requirement.marker,
             // requirements.txt doesn't have fork annotations.
             fork_markers: vec![],
+            index: None,
             hashes: entry
                 .hashes
                 .iter()
@@ -79,6 +83,7 @@ impl Preference {
             name: dist.name().clone(),
             version: version.clone(),
             marker: MarkerTree::TRUE,
+            index: None,
             // Installed distributions don't have fork annotations.
             fork_markers: vec![],
             hashes: Vec::new(),
@@ -86,14 +91,18 @@ impl Preference {
     }
 
     /// Create a [`Preference`] from a locked distribution.
-    pub fn from_lock(package: &crate::lock::Package) -> Self {
-        Self {
+    pub fn from_lock(
+        package: &crate::lock::Package,
+        install_path: &Path,
+    ) -> Result<Self, LockError> {
+        Ok(Self {
             name: package.id.name.clone(),
             version: package.id.version.clone(),
             marker: MarkerTree::TRUE,
+            index: package.index(install_path)?,
             fork_markers: package.fork_markers().to_vec(),
             hashes: Vec::new(),
-        }
+        })
     }
 
     /// Return the [`PackageName`] of the package for this [`Preference`].
@@ -107,6 +116,13 @@ impl Preference {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Entry {
+    marker: Option<MarkerTree>,
+    index: Option<IndexUrl>,
+    pin: Pin,
+}
+
 /// A set of pinned packages that should be preserved during resolution, if possible.
 ///
 /// The marker is the marker of the fork that resolved to the pin, if any.
@@ -114,15 +130,15 @@ impl Preference {
 /// Preferences should be prioritized first by whether their marker matches and then by the order
 /// they are stored, so that a lockfile has higher precedence than sibling forks.
 #[derive(Debug, Clone, Default)]
-pub struct Preferences(FxHashMap<PackageName, Vec<(Option<MarkerTree>, Pin)>>);
+pub struct Preferences(FxHashMap<PackageName, Vec<Entry>>);
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
     ///
     /// The provided [`ResolverEnvironment`] will be used to filter the preferences
     /// to an applicable subset.
-    pub fn from_iter<PreferenceIterator: IntoIterator<Item = Preference>>(
-        preferences: PreferenceIterator,
+    pub fn from_iter(
+        preferences: impl IntoIterator<Item = Preference>,
         env: &ResolverEnvironment,
     ) -> Self {
         let mut slf = Self::default();
@@ -152,6 +168,7 @@ impl Preferences {
             if preference.fork_markers.is_empty() {
                 slf.insert(
                     preference.name,
+                    preference.index,
                     None,
                     Pin {
                         version: preference.version,
@@ -162,6 +179,7 @@ impl Preferences {
                 for fork_marker in preference.fork_markers {
                     slf.insert(
                         preference.name.clone(),
+                        preference.index.clone(),
                         Some(fork_marker),
                         Pin {
                             version: preference.version.clone(),
@@ -179,13 +197,15 @@ impl Preferences {
     pub(crate) fn insert(
         &mut self,
         package_name: PackageName,
+        index: Option<IndexUrl>,
         markers: Option<MarkerTree>,
         pin: impl Into<Pin>,
     ) {
-        self.0
-            .entry(package_name)
-            .or_default()
-            .push((markers, pin.into()));
+        self.0.entry(package_name).or_default().push(Entry {
+            marker: markers,
+            index,
+            pin: pin.into(),
+        });
     }
 
     /// Returns an iterator over the preferences.
@@ -194,15 +214,19 @@ impl Preferences {
     ) -> impl Iterator<
         Item = (
             &PackageName,
-            impl Iterator<Item = (Option<&MarkerTree>, &Version)>,
+            impl Iterator<Item = (Option<&MarkerTree>, Option<&IndexUrl>, &Version)>,
         ),
     > {
         self.0.iter().map(|(name, preferences)| {
             (
                 name,
-                preferences
-                    .iter()
-                    .map(|(markers, pin)| (markers.as_ref(), pin.version())),
+                preferences.iter().map(|entry| {
+                    (
+                        entry.marker.as_ref(),
+                        entry.index.as_ref(),
+                        entry.pin.version(),
+                    )
+                }),
             )
         })
     }
@@ -211,12 +235,14 @@ impl Preferences {
     pub(crate) fn get(
         &self,
         package_name: &PackageName,
-    ) -> impl Iterator<Item = (Option<&MarkerTree>, &Version)> {
-        self.0
-            .get(package_name)
-            .into_iter()
-            .flatten()
-            .map(|(markers, pin)| (markers.as_ref(), pin.version()))
+    ) -> impl Iterator<Item = (Option<&MarkerTree>, Option<&IndexUrl>, &Version)> {
+        self.0.get(package_name).into_iter().flatten().map(|entry| {
+            (
+                entry.marker.as_ref(),
+                entry.index.as_ref(),
+                entry.pin.version(),
+            )
+        })
     }
 
     /// Return the hashes for a package, if the version matches that of the pin.
@@ -229,8 +255,8 @@ impl Preferences {
             .get(package_name)
             .into_iter()
             .flatten()
-            .find(|(_markers, pin)| pin.version() == version)
-            .map(|(_markers, pin)| pin.hashes())
+            .find(|entry| entry.pin.version() == version)
+            .map(|entry| entry.pin.hashes())
     }
 }
 

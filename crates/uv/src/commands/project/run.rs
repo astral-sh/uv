@@ -372,7 +372,7 @@ pub(crate) async fn run(
     };
 
     // The lockfile used for the base environment.
-    let mut lock: Option<Lock> = None;
+    let mut lock: Option<(Lock, PathBuf)> = None;
 
     // Discover and sync the base environment.
     let temp_dir;
@@ -609,7 +609,8 @@ pub(crate) async fn run(
                     lock = project::lock::read(project.workspace())
                         .await
                         .ok()
-                        .flatten();
+                        .flatten()
+                        .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
                 // Validate that any referenced dependency groups are defined in the workspace.
@@ -749,7 +750,10 @@ pub(crate) async fn run(
                     Err(err) => return Err(err.into()),
                 }
 
-                lock = Some(result.into_lock());
+                lock = Some((
+                    result.into_lock(),
+                    project.workspace().install_path().to_owned(),
+                ));
             }
 
             venv.into_interpreter()
@@ -861,7 +865,10 @@ pub(crate) async fn run(
                 debug!("Syncing ephemeral requirements");
 
                 let result = CachedEnvironment::get_or_create(
-                    EnvironmentSpecification::from(spec).with_lock(lock.as_ref()),
+                    EnvironmentSpecification::from(spec).with_lock(
+                        lock.as_ref()
+                            .map(|(lock, install_path)| (lock, install_path.as_ref())),
+                    ),
                     base_interpreter.clone(),
                     &settings,
                     &state,
