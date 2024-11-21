@@ -9,6 +9,8 @@ It is recommended to set a `requires-python` value:
 
 ```toml title="pyproject.toml"
 [project]
+name = "example"
+version = "0.1.0"
 requires-python = ">=3.12"
 ```
 
