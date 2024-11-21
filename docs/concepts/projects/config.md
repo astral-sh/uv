@@ -296,7 +296,7 @@ which instructs uv to install the project in non-editable mode. `--no-editable` 
 deployment use-cases, such as building a Docker container, in which the project should be included
 in the deployed environment without a dependency on the originating source code.
 
-### Conflicting dependencies
+## Conflicting dependencies
 
 uv requires that all optional dependencies ("extras") declared by the project are compatible with
 each other and resolves all optional dependencies together when creating the lockfile.
