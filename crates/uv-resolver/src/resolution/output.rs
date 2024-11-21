@@ -160,18 +160,19 @@ impl ResolverOutput {
         let requires_python = python.target().clone();
 
         let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
+            // In the case of a singleton marker, we only include it if it's not
+            // always true. Otherwise, we keep our `fork_markers` empty as there
+            // are no forks.
             resolution
                 .env
-                .try_markers()
-                .cloned()
+                .try_universal_markers()
                 .into_iter()
-                .map(|marker| UniversalMarker::new(marker, MarkerTree::TRUE))
+                .filter(|marker| !marker.is_true())
                 .collect()
         } else {
             resolutions
                 .iter()
-                .map(|resolution| resolution.env.try_markers().cloned().unwrap_or_default())
-                .map(|marker| UniversalMarker::new(marker, MarkerTree::TRUE))
+                .map(|resolution| resolution.env.try_universal_markers().unwrap_or_default())
                 .collect()
         };
 

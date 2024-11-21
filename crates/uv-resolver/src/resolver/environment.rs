@@ -344,12 +344,8 @@ impl ResolverEnvironment {
         match self.kind {
             Kind::Specific { .. } => None,
             Kind::Universal { ref markers, .. } => {
-                if markers.is_true() {
-                    None
-                } else {
-                    // FIXME: Support conflicts.
-                    Some(UniversalMarker::new(markers.clone(), MarkerTree::TRUE))
-                }
+                // FIXME: Support conflicts.
+                Some(UniversalMarker::new(markers.clone(), MarkerTree::TRUE))
             }
         }
     }
