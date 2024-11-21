@@ -118,7 +118,7 @@ impl Preference {
 
 #[derive(Debug, Clone)]
 struct Entry {
-    marker: Option<MarkerTree>,
+    marker: MarkerTree,
     index: Option<IndexUrl>,
     pin: Pin,
 }
@@ -169,7 +169,7 @@ impl Preferences {
                 slf.insert(
                     preference.name,
                     preference.index,
-                    None,
+                    MarkerTree::TRUE,
                     Pin {
                         version: preference.version,
                         hashes: preference.hashes,
@@ -180,7 +180,7 @@ impl Preferences {
                     slf.insert(
                         preference.name.clone(),
                         preference.index.clone(),
-                        Some(fork_marker),
+                        fork_marker,
                         Pin {
                             version: preference.version.clone(),
                             hashes: preference.hashes.clone(),
@@ -198,7 +198,7 @@ impl Preferences {
         &mut self,
         package_name: PackageName,
         index: Option<IndexUrl>,
-        markers: Option<MarkerTree>,
+        markers: MarkerTree,
         pin: impl Into<Pin>,
     ) {
         self.0.entry(package_name).or_default().push(Entry {
@@ -214,19 +214,15 @@ impl Preferences {
     ) -> impl Iterator<
         Item = (
             &PackageName,
-            impl Iterator<Item = (Option<&MarkerTree>, Option<&IndexUrl>, &Version)>,
+            impl Iterator<Item = (&MarkerTree, Option<&IndexUrl>, &Version)>,
         ),
     > {
         self.0.iter().map(|(name, preferences)| {
             (
                 name,
-                preferences.iter().map(|entry| {
-                    (
-                        entry.marker.as_ref(),
-                        entry.index.as_ref(),
-                        entry.pin.version(),
-                    )
-                }),
+                preferences
+                    .iter()
+                    .map(|entry| (&entry.marker, entry.index.as_ref(), entry.pin.version())),
             )
         })
     }
@@ -235,14 +231,12 @@ impl Preferences {
     pub(crate) fn get(
         &self,
         package_name: &PackageName,
-    ) -> impl Iterator<Item = (Option<&MarkerTree>, Option<&IndexUrl>, &Version)> {
-        self.0.get(package_name).into_iter().flatten().map(|entry| {
-            (
-                entry.marker.as_ref(),
-                entry.index.as_ref(),
-                entry.pin.version(),
-            )
-        })
+    ) -> impl Iterator<Item = (&MarkerTree, Option<&IndexUrl>, &Version)> {
+        self.0
+            .get(package_name)
+            .into_iter()
+            .flatten()
+            .map(|entry| (&entry.marker, entry.index.as_ref(), entry.pin.version()))
     }
 
     /// Return the hashes for a package, if the version matches that of the pin.
