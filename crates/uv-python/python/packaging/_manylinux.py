@@ -173,7 +173,7 @@ def _parse_glibc_version(version_str: str) -> tuple[int, int]:
 def _get_glibc_version() -> tuple[int, int]:
     version_str = _glibc_version_string()
     if version_str is None:
-        return (0, 0)
+        return (-1, -1)
     return _parse_glibc_version(version_str)
 
 
