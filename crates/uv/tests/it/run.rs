@@ -2742,45 +2742,31 @@ fn run_script_explicit_directory() -> Result<()> {
 fn run_gui_script_explicit() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let test_script = context.temp_dir.child("script");
+    let test_script = context.temp_dir.child("script.pyw");
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.11"
-        # dependencies = [
-        #   "PyQt5",
-        # ]
+        # dependencies = []
         # ///
         import sys
         import os
-        from PyQt5.QtWidgets import QApplication, QMainWindow
-        from PyQt5.QtCore import QTimer
-        
-        # Log environment info
-        print("Python executable:", sys.executable, file=sys.stderr)
-        print("Working directory:", os.getcwd(), file=sys.stderr)
-        
-        try:
-            app = QApplication(sys.argv)
-            window = QMainWindow()
-            window.setWindowTitle("UV GUI Test")
-            window.setGeometry(100, 100, 200, 100)
-            window.show()
-            
-            # Close after 1 second
-            QTimer.singleShot(1000, app.quit)
-            sys.exit(app.exec_())
-        except Exception as e:
-            print(f"Error initializing GUI: {e}", file=sys.stderr)
+
+        executable = os.path.basename(sys.executable).lower()
+        if not executable.startswith("pythonw"):
+            print(f"Error: Expected pythonw.exe but got: {executable}", file=sys.stderr)
             sys.exit(1)
+        
+        print(f"Using executable: {executable}", file=sys.stderr)
     "#})?;
 
-    let output = context.run().arg("--script").arg("script").output()?;
-    if !output.status.success() {
-        eprintln!("GUI script failed with status: {}", output.status);
-        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-    }
-    assert!(output.status.success());
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script.pyw"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using executable: pythonw.exe
+    "###);
 
     Ok(())
 }
