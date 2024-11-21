@@ -636,25 +636,25 @@ impl ResolverOutput {
                 MarkerTreeKind::True => {}
                 MarkerTreeKind::False => {}
                 MarkerTreeKind::Version(marker) => {
-                    set.insert(MarkerParam::Version(marker.key().clone()));
+                    set.insert(MarkerParam::Version(marker.key()));
                     for (_, tree) in marker.edges() {
                         add_marker_params_from_tree(&tree, set);
                     }
                 }
                 MarkerTreeKind::String(marker) => {
-                    set.insert(MarkerParam::String(marker.key().clone()));
+                    set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
                         add_marker_params_from_tree(&tree, set);
                     }
                 }
                 MarkerTreeKind::In(marker) => {
-                    set.insert(MarkerParam::String(marker.key().clone()));
+                    set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
                         add_marker_params_from_tree(&tree, set);
                     }
                 }
                 MarkerTreeKind::Contains(marker) => {
-                    set.insert(MarkerParam::String(marker.key().clone()));
+                    set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
                         add_marker_params_from_tree(&tree, set);
                     }
@@ -715,14 +715,14 @@ impl ResolverOutput {
         for marker_param in seen_marker_values {
             let expr = match marker_param {
                 MarkerParam::Version(value_version) => {
-                    let from_env = marker_env.get_version(&value_version);
+                    let from_env = marker_env.get_version(value_version);
                     MarkerExpression::Version {
                         key: value_version,
                         specifier: VersionSpecifier::equals_version(from_env.clone()),
                     }
                 }
                 MarkerParam::String(value_string) => {
-                    let from_env = marker_env.get_string(&value_string);
+                    let from_env = marker_env.get_string(value_string);
                     MarkerExpression::String {
                         key: value_string,
                         operator: MarkerOperator::Equal,

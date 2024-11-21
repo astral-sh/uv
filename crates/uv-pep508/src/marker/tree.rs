@@ -20,7 +20,7 @@ use super::algebra::{Edges, NodeId, Variable, INTERNER};
 use super::simplify;
 
 /// Ways in which marker evaluation can fail
-#[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerWarningKind {
     /// Using an old name from PEP 345 instead of the modern equivalent
     /// <https://peps.python.org/pep-0345/#environment-markers>
@@ -39,7 +39,7 @@ pub enum MarkerWarningKind {
 }
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(clippy::enum_variant_names)]
 pub enum MarkerValueVersion {
     /// `implementation_version`
@@ -61,7 +61,7 @@ impl Display for MarkerValueVersion {
 }
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueString {
     /// `implementation_name`
     ImplementationName,
@@ -754,7 +754,7 @@ impl MarkerTree {
                 };
                 MarkerTreeKind::Version(VersionMarkerTree {
                     id: self.0,
-                    key: key.clone(),
+                    key: *key,
                     map,
                 })
             }
@@ -764,7 +764,7 @@ impl MarkerTree {
                 };
                 MarkerTreeKind::String(StringMarkerTree {
                     id: self.0,
-                    key: key.clone(),
+                    key: *key,
                     map,
                 })
             }
@@ -773,7 +773,7 @@ impl MarkerTree {
                     unreachable!()
                 };
                 MarkerTreeKind::In(InMarkerTree {
-                    key: key.clone(),
+                    key: *key,
                     value,
                     high: high.negate(self.0),
                     low: low.negate(self.0),
@@ -784,7 +784,7 @@ impl MarkerTree {
                     unreachable!()
                 };
                 MarkerTreeKind::Contains(ContainsMarkerTree {
-                    key: key.clone(),
+                    key: *key,
                     value,
                     high: high.negate(self.0),
                     low: low.negate(self.0),
@@ -932,7 +932,7 @@ impl MarkerTree {
             MarkerTreeKind::True => true,
             MarkerTreeKind::False => false,
             MarkerTreeKind::Version(marker) => marker.edges().any(|(range, tree)| {
-                if *marker.key() == MarkerValueVersion::PythonVersion {
+                if marker.key() == MarkerValueVersion::PythonVersion {
                     if !python_versions
                         .iter()
                         .any(|version| range.contains(version))
@@ -1423,8 +1423,8 @@ pub struct VersionMarkerTree<'a> {
 
 impl VersionMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> &MarkerValueVersion {
-        &self.key
+    pub fn key(&self) -> MarkerValueVersion {
+        self.key
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
@@ -1444,7 +1444,7 @@ impl PartialOrd for VersionMarkerTree<'_> {
 impl Ord for VersionMarkerTree<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
-            .cmp(other.key())
+            .cmp(&other.key())
             .then_with(|| self.edges().cmp(other.edges()))
     }
 }
@@ -1459,8 +1459,8 @@ pub struct StringMarkerTree<'a> {
 
 impl StringMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> &MarkerValueString {
-        &self.key
+    pub fn key(&self) -> MarkerValueString {
+        self.key
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
@@ -1480,7 +1480,7 @@ impl PartialOrd for StringMarkerTree<'_> {
 impl Ord for StringMarkerTree<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
-            .cmp(other.key())
+            .cmp(&other.key())
             .then_with(|| self.children().cmp(other.children()))
     }
 }
@@ -1496,8 +1496,8 @@ pub struct InMarkerTree<'a> {
 
 impl InMarkerTree<'_> {
     /// The key (LHS) for this expression.
-    pub fn key(&self) -> &MarkerValueString {
-        &self.key
+    pub fn key(&self) -> MarkerValueString {
+        self.key
     }
 
     /// The value (RHS) for this expression.
@@ -1529,7 +1529,7 @@ impl PartialOrd for InMarkerTree<'_> {
 impl Ord for InMarkerTree<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
-            .cmp(other.key())
+            .cmp(&other.key())
             .then_with(|| self.value().cmp(other.value()))
             .then_with(|| self.children().cmp(other.children()))
     }
@@ -1546,8 +1546,8 @@ pub struct ContainsMarkerTree<'a> {
 
 impl ContainsMarkerTree<'_> {
     /// The key (LHS) for this expression.
-    pub fn key(&self) -> &MarkerValueString {
-        &self.key
+    pub fn key(&self) -> MarkerValueString {
+        self.key
     }
 
     /// The value (RHS) for this expression.
@@ -1579,7 +1579,7 @@ impl PartialOrd for ContainsMarkerTree<'_> {
 impl Ord for ContainsMarkerTree<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.key()
-            .cmp(other.key())
+            .cmp(&other.key())
             .then_with(|| self.value().cmp(other.value()))
             .then_with(|| self.children().cmp(other.children()))
     }
