@@ -9,7 +9,8 @@ use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
     options::{flag, resolver_installer_options, resolver_options},
-    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ToolUpgradeArgs,
+    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
+    ToolUpgradeArgs,
 };
 use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
@@ -544,18 +545,58 @@ impl ToolUpgradeSettings {
         let ToolUpgradeArgs {
             name,
             python,
+            upgrade,
+            upgrade_package,
+            index_args,
             all,
-            mut installer,
+            reinstall,
+            no_reinstall,
+            reinstall_package,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            no_build_isolation,
+            no_build_isolation_package,
+            build_isolation,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+            no_sources,
             build,
         } = args;
 
-        if installer.upgrade {
-            // If `--upgrade` was passed explicitly, warn.
+        if upgrade {
             warn_user_once!("`--upgrade` is enabled by default on `uv tool upgrade`");
-        } else if installer.upgrade_package.is_empty() {
-            // If neither `--upgrade` nor `--upgrade-package` were passed in, assume `--upgrade`.
-            installer.upgrade = true;
         }
+
+        // Enable `--upgrade` by default.
+        let installer = ResolverInstallerArgs {
+            index_args,
+            upgrade: upgrade_package.is_empty(),
+            no_upgrade: false,
+            upgrade_package,
+            reinstall,
+            no_reinstall,
+            reinstall_package,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            pre,
+            config_setting,
+            no_build_isolation,
+            no_build_isolation_package,
+            build_isolation,
+            exclude_newer,
+            link_mode,
+            compile_bytecode,
+            no_compile_bytecode,
+            no_sources,
+        };
 
         let args = resolver_installer_options(installer, build);
         let filesystem = filesystem.map(FilesystemOptions::into_options);
