@@ -188,8 +188,6 @@ impl ResolverOutput {
                                 .expect("A non-forking resolution exists in forking mode")
                                 .clone()
                         })
-                        // Any unsatisfiable forks were skipped.
-                        .filter(|fork| !fork.is_false())
                         .collect()
                 })
                 .unwrap_or_else(Vec::new)
@@ -203,8 +201,6 @@ impl ResolverOutput {
                         .cloned()
                         .unwrap_or(MarkerTree::TRUE)
                 })
-                // Any unsatisfiable forks were skipped.
-                .filter(|fork| !fork.is_false())
                 .collect()
         };
 
