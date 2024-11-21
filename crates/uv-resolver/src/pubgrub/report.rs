@@ -725,12 +725,18 @@ impl PubGrubReportFormatter<'_> {
                     .skip_while(|url| *url != found_index)
                     .nth(1)
                 {
-                    hints.insert(PubGrubHint::UncheckedIndex {
-                        package: package.clone(),
-                        range: set.clone(),
-                        found_index: found_index.clone(),
-                        next_index: next_index.clone(),
-                    });
+                    // Do not include the hint if the set is "all versions"
+                    if !set
+                        .iter()
+                        .all(|range| matches!(range, (Bound::Unbounded, Bound::Unbounded)))
+                    {
+                        hints.insert(PubGrubHint::UncheckedIndex {
+                            package: package.clone(),
+                            range: set.clone(),
+                            found_index: found_index.clone(),
+                            next_index: next_index.clone(),
+                        });
+                    }
                 }
             }
         }
