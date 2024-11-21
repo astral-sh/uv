@@ -46,6 +46,11 @@ enum DisplayResolutionGraphNode<'dist> {
 
 impl<'a> DisplayResolutionGraph<'a> {
     /// Create a new [`DisplayResolutionGraph`] for the given graph.
+    ///
+    /// Note that this panics if any of the forks in the given resolver
+    /// output contain non-empty conflicting groups. That is, when using `uv
+    /// pip compile`, specifying conflicts is not supported because their
+    /// conditional logic cannot be encoded into a `requirements.txt`.
     #[allow(clippy::fn_params_excessive_bools)]
     pub fn new(
         underlying: &'a ResolverOutput,
@@ -58,6 +63,13 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
     ) -> DisplayResolutionGraph<'a> {
+        for fork_marker in &underlying.fork_markers {
+            assert!(
+                fork_marker.conflict().is_true(),
+                "found fork marker {fork_marker} with non-trivial conflicting marker, \
+                 cannot display resolver output with conflicts in requirements.txt format",
+            );
+        }
         Self {
             resolution: underlying,
             env,

@@ -11,6 +11,7 @@ use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{HashDigest, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
+use crate::universal_marker::UniversalMarker;
 use crate::{LockError, ResolverEnvironment};
 
 #[derive(thiserror::Error, Debug)]
@@ -30,7 +31,7 @@ pub struct Preference {
     index: Option<IndexUrl>,
     /// If coming from a package with diverging versions, the markers of the forks this preference
     /// is part of, otherwise `None`.
-    fork_markers: Vec<MarkerTree>,
+    fork_markers: Vec<UniversalMarker>,
     hashes: Vec<HashDigest>,
 }
 
@@ -118,7 +119,7 @@ impl Preference {
 
 #[derive(Debug, Clone)]
 struct Entry {
-    marker: MarkerTree,
+    marker: UniversalMarker,
     index: Option<IndexUrl>,
     pin: Pin,
 }
@@ -169,7 +170,7 @@ impl Preferences {
                 slf.insert(
                     preference.name,
                     preference.index,
-                    MarkerTree::TRUE,
+                    UniversalMarker::TRUE,
                     Pin {
                         version: preference.version,
                         hashes: preference.hashes,
@@ -198,7 +199,7 @@ impl Preferences {
         &mut self,
         package_name: PackageName,
         index: Option<IndexUrl>,
-        markers: MarkerTree,
+        markers: UniversalMarker,
         pin: impl Into<Pin>,
     ) {
         self.0.entry(package_name).or_default().push(Entry {
@@ -214,7 +215,7 @@ impl Preferences {
     ) -> impl Iterator<
         Item = (
             &PackageName,
-            impl Iterator<Item = (&MarkerTree, Option<&IndexUrl>, &Version)>,
+            impl Iterator<Item = (&UniversalMarker, Option<&IndexUrl>, &Version)>,
         ),
     > {
         self.0.iter().map(|(name, preferences)| {
@@ -231,7 +232,7 @@ impl Preferences {
     pub(crate) fn get(
         &self,
         package_name: &PackageName,
-    ) -> impl Iterator<Item = (&MarkerTree, Option<&IndexUrl>, &Version)> {
+    ) -> impl Iterator<Item = (&UniversalMarker, Option<&IndexUrl>, &Version)> {
         self.0
             .get(package_name)
             .into_iter()

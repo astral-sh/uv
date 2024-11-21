@@ -19,6 +19,7 @@ pub use crate::lock::target::InstallTarget;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
+use crate::universal_marker::UniversalMarker;
 use crate::{
     ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionMode,
     ResolverOutput,
@@ -55,23 +56,26 @@ mod tree;
 /// The current version of the lockfile format.
 pub const VERSION: u32 = 1;
 
-static LINUX_MARKERS: LazyLock<MarkerTree> = LazyLock::new(|| {
-    MarkerTree::from_str(
+static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
         "platform_system == 'Linux' and os_name == 'posix' and sys_platform == 'linux'",
     )
-    .unwrap()
+    .unwrap();
+    UniversalMarker::new(pep508, MarkerTree::TRUE)
 });
-static WINDOWS_MARKERS: LazyLock<MarkerTree> = LazyLock::new(|| {
-    MarkerTree::from_str(
+static WINDOWS_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
         "platform_system == 'Windows' and os_name == 'nt' and sys_platform == 'win32'",
     )
-    .unwrap()
+    .unwrap();
+    UniversalMarker::new(pep508, MarkerTree::TRUE)
 });
-static MAC_MARKERS: LazyLock<MarkerTree> = LazyLock::new(|| {
-    MarkerTree::from_str(
+static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
         "platform_system == 'Darwin' and os_name == 'posix' and sys_platform == 'darwin'",
     )
-    .unwrap()
+    .unwrap();
+    UniversalMarker::new(pep508, MarkerTree::TRUE)
 });
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -80,7 +84,7 @@ pub struct Lock {
     version: u32,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
-    fork_markers: Vec<MarkerTree>,
+    fork_markers: Vec<UniversalMarker>,
     /// The conflicting groups/extras specified by the user.
     conflicts: Conflicts,
     /// The list of supported environments specified by the user.
@@ -315,7 +319,7 @@ impl Lock {
         manifest: ResolverManifest,
         conflicts: Conflicts,
         supported_environments: Vec<MarkerTree>,
-        fork_markers: Vec<MarkerTree>,
+        fork_markers: Vec<UniversalMarker>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
         // check for duplicates.
@@ -597,7 +601,7 @@ impl Lock {
 
     /// If this lockfile was built from a forking resolution with non-identical forks, return the
     /// markers of those forks, otherwise `None`.
-    pub fn fork_markers(&self) -> &[MarkerTree] {
+    pub fn fork_markers(&self) -> &[UniversalMarker] {
         self.fork_markers.as_slice()
     }
 
@@ -614,7 +618,13 @@ impl Lock {
             let fork_markers = each_element_on_its_line_array(
                 self.fork_markers
                     .iter()
-                    .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker.clone()))
+                    .map(|marker| {
+                        // TODO(ag): Consider whether `resolution-markers` should actually
+                        // include conflicting marker info. In which case, we should serialize
+                        // the entire `UniversalMarker` (taking care to still make the PEP 508
+                        // simplified).
+                        SimplifiedMarkerTree::new(&self.requires_python, marker.pep508().clone())
+                    })
                     .filter_map(|marker| marker.try_to_string()),
             );
             doc.insert("resolution-markers", value(fork_markers));
@@ -1434,6 +1444,9 @@ impl TryFrom<LockWire> for Lock {
             .fork_markers
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+            // TODO(ag): Consider whether this should also deserialize a conflict marker.
+            // We currently aren't serializing. Dropping it completely is likely to be wrong.
+            .map(|complexified_marker| UniversalMarker::new(complexified_marker, MarkerTree::TRUE))
             .collect();
         let lock = Lock::new(
             wire.version,
@@ -1475,7 +1488,7 @@ pub struct Package {
     /// the next resolution.
     ///
     /// Named `resolution-markers` in `uv.lock`.
-    fork_markers: Vec<MarkerTree>,
+    fork_markers: Vec<UniversalMarker>,
     /// The resolved dependencies of the package.
     dependencies: Vec<Dependency>,
     /// The resolved optional dependencies of the package.
@@ -1489,7 +1502,7 @@ pub struct Package {
 impl Package {
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
-        fork_markers: Vec<MarkerTree>,
+        fork_markers: Vec<UniversalMarker>,
         root: &Path,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
@@ -1549,7 +1562,7 @@ impl Package {
         &mut self,
         requires_python: &RequiresPython,
         annotated_dist: &AnnotatedDist,
-        marker: MarkerTree,
+        marker: UniversalMarker,
         root: &Path,
     ) -> Result<(), LockError> {
         let new_dep =
@@ -1595,7 +1608,7 @@ impl Package {
         requires_python: &RequiresPython,
         extra: ExtraName,
         annotated_dist: &AnnotatedDist,
-        marker: MarkerTree,
+        marker: UniversalMarker,
         root: &Path,
     ) -> Result<(), LockError> {
         let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
@@ -1621,7 +1634,7 @@ impl Package {
         requires_python: &RequiresPython,
         group: GroupName,
         annotated_dist: &AnnotatedDist,
-        marker: MarkerTree,
+        marker: UniversalMarker,
         root: &Path,
     ) -> Result<(), LockError> {
         let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
@@ -1957,7 +1970,13 @@ impl Package {
             let wheels = each_element_on_its_line_array(
                 self.fork_markers
                     .iter()
-                    .map(|marker| SimplifiedMarkerTree::new(requires_python, marker.clone()))
+                    // TODO(ag): Consider whether `resolution-markers` should actually
+                    // include conflicting marker info. In which case, we should serialize
+                    // the entire `UniversalMarker` (taking care to still make the PEP 508
+                    // simplified).
+                    .map(|marker| {
+                        SimplifiedMarkerTree::new(requires_python, marker.pep508().clone())
+                    })
                     .filter_map(|marker| marker.try_to_string()),
             );
             table.insert("resolution-markers", value(wheels));
@@ -2112,7 +2131,7 @@ impl Package {
     }
 
     /// Return the fork markers for this package, if any.
-    pub fn fork_markers(&self) -> &[MarkerTree] {
+    pub fn fork_markers(&self) -> &[UniversalMarker] {
         self.fork_markers.as_slice()
     }
 
@@ -2223,6 +2242,11 @@ impl PackageWire {
                 .fork_markers
                 .into_iter()
                 .map(|simplified_marker| simplified_marker.into_marker(requires_python))
+                // TODO(ag): Consider whether this should also deserialize a conflict marker.
+                // We currently aren't serializing. Dropping it completely is likely to be wrong.
+                .map(|complexified_marker| {
+                    UniversalMarker::new(complexified_marker, MarkerTree::TRUE)
+                })
                 .collect(),
             dependencies: unwire_deps(self.dependencies)?,
             optional_dependencies: self
@@ -3477,8 +3501,9 @@ impl TryFrom<WheelWire> for Wheel {
 struct Dependency {
     package_id: PackageId,
     extra: BTreeSet<ExtraName>,
-    /// A marker simplified by assuming `requires-python` is satisfied.
-    /// So if `requires-python = '>=3.8'`, then
+    /// A marker simplified from the PEP 508 marker in `complexified_marker`
+    /// by assuming `requires-python` is satisfied. So if
+    /// `requires-python = '>=3.8'`, then
     /// `python_version >= '3.8' and python_version < '3.12'`
     /// gets simplfiied to `python_version < '3.12'`.
     ///
@@ -3496,10 +3521,10 @@ struct Dependency {
     /// `requires-python` applies to the entire lock file, it's
     /// acceptable to do comparisons on the simplified form.
     simplified_marker: SimplifiedMarkerTree,
-    /// The "complexified" marker is a marker that can stand on its
-    /// own independent of `requires-python`. It can be safely used
-    /// for any kind of marker algebra.
-    complexified_marker: MarkerTree,
+    /// The "complexified" marker is a universal marker whose PEP 508
+    /// marker can stand on its own independent of `requires-python`.
+    /// It can be safely used for any kind of marker algebra.
+    complexified_marker: UniversalMarker,
 }
 
 impl Dependency {
@@ -3507,10 +3532,10 @@ impl Dependency {
         requires_python: &RequiresPython,
         package_id: PackageId,
         extra: BTreeSet<ExtraName>,
-        complexified_marker: MarkerTree,
+        complexified_marker: UniversalMarker,
     ) -> Dependency {
         let simplified_marker =
-            SimplifiedMarkerTree::new(requires_python, complexified_marker.clone());
+            SimplifiedMarkerTree::new(requires_python, complexified_marker.pep508().clone());
         Dependency {
             package_id,
             extra,
@@ -3522,7 +3547,7 @@ impl Dependency {
     fn from_annotated_dist(
         requires_python: &RequiresPython,
         annotated_dist: &AnnotatedDist,
-        complexified_marker: MarkerTree,
+        complexified_marker: UniversalMarker,
         root: &Path,
     ) -> Result<Dependency, LockError> {
         let package_id = PackageId::from_annotated_dist(annotated_dist, root)?;
@@ -3590,6 +3615,7 @@ struct DependencyWire {
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
     marker: SimplifiedMarkerTree,
+    // FIXME: Add support for representing conflict markers.
 }
 
 impl DependencyWire {
@@ -3603,7 +3629,8 @@ impl DependencyWire {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             simplified_marker: self.marker,
-            complexified_marker,
+            // FIXME: Support reading conflict markers.
+            complexified_marker: UniversalMarker::new(complexified_marker, MarkerTree::TRUE),
         })
     }
 }
@@ -4103,6 +4130,11 @@ enum LockErrorKind {
         #[source]
         err: DependencyGroupError,
     },
+    /// An error that occurs when trying to export a `uv.lock` with
+    /// conflicting extras/groups specified to `requirements.txt`.
+    /// (Because `requirements.txt` cannot encode them.)
+    #[error("Cannot represent `uv.lock` with conflicting extras or groups as `requirements.txt`")]
+    ConflictsNotAllowedInRequirementsTxt,
 }
 
 /// An error that occurs when a source string could not be parsed.

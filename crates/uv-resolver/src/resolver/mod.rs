@@ -63,6 +63,7 @@ pub(crate) use crate::resolver::availability::{
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
+use crate::universal_marker::UniversalMarker;
 
 use crate::resolver::groups::Groups;
 pub use crate::resolver::index::InMemoryIndex;
@@ -384,9 +385,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 package.index.clone(),
                                 resolution
                                     .env
-                                    .try_markers()
-                                    .cloned()
-                                    .unwrap_or(MarkerTree::TRUE),
+                                    .try_universal_markers()
+                                    .unwrap_or(UniversalMarker::TRUE),
                                 version.clone(),
                             );
                         }
@@ -2610,6 +2610,13 @@ pub(crate) struct ResolutionDependencyEdge {
     pub(crate) to_extra: Option<ExtraName>,
     pub(crate) to_dev: Option<GroupName>,
     pub(crate) marker: MarkerTree,
+}
+
+impl ResolutionDependencyEdge {
+    pub(crate) fn universal_marker(&self) -> UniversalMarker {
+        // FIXME: Account for extras and groups here.
+        UniversalMarker::new(self.marker.clone(), MarkerTree::TRUE)
+    }
 }
 
 /// Fetch the metadata for an item

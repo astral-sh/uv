@@ -3,7 +3,8 @@ use petgraph::visit::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::collections::hash_map::Entry;
-use uv_pep508::MarkerTree;
+
+use crate::universal_marker::UniversalMarker;
 
 /// Determine the markers under which a package is reachable in the dependency tree.
 ///
@@ -13,9 +14,9 @@ use uv_pep508::MarkerTree;
 /// whenever we re-reach a node through a cycle the marker we have is a more
 /// specific marker/longer path, so we don't update the node and don't re-queue it.
 pub(crate) fn marker_reachability<T>(
-    graph: &Graph<T, MarkerTree>,
-    fork_markers: &[MarkerTree],
-) -> FxHashMap<NodeIndex, MarkerTree> {
+    graph: &Graph<T, UniversalMarker>,
+    fork_markers: &[UniversalMarker],
+) -> FxHashMap<NodeIndex, UniversalMarker> {
     // Note that we build including the virtual packages due to how we propagate markers through
     // the graph, even though we then only read the markers for base packages.
     let mut reachability = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
@@ -36,12 +37,12 @@ pub(crate) fn marker_reachability<T>(
 
     // The root nodes are always applicable, unless the user has restricted resolver
     // environments with `tool.uv.environments`.
-    let root_markers: MarkerTree = if fork_markers.is_empty() {
-        MarkerTree::TRUE
+    let root_markers = if fork_markers.is_empty() {
+        UniversalMarker::TRUE
     } else {
         fork_markers
             .iter()
-            .fold(MarkerTree::FALSE, |mut acc, marker| {
+            .fold(UniversalMarker::FALSE, |mut acc, marker| {
                 acc.or(marker.clone());
                 acc
             })

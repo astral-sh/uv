@@ -22,6 +22,7 @@ pub use resolver::{
     PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
     ResolverProvider, VersionsResponse, WheelMetadataResult,
 };
+pub use universal_marker::UniversalMarker;
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 
@@ -56,5 +57,6 @@ mod requires_python;
 mod resolution;
 mod resolution_mode;
 mod resolver;
+mod universal_marker;
 mod version_map;
 mod yanks;

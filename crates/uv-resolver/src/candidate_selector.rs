@@ -8,12 +8,12 @@ use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::Preferences;
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
+use crate::universal_marker::UniversalMarker;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
@@ -140,10 +140,10 @@ impl CandidateSelector {
         // first has the matching half and then the mismatching half.
         let preferences_match = preferences
             .get(package_name)
-            .filter(|(marker, _index, _version)| env.included_by_marker(marker));
+            .filter(|(marker, _index, _version)| env.included_by_marker(marker.pep508()));
         let preferences_mismatch = preferences
             .get(package_name)
-            .filter(|(marker, _index, _version)| !env.included_by_marker(marker));
+            .filter(|(marker, _index, _version)| !env.included_by_marker(marker.pep508()));
         let preferences = preferences_match.chain(preferences_mismatch).filter_map(
             |(marker, source, version)| {
                 // If the package is mapped to an explicit index, only consider preferences that
@@ -167,7 +167,7 @@ impl CandidateSelector {
     /// Return the first preference that satisfies the current range and is allowed.
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
-        preferences: impl Iterator<Item = (&'a MarkerTree, &'a Version)>,
+        preferences: impl Iterator<Item = (&'a UniversalMarker, &'a Version)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],

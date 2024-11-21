@@ -1,5 +1,5 @@
 ---
-source: crates/uv-resolver/src/lock/tests.rs
+source: crates/uv-resolver/src/lock/mod.rs
 expression: result
 ---
 Ok(
@@ -135,7 +135,10 @@ Ok(
                         simplified_marker: SimplifiedMarkerTree(
                             true,
                         ),
-                        complexified_marker: python_full_version >= '3.12',
+                        complexified_marker: UniversalMarker {
+                            pep508_marker: python_full_version >= '3.12',
+                            conflict_marker: true,
+                        },
                     },
                 ],
                 optional_dependencies: {},

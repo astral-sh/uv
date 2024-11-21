@@ -28,6 +28,7 @@ use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
+use crate::universal_marker::UniversalMarker;
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
     VersionsResponse,
@@ -40,12 +41,12 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolverOutput {
     /// The underlying graph.
-    pub(crate) graph: Graph<ResolutionGraphNode, MarkerTree, Directed>,
+    pub(crate) graph: Graph<ResolutionGraphNode, UniversalMarker, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: RequiresPython,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
     /// recreate them in subsequent resolutions.
-    pub(crate) fork_markers: Vec<MarkerTree>,
+    pub(crate) fork_markers: Vec<UniversalMarker>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
@@ -65,9 +66,9 @@ pub(crate) enum ResolutionGraphNode {
 }
 
 impl ResolutionGraphNode {
-    pub(crate) fn marker(&self) -> &MarkerTree {
+    pub(crate) fn marker(&self) -> &UniversalMarker {
         match self {
-            ResolutionGraphNode::Root => &MarkerTree::TRUE,
+            ResolutionGraphNode::Root => &UniversalMarker::TRUE,
             ResolutionGraphNode::Dist(dist) => &dist.marker,
         }
     }
@@ -108,7 +109,7 @@ impl ResolverOutput {
         options: Options,
     ) -> Result<Self, ResolveError> {
         let size_guess = resolutions[0].nodes.len();
-        let mut graph: Graph<ResolutionGraphNode, MarkerTree, Directed> =
+        let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
             Graph::with_capacity(size_guess, size_guess);
         let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
             FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
@@ -141,7 +142,7 @@ impl ResolverOutput {
 
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
-            let marker = resolution.env.try_markers().cloned().unwrap_or_default();
+            let marker = resolution.env.try_universal_markers().unwrap_or_default();
 
             // Add every edge to the graph, propagating the marker for the current fork, if
             // necessary.
@@ -158,12 +159,19 @@ impl ResolverOutput {
         // Extract the `Requires-Python` range, if provided.
         let requires_python = python.target().clone();
 
-        let fork_markers: Vec<MarkerTree> = if let [resolution] = resolutions {
-            resolution.env.try_markers().cloned().into_iter().collect()
+        let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
+            resolution
+                .env
+                .try_markers()
+                .cloned()
+                .into_iter()
+                .map(|marker| UniversalMarker::new(marker, MarkerTree::TRUE))
+                .collect()
         } else {
             resolutions
                 .iter()
                 .map(|resolution| resolution.env.try_markers().cloned().unwrap_or_default())
+                .map(|marker| UniversalMarker::new(marker, MarkerTree::TRUE))
                 .collect()
         };
 
@@ -206,6 +214,9 @@ impl ResolverOutput {
         // the same time. At which point, uv will report an error,
         // thereby sidestepping the possibility of installing different
         // versions of the same package into the same virtualenv. ---AG
+        //
+        // FIXME: When `UniversalMarker` supports extras/groups, we can
+        // re-enable this.
         if conflicts.is_empty() {
             #[allow(unused_mut, reason = "Used in debug_assertions below")]
             let mut conflicting = output.find_conflicting_distributions();
@@ -234,11 +245,11 @@ impl ResolverOutput {
     }
 
     fn add_edge(
-        graph: &mut Graph<ResolutionGraphNode, MarkerTree>,
+        graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
         inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
         edge: &ResolutionDependencyEdge,
-        marker: MarkerTree,
+        marker: UniversalMarker,
     ) {
         let from_index = edge.from.as_ref().map_or(root_index, |from| {
             inverse[&PackageRef {
@@ -260,25 +271,25 @@ impl ResolverOutput {
         }];
 
         let edge_marker = {
-            let mut edge_marker = edge.marker.clone();
+            let mut edge_marker = edge.universal_marker();
             edge_marker.and(marker);
             edge_marker
         };
 
-        if let Some(marker) = graph
+        if let Some(weight) = graph
             .find_edge(from_index, to_index)
             .and_then(|edge| graph.edge_weight_mut(edge))
         {
             // If either the existing marker or new marker is `true`, then the dependency is
             // included unconditionally, and so the combined marker is `true`.
-            marker.or(edge_marker);
+            weight.or(edge_marker);
         } else {
             graph.update_edge(from_index, to_index, edge_marker);
         }
     }
 
     fn add_version<'a>(
-        graph: &mut Graph<ResolutionGraphNode, MarkerTree>,
+        graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
         inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
@@ -339,7 +350,7 @@ impl ResolverOutput {
             dev: dev.clone(),
             hashes,
             metadata,
-            marker: MarkerTree::TRUE,
+            marker: UniversalMarker::TRUE,
         }));
         inverse.insert(
             PackageRef {
@@ -703,7 +714,7 @@ impl ResolverOutput {
     /// an installation in that marker environment could wind up trying to
     /// install different versions of the same package, which is not allowed.
     fn find_conflicting_distributions(&self) -> Vec<ConflictingDistributionError> {
-        let mut name_to_markers: BTreeMap<&PackageName, Vec<(&Version, &MarkerTree)>> =
+        let mut name_to_markers: BTreeMap<&PackageName, Vec<(&Version, &UniversalMarker)>> =
             BTreeMap::new();
         for node in self.graph.node_weights() {
             let annotated_dist = match node {
@@ -749,8 +760,8 @@ pub struct ConflictingDistributionError {
     name: PackageName,
     version1: Version,
     version2: Version,
-    marker1: MarkerTree,
-    marker2: MarkerTree,
+    marker1: UniversalMarker,
+    marker2: UniversalMarker,
 }
 
 impl std::error::Error for ConflictingDistributionError {}
@@ -767,8 +778,8 @@ impl Display for ConflictingDistributionError {
         write!(
             f,
             "found conflicting versions for package `{name}`:
-             `{marker1:?}` (for version `{version1}`) is not disjoint with \
-             `{marker2:?}` (for version `{version2}`)",
+             `{marker1}` (for version `{version1}`) is not disjoint with \
+             `{marker2}` (for version `{version2}`)",
         )
     }
 }
@@ -824,7 +835,11 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
         // Re-add the edges to the reduced graph.
         for edge in graph.edge_indices() {
             let (source, target) = graph.edge_endpoints(edge).unwrap();
-            let marker = graph[edge].clone();
+            // OK to ignore conflicting marker because we've asserted
+            // above that we aren't in universal mode. If we aren't in
+            // universal mode, then there can be no conflicts since
+            // conflicts imply forks and forks imply universal mode.
+            let marker = graph[edge].pep508().clone();
 
             match (&graph[source], &graph[target]) {
                 (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
@@ -860,7 +875,7 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.
 fn report_missing_lower_bounds(
-    graph: &Graph<ResolutionGraphNode, MarkerTree>,
+    graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
 ) {
     for node_index in graph.node_indices() {
@@ -887,7 +902,7 @@ fn report_missing_lower_bounds(
 fn has_lower_bound(
     node_index: NodeIndex,
     package_name: &PackageName,
-    graph: &Graph<ResolutionGraphNode, MarkerTree>,
+    graph: &Graph<ResolutionGraphNode, UniversalMarker>,
 ) -> bool {
     for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
         let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
