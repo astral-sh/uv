@@ -2742,7 +2742,7 @@ fn run_script_explicit_directory() -> Result<()> {
 fn run_gui_script_explicit() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let test_script = context.temp_dir.child("script.pyw");
+    let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.11"
@@ -2759,7 +2759,7 @@ fn run_gui_script_explicit() -> Result<()> {
         print(f"Using executable: {executable}", file=sys.stderr)
     "#})?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script.pyw"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
