@@ -16,7 +16,10 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
-use uv_pep508::{LoweredMarkerValueString, LoweredMarkerValueVersion, MarkerEnvironment, MarkerTree, MarkerTreeKind};
+use uv_pep508::{
+    LoweredMarkerValueString, LoweredMarkerValueVersion, MarkerEnvironment, MarkerTree,
+    MarkerTreeKind,
+};
 use uv_pypi_types::{
     Conflicts, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
 };
@@ -643,6 +646,12 @@ impl ResolverOutput {
                 }
                 MarkerTreeKind::String(marker) => {
                     set.insert(MarkerParam::String(marker.key().clone()));
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(&tree, set);
+                    }
+                }
+                MarkerTreeKind::Platform(marker) => {
+                    // set.insert(MarkerParam::String(key));
                     for (_, tree) in marker.children() {
                         add_marker_params_from_tree(&tree, set);
                     }

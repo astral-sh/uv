@@ -9,14 +9,16 @@ use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 use version_ranges::Ranges;
 
+use super::algebra::{Edges, NodeId, Variable, INTERNER};
+use super::simplify;
 use crate::cursor::Cursor;
+use crate::marker::lowered::{
+    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion, Platform,
+};
 use crate::marker::parse;
 use crate::{
     MarkerEnvironment, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter, TracingReporter,
 };
-use crate::marker::lowered::{LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion};
-use super::algebra::{Edges, NodeId, Variable, INTERNER};
-use super::simplify;
 
 /// Ways in which marker evaluation can fail
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq, Clone, Copy)]
@@ -268,9 +270,9 @@ impl MarkerOperator {
     }
 
     /// Returns the marker operator and value whose union represents the given range.
-    pub fn from_bounds(
-        bounds: (&Bound<String>, &Bound<String>),
-    ) -> impl Iterator<Item = (MarkerOperator, String)> {
+    pub fn from_bounds<T: Clone + PartialEq>(
+        bounds: (&Bound<T>, &Bound<T>),
+    ) -> impl Iterator<Item = (MarkerOperator, T)> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some((MarkerOperator::Equal, v1.clone())), None)
@@ -288,7 +290,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<String>) -> Option<(MarkerOperator, String)> {
+    pub fn from_lower_bound<T: Clone + PartialEq>(bound: &Bound<T>) -> Option<(MarkerOperator, T)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::GreaterEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::GreaterThan, value.clone())),
@@ -297,7 +299,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<String>) -> Option<(MarkerOperator, String)> {
+    pub fn from_upper_bound<T: Clone + PartialEq>(bound: &Bound<T>) -> Option<(MarkerOperator, T)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::LessEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::LessThan, value.clone())),
@@ -659,15 +661,7 @@ impl MarkerTree {
 
     /// Returns a marker tree for a single expression.
     pub fn expression(expr: MarkerExpression) -> MarkerTree {
-        if let Some(implied) =
-            MarkerTree::implies(&expr).map(|expr| MarkerTree(INTERNER.lock().expression(expr)))
-        {
-            let mut expr = MarkerTree(INTERNER.lock().expression(expr));
-            expr.and(implied);
-            expr
-        } else {
-            MarkerTree(INTERNER.lock().expression(expr))
-        }
+        MarkerTree(INTERNER.lock().expression(expr))
     }
 
     /// If the [`MarkerExpression`] implies another expression, return the implied expression.
@@ -818,6 +812,12 @@ impl MarkerTree {
                     map,
                 })
             }
+            Variable::Platform => {
+                let Edges::Platform { edges: ref map } = node.children else {
+                    unreachable!()
+                };
+                MarkerTreeKind::Platform(PlatformMarkerTree { id: self.0, map })
+            }
             Variable::In { key, value } => {
                 let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
@@ -949,10 +949,16 @@ impl MarkerTree {
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
-                    .edge(
-                        extras.contains(marker.name().extra())
-                    )
+                    .edge(extras.contains(marker.name().extra()))
                     .evaluate_reporter_impl(env, extras, reporter);
+            }
+            MarkerTreeKind::Platform(marker) => {
+                for (range, tree) in marker.children() {
+                    let l_platform = env.get_platform();
+                    if range.contains(&l_platform) {
+                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                    }
+                }
             }
         }
 
@@ -979,10 +985,11 @@ impl MarkerTree {
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::Extra(marker) => marker
-                .edge(
-                    extras.contains(marker.name().extra())
-                )
+                .edge(extras.contains(marker.name().extra()))
                 .evaluate_extras(extras),
+            MarkerTreeKind::Platform(marker) => marker
+                .children()
+                .any(|(_, tree)| tree.evaluate_extras(extras)),
         }
     }
 
@@ -1000,7 +1007,6 @@ impl MarkerTree {
         let result = self.evaluate_reporter_impl(env, extras, &mut reporter);
         (result, warnings)
     }
-
 
     /// Find a top level `extra == "..."` expression.
     ///
@@ -1140,11 +1146,9 @@ impl MarkerTree {
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
-        MarkerTree(INTERNER.lock().restrict(self.0, &|var| {
-            match var {
-                Variable::Extra(name) => is_extra(name.extra()).then_some(true),
-                _ => None,
-            }
+        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
+            Variable::Extra(name) => is_extra(name.extra()).then_some(true),
+            _ => None,
         }))
     }
 }
@@ -1203,6 +1207,17 @@ impl MarkerTree {
                     }
 
                     write!(f, "{key}{range} -> ", key = kind.key())?;
+                    tree.fmt_graph(f, level + 1)?;
+                }
+            }
+            MarkerTreeKind::Platform(kind) => {
+                for (tree, range) in simplify::collect_edges(kind.children()) {
+                    writeln!(f)?;
+                    for _ in 0..level {
+                        write!(f, "  ")?;
+                    }
+
+                    write!(f, "platform{range} -> ")?;
                     tree.fmt_graph(f, level + 1)?;
                 }
             }
@@ -1316,6 +1331,7 @@ pub enum MarkerTreeKind<'a> {
     Version(VersionMarkerTree<'a>),
     /// A string expression.
     String(StringMarkerTree<'a>),
+    Platform(PlatformMarkerTree<'a>),
     /// A string expression with the `in` operator.
     In(InMarkerTree<'a>),
     /// A string expression with the `contains` operator.
@@ -1393,6 +1409,34 @@ impl Ord for StringMarkerTree<'_> {
         self.key()
             .cmp(other.key())
             .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
+/// A string marker node, such as `os_name == 'Linux'`.
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct PlatformMarkerTree<'a> {
+    id: NodeId,
+    map: &'a [(Ranges<Platform>, NodeId)],
+}
+
+impl PlatformMarkerTree<'_> {
+    /// The edges of this node, corresponding to possible output ranges of the given variable.
+    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<Platform>, MarkerTree)> {
+        self.map
+            .iter()
+            .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
+    }
+}
+
+impl PartialOrd for PlatformMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PlatformMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.children().cmp(other.children())
     }
 }
 

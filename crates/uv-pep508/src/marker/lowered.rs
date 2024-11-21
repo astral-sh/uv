@@ -1,10 +1,11 @@
 use std::fmt::{Display, Formatter};
 
+use crate::marker::parse;
+use crate::{
+    ExtraOperator, MarkerOperator, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
+};
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionSpecifier};
-
-use crate::marker::parse;
-use crate::{ExtraOperator, MarkerOperator, MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -153,6 +154,40 @@ impl Display for LoweredMarkerValueExtra {
     }
 }
 
+/// The [`MarkerValue`] value used in `platform` markers.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum Platform {
+    Linux,
+    Windows,
+    Darwin,
+    SysPlatform(String),
+    PlatformSystem(String),
+}
+
+impl Display for Platform {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Platform::Linux => f.write_str("sys_platform:linux"),
+            Platform::Windows => f.write_str("sys_platform:win32"),
+            Platform::Darwin => f.write_str("sys_platform:darwin"),
+            Platform::SysPlatform(platform) => write!(f, "sys_platform:{platform}"),
+            Platform::PlatformSystem(system) => write!(f, "platform_system:{system}"),
+        }
+    }
+}
+
+impl From<Platform> for (MarkerValueString, String) {
+    fn from(value: Platform) -> Self {
+        match value {
+            Platform::Linux => (MarkerValueString::SysPlatform, "linux".to_string()),
+            Platform::Windows => (MarkerValueString::SysPlatform, "win32".to_string()),
+            Platform::Darwin => (MarkerValueString::SysPlatform, "darwin".to_string()),
+            Platform::SysPlatform(value) => (MarkerValueString::SysPlatform, value),
+            Platform::PlatformSystem(value) => (MarkerValueString::PlatformSystem, value),
+        }
+    }
+}
+
 /// Represents one clause such as `python_version > "3.8"`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(missing_docs)]
@@ -167,7 +202,7 @@ pub enum LoweredMarkerExpression {
     },
     /// A version in list expression, e.g. `<version key> in <quoted list of PEP 440 versions>`.
     ///
-    /// A special case of [`MarkerExpression::String`] with the [`MarkerOperator::In`] operator for
+    /// A special case of [`LoweredMarkerExpression::String`] with the [`LoweredMarkerOperator::In`] operator for
     /// [`LoweredMarkerValueVersion`] values.
     ///
     /// See [`parse::parse_version_in_expr`] for details on the supported syntax.
@@ -178,7 +213,11 @@ pub enum LoweredMarkerExpression {
         versions: Vec<Version>,
         negated: bool,
     },
-    /// A string marker comparison, e.g. `sys_platform == '...'`.
+    Platform {
+        operator: MarkerOperator,
+        value: Platform,
+    },
+    /// An string marker comparison, e.g. `sys_platform == '...'`.
     ///
     /// Inverted string expressions, e.g `'...' == sys_platform`, are also normalized to this form.
     String {

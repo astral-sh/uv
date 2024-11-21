@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use uv_pep440::{Version, VersionParseError};
 
+use crate::marker::lowered::{LoweredMarkerValueString, LoweredMarkerValueVersion, Platform};
 use crate::{MarkerValueString, MarkerValueVersion, StringVersion};
-use crate::marker::lowered::{LoweredMarkerValueString, LoweredMarkerValueVersion};
 
 /// The marker values for a python interpreter, normally the current one
 ///
@@ -36,7 +36,9 @@ impl MarkerEnvironment {
     /// Returns of the PEP 440 version typed value of the key in the current environment
     pub fn get_version(&self, key: &LoweredMarkerValueVersion) -> &Version {
         match key {
-            LoweredMarkerValueVersion::ImplementationVersion => &self.implementation_version().version,
+            LoweredMarkerValueVersion::ImplementationVersion => {
+                &self.implementation_version().version
+            }
             LoweredMarkerValueVersion::PythonFullVersion => &self.python_full_version().version,
         }
     }
@@ -45,24 +47,20 @@ impl MarkerEnvironment {
     pub fn get_string(&self, key: &LoweredMarkerValueString) -> &str {
         match key {
             LoweredMarkerValueString::ImplementationName => self.implementation_name(),
-            LoweredMarkerValueString::OsName  => self.os_name(),
-            LoweredMarkerValueString::PlatformMachine  => {
-                self.platform_machine()
-            }
-            LoweredMarkerValueString::PlatformPythonImplementation
-
-             => {
+            LoweredMarkerValueString::OsName => self.os_name(),
+            LoweredMarkerValueString::PlatformMachine => self.platform_machine(),
+            LoweredMarkerValueString::PlatformPythonImplementation => {
                 self.platform_python_implementation()
             }
             LoweredMarkerValueString::PlatformRelease => self.platform_release(),
             LoweredMarkerValueString::PlatformSystem => self.platform_system(),
-            LoweredMarkerValueString::PlatformVersion  => {
-                self.platform_version()
-            }
-            LoweredMarkerValueString::SysPlatform  => {
-                self.sys_platform()
-            }
+            LoweredMarkerValueString::PlatformVersion => self.platform_version(),
+            LoweredMarkerValueString::SysPlatform => self.sys_platform(),
         }
+    }
+
+    pub fn get_platform(&self) -> Platform {
+        Platform::PlatformSystem(self.platform_system().to_string())
     }
 }
 

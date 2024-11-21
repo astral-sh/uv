@@ -90,7 +90,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -107,13 +107,13 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "package-a", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+            { name = "package-a", marker = "sys_platform == 'linux' or sys_platform == 'darwin'" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -306,7 +306,7 @@ fn fork_basic() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -344,8 +344,8 @@ fn fork_basic() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -591,7 +591,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'linux'",
             "sys_platform == 'darwin'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -679,8 +679,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "==4.3.0" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = "==4.4.0" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "==4.3.0" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
             { name = "package-c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
         ]
@@ -1247,7 +1247,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -1327,8 +1327,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -1427,7 +1427,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -1495,8 +1495,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -1596,7 +1596,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
             "implementation_name == 'cpython' and sys_platform == 'darwin'",
             "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -1664,8 +1664,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -1756,7 +1756,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -1806,8 +1806,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -1904,7 +1904,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -1966,8 +1966,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -2060,7 +2060,7 @@ fn fork_marker_inherit() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -2098,8 +2098,8 @@ fn fork_marker_inherit() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -2198,7 +2198,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -2258,8 +2258,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-b" },
         ]
         "###
@@ -2353,7 +2353,7 @@ fn fork_marker_selection() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -2402,8 +2402,8 @@ fn fork_marker_selection() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "package-a" },
-            { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
+            { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2" },
         ]
         "###
         );
@@ -2508,7 +2508,7 @@ fn fork_marker_track() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'darwin'",
             "sys_platform == 'linux'",
-            "sys_platform != 'darwin' and sys_platform != 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'darwin'",
         ]
 
         [[package]]
@@ -2569,8 +2569,8 @@ fn fork_marker_track() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "package-a" },
-            { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2.8" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
+            { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2.8" },
         ]
         "###
         );
@@ -3772,7 +3772,7 @@ fn preferences_dependent_forking() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
+    Resolved 5 packages in [TIME]
     "###
     );
 

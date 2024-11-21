@@ -17,13 +17,13 @@ mod simplify;
 mod tree;
 
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
+pub use lowered::{LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion};
 pub use tree::{
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerExpression,
     MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeDebugGraph, MarkerTreeKind,
     MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion, MarkerWarningKind,
     StringMarkerTree, StringVersion, VersionMarkerTree,
 };
-pub use lowered::{LoweredMarkerValueString, LoweredMarkerValueVersion, LoweredMarkerValueExtra, LoweredMarkerExpression};
 
 /// `serde` helpers for [`MarkerTree`].
 pub mod ser {

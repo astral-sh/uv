@@ -5,7 +5,7 @@ description = "My test project"
 readme = "README.md"
 
 dependencies = [
-    "ipykernel ; sys_platform == 'linux'"
+    "ipykernel ; platform_system == 'Linux'"
 ]
 
 [tool.uv]
