@@ -312,7 +312,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
             range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
         {
             if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)`
+                // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)
                 format!(
                     "`{}{}` ({})",
                     format!("{}[{}]", step.name, extra).cyan(),
@@ -320,7 +320,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
                     format!("v{}", step.version).cyan(),
                 )
             } else if let Some(group) = &step.group {
-                // Ex) `flask:dev>=1.0.0` (v1.2.3)`
+                // Ex) `flask:dev>=1.0.0` (v1.2.3)
                 format!(
                     "`{}{}` ({})",
                     format!("{}:{}", step.name, group).cyan(),
@@ -328,7 +328,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
                     format!("v{}", step.version).cyan(),
                 )
             } else {
-                // Ex) `flask>=1.0.0` (v1.2.3)`
+                // Ex) `flask>=1.0.0` (v1.2.3)
                 format!(
                     "`{}{}` ({})",
                     step.name.cyan(),
@@ -338,21 +338,21 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
             }
         } else {
             if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]` (v1.2.3)`
+                // Ex) `flask[dotenv]` (v1.2.3)
                 format!(
                     "`{}` ({})",
                     format!("{}[{}]", step.name, extra).cyan(),
                     format!("v{}", step.version).cyan(),
                 )
             } else if let Some(group) = &step.group {
-                // Ex) `flask:dev` (v1.2.3)`
+                // Ex) `flask:dev` (v1.2.3)
                 format!(
                     "`{}` ({})",
                     format!("{}:{}", step.name, group).cyan(),
                     format!("v{}", step.version).cyan(),
                 )
             } else {
-                // Ex) `flask` (v1.2.3)`
+                // Ex) `flask` (v1.2.3)
                 format!(
                     "`{}` ({})",
                     step.name.cyan(),

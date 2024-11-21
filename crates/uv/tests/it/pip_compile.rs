@@ -6347,11 +6347,10 @@ fn invalid_metadata_requires_python() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Metadata for validation==2.0.0 could not be parsed:
+          hint: Metadata for `validation` (v2.0.0) could not be parsed:
             Failed to parse version: Unexpected end of version specifier, expected operator:
             12
             ^^
-
     "###
     );
 
@@ -6379,7 +6378,7 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because validation==3.0.0 has an invalid package format and you require validation==3.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of validation==3.0.0 was invalid:
+          hint: The structure of `validation` (v3.0.0) was invalid:
             Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
     "###
     );
@@ -13397,7 +13396,7 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
       × No solution found when resolving dependencies for split (python_full_version >= '3.10'):
       ╰─▶ Because source-distribution{python_full_version >= '3.10'}==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
-          hint: The source distribution for source-distribution{python_full_version >= '3.10'}==0.0.3 does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
+          hint: The source distribution for `source-distribution{python_full_version >= '3.10'}` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
     "###);
 
     Ok(())
