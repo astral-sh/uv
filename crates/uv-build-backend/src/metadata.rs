@@ -1,5 +1,5 @@
 use crate::Error;
-use globset::{Glob, GlobSetBuilder};
+use globset::Glob;
 use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::{BTreeMap, Bound};
@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tracing::{debug, trace};
 use uv_fs::Simplified;
-use uv_globfilter::parse_portable_glob;
+use uv_globfilter::{parse_portable_glob, GlobDirFilter};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
@@ -328,7 +328,7 @@ impl PyProjectToml {
                 };
 
                 let mut license_files = Vec::new();
-                let mut license_glob_builder = GlobSetBuilder::new();
+                let mut license_globs_parsed = Vec::new();
                 for license_glob in license_globs {
                     let pep639_glob =
                         parse_portable_glob(license_glob).map_err(|err| Error::PortableGlob {
@@ -341,28 +341,38 @@ impl PyProjectToml {
                     .join(pep639_glob.to_string())
                     .to_string_lossy()
                     .to_string();
-                    license_glob_builder.add(Glob::new(&absolute_glob).map_err(|err| {
+                    license_globs_parsed.push(Glob::new(&absolute_glob).map_err(|err| {
                         Error::GlobSet {
                             field: "project.license-files".to_string(),
                             err,
                         }
                     })?);
                 }
-                let license_globs = license_glob_builder.build().map_err(|err| Error::GlobSet {
-                    field: "project.license-files".to_string(),
-                    err,
-                })?;
+                let license_globs =
+                    GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
+                        Error::GlobSetTooLarge {
+                            field: "tool.uv.source-dist.include".to_string(),
+                            source: err,
+                        }
+                    })?;
 
-                for entry in WalkDir::new(".") {
+                for entry in WalkDir::new(root).into_iter().filter_entry(|entry| {
+                    license_globs.match_directory(
+                        entry
+                            .path()
+                            .strip_prefix(root)
+                            .expect("walkdir starts with root"),
+                    )
+                }) {
                     let entry = entry.map_err(|err| Error::WalkDir {
                         root: PathBuf::from("."),
                         err,
                     })?;
                     let relative = entry
                         .path()
-                        .strip_prefix("./")
+                        .strip_prefix(root)
                         .expect("walkdir starts with root");
-                    if !license_globs.is_match(relative) {
+                    if !license_globs.match_path(relative) {
                         trace!("Not a license files match: `{}`", relative.user_display());
                         continue;
                     }
@@ -711,6 +721,17 @@ pub(crate) struct WheelSettings {
     /// The directory that contains the module directory, usually `src`, or an empty path when
     /// using the flat layout over the src layout.
     pub(crate) module_root: Option<PathBuf>,
+
+    /// Glob expressions which files and directories to exclude from the previous source
+    /// distribution includes.
+    ///
+    /// Excludes are not anchored, which means that `__pycache__` excludes all directories named
+    /// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
+    /// `/dist` will exclude only `<project root>/dist`.
+    ///
+    /// The glob syntax is the reduced portable glob from
+    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
+    pub(crate) exclude: Option<Vec<String>>,
     /// Data includes for wheels.
     pub(crate) data: Option<WheelDataIncludes>,
 }
