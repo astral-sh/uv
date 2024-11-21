@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource};
+use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl};
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -80,11 +80,12 @@ impl CandidateSelector {
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
+        index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
         let is_excluded = exclusions.contains(package_name);
 
-        // Check for a preference from a lockfile or a previous fork  that satisfies the range and
+        // Check for a preference from a lockfile or a previous fork that satisfies the range and
         // is allowed.
         if let Some(preferred) = self.get_preferred(
             package_name,
@@ -93,6 +94,7 @@ impl CandidateSelector {
             preferences,
             installed_packages,
             is_excluded,
+            index,
             env,
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
@@ -131,23 +133,31 @@ impl CandidateSelector {
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
         is_excluded: bool,
+        index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
     ) -> Option<Candidate> {
         // In the branches, we "sort" the preferences by marker-matching through an iterator that
         // first has the matching half and then the mismatching half.
-        let preferences_match = preferences.get(package_name).filter(|(marker, _version)| {
+        let preferences_match = preferences.get(package_name).filter(|(marker, _index, _version)| {
             // `.unwrap_or(true)` because the universal marker is considered matching.
             marker
                 .map(|marker| env.included_by_marker(marker))
                 .unwrap_or(true)
         });
-        let preferences_mismatch = preferences.get(package_name).filter(|(marker, _version)| {
+        let preferences_mismatch = preferences.get(package_name).filter(|(marker,_index, _version)| {
             marker
                 .map(|marker| !env.included_by_marker(marker))
                 .unwrap_or(false)
         });
+        let preferences = preferences_match.chain(preferences_mismatch).filter_map(|(marker, source, version)| {
+            if source == index {
+                Some((marker, version))
+            } else {
+                None
+            }
+        });
         self.get_preferred_from_iter(
-            preferences_match.chain(preferences_mismatch),
+            preferences,
             package_name,
             range,
             version_maps,

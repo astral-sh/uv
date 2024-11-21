@@ -3,7 +3,7 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use uv_distribution_types::{InstalledDist, InstalledMetadata, InstalledVersion, Name};
+use uv_distribution_types::{IndexUrl, InstalledDist, InstalledMetadata, InstalledVersion, Name};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -114,7 +114,7 @@ impl Preference {
 /// Preferences should be prioritized first by whether their marker matches and then by the order
 /// they are stored, so that a lockfile has higher precedence than sibling forks.
 #[derive(Debug, Clone, Default)]
-pub struct Preferences(FxHashMap<PackageName, Vec<(Option<MarkerTree>, Pin)>>);
+pub struct Preferences(FxHashMap<PackageName, Vec<(Option<MarkerTree>, Option<IndexUrl>, Pin)>>);
 
 impl Preferences {
     /// Create a map of pinned packages from an iterator of [`Preference`] entries.
@@ -153,6 +153,7 @@ impl Preferences {
                 slf.insert(
                     preference.name,
                     None,
+                    None,
                     Pin {
                         version: preference.version,
                         hashes: preference.hashes,
@@ -162,6 +163,7 @@ impl Preferences {
                 for fork_marker in preference.fork_markers {
                     slf.insert(
                         preference.name.clone(),
+                        None,
                         Some(fork_marker),
                         Pin {
                             version: preference.version.clone(),
@@ -179,13 +181,14 @@ impl Preferences {
     pub(crate) fn insert(
         &mut self,
         package_name: PackageName,
+        index: Option<IndexUrl>,
         markers: Option<MarkerTree>,
         pin: impl Into<Pin>,
     ) {
         self.0
             .entry(package_name)
             .or_default()
-            .push((markers, pin.into()));
+            .push((markers, index, pin.into()));
     }
 
     /// Returns an iterator over the preferences.
@@ -202,7 +205,7 @@ impl Preferences {
                 name,
                 preferences
                     .iter()
-                    .map(|(markers, pin)| (markers.as_ref(), pin.version())),
+                    .map(|(markers, _index, pin)| (markers.as_ref(), pin.version())),
             )
         })
     }
@@ -211,12 +214,12 @@ impl Preferences {
     pub(crate) fn get(
         &self,
         package_name: &PackageName,
-    ) -> impl Iterator<Item = (Option<&MarkerTree>, &Version)> {
+    ) -> impl Iterator<Item = (Option<&MarkerTree>, Option<&IndexUrl>, &Version)> {
         self.0
             .get(package_name)
             .into_iter()
             .flatten()
-            .map(|(markers, pin)| (markers.as_ref(), pin.version()))
+            .map(|(markers, index, pin)| (markers.as_ref(), index.as_ref(), pin.version()))
     }
 
     /// Return the hashes for a package, if the version matches that of the pin.
@@ -229,8 +232,8 @@ impl Preferences {
             .get(package_name)
             .into_iter()
             .flatten()
-            .find(|(_markers, pin)| pin.version() == version)
-            .map(|(_markers, pin)| pin.hashes())
+            .find(|(_markers, _index, pin)| pin.version() == version)
+            .map(|(_markers, _index, pin)| pin.hashes())
     }
 }
 
