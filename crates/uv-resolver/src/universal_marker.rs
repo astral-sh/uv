@@ -122,9 +122,9 @@ impl std::fmt::Display for UniversalMarker {
         ) {
             (None, None) => write!(f, "`true`"),
             (Some(pep508), None) => write!(f, "`{pep508}`"),
-            (None, Some(conflict)) => write!(f, "`true` (conflict marker: `{conflict}`"),
+            (None, Some(conflict)) => write!(f, "`true` (conflict marker: `{conflict}`)"),
             (Some(pep508), Some(conflict)) => {
-                write!(f, "`{pep508}` (conflict marker: `{conflict}`")
+                write!(f, "`{pep508}` (conflict marker: `{conflict}`)")
             }
         }
     }
