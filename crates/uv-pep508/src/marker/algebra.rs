@@ -57,10 +57,10 @@ use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier}
 use version_ranges::Ranges;
 
 use crate::marker::lowering::{
-    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion,
+    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion, Platform,
 };
 use crate::marker::MarkerValueExtra;
-use crate::ExtraOperator;
+use crate::{ExtraOperator, MarkerValueString};
 use crate::{MarkerExpression, MarkerOperator, MarkerValueVersion};
 
 /// The global node interner.
@@ -260,6 +260,24 @@ impl InternerGuard<'_> {
                 },
                 Edges::from_bool(false),
             ),
+            // A variable representing the output of a platform key. Edges correspond
+            // to disjoint platform ranges.
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator,
+                value,
+            } => {
+                let platform = Platform::from_platform_system(value);
+                (Variable::Platform, Edges::from_platform(operator, platform))
+            }
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator,
+                value,
+            } => {
+                let platform = Platform::from_sys_platform(value);
+                (Variable::Platform, Edges::from_platform(operator, platform))
+            }
             // A variable representing the output of a string key. Edges correspond
             // to disjoint string ranges.
             MarkerExpression::String {
@@ -624,6 +642,8 @@ pub(crate) enum Variable {
     Version(LoweredMarkerValueVersion),
     /// A string marker, such as `os_name`.
     String(LoweredMarkerValueString),
+    /// A platform marker, combining `sys_platform` with `platform_system`.
+    Platform,
     /// A variable representing a `<key> in <value>` expression for a particular
     /// string marker and value.
     In {
@@ -748,6 +768,11 @@ pub(crate) enum Edges {
     String {
         edges: SmallVec<(Ranges<String>, NodeId)>,
     },
+    // The edges of a platform variable, representing a disjoint set of ranges that cover
+    // the output space.
+    Platform {
+        edges: SmallVec<(Ranges<Platform>, NodeId)>,
+    },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
     Boolean {
@@ -789,6 +814,24 @@ impl Edges {
         };
 
         Edges::String {
+            edges: Edges::from_range(&range),
+        }
+    }
+
+    /// Returns the [`Edges`] for a platform expression.
+    fn from_platform(operator: MarkerOperator, value: Platform) -> Edges {
+        let range: Ranges<Platform> = match operator {
+            MarkerOperator::Equal => Ranges::singleton(value),
+            MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
+            MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
+            MarkerOperator::GreaterEqual => Ranges::higher_than(value),
+            MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
+            MarkerOperator::LessEqual => Ranges::lower_than(value),
+            MarkerOperator::TildeEqual => unreachable!("string comparisons with ~= are ignored"),
+            _ => unreachable!("`in` and `contains` are treated as boolean variables"),
+        };
+
+        Edges::Platform {
             edges: Edges::from_range(&range),
         }
     }
@@ -901,6 +944,11 @@ impl Edges {
             (Edges::String { edges }, Edges::String { edges: right_edges }) => Edges::String {
                 edges: Edges::apply_ranges(edges, parent, right_edges, right_parent, apply),
             },
+            (Edges::Platform { edges }, Edges::Platform { edges: right_edges }) => {
+                Edges::Platform {
+                    edges: Edges::apply_ranges(edges, parent, right_edges, right_parent, apply),
+                }
+            }
             // For boolean variables, we simply merge the low and high edges.
             (
                 Edges::Boolean { high, low },
@@ -1000,6 +1048,9 @@ impl Edges {
             (Edges::String { edges }, Edges::String { edges: right_edges }) => {
                 Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
             }
+            (Edges::Platform { edges }, Edges::Platform { edges: right_edges }) => {
+                Edges::is_disjoint_ranges(edges, parent, right_edges, right_parent, interner)
+            }
             // For boolean variables, we simply check the low and high edges.
             (
                 Edges::Boolean { high, low },
@@ -1065,6 +1116,13 @@ impl Edges {
                     .map(|(range, node)| (range, f(node.negate(parent))))
                     .collect(),
             },
+            Edges::Platform { edges: map } => Edges::Platform {
+                edges: map
+                    .iter()
+                    .cloned()
+                    .map(|(range, node)| (range, f(node.negate(parent))))
+                    .collect(),
+            },
             Edges::Boolean { high, low } => Edges::Boolean {
                 low: f(low.negate(parent)),
                 high: f(high.negate(parent)),
@@ -1081,7 +1139,10 @@ impl Edges {
             Edges::String { edges: map } => {
                 Either::Left(Either::Right(map.iter().map(|(_, node)| *node)))
             }
-            Edges::Boolean { high, low } => Either::Right([*high, *low].into_iter()),
+            Edges::Platform { edges: map } => {
+                Either::Right(Either::Left(map.iter().map(|(_, node)| *node)))
+            }
+            Edges::Boolean { high, low } => Either::Right(Either::Right([*high, *low].into_iter())),
         }
     }
 
@@ -1095,6 +1156,12 @@ impl Edges {
                     .collect(),
             },
             Edges::String { edges: map } => Edges::String {
+                edges: map
+                    .into_iter()
+                    .map(|(range, node)| (range, node.not()))
+                    .collect(),
+            },
+            Edges::Platform { edges: map } => Edges::Platform {
                 edges: map
                     .into_iter()
                     .map(|(range, node)| (range, node.not()))

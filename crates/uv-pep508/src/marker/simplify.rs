@@ -120,6 +120,41 @@ fn collect_dnf(
                 }
             }
         }
+        MarkerTreeKind::Platform(marker) => {
+            for (tree, range) in collect_edges(marker.children()) {
+                // Detect whether the range for this edge can be simplified as an inequality.
+                if let Some(excluded) = range_inequality(&range) {
+                    let current = path.len();
+                    for value in excluded {
+                        let (key, value) = value.clone().into();
+                        path.push(MarkerExpression::String {
+                            key,
+                            operator: MarkerOperator::NotEqual,
+                            value,
+                        });
+                    }
+
+                    collect_dnf(&tree, dnf, path);
+                    path.truncate(current);
+                    continue;
+                }
+
+                for bounds in range.iter() {
+                    let current = path.len();
+                    for (operator, value) in MarkerOperator::from_bounds(bounds) {
+                        let (key, value) = value.clone().into();
+                        path.push(MarkerExpression::String {
+                            key,
+                            operator,
+                            value,
+                        });
+                    }
+
+                    collect_dnf(&tree, dnf, path);
+                    path.truncate(current);
+                }
+            }
+        }
         MarkerTreeKind::In(marker) => {
             for (value, tree) in marker.children() {
                 let operator = if value {

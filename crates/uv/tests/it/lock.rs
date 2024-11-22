@@ -1014,7 +1014,7 @@ fn lock_wheel_url() -> Result<()> {
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
             { name = "trustme", marker = "extra == 'test'" },
             { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
-            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
+            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32' and extra == 'test'", specifier = ">=0.17" },
         ]
 
         [[package]]
@@ -1159,7 +1159,7 @@ fn lock_sdist_url() -> Result<()> {
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
             { name = "trustme", marker = "extra == 'test'" },
             { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
-            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
+            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32' and extra == 'test'", specifier = ">=0.17" },
         ]
 
         [[package]]
@@ -1548,7 +1548,7 @@ fn lock_dependency_extra() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         wheels = [
@@ -2035,7 +2035,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         wheels = [
@@ -13663,10 +13663,10 @@ fn lock_constrained_environment() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
-            "platform_system != 'Windows'",
+            "sys_platform != 'win32'",
         ]
         supported-markers = [
-            "platform_system != 'Windows'",
+            "sys_platform != 'win32'",
         ]
 
         [options]
@@ -13677,11 +13677,11 @@ fn lock_constrained_environment() -> Result<()> {
         version = "24.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "click", marker = "platform_system != 'Windows'" },
-            { name = "mypy-extensions", marker = "platform_system != 'Windows'" },
-            { name = "packaging", marker = "platform_system != 'Windows'" },
-            { name = "pathspec", marker = "platform_system != 'Windows'" },
-            { name = "platformdirs", marker = "platform_system != 'Windows'" },
+            { name = "click", marker = "sys_platform != 'win32'" },
+            { name = "mypy-extensions", marker = "sys_platform != 'win32'" },
+            { name = "packaging", marker = "sys_platform != 'win32'" },
+            { name = "pathspec", marker = "sys_platform != 'win32'" },
+            { name = "platformdirs", marker = "sys_platform != 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292 }
         wheels = [
@@ -13741,7 +13741,7 @@ fn lock_constrained_environment() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "black", marker = "platform_system != 'Windows'" },
+            { name = "black", marker = "sys_platform != 'win32'" },
         ]
 
         [package.metadata]
@@ -13876,7 +13876,7 @@ fn lock_constrained_environment() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         wheels = [
@@ -13993,10 +13993,10 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
-            "platform_system != 'Windows'",
+            "sys_platform != 'win32'",
         ]
         supported-markers = [
-            "platform_system != 'Windows'",
+            "sys_platform != 'win32'",
         ]
 
         [options]
@@ -14012,11 +14012,11 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         version = "24.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "click", marker = "platform_system != 'Windows'" },
-            { name = "mypy-extensions", marker = "platform_system != 'Windows'" },
-            { name = "packaging", marker = "platform_system != 'Windows'" },
-            { name = "pathspec", marker = "platform_system != 'Windows'" },
-            { name = "platformdirs", marker = "platform_system != 'Windows'" },
+            { name = "click", marker = "sys_platform != 'win32'" },
+            { name = "mypy-extensions", marker = "sys_platform != 'win32'" },
+            { name = "packaging", marker = "sys_platform != 'win32'" },
+            { name = "pathspec", marker = "sys_platform != 'win32'" },
+            { name = "platformdirs", marker = "sys_platform != 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292 }
         wheels = [
@@ -14031,7 +14031,7 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "child" }
         dependencies = [
-            { name = "black", marker = "platform_system != 'Windows'" },
+            { name = "black", marker = "sys_platform != 'win32'" },
         ]
 
         [package.metadata]
@@ -14138,9 +14138,9 @@ fn lock_overlapping_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Supported environments must be disjoint, but the following markers overlap: `platform_system != 'Windows'` and `python_full_version >= '3.11'`.
+    error: Supported environments must be disjoint, but the following markers overlap: `sys_platform != 'win32'` and `python_full_version >= '3.11'`.
 
-    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and platform_system == 'Windows'`.
+    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and sys_platform == 'win32'`.
     "###);
 
     Ok(())
@@ -15937,7 +15937,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         wheels = [
@@ -16154,7 +16154,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         wheels = [
@@ -16653,7 +16653,7 @@ fn lock_python_upper_bound() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
         wheels = [
@@ -16937,7 +16937,7 @@ fn lock_python_upper_bound() -> Result<()> {
         version = "4.66.2"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "platform_system == 'Windows'" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/ea/85/3ce0f9f7d3f596e7ea57f4e5ce8c18cb44e4a9daa58ddb46ee0d13d6bff8/tqdm-4.66.2.tar.gz", hash = "sha256:6cd52cdf0fef0e0f543299cfc96fec90d7b8a7e88745f411ec33eb44d5ed3531", size = 169462 }
         wheels = [
@@ -18829,7 +18829,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###);
 
     let lock = context.read("uv.lock");
@@ -18841,11 +18841,6 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_system == 'Windows' and sys_platform == 'darwin'",
-            "platform_system == 'Windows' and sys_platform != 'darwin'",
-            "platform_system != 'Windows'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -18854,23 +18849,9 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "platform_system == 'Windows' and sys_platform != 'darwin'",
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
-        ]
-
-        [[package]]
-        name = "iniconfig"
-        version = "2.0.0"
-        source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
-        resolution-markers = [
-            "platform_system == 'Windows' and sys_platform == 'darwin'",
-        ]
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
         [[package]]
@@ -18878,15 +18859,11 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_system == 'Windows' and sys_platform != 'darwin'" },
-            { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "platform_system == 'Windows' and sys_platform == 'darwin'" },
+            { name = "iniconfig", marker = "sys_platform == 'win32'" },
         ]
 
         [package.metadata]
-        requires-dist = [
-            { name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform != 'darwin'" },
-            { name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform == 'darwin'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
-        ]
+        requires-dist = [{ name = "iniconfig", marker = "sys_platform == 'win32'" }]
         "###
         );
     });
@@ -18898,7 +18875,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###);
 
     Ok(())

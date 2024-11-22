@@ -13,7 +13,7 @@ use super::algebra::{Edges, NodeId, Variable, INTERNER};
 use super::simplify;
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
-    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion,
+    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion, Platform,
 };
 use crate::marker::parse;
 use crate::{
@@ -270,9 +270,9 @@ impl MarkerOperator {
     }
 
     /// Returns the marker operator and value whose union represents the given range.
-    pub fn from_bounds(
-        bounds: (&Bound<String>, &Bound<String>),
-    ) -> impl Iterator<Item = (MarkerOperator, String)> {
+    pub fn from_bounds<T: Clone + PartialEq>(
+        bounds: (&Bound<T>, &Bound<T>),
+    ) -> impl Iterator<Item = (MarkerOperator, T)> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some((MarkerOperator::Equal, v1.clone())), None)
@@ -290,7 +290,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<String>) -> Option<(MarkerOperator, String)> {
+    pub fn from_lower_bound<T: Clone + PartialEq>(bound: &Bound<T>) -> Option<(MarkerOperator, T)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::GreaterEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::GreaterThan, value.clone())),
@@ -299,7 +299,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<String>) -> Option<(MarkerOperator, String)> {
+    pub fn from_upper_bound<T: Clone + PartialEq>(bound: &Bound<T>) -> Option<(MarkerOperator, T)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::LessEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::LessThan, value.clone())),
@@ -782,6 +782,12 @@ impl MarkerTree {
                     map,
                 })
             }
+            Variable::Platform => {
+                let Edges::Platform { edges: ref map } = node.children else {
+                    unreachable!()
+                };
+                MarkerTreeKind::Platform(PlatformMarkerTree { id: self.0, map })
+            }
             Variable::In { key, value } => {
                 let Edges::Boolean { low, high } = node.children else {
                     unreachable!()
@@ -901,6 +907,34 @@ impl MarkerTree {
                     }
                 }
             }
+            MarkerTreeKind::Platform(marker) => {
+                for (range, tree) in marker.children() {
+                    let Some(target) = range.as_singleton() else {
+                        // TODO(charlie): How should we handle this?
+                        continue;
+                    };
+                    let is_match = match target {
+                        Platform::Linux => {
+                            env.get_string(LoweredMarkerValueString::SysPlatform) == "linux"
+                        }
+                        Platform::Windows => {
+                            env.get_string(LoweredMarkerValueString::SysPlatform) == "win32"
+                        }
+                        Platform::Darwin => {
+                            env.get_string(LoweredMarkerValueString::SysPlatform) == "darwin"
+                        }
+                        Platform::SysPlatform(target) => {
+                            env.get_string(LoweredMarkerValueString::SysPlatform) == target
+                        }
+                        Platform::PlatformSystem(target) => {
+                            env.get_string(LoweredMarkerValueString::PlatformSystem) == target
+                        }
+                    };
+                    if is_match {
+                        return tree.evaluate_reporter_impl(env, extras, reporter);
+                    }
+                }
+            }
             MarkerTreeKind::In(marker) => {
                 return marker
                     .edge(marker.value().contains(env.get_string(marker.key())))
@@ -932,6 +966,9 @@ impl MarkerTree {
                 marker.edges().any(|(_, tree)| tree.evaluate_extras(extras))
             }
             MarkerTreeKind::String(marker) => marker
+                .children()
+                .any(|(_, tree)| tree.evaluate_extras(extras)),
+            MarkerTreeKind::Platform(marker) => marker
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::In(marker) => marker
@@ -1148,6 +1185,17 @@ impl MarkerTree {
                     tree.fmt_graph(f, level + 1)?;
                 }
             }
+            MarkerTreeKind::Platform(kind) => {
+                for (tree, range) in simplify::collect_edges(kind.children()) {
+                    writeln!(f)?;
+                    for _ in 0..level {
+                        write!(f, "  ")?;
+                    }
+
+                    write!(f, "{range} -> ")?;
+                    tree.fmt_graph(f, level + 1)?;
+                }
+            }
             MarkerTreeKind::In(kind) => {
                 writeln!(f)?;
                 for _ in 0..level {
@@ -1258,6 +1306,8 @@ pub enum MarkerTreeKind<'a> {
     Version(VersionMarkerTree<'a>),
     /// A string expression.
     String(StringMarkerTree<'a>),
+    /// A platform expression.
+    Platform(PlatformMarkerTree<'a>),
     /// A string expression with the `in` operator.
     In(InMarkerTree<'a>),
     /// A string expression with the `contains` operator.
@@ -1335,6 +1385,34 @@ impl Ord for StringMarkerTree<'_> {
         self.key()
             .cmp(&other.key())
             .then_with(|| self.children().cmp(other.children()))
+    }
+}
+
+/// A platform marker node, such as `sys_platform == 'linux'`.
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct PlatformMarkerTree<'a> {
+    id: NodeId,
+    map: &'a [(Ranges<Platform>, NodeId)],
+}
+
+impl PlatformMarkerTree<'_> {
+    /// The edges of this node, corresponding to possible output ranges of the given variable.
+    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<Platform>, MarkerTree)> {
+        self.map
+            .iter()
+            .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
+    }
+}
+
+impl PartialOrd for PlatformMarkerTree<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PlatformMarkerTree<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.children().cmp(other.children())
     }
 }
 
@@ -1808,6 +1886,46 @@ mod test {
         let marker = MarkerTree::from_str("implementation_version not in \"2.4 3.8 4.0\"").unwrap();
         assert!(marker.evaluate(&env27, &[]));
         assert!(marker.evaluate(&env37, &[]));
+    }
+
+    #[test]
+    fn test_string_in_evaluation() {
+        let env_windows = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "",
+            implementation_version: "3.7",
+            os_name: "Windows 10",
+            platform_machine: "",
+            platform_python_implementation: "",
+            platform_release: "",
+            platform_system: "Windows",
+            platform_version: "",
+            python_full_version: "3.7",
+            python_version: "3.7",
+            sys_platform: "win32",
+        })
+        .unwrap();
+        let env_darwin = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "",
+            implementation_version: "3.7",
+            os_name: "posix",
+            platform_machine: "",
+            platform_python_implementation: "",
+            platform_release: "",
+            platform_system: "Darwin",
+            platform_version: "",
+            python_full_version: "3.7",
+            python_version: "3.7",
+            sys_platform: "darwin",
+        })
+        .unwrap();
+
+        let marker = MarkerTree::from_str("\"win\" in sys_platform").unwrap();
+        assert!(marker.evaluate(&env_windows, &[]));
+        assert!(marker.evaluate(&env_darwin, &[]));
+
+        let marker = MarkerTree::from_str("\"win32\" in sys_platform").unwrap();
+        assert!(marker.evaluate(&env_windows, &[]));
+        assert!(!marker.evaluate(&env_darwin, &[]));
     }
 
     #[test]
@@ -2475,8 +2593,6 @@ mod test {
                 or (os_name == 'nt' and sys_platform != 'win32')",
         );
 
-        // This is another case we cannot simplify fully, depending on the variable order.
-        // The expression is equivalent to `sys_platform == 'x' or (os_name == 'Linux' and platform_system == 'win32')`.
         assert_simplifies(
             "(os_name == 'Linux' and platform_system == 'win32')
                 or (os_name == 'Linux' and platform_system == 'win32' and sys_platform == 'a')
@@ -2484,7 +2600,7 @@ mod test {
                 or (os_name != 'Linux' and platform_system == 'win32' and sys_platform == 'x')
                 or (os_name == 'Linux' and platform_system != 'win32' and sys_platform == 'x')
                 or (os_name != 'Linux' and platform_system != 'win32' and sys_platform == 'x')",
-            "(os_name != 'Linux' and sys_platform == 'x') or (platform_system != 'win32' and sys_platform == 'x') or (os_name == 'Linux' and platform_system == 'win32')",
+            "sys_platform == 'x' or (os_name == 'Linux' and platform_system == 'win32')",
         );
 
         assert_simplifies("python_version > '3.7'", "python_full_version >= '3.8'");
@@ -2696,6 +2812,12 @@ mod test {
         assert!(is_disjoint(
             "extra == 'x1' and extra != 'x2'",
             "extra == 'x2'"
+        ));
+
+        // These rely on encoded knowledge about the `sys_platform` and `platform_system` values.
+        assert!(is_disjoint(
+            "sys_platform == 'win32'",
+            "platform_system == 'Darwin'"
         ));
     }
 

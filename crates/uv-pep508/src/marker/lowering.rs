@@ -141,3 +141,65 @@ impl Display for LoweredMarkerValueExtra {
         }
     }
 }
+
+/// The [`MarkerValue`] value used in `platform` markers. A combination of `sys_platform` and
+/// `platform_system`.
+///
+/// The core idea is that we normalize `platform_system == 'Linux'` to `sys_platform == 'linux'`,
+/// `platform_system == 'Windows'` to `sys_platform == 'win32'`, and `platform_system == 'Darwin'`
+/// to `sys_platform == 'darwin'`. Apart from that, values are passed through as-is.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[allow(clippy::enum_variant_names)]
+pub enum Platform {
+    Darwin,
+    Linux,
+    Windows,
+    SysPlatform(String),
+    PlatformSystem(String),
+}
+
+impl Platform {
+    /// Construct a [`Platform`] from the `sys_platform` value.
+    pub fn from_sys_platform(value: String) -> Self {
+        match value.as_str() {
+            "linux" => Self::Linux,
+            "win32" => Self::Windows,
+            "darwin" => Self::Darwin,
+            _ => Self::SysPlatform(value),
+        }
+    }
+
+    /// Construct a [`Platform`] from the `platform_system` value.
+    pub fn from_platform_system(value: String) -> Self {
+        match value.as_str() {
+            "Linux" => Self::Linux,
+            "Windows" => Self::Windows,
+            "Darwin" => Self::Darwin,
+            _ => Self::PlatformSystem(value),
+        }
+    }
+}
+
+impl Display for Platform {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Platform::Linux => f.write_str("sys_platform == 'linux'"),
+            Platform::Windows => f.write_str("sys_platform == 'win32'"),
+            Platform::Darwin => f.write_str("sys_platform == 'darwin'"),
+            Platform::SysPlatform(platform) => write!(f, "sys_platform == '{platform}'"),
+            Platform::PlatformSystem(system) => write!(f, "platform_system == '{system}'"),
+        }
+    }
+}
+
+impl From<Platform> for (MarkerValueString, String) {
+    fn from(value: Platform) -> Self {
+        match value {
+            Platform::Linux => (MarkerValueString::SysPlatform, "linux".to_string()),
+            Platform::Windows => (MarkerValueString::SysPlatform, "win32".to_string()),
+            Platform::Darwin => (MarkerValueString::SysPlatform, "darwin".to_string()),
+            Platform::SysPlatform(value) => (MarkerValueString::SysPlatform, value),
+            Platform::PlatformSystem(value) => (MarkerValueString::PlatformSystem, value),
+        }
+    }
+}

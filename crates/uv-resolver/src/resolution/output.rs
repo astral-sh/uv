@@ -619,6 +619,15 @@ impl ResolverOutput {
                         add_marker_params_from_tree(&tree, set);
                     }
                 }
+                MarkerTreeKind::Platform(marker) => {
+                    set.insert(MarkerParam::String(LoweredMarkerValueString::SysPlatform));
+                    set.insert(MarkerParam::String(
+                        LoweredMarkerValueString::PlatformSystem,
+                    ));
+                    for (_, tree) in marker.children() {
+                        add_marker_params_from_tree(&tree, set);
+                    }
+                }
                 MarkerTreeKind::In(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
