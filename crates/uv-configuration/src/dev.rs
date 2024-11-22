@@ -346,6 +346,18 @@ impl DevGroupsManifest {
         self.spec.prod()
     }
 
+    /// Returns `true` if the group was enabled by default.
+    pub fn default(&self, group: &GroupName) -> bool {
+        if self.spec.contains(group) {
+            // If the group was explicitly requested, then it wasn't enabled by default.
+            false
+        } else {
+            // If the group was enabled, but wasn't explicitly requested, then it was enabled by
+            // default.
+            self.contains(group)
+        }
+    }
+
     /// Returns `true` if the group is included in the manifest.
     pub fn contains(&self, group: &GroupName) -> bool {
         if self.spec.contains(group) {
