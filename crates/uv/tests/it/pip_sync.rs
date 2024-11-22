@@ -5361,6 +5361,36 @@ fn target_no_build_isolation() -> Result<()> {
     Ok(())
 }
 
+/// Sync to a `--target` directory without a virtual environment.
+#[test]
+fn target_system() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Install `iniconfig` to the target directory.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig==2.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.in")
+        .arg("--target")
+        .arg("target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Ensure that the package is present in the target directory.
+    assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
+
+    Ok(())
+}
+
 /// Sync to a `--prefix` directory.
 #[test]
 fn prefix() -> Result<()> {

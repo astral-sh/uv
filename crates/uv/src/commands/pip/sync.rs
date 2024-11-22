@@ -122,17 +122,22 @@ pub(crate) async fn pip_sync(
         }
     }
 
+    // Determine whether we're modifying the discovered environment, or a separate target.
+    let mutable = !(target.is_some() || prefix.is_some());
+
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python
             .as_deref()
             .map(PythonRequest::parse)
             .unwrap_or_default(),
-        EnvironmentPreference::from_system_flag(system, true),
+        EnvironmentPreference::from_system_flag(system, mutable),
         &cache,
     )?;
 
-    report_target_environment(&environment, &cache, printer)?;
+    if mutable {
+        report_target_environment(&environment, &cache, printer)?;
+    }
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
