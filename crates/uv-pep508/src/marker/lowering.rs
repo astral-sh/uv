@@ -12,8 +12,6 @@ pub enum LoweredMarkerValueVersion {
     ImplementationVersion,
     /// `python_full_version`
     PythonFullVersion,
-    /// `python_version`
-    PythonVersion,
 }
 
 impl Display for LoweredMarkerValueVersion {
@@ -21,17 +19,6 @@ impl Display for LoweredMarkerValueVersion {
         match self {
             Self::ImplementationVersion => f.write_str("implementation_version"),
             Self::PythonFullVersion => f.write_str("python_full_version"),
-            Self::PythonVersion => f.write_str("python_version"),
-        }
-    }
-}
-
-impl From<MarkerValueVersion> for LoweredMarkerValueVersion {
-    fn from(value: MarkerValueVersion) -> Self {
-        match value {
-            MarkerValueVersion::ImplementationVersion => Self::ImplementationVersion,
-            MarkerValueVersion::PythonFullVersion => Self::PythonFullVersion,
-            MarkerValueVersion::PythonVersion => Self::PythonVersion,
         }
     }
 }
@@ -41,7 +28,6 @@ impl From<LoweredMarkerValueVersion> for MarkerValueVersion {
         match value {
             LoweredMarkerValueVersion::ImplementationVersion => Self::ImplementationVersion,
             LoweredMarkerValueVersion::PythonFullVersion => Self::PythonFullVersion,
-            LoweredMarkerValueVersion::PythonVersion => Self::PythonVersion,
         }
     }
 }
