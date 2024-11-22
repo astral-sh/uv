@@ -181,7 +181,7 @@ Ignore `.env` files when executing `uv run` commands.
 
 ### `UV_NO_PROGRESS`
 
-Equivalent to the `--no-progress` command-line argument. Disables all progress output. For example, spinners and progress bars.
+Disables all progress output. For example, spinners and progress bars.
 
 ### `UV_NO_SYNC`
 
