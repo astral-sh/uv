@@ -63,7 +63,7 @@ use crate::resolver::environment::ForkingPossibility;
 pub use crate::resolver::environment::ResolverEnvironment;
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub(crate) use crate::resolver::urls::Urls;
-use crate::universal_marker::UniversalMarker;
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
@@ -2716,8 +2716,10 @@ pub(crate) struct ResolutionDependencyEdge {
 
 impl ResolutionDependencyEdge {
     pub(crate) fn universal_marker(&self) -> UniversalMarker {
-        // FIXME: Account for extras and groups here.
-        UniversalMarker::new(self.marker, MarkerTree::TRUE)
+        // We specifically do not account for conflict
+        // markers here. Instead, those are computed via
+        // a traversal on the resolution graph.
+        UniversalMarker::new(self.marker, ConflictMarker::TRUE)
     }
 }
 
