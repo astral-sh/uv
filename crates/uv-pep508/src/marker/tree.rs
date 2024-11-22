@@ -10,14 +10,16 @@ use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 use version_ranges::Ranges;
 
+use super::algebra::{Edges, NodeId, Variable, INTERNER};
+use super::simplify;
 use crate::cursor::Cursor;
+use crate::marker::lowering::{
+    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion,
+};
 use crate::marker::parse;
 use crate::{
     MarkerEnvironment, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter, TracingReporter,
 };
-
-use super::algebra::{Edges, NodeId, Variable, INTERNER};
-use super::simplify;
 
 /// Ways in which marker evaluation can fail
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -899,12 +901,7 @@ impl MarkerTree {
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
-                    .edge(
-                        marker
-                            .name()
-                            .as_extra()
-                            .is_some_and(|extra| extras.contains(extra)),
-                    )
+                    .edge(extras.contains(marker.name().extra()))
                     .evaluate_reporter_impl(env, extras, reporter);
             }
         }
@@ -929,7 +926,7 @@ impl MarkerTree {
             MarkerTreeKind::True => true,
             MarkerTreeKind::False => false,
             MarkerTreeKind::Version(marker) => marker.edges().any(|(range, tree)| {
-                if marker.key() == MarkerValueVersion::PythonVersion {
+                if marker.key() == LoweredMarkerValueVersion::PythonVersion {
                     if !python_versions
                         .iter()
                         .any(|version| range.contains(version))
@@ -950,12 +947,7 @@ impl MarkerTree {
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
             MarkerTreeKind::Extra(marker) => marker
-                .edge(
-                    marker
-                        .name()
-                        .as_extra()
-                        .is_some_and(|extra| extras.contains(extra)),
-                )
+                .edge(extras.contains(marker.name().extra()))
                 .evaluate_extras_and_python_version(extras, python_versions),
         }
     }
@@ -980,12 +972,7 @@ impl MarkerTree {
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::Extra(marker) => marker
-                .edge(
-                    marker
-                        .name()
-                        .as_extra()
-                        .is_some_and(|extra| extras.contains(extra)),
-                )
+                .edge(extras.contains(marker.name().extra()))
                 .evaluate_extras(extras),
         }
     }
@@ -1128,13 +1115,9 @@ impl MarkerTree {
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
-        MarkerTree(INTERNER.lock().restrict(self.0, &|var| {
-            match var {
-                Variable::Extra(name) => name
-                    .as_extra()
-                    .and_then(|name| is_extra(name).then_some(true)),
-                _ => None,
-            }
+        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
+            Variable::Extra(name) => is_extra(name.extra()).then_some(true),
+            _ => None,
         }))
     }
 }
@@ -1318,13 +1301,13 @@ pub enum MarkerTreeKind<'a> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct VersionMarkerTree<'a> {
     id: NodeId,
-    key: MarkerValueVersion,
+    key: LoweredMarkerValueVersion,
     map: &'a [(Ranges<Version>, NodeId)],
 }
 
 impl VersionMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> MarkerValueVersion {
+    pub fn key(&self) -> LoweredMarkerValueVersion {
         self.key
     }
 
@@ -1354,13 +1337,13 @@ impl Ord for VersionMarkerTree<'_> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StringMarkerTree<'a> {
     id: NodeId,
-    key: MarkerValueString,
+    key: LoweredMarkerValueString,
     map: &'a [(Ranges<String>, NodeId)],
 }
 
 impl StringMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> MarkerValueString {
+    pub fn key(&self) -> LoweredMarkerValueString {
         self.key
     }
 
@@ -1389,7 +1372,7 @@ impl Ord for StringMarkerTree<'_> {
 /// A string marker node with the `in` operator, such as `os_name in 'WindowsLinux'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct InMarkerTree<'a> {
-    key: MarkerValueString,
+    key: LoweredMarkerValueString,
     value: &'a str,
     high: NodeId,
     low: NodeId,
@@ -1397,7 +1380,7 @@ pub struct InMarkerTree<'a> {
 
 impl InMarkerTree<'_> {
     /// The key (LHS) for this expression.
-    pub fn key(&self) -> MarkerValueString {
+    pub fn key(&self) -> LoweredMarkerValueString {
         self.key
     }
 
@@ -1439,7 +1422,7 @@ impl Ord for InMarkerTree<'_> {
 /// A string marker node with inverse of the `in` operator, such as `'nux' in os_name`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ContainsMarkerTree<'a> {
-    key: MarkerValueString,
+    key: LoweredMarkerValueString,
     value: &'a str,
     high: NodeId,
     low: NodeId,
@@ -1447,7 +1430,7 @@ pub struct ContainsMarkerTree<'a> {
 
 impl ContainsMarkerTree<'_> {
     /// The key (LHS) for this expression.
-    pub fn key(&self) -> MarkerValueString {
+    pub fn key(&self) -> LoweredMarkerValueString {
         self.key
     }
 
@@ -1489,14 +1472,14 @@ impl Ord for ContainsMarkerTree<'_> {
 /// A node representing the existence or absence of a given extra, such as `extra == 'bar'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ExtraMarkerTree<'a> {
-    name: &'a MarkerValueExtra,
+    name: &'a LoweredMarkerValueExtra,
     high: NodeId,
     low: NodeId,
 }
 
 impl ExtraMarkerTree<'_> {
     /// Returns the name of the extra in this expression.
-    pub fn name(&self) -> &MarkerValueExtra {
+    pub fn name(&self) -> &LoweredMarkerValueExtra {
         self.name
     }
 
