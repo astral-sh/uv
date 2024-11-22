@@ -81,26 +81,8 @@ pub(crate) enum ProjectError {
     #[error("The current Python platform is not compatible with the lockfile's supported environments: {0}")]
     LockedPlatformIncompatibility(String),
 
-    #[error(
-        "{} are incompatible with the declared conflicts: {{{}}}",
-        _1.iter().map(|conflict| {
-            match conflict {
-                ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                ConflictPackage::Group(ref group) => format!("group `{group}`"),
-            }
-        }).collect::<Vec<String>>().join(", "),
-        _0
-            .iter()
-            .map(|item| {
-                match item.conflict() {
-                    ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
-                    ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
-                }
-            })
-            .collect::<Vec<String>>()
-            .join(", "),
-    )]
-    ConflictIncompatibility(ConflictSet, Vec<ConflictPackage>),
+    #[error(transparent)]
+    Conflict(#[from] ConflictError),
 
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
     RequestedPythonProjectIncompatibility(Version, RequiresPython),
@@ -226,6 +208,43 @@ pub(crate) enum ProjectError {
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }
+
+#[derive(Debug)]
+pub(crate) struct ConflictError {
+    /// The set from which the conflict was derived.
+    pub(crate) set: ConflictSet,
+    /// The items from the set that were enabled, and thus create the conflict.
+    pub(crate) conflicts: Vec<ConflictPackage>,
+    /// The manifest of enabled dependency groups.
+    pub(crate) dev: DevGroupsManifest,
+}
+
+impl std::fmt::Display for ConflictError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} are incompatible with the declared conflicts: {{{}}}",
+            self.conflicts
+                .iter()
+                .map(|conflict| match conflict {
+                    ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
+                    ConflictPackage::Group(ref group) if self.dev.default(group) =>
+                        format!("group `{group}` (enabled by default)"),
+                    ConflictPackage::Group(ref group) => format!("group `{group}`"),
+                })
+                .join(", "),
+            self.set
+                .iter()
+                .map(|item| match item.conflict() {
+                    ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
+                    ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
+                })
+                .join(", ")
+        )
+    }
+}
+
+impl std::error::Error for ConflictError {}
 
 /// Compute the `Requires-Python` bound for the [`Workspace`].
 ///
@@ -1662,10 +1681,11 @@ pub(crate) fn detect_conflicts(
             }
         }
         if conflicts.len() >= 2 {
-            return Err(ProjectError::ConflictIncompatibility(
-                set.clone(),
+            return Err(ProjectError::Conflict(ConflictError {
+                set: set.clone(),
                 conflicts,
-            ));
+                dev: dev.clone(),
+            }));
         }
     }
     Ok(())
