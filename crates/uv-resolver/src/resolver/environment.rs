@@ -172,8 +172,14 @@ impl ResolverEnvironment {
     /// Returns the bounding Python versions that can satisfy this
     /// resolver environment's marker, if it's constrained.
     pub(crate) fn requires_python(&self) -> Option<RequiresPythonRange> {
-        let marker = self.try_markers().unwrap_or(&MarkerTree::TRUE);
-        crate::marker::requires_python(marker)
+        let Kind::Universal {
+            markers: ref pep508_marker,
+            ..
+        } = self.kind
+        else {
+            return None;
+        };
+        crate::marker::requires_python(pep508_marker)
     }
 
     /// Narrow this environment given the forking markers.
@@ -292,7 +298,7 @@ impl ResolverEnvironment {
         &self,
         python_requirement: &PythonRequirement,
     ) -> Option<PythonRequirement> {
-        python_requirement.narrow(&self.requires_python_range()?)
+        python_requirement.narrow(&self.requires_python()?)
     }
 
     /// Returns a message formatted for end users representing a fork in the
@@ -317,23 +323,6 @@ impl ResolverEnvironment {
         }
     }
 
-    /// Returns the marker expression corresponding to the fork that is
-    /// represented by this resolver environment.
-    ///
-    /// This returns `None` when this does not correspond to a fork.
-    pub(crate) fn try_markers(&self) -> Option<&MarkerTree> {
-        match self.kind {
-            Kind::Specific { .. } => None,
-            Kind::Universal { ref markers, .. } => {
-                if markers.is_true() {
-                    None
-                } else {
-                    Some(markers)
-                }
-            }
-        }
-    }
-
     /// Creates a universal marker expression corresponding to the fork that is
     /// represented by this resolver environment. A universal marker includes
     /// not just the standard PEP 508 marker, but also a marker based on
@@ -348,15 +337,6 @@ impl ResolverEnvironment {
                 Some(UniversalMarker::new(markers.clone(), MarkerTree::TRUE))
             }
         }
-    }
-
-    /// Returns a requires-python version range derived from the marker
-    /// expression describing this resolver environment.
-    ///
-    /// When this isn't a fork, then there is nothing to constrain and thus
-    /// `None` is returned.
-    fn requires_python_range(&self) -> Option<RequiresPythonRange> {
-        crate::marker::requires_python(self.try_markers()?)
     }
 }
 
