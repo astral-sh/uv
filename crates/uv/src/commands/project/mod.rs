@@ -8,8 +8,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, ExtrasSpecification, GroupsSpecification,
-    LowerBound, Reinstall, TrustedHost, Upgrade,
+    Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
+    GroupsSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -1628,6 +1628,47 @@ pub(crate) fn default_dependency_groups(
     } else {
         Ok(vec![DEV_DEPENDENCIES.clone()])
     }
+}
+
+/// Validate that we aren't trying to install extras or groups that
+/// are declared as conflicting.
+#[allow(clippy::result_large_err)]
+pub(crate) fn detect_conflicts(
+    lock: &Lock,
+    extras: &ExtrasSpecification,
+    dev: &DevGroupsManifest,
+) -> Result<(), ProjectError> {
+    // Note that we need to collect all extras and groups that match in
+    // a particular set, since extras can be declared as conflicting with
+    // groups. So if extra `x` and group `g` are declared as conflicting,
+    // then enabling both of those should result in an error.
+    let conflicts = lock.conflicts();
+    for set in conflicts.iter() {
+        let mut conflicts: Vec<ConflictPackage> = vec![];
+        for item in set.iter() {
+            if item
+                .extra()
+                .map(|extra| extras.contains(extra))
+                .unwrap_or(false)
+            {
+                conflicts.push(item.conflict().clone());
+            }
+            if item
+                .group()
+                .map(|group| dev.contains(group))
+                .unwrap_or(false)
+            {
+                conflicts.push(item.conflict().clone());
+            }
+        }
+        if conflicts.len() >= 2 {
+            return Err(ProjectError::ConflictIncompatibility(
+                set.clone(),
+                conflicts,
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.

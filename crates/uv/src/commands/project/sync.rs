@@ -20,8 +20,7 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
-    ConflictPackage, LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl,
-    VerbatimParsedUrl,
+    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, InstallTarget};
@@ -36,7 +35,7 @@ use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, DependencyGroupsTarget, ProjectError, SharedState,
+    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError, SharedState,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -304,38 +303,8 @@ pub(super) async fn do_sync(
         ));
     }
 
-    // Validate that we aren't trying to install extras or groups that
-    // are declared as conflicting. Note that we need to collect all
-    // extras and groups that match in a particular set, since extras
-    // can be declared as conflicting with groups. So if extra `x` and
-    // group `g` are declared as conflicting, then enabling both of
-    // those should result in an error.
-    let conflicts = target.lock().conflicts();
-    for set in conflicts.iter() {
-        let mut conflicts: Vec<ConflictPackage> = vec![];
-        for item in set.iter() {
-            if item
-                .extra()
-                .map(|extra| extras.contains(extra))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.conflict().clone());
-            }
-            if item
-                .group()
-                .map(|group| dev.contains(group))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.conflict().clone());
-            }
-        }
-        if conflicts.len() >= 2 {
-            return Err(ProjectError::ConflictIncompatibility(
-                set.clone(),
-                conflicts,
-            ));
-        }
-    }
+    // Validate that the set of requested extras and development groups are compatible.
+    detect_conflicts(target.lock(), extras, dev)?;
 
     // Determine the markers to use for resolution.
     let marker_env = venv.interpreter().resolver_marker_environment();
