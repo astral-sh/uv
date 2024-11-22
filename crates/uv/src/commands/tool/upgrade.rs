@@ -25,7 +25,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
+use crate::commands::{conjunction, tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -355,31 +355,4 @@ async fn upgrade_tool(
     }
 
     Ok(outcome)
-}
-
-/// Given a list of names, return a conjunction of the names (e.g., "Alice, Bob and Charlie").
-fn conjunction(names: Vec<String>) -> String {
-    let mut names = names.into_iter();
-    let first = names.next();
-    let last = names.next_back();
-    match (first, last) {
-        (Some(first), Some(last)) => {
-            let mut result = first;
-            let mut comma = false;
-            for name in names {
-                result.push_str(", ");
-                result.push_str(&name);
-                comma = true;
-            }
-            if comma {
-                result.push_str(", and ");
-            } else {
-                result.push_str(" and ");
-            }
-            result.push_str(&last);
-            result
-        }
-        (Some(first), None) => first,
-        _ => String::new(),
-    }
 }

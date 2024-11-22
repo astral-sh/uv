@@ -2361,7 +2361,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
+    error: Extras `project1` and `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
     "###);
     // As should exporting them.
     uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--all-extras"), @r###"
@@ -2370,7 +2370,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
+    error: Extras `project1` and `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
     "###);
 
     Ok(())
@@ -2604,7 +2604,7 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
+    error: Extras `project1` and `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
     "###);
     // project3/project4 conflict!
     uv_snapshot!(
@@ -2616,7 +2616,7 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: extra `project3`, extra `project4` are incompatible with the declared conflicts: {`project[project3]`, `project[project4]`}
+    error: Extras `project3` and `project4` are incompatible with the declared conflicts: {`project[project3]`, `project[project4]`}
     "###);
     // ... but project1/project3 does not.
     uv_snapshot!(
@@ -3759,7 +3759,7 @@ fn lock_conflicting_group_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: group `project1`, group `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
+    error: Groups `project1` and `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
     "###);
 
     Ok(())
@@ -3914,7 +3914,7 @@ fn lock_conflicting_group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: group `project1` (enabled by default), group `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
+    error: Groups `project1` (enabled by default) and `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
     "###);
 
     // If the group is explicitly requested, we should still fail, but shouldn't mark it as
@@ -3925,7 +3925,7 @@ fn lock_conflicting_group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: group `project1`, group `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
+    error: Groups `project1` and `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
     "###);
 
     // If we install via `--all-groups`, we should also avoid marking the group as "enabled by
@@ -3936,7 +3936,7 @@ fn lock_conflicting_group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: group `project1`, group `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
+    error: Groups `project1` and `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
     "###);
 
     // Disabling the default group should succeed.
@@ -4153,7 +4153,7 @@ fn lock_conflicting_mixed() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: group `project1`, extra `project2` are incompatible with the declared conflicts: {`project:project1`, `project[project2]`}
+    error: Group `project1` and extra `project2` are incompatible with the declared conflicts: {`project:project1`, `project[project2]`}
     "###);
 
     Ok(())
