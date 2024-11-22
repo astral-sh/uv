@@ -186,7 +186,8 @@ impl EnvVars {
     /// packages.
     pub const UV_CONCURRENT_INSTALLS: &'static str = "UV_CONCURRENT_INSTALLS";
 
-    /// Disables all progress output. For example, spinners and progress bars.
+    /// Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
+    /// example, spinners and progress bars.
     pub const UV_NO_PROGRESS: &'static str = "UV_NO_PROGRESS";
 
     /// Specifies the directory where uv stores managed tools.
