@@ -45,7 +45,7 @@ use uv_workspace::{ProjectWorkspace, Workspace};
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{pip, SharedState};
+use crate::commands::{capitalize, conjunction, pip, SharedState};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
 
@@ -221,26 +221,77 @@ pub(crate) struct ConflictError {
 
 impl std::fmt::Display for ConflictError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} are incompatible with the declared conflicts: {{{}}}",
-            self.conflicts
-                .iter()
-                .map(|conflict| match conflict {
-                    ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                    ConflictPackage::Group(ref group) if self.dev.default(group) =>
-                        format!("group `{group}` (enabled by default)"),
-                    ConflictPackage::Group(ref group) => format!("group `{group}`"),
-                })
-                .join(", "),
-            self.set
-                .iter()
-                .map(|item| match item.conflict() {
-                    ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
-                    ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
-                })
-                .join(", ")
-        )
+        // Format the set itself.
+        let set = self
+            .set
+            .iter()
+            .map(|item| match item.conflict() {
+                ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
+                ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
+            })
+            .join(", ");
+
+        // If all the conflicts are of the same kind, show a more succinct error.
+        if self
+            .conflicts
+            .iter()
+            .all(|conflict| matches!(conflict, ConflictPackage::Extra(..)))
+        {
+            write!(
+                f,
+                "Extras {} are incompatible with the declared conflicts: {{{set}}}",
+                conjunction(
+                    self.conflicts
+                        .iter()
+                        .map(|conflict| match conflict {
+                            ConflictPackage::Extra(ref extra) => format!("`{extra}`"),
+                            ConflictPackage::Group(..) => unreachable!(),
+                        })
+                        .collect()
+                )
+            )
+        } else if self
+            .conflicts
+            .iter()
+            .all(|conflict| matches!(conflict, ConflictPackage::Group(..)))
+        {
+            write!(
+                f,
+                "Groups {} are incompatible with the declared conflicts: {{{set}}}",
+                conjunction(
+                    self.conflicts
+                        .iter()
+                        .map(|conflict| match conflict {
+                            ConflictPackage::Group(ref group) if self.dev.default(group) =>
+                                format!("`{group}` (enabled by default)"),
+                            ConflictPackage::Group(ref group) => format!("`{group}`"),
+                            ConflictPackage::Extra(..) => unreachable!(),
+                        })
+                        .collect()
+                )
+            )
+        } else {
+            write!(
+                f,
+                "{} are incompatible with the declared conflicts: {{{set}}}",
+                conjunction(
+                    self.conflicts
+                        .iter()
+                        .enumerate()
+                        .map(|(i, conflict)| {
+                            let conflict = match conflict {
+                                ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
+                                ConflictPackage::Group(ref group) if self.dev.default(group) => {
+                                    format!("group `{group}` (enabled by default)")
+                                }
+                                ConflictPackage::Group(ref group) => format!("group `{group}`"),
+                            };
+                            (i == 0).then(|| capitalize(&conflict)).unwrap_or(conflict)
+                        })
+                        .collect()
+                )
+            )
+        }
     }
 }
 

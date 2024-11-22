@@ -2422,7 +2422,7 @@ impl DiscoveryPreferences {
             .map(ToString::to_string)
             .collect::<Vec<_>>();
         match self.environment_preference {
-            EnvironmentPreference::Any => conjunction(
+            EnvironmentPreference::Any => disjunction(
                 &["virtual environments"]
                     .into_iter()
                     .chain(python_sources.iter().map(String::as_str))
@@ -2430,23 +2430,23 @@ impl DiscoveryPreferences {
             ),
             EnvironmentPreference::ExplicitSystem => {
                 if request.is_explicit_system() {
-                    conjunction(
+                    disjunction(
                         &["virtual environments"]
                             .into_iter()
                             .chain(python_sources.iter().map(String::as_str))
                             .collect::<Vec<_>>(),
                     )
                 } else {
-                    conjunction(&["virtual environments"])
+                    disjunction(&["virtual environments"])
                 }
             }
-            EnvironmentPreference::OnlySystem => conjunction(
+            EnvironmentPreference::OnlySystem => disjunction(
                 &python_sources
                     .iter()
                     .map(String::as_str)
                     .collect::<Vec<_>>(),
             ),
-            EnvironmentPreference::OnlyVirtual => conjunction(&["virtual environments"]),
+            EnvironmentPreference::OnlyVirtual => disjunction(&["virtual environments"]),
         }
     }
 }
@@ -2471,8 +2471,9 @@ impl fmt::Display for PythonNotFound {
 }
 
 /// Join a series of items with `or` separators, making use of commas when necessary.
-fn conjunction(items: &[&str]) -> String {
+fn disjunction(items: &[&str]) -> String {
     match items.len() {
+        0 => String::new(),
         1 => items[0].to_string(),
         2 => format!("{} or {}", items[0], items[1]),
         _ => {
