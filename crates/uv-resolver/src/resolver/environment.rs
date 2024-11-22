@@ -95,6 +95,20 @@ enum Kind {
         initial_forks: Arc<[MarkerTree]>,
         /// The markers associated with this resolver fork.
         markers: MarkerTree,
+        /// Conflicting group inclusions.
+        ///
+        /// Note that inclusions don't play a role in predicates
+        /// like `ResolverEnvironment::included_by_group`. Instead,
+        /// only exclusions are considered.
+        ///
+        /// We record inclusions for two reasons. First is that if
+        /// we somehow wind up with an inclusion and exclusion rule
+        /// for the same conflict item, then we treat the resulting
+        /// fork as impossible. (You cannot require that an extra is
+        /// both included and excluded. Such a rule can never be
+        /// satisfied.) Second is that we use the inclusion rules to
+        /// write conflict markers after resolution is finished.
+        include: Arc<crate::FxHashbrownSet<ConflictItem>>,
         /// Conflicting group exclusions.
         exclude: Arc<crate::FxHashbrownSet<ConflictItem>>,
     },
@@ -134,6 +148,7 @@ impl ResolverEnvironment {
         let kind = Kind::Universal {
             initial_forks: initial_forks.into(),
             markers: MarkerTree::TRUE,
+            include: Arc::new(crate::FxHashbrownSet::default()),
             exclude: Arc::new(crate::FxHashbrownSet::default()),
         };
         ResolverEnvironment { kind }
@@ -201,6 +216,7 @@ impl ResolverEnvironment {
             Kind::Universal {
                 ref initial_forks,
                 markers: ref lhs,
+                ref include,
                 ref exclude,
             } => {
                 let mut markers = lhs.clone();
@@ -208,6 +224,7 @@ impl ResolverEnvironment {
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
                     markers,
+                    include: Arc::clone(include),
                     exclude: Arc::clone(exclude),
                 };
                 ResolverEnvironment { kind }
@@ -215,22 +232,29 @@ impl ResolverEnvironment {
         }
     }
 
-    /// Returns a new resolver environment with the given groups excluded from
-    /// it.
+    /// Returns a new resolver environment with the given groups included or
+    /// excluded from it. An `Ok` variant indicates an include rule while an
+    /// `Err` variant indicates en exclude rule.
     ///
     /// When a group is excluded from a resolver environment,
     /// `ResolverEnvironment::included_by_group` will return false. The idea
     /// is that a dependency with a corresponding group should be excluded by
-    /// forks in the resolver with this environment.
+    /// forks in the resolver with this environment. (Include rules have no
+    /// effect in `included_by_group` since, for the purposes of conflicts
+    /// during resolution, we only care about what *isn't* allowed.)
+    ///
+    /// If calling this routine results in the same conflict item being both
+    /// included and excluded, then this returns `None` (since it would
+    /// otherwise result in a fork that can never be satisfied).
     ///
     /// # Panics
     ///
     /// This panics if the resolver environment corresponds to one and only one
     /// specific marker environment. i.e., "pip"-style resolution.
-    pub(crate) fn exclude_by_group(
+    pub(crate) fn filter_by_group(
         &self,
-        items: impl IntoIterator<Item = ConflictItem>,
-    ) -> ResolverEnvironment {
+        rules: impl IntoIterator<Item = Result<ConflictItem, ConflictItem>>,
+    ) -> Option<ResolverEnvironment> {
         match self.kind {
             Kind::Specific { .. } => {
                 unreachable!("environment narrowing only happens in universal resolution")
@@ -238,18 +262,34 @@ impl ResolverEnvironment {
             Kind::Universal {
                 ref initial_forks,
                 ref markers,
+                ref include,
                 ref exclude,
             } => {
+                let mut include: crate::FxHashbrownSet<_> = (**include).clone();
                 let mut exclude: crate::FxHashbrownSet<_> = (**exclude).clone();
-                for item in items {
-                    exclude.insert(item);
+                for rule in rules {
+                    match rule {
+                        Ok(item) => {
+                            if exclude.contains(&item) {
+                                return None;
+                            }
+                            include.insert(item);
+                        }
+                        Err(item) => {
+                            if include.contains(&item) {
+                                return None;
+                            }
+                            exclude.insert(item);
+                        }
+                    }
                 }
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
                     markers: markers.clone(),
+                    include: Arc::new(include),
                     exclude: Arc::new(exclude),
                 };
-                ResolverEnvironment { kind }
+                Some(ResolverEnvironment { kind })
             }
         }
     }
@@ -266,6 +306,7 @@ impl ResolverEnvironment {
         let Kind::Universal {
             ref initial_forks,
             markers: ref _markers,
+            include: ref _include,
             exclude: ref _exclude,
         } = self.kind
         else {
@@ -332,9 +373,32 @@ impl ResolverEnvironment {
     pub(crate) fn try_universal_markers(&self) -> Option<UniversalMarker> {
         match self.kind {
             Kind::Specific { .. } => None,
-            Kind::Universal { ref markers, .. } => {
-                // FIXME: Support conflicts.
-                Some(UniversalMarker::new(markers.clone(), MarkerTree::TRUE))
+            Kind::Universal {
+                ref markers,
+                ref include,
+                ref exclude,
+                ..
+            } => {
+                let mut conflict_marker = MarkerTree::TRUE;
+                for item in exclude.iter() {
+                    if let Some(extra) = item.extra() {
+                        let operator = uv_pep508::ExtraOperator::NotEqual;
+                        let name = uv_pep508::MarkerValueExtra::Extra(extra.clone());
+                        let expr = uv_pep508::MarkerExpression::Extra { operator, name };
+                        let exclude_extra_marker = MarkerTree::expression(expr);
+                        conflict_marker.and(exclude_extra_marker);
+                    }
+                }
+                for item in include.iter() {
+                    if let Some(extra) = item.extra() {
+                        let operator = uv_pep508::ExtraOperator::Equal;
+                        let name = uv_pep508::MarkerValueExtra::Extra(extra.clone());
+                        let expr = uv_pep508::MarkerExpression::Extra { operator, name };
+                        let exclude_extra_marker = MarkerTree::expression(expr);
+                        conflict_marker.and(exclude_extra_marker);
+                    }
+                }
+                Some(UniversalMarker::new(markers.clone(), conflict_marker))
             }
         }
     }
