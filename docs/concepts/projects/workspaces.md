@@ -88,6 +88,10 @@ the workspace. The `workspace = true` key-value pair in the `tool.uv.sources` ta
 `bird-feeder` dependency should be provided by the workspace, rather than fetched from PyPI or
 another registry.
 
+!!! note
+
+    Dependencies between workspace members are editable.
+
 Any `tool.uv.sources` definitions in the workspace root apply to all members, unless overridden in
 the `tool.uv.sources` of a specific member. For example, given the following `pyproject.toml`:
 
