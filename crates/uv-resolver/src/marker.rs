@@ -10,8 +10,7 @@ pub(crate) fn requires_python(tree: &MarkerTree) -> Option<RequiresPythonRange> 
         match tree.kind() {
             MarkerTreeKind::True | MarkerTreeKind::False => {}
             MarkerTreeKind::Version(marker) => match marker.key() {
-                LoweredMarkerValueVersion::PythonVersion
-                | LoweredMarkerValueVersion::PythonFullVersion => {
+                LoweredMarkerValueVersion::PythonFullVersion => {
                     for (range, tree) in marker.edges() {
                         if !tree.is_false() {
                             markers.push(range.clone());
