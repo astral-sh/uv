@@ -53,30 +53,19 @@ pub enum LoweredMarkerValueString {
     ImplementationName,
     /// `os_name`
     OsName,
-    /// Deprecated `os.name` from <https://peps.python.org/pep-0345/#environment-markers>
-    OsNameDeprecated,
     /// `platform_machine`
     PlatformMachine,
     /// Deprecated `platform.machine` from <https://peps.python.org/pep-0345/#environment-markers>
-    PlatformMachineDeprecated,
     /// `platform_python_implementation`
     PlatformPythonImplementation,
-    /// Deprecated `platform.python_implementation` from <https://peps.python.org/pep-0345/#environment-markers>
-    PlatformPythonImplementationDeprecated,
-    /// Deprecated `python_implementation` from <https://github.com/pypa/packaging/issues/72>
-    PythonImplementationDeprecated,
     /// `platform_release`
     PlatformRelease,
     /// `platform_system`
     PlatformSystem,
     /// `platform_version`
     PlatformVersion,
-    /// Deprecated `platform.version` from <https://peps.python.org/pep-0345/#environment-markers>
-    PlatformVersionDeprecated,
     /// `sys_platform`
     SysPlatform,
-    /// Deprecated `sys.platform` from <https://peps.python.org/pep-0345/#environment-markers>
-    SysPlatformDeprecated,
 }
 
 impl From<MarkerValueString> for LoweredMarkerValueString {
@@ -84,22 +73,20 @@ impl From<MarkerValueString> for LoweredMarkerValueString {
         match value {
             MarkerValueString::ImplementationName => Self::ImplementationName,
             MarkerValueString::OsName => Self::OsName,
-            MarkerValueString::OsNameDeprecated => Self::OsNameDeprecated,
+            MarkerValueString::OsNameDeprecated => Self::OsName,
             MarkerValueString::PlatformMachine => Self::PlatformMachine,
-            MarkerValueString::PlatformMachineDeprecated => Self::PlatformMachineDeprecated,
+            MarkerValueString::PlatformMachineDeprecated => Self::PlatformMachine,
             MarkerValueString::PlatformPythonImplementation => Self::PlatformPythonImplementation,
             MarkerValueString::PlatformPythonImplementationDeprecated => {
-                Self::PlatformPythonImplementationDeprecated
+                Self::PlatformPythonImplementation
             }
-            MarkerValueString::PythonImplementationDeprecated => {
-                Self::PythonImplementationDeprecated
-            }
+            MarkerValueString::PythonImplementationDeprecated => Self::PlatformPythonImplementation,
             MarkerValueString::PlatformRelease => Self::PlatformRelease,
             MarkerValueString::PlatformSystem => Self::PlatformSystem,
             MarkerValueString::PlatformVersion => Self::PlatformVersion,
-            MarkerValueString::PlatformVersionDeprecated => Self::PlatformVersionDeprecated,
+            MarkerValueString::PlatformVersionDeprecated => Self::PlatformVersion,
             MarkerValueString::SysPlatform => Self::SysPlatform,
-            MarkerValueString::SysPlatformDeprecated => Self::SysPlatformDeprecated,
+            MarkerValueString::SysPlatformDeprecated => Self::SysPlatform,
         }
     }
 }
@@ -109,24 +96,14 @@ impl From<LoweredMarkerValueString> for MarkerValueString {
         match value {
             LoweredMarkerValueString::ImplementationName => Self::ImplementationName,
             LoweredMarkerValueString::OsName => Self::OsName,
-            LoweredMarkerValueString::OsNameDeprecated => Self::OsNameDeprecated,
             LoweredMarkerValueString::PlatformMachine => Self::PlatformMachine,
-            LoweredMarkerValueString::PlatformMachineDeprecated => Self::PlatformMachineDeprecated,
             LoweredMarkerValueString::PlatformPythonImplementation => {
                 Self::PlatformPythonImplementation
-            }
-            LoweredMarkerValueString::PlatformPythonImplementationDeprecated => {
-                Self::PlatformPythonImplementationDeprecated
-            }
-            LoweredMarkerValueString::PythonImplementationDeprecated => {
-                Self::PythonImplementationDeprecated
             }
             LoweredMarkerValueString::PlatformRelease => Self::PlatformRelease,
             LoweredMarkerValueString::PlatformSystem => Self::PlatformSystem,
             LoweredMarkerValueString::PlatformVersion => Self::PlatformVersion,
-            LoweredMarkerValueString::PlatformVersionDeprecated => Self::PlatformVersionDeprecated,
             LoweredMarkerValueString::SysPlatform => Self::SysPlatform,
-            LoweredMarkerValueString::SysPlatformDeprecated => Self::SysPlatformDeprecated,
         }
     }
 }
@@ -136,19 +113,13 @@ impl Display for LoweredMarkerValueString {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ImplementationName => f.write_str("implementation_name"),
-            Self::OsName | Self::OsNameDeprecated => f.write_str("os_name"),
-            Self::PlatformMachine | Self::PlatformMachineDeprecated => {
-                f.write_str("platform_machine")
-            }
-            Self::PlatformPythonImplementation
-            | Self::PlatformPythonImplementationDeprecated
-            | Self::PythonImplementationDeprecated => f.write_str("platform_python_implementation"),
+            Self::OsName => f.write_str("os_name"),
+            Self::PlatformMachine => f.write_str("platform_machine"),
+            Self::PlatformPythonImplementation => f.write_str("platform_python_implementation"),
             Self::PlatformRelease => f.write_str("platform_release"),
             Self::PlatformSystem => f.write_str("platform_system"),
-            Self::PlatformVersion | Self::PlatformVersionDeprecated => {
-                f.write_str("platform_version")
-            }
-            Self::SysPlatform | Self::SysPlatformDeprecated => f.write_str("sys_platform"),
+            Self::PlatformVersion => f.write_str("platform_version"),
+            Self::SysPlatform => f.write_str("sys_platform"),
         }
     }
 }
