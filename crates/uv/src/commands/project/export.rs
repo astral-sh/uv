@@ -20,7 +20,8 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace}
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
+    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
+    ProjectInterpreter,
 };
 use crate::commands::{diagnostics, ExitStatus, OutputWriter, SharedState};
 use crate::printer::Printer;
@@ -93,6 +94,7 @@ pub(crate) async fn export(
 
     // Determine the default groups to include.
     let defaults = default_dependency_groups(project.current_project().pyproject_toml())?;
+    let dev = dev.with_defaults(defaults);
 
     // Determine the lock mode.
     let interpreter;
@@ -153,6 +155,9 @@ pub(crate) async fn export(
         Err(err) => return Err(err.into()),
     };
 
+    // Validate that the set of requested extras and development groups are compatible.
+    detect_conflicts(&lock, &extras, &dev)?;
+
     // Identify the installation target.
     let target = if all_packages {
         InstallTarget::Workspace {
@@ -179,7 +184,7 @@ pub(crate) async fn export(
             let export = RequirementsTxtExport::from_lock(
                 target,
                 &extras,
-                &dev.with_defaults(defaults),
+                &dev,
                 editable,
                 hashes,
                 &install_options,

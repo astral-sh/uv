@@ -2363,6 +2363,15 @@ fn lock_conflicting_extra_basic() -> Result<()> {
     ----- stderr -----
     error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
     "###);
+    // As should exporting them.
+    uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--all-extras"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: extra `project1`, extra `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
+    "###);
 
     Ok(())
 }
