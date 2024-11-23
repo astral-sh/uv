@@ -1395,12 +1395,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     Cow::Borrowed(fetch.path())
                 };
 
+                let git_member = GitWorkspaceMember {
+                    fetch_root: fetch.path(),
+                    git_source: resource,
+                };
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
                         metadata,
                         &path,
-                        None,
+                        Some(&git_member),
                         self.build_context.locations(),
                         self.build_context.sources(),
                         self.build_context.bounds(),
