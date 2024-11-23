@@ -14,7 +14,7 @@ use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, Ins
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git::GitReference;
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
@@ -33,6 +33,7 @@ pub struct RequirementsTxtExport<'lock> {
 impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
         target: InstallTarget<'lock>,
+        prune: &[PackageName],
         extras: &ExtrasSpecification,
         dev: &DevGroupsManifest,
         editable: EditableMode,
@@ -50,6 +51,10 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         // Add the workspace package to the queue.
         for root_name in target.packages() {
+            if prune.contains(root_name) {
+                continue;
+            }
+
             let dist = target
                 .lock()
                 .find_by_name(root_name)
@@ -96,6 +101,10 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 })
                 .flatten()
             {
+                if prune.contains(&dep.package_id.name) {
+                    continue;
+                }
+
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
@@ -142,6 +151,10 @@ impl<'lock> RequirementsTxtExport<'lock> {
             };
 
             for dep in deps {
+                if prune.contains(&dep.package_id.name) {
+                    continue;
+                }
+
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.

@@ -3401,6 +3401,10 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
+    /// Prune the given package from the dependency tree.
+    #[arg(long, conflicts_with = "all_packages")]
+    pub prune: Vec<PackageName>,
+
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.

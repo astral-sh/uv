@@ -2355,6 +2355,8 @@ uv export [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+</dd><dt><code>--prune</code> <i>prune</i></dt><dd><p>Prune the given package from the dependency tree</p>
+
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
