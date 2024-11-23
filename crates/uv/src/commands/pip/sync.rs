@@ -19,7 +19,8 @@ use uv_installer::SitePackages;
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
+    PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -29,8 +30,8 @@ use uv_resolver::{
 use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::pip::operations::report_target_environment;
 use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{diagnostics, ExitStatus, SharedState};
 use crate::printer::Printer;
@@ -65,6 +66,7 @@ pub(crate) async fn pip_sync(
     target: Option<Target>,
     prefix: Option<Prefix>,
     sources: SourceStrategy,
+    python_preference: PythonPreference,
     concurrency: Concurrency,
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
@@ -122,22 +124,31 @@ pub(crate) async fn pip_sync(
         }
     }
 
-    // Determine whether we're modifying the discovered environment, or a separate target.
-    let mutable = !(target.is_some() || prefix.is_some());
-
     // Detect the current Python interpreter.
-    let environment = PythonEnvironment::find(
-        &python
-            .as_deref()
-            .map(PythonRequest::parse)
-            .unwrap_or_default(),
-        EnvironmentPreference::from_system_flag(system, mutable),
-        &cache,
-    )?;
-
-    if mutable {
+    let environment = if target.is_some() || prefix.is_some() {
+        let installation = PythonInstallation::find(
+            &python
+                .as_deref()
+                .map(PythonRequest::parse)
+                .unwrap_or_default(),
+            EnvironmentPreference::from_system_flag(system, false),
+            python_preference,
+            &cache,
+        )?;
+        report_interpreter(&installation, true, printer)?;
+        PythonEnvironment::from_installation(installation)
+    } else {
+        let environment = PythonEnvironment::find(
+            &python
+                .as_deref()
+                .map(PythonRequest::parse)
+                .unwrap_or_default(),
+            EnvironmentPreference::from_system_flag(system, true),
+            &cache,
+        )?;
         report_target_environment(&environment, &cache, printer)?;
-    }
+        environment
+    };
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {

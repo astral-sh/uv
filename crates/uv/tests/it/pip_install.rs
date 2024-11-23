@@ -1266,7 +1266,7 @@ fn install_editable_bare_cli() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1293,7 +1293,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3445,7 +3445,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3465,7 +3465,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3491,7 +3491,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -3539,7 +3539,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3559,7 +3559,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3576,7 +3576,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3597,7 +3597,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3628,7 +3628,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3661,7 +3661,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3682,7 +3682,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3738,7 +3738,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3758,7 +3758,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3781,7 +3781,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4881,7 +4881,7 @@ fn deptry_gitignore() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
