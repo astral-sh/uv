@@ -282,6 +282,7 @@ impl RunSettings {
         let RunArgs {
             extra,
             all_extras,
+            no_extra,
             no_all_extras,
             dev,
             no_dev,
@@ -323,6 +324,7 @@ impl RunSettings {
             frozen,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
+                no_extra,
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
@@ -884,6 +886,7 @@ impl SyncSettings {
         let SyncArgs {
             extra,
             all_extras,
+            no_extra,
             no_all_extras,
             dev,
             no_dev,
@@ -922,6 +925,7 @@ impl SyncSettings {
             frozen,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
+                no_extra,
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
@@ -1304,6 +1308,7 @@ impl ExportSettings {
             package,
             extra,
             all_extras,
+            no_extra,
             no_all_extras,
             dev,
             no_dev,
@@ -1339,6 +1344,7 @@ impl ExportSettings {
             package,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
+                no_extra,
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
@@ -2487,6 +2493,7 @@ impl PipSettings {
             strict,
             extra,
             all_extras,
+            no_extra,
             no_deps,
             allow_empty_requirements,
             resolution,
@@ -2598,6 +2605,7 @@ impl PipSettings {
             ),
             extras: ExtrasSpecification::from_args(
                 args.all_extras.combine(all_extras).unwrap_or_default(),
+                args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
             ),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {

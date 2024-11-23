@@ -1009,6 +1009,16 @@ pub struct PipOptions {
         "#
     )]
     pub all_extras: Option<bool>,
+    /// Exclude the specified optional dependencies if `all-extras` is supplied.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            all-extras = true
+            no-extra = ["dev", "docs"]
+        "#
+    )]
+    pub no_extra: Option<Vec<ExtraName>>,
     /// Ignore package dependencies, instead only add those packages explicitly listed
     /// on the command line to the resulting the requirements file.
     #[option(
