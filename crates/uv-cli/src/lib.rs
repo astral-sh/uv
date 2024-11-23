@@ -3849,9 +3849,9 @@ pub struct ToolUninstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolUpgradeArgs {
-    /// The name of the tool to upgrade.
+    /// The name of the tool to upgrade, along with an optional version specifier.
     #[arg(required = true)]
-    pub name: Vec<PackageName>,
+    pub name: Vec<String>,
 
     /// Upgrade all tools.
     #[arg(long, conflicts_with("name"))]

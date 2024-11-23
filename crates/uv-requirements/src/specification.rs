@@ -339,8 +339,24 @@ impl RequirementsSpecification {
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints.
+    pub fn from_constraints(requirements: Vec<Requirement>, constraints: Vec<Requirement>) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
     /// constraints and overrides.
-    pub fn from_constraints(
+    pub fn from_overrides(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,

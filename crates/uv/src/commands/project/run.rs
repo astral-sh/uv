@@ -316,7 +316,7 @@ pub(crate) async fn run(
                 .collect::<Result<Vec<_>, _>>()?;
 
             let spec =
-                RequirementsSpecification::from_constraints(requirements, constraints, overrides);
+                RequirementsSpecification::from_overrides(requirements, constraints, overrides);
             let result = CachedEnvironment::get_or_create(
                 EnvironmentSpecification::from(spec),
                 interpreter,
