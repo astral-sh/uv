@@ -440,7 +440,12 @@ pub(crate) async fn install(
     };
 
     // Nothing to do.
-    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
+    if remote.is_empty()
+        && cached.is_empty()
+        && reinstalls.is_empty()
+        && extraneous.is_empty()
+        && !compile
+    {
         logger.on_audit(resolution.len(), start, printer)?;
         return Ok(Changelog::default());
     }

@@ -3292,6 +3292,55 @@ fn compile() -> Result<()> {
     Ok(())
 }
 
+/// Re-install with bytecode compilation.
+#[test]
+fn recompile() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
+    );
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Bytecode compiled 3 files in [TIME]
+    "###
+    );
+
+    assert!(context
+        .site_packages()
+        .join("markupsafe")
+        .join("__pycache__")
+        .join("__init__.cpython-312.pyc")
+        .exists());
+
+    context.assert_command("import markupsafe").success();
+
+    Ok(())
+}
+
 /// Raise an error when an editable's `Requires-Python` constraint is not met.
 #[test]
 fn requires_python_editable() -> Result<()> {
