@@ -78,3 +78,80 @@ impl<'a, Names: Iterator<Item = &'a ExtraName>> Iterator for ExtrasIter<'a, Name
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! extras {
+        () => (
+            Vec::new()
+        );
+        ($($x:expr),+ $(,)?) => (
+            vec![$(ExtraName::new($x.into()).unwrap()),+]
+        )
+    }
+
+    #[test]
+    fn test_no_extra_full() {
+        let pkg_extras = extras!["dev", "docs", "extra-1", "extra-2"];
+        let no_extra = extras!["dev", "docs", "extra-1", "extra-2"];
+        let spec = ExtrasSpecification::from_args(true, no_extra, vec![]);
+        let result: Vec<_> = spec.extra_names(pkg_extras.iter()).cloned().collect();
+        assert_eq!(result, extras![]);
+    }
+
+    #[test]
+    fn test_no_extra_partial() {
+        let pkg_extras = extras!["dev", "docs", "extra-1", "extra-2"];
+        let no_extra = extras!["extra-1", "extra-2"];
+        let spec = ExtrasSpecification::from_args(true, no_extra, vec![]);
+        let result: Vec<_> = spec.extra_names(pkg_extras.iter()).cloned().collect();
+        assert_eq!(result, extras!["dev", "docs"]);
+    }
+
+    #[test]
+    fn test_no_extra_empty() {
+        let pkg_extras = extras!["dev", "docs", "extra-1", "extra-2"];
+        let no_extra = extras![];
+        let spec = ExtrasSpecification::from_args(true, no_extra, vec![]);
+        let result: Vec<_> = spec.extra_names(pkg_extras.iter()).cloned().collect();
+        assert_eq!(result, extras!["dev", "docs", "extra-1", "extra-2"]);
+    }
+
+    #[test]
+    fn test_no_extra_excessive() {
+        let pkg_extras = extras!["dev", "docs", "extra-1", "extra-2"];
+        let no_extra = extras!["does-not-exists"];
+        let spec = ExtrasSpecification::from_args(true, no_extra, vec![]);
+        let result: Vec<_> = spec.extra_names(pkg_extras.iter()).cloned().collect();
+        assert_eq!(result, extras!["dev", "docs", "extra-1", "extra-2"]);
+    }
+
+    #[test]
+    fn test_no_extra_without_all_extras() {
+        let pkg_extras = extras!["dev", "docs", "extra-1", "extra-2"];
+        let no_extra = extras!["extra-1", "extra-2"];
+        let spec = ExtrasSpecification::from_args(false, no_extra, vec![]);
+        let result: Vec<_> = spec.extra_names(pkg_extras.iter()).cloned().collect();
+        assert_eq!(result, extras![]);
+    }
+
+    #[test]
+    fn test_no_extra_without_package_extras() {
+        let pkg_extras = extras![];
+        let no_extra = extras!["extra-1", "extra-2"];
+        let spec = ExtrasSpecification::from_args(true, no_extra, vec![]);
+        let result: Vec<_> = spec.extra_names(pkg_extras.iter()).cloned().collect();
+        assert_eq!(result, extras![]);
+    }
+
+    #[test]
+    fn test_no_extra_duplicates() {
+        let pkg_extras = extras!["dev", "docs", "extra-1", "extra-1", "extra-2"];
+        let no_extra = extras!["extra-1", "extra-2"];
+        let spec = ExtrasSpecification::from_args(true, no_extra, vec![]);
+        let result: Vec<_> = spec.extra_names(pkg_extras.iter()).cloned().collect();
+        assert_eq!(result, extras!["dev", "docs"]);
+    }
+}
