@@ -2188,8 +2188,8 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -2204,8 +2204,8 @@ fn lock_conflicting_extra_basic() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project2] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.3.0, we can conclude that project[project1] and project[project2] are incompatible.
-          And because your project requires project[project1] and project[project2], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra configuration, we tell uv about
@@ -2222,14 +2222,14 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { extra = "project1" },
-              { extra = "project2" },
+              { extra = "extra1" },
+              { extra = "extra2" },
             ],
         ]
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -2258,8 +2258,8 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         resolution-markers = [
         ]
         conflicts = [[
-            { package = "project", extra = "project1" },
-            { package = "project", extra = "project2" },
+            { package = "project", extra = "extra1" },
+            { package = "project", extra = "extra2" },
         ]]
 
         [options]
@@ -2271,17 +2271,17 @@ fn lock_conflicting_extra_basic() -> Result<()> {
         source = { editable = "." }
 
         [package.optional-dependencies]
-        project1 = [
+        extra1 = [
             { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
-        project2 = [
+        extra2 = [
             { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "sortedcontainers", marker = "extra == 'project1'", specifier = "==2.3.0" },
-            { name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.3.0" },
+            { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.4.0" },
         ]
 
         [[package]]
@@ -2331,7 +2331,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
     // Another install, but with one of the extras enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=project1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2342,7 +2342,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
      + sortedcontainers==2.3.0
     "###);
     // Another install, but with the other extra enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra2"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2361,7 +2361,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Extras `project1` and `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
+    error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
     "###);
     // As should exporting them.
     uv_snapshot!(context.filters(), context.export().arg("--frozen").arg("--all-extras"), @r###"
@@ -2370,7 +2370,7 @@ fn lock_conflicting_extra_basic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Extras `project1` and `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
+    error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
     "###);
 
     Ok(())
@@ -2393,8 +2393,8 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.2.0"]
-        project2 = ["sortedcontainers==2.3.0"]
+        extra1 = ["sortedcontainers==2.2.0"]
+        extra2 = ["sortedcontainers==2.3.0"]
         project3 = ["sortedcontainers==2.4.0"]
 
         [build-system]
@@ -2410,8 +2410,8 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project3] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.2.0, we can conclude that project[project1] and project[project3] are incompatible.
-          And because your project requires project[project1] and project[project3], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project[project3] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.2.0, we can conclude that project[extra1] and project[project3] are incompatible.
+          And because your project requires project[extra1] and project[project3], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra configuration, we tell uv about
@@ -2428,15 +2428,15 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { extra = "project1" },
-              { extra = "project2" },
+              { extra = "extra1" },
+              { extra = "extra2" },
               { extra = "project3" },
             ],
         ]
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.2.0"]
-        project2 = ["sortedcontainers==2.3.0"]
+        extra1 = ["sortedcontainers==2.2.0"]
+        extra2 = ["sortedcontainers==2.3.0"]
         project3 = ["sortedcontainers==2.4.0"]
 
         [build-system]
@@ -2466,8 +2466,8 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         resolution-markers = [
         ]
         conflicts = [[
-            { package = "project", extra = "project1" },
-            { package = "project", extra = "project2" },
+            { package = "project", extra = "extra1" },
+            { package = "project", extra = "extra2" },
             { package = "project", extra = "project3" },
         ]]
 
@@ -2480,10 +2480,10 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
         source = { editable = "." }
 
         [package.optional-dependencies]
-        project1 = [
+        extra1 = [
             { name = "sortedcontainers", version = "2.2.0", source = { registry = "https://pypi.org/simple" } },
         ]
-        project2 = [
+        extra2 = [
             { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
         project3 = [
@@ -2492,8 +2492,8 @@ fn lock_conflicting_extra_basic_three_extras() -> Result<()> {
 
         [package.metadata]
         requires-dist = [
-            { name = "sortedcontainers", marker = "extra == 'project1'", specifier = "==2.2.0" },
-            { name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.3.0" },
+            { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.2.0" },
+            { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.3.0" },
             { name = "sortedcontainers", marker = "extra == 'project3'", specifier = "==2.4.0" },
         ]
 
@@ -2553,8 +2553,8 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { extra = "project1" },
-              { extra = "project2" },
+              { extra = "extra1" },
+              { extra = "extra2" },
             ],
             [
               { extra = "project3" },
@@ -2563,8 +2563,8 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
         ]
 
         [project.optional-dependencies]
-        project1 = []
-        project2 = []
+        extra1 = []
+        extra2 = []
         project3 = []
         project4 = []
 
@@ -2594,17 +2594,17 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
-    // project1/project2 conflict!
+    // extra1/extra2 conflict!
     uv_snapshot!(
         context.filters(),
-        context.sync().arg("--frozen").arg("--extra=project1").arg("--extra=project2"),
+        context.sync().arg("--frozen").arg("--extra=extra1").arg("--extra=extra2"),
         @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Extras `project1` and `project2` are incompatible with the declared conflicts: {`project[project1]`, `project[project2]`}
+    error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
     "###);
     // project3/project4 conflict!
     uv_snapshot!(
@@ -2618,10 +2618,10 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     ----- stderr -----
     error: Extras `project3` and `project4` are incompatible with the declared conflicts: {`project[project3]`, `project[project4]`}
     "###);
-    // ... but project1/project3 does not.
+    // ... but extra1/project3 does not.
     uv_snapshot!(
         context.filters(),
-        context.sync().arg("--frozen").arg("--extra=project1").arg("--extra=project3"),
+        context.sync().arg("--frozen").arg("--extra=extra1").arg("--extra=project3"),
         @r###"
     success: true
     exit_code: 0
@@ -2630,10 +2630,10 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     ----- stderr -----
     Audited 1 package in [TIME]
     "###);
-    // ... and neither does project2/project3.
+    // ... and neither does extra2/project3.
     uv_snapshot!(
         context.filters(),
-        context.sync().arg("--frozen").arg("--extra=project2").arg("--extra=project3"),
+        context.sync().arg("--frozen").arg("--extra=extra2").arg("--extra=project3"),
         @r###"
     success: true
     exit_code: 0
@@ -2645,7 +2645,7 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     // And similarly, with project 4.
     uv_snapshot!(
         context.filters(),
-        context.sync().arg("--frozen").arg("--extra=project1").arg("--extra=project4"),
+        context.sync().arg("--frozen").arg("--extra=extra1").arg("--extra=project4"),
         @r###"
     success: true
     exit_code: 0
@@ -2654,10 +2654,10 @@ fn lock_conflicting_extra_multiple_not_conflicting1() -> Result<()> {
     ----- stderr -----
     Audited 1 package in [TIME]
     "###);
-    // ... and neither does project2/project3.
+    // ... and neither does extra2/project3.
     uv_snapshot!(
         context.filters(),
-        context.sync().arg("--frozen").arg("--extra=project2").arg("--extra=project4"),
+        context.sync().arg("--frozen").arg("--extra=extra2").arg("--extra=project4"),
         @r###"
     success: true
     exit_code: 0
@@ -2687,8 +2687,8 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["sortedcontainers==2.3.0"]
         project4 = ["sortedcontainers==2.4.0"]
 
@@ -2706,13 +2706,13 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project4] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.3.0, we can conclude that project[project1] and project[project4] are incompatible.
-          And because your project requires project[project1] and project[project4], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project[project4] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[project4] are incompatible.
+          And because your project requires project[extra1] and project[project4], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
-    // If we define project1/project2 as conflicting and project3/project4
-    // as conflicting, that still isn't enough! That's because project1
-    // conflicts with project4 and project2 conflicts with project3.
+    // If we define extra1/extra2 as conflicting and project3/project4
+    // as conflicting, that still isn't enough! That's because extra1
+    // conflicts with project4 and extra2 conflicts with project3.
     pyproject_toml.write_str(
         r#"
         [project]
@@ -2723,8 +2723,8 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { extra = "project1" },
-              { extra = "project2" },
+              { extra = "extra1" },
+              { extra = "extra2" },
             ],
             [
               { extra = "project3" },
@@ -2733,8 +2733,8 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         ]
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["sortedcontainers==2.3.0"]
         project4 = ["sortedcontainers==2.4.0"]
 
@@ -2750,15 +2750,15 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[project2] depends on sortedcontainers==2.4.0, we can conclude that project[project2] and project[project3] are incompatible.
-          And because your project requires project[project2] and project[project3], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
+          And because your project requires project[extra2] and project[project3], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     // One could try to declare all pairs of conflicting extras as
     // conflicting, but this doesn't quite work either. For example,
-    // the first group of conflicting extra, project1/project2,
-    // specifically allows project4 to be co-mingled with project1 (and
-    // similarly, project3 with project2), which are conflicting.
+    // the first group of conflicting extra, extra1/extra2,
+    // specifically allows project4 to be co-mingled with extra1 (and
+    // similarly, project3 with extra2), which are conflicting.
     pyproject_toml.write_str(
         r#"
         [project]
@@ -2769,26 +2769,26 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { extra = "project1" },
-              { extra = "project2" },
+              { extra = "extra1" },
+              { extra = "extra2" },
             ],
             [
               { extra = "project3" },
               { extra = "project4" },
             ],
             [
-              { extra = "project1" },
+              { extra = "extra1" },
               { extra = "project4" },
             ],
             [
-              { extra = "project2" },
+              { extra = "extra2" },
               { extra = "project3" },
             ],
         ]
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["sortedcontainers==2.3.0"]
         project4 = ["sortedcontainers==2.4.0"]
 
@@ -2807,8 +2807,8 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
     "###);
 
     // We can also fix this by just putting them all in one big
-    // group, even though project1/project3 don't conflict and
-    // project2/project4 don't conflict.
+    // group, even though extra1/project3 don't conflict and
+    // extra2/project4 don't conflict.
     pyproject_toml.write_str(
         r#"
         [project]
@@ -2819,16 +2819,16 @@ fn lock_conflicting_extra_multiple_not_conflicting2() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { extra = "project1" },
-              { extra = "project2" },
+              { extra = "extra1" },
+              { extra = "extra2" },
               { extra = "project3" },
               { extra = "project4" },
             ],
         ]
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["sortedcontainers==2.3.0"]
         project4 = ["sortedcontainers==2.4.0"]
 
@@ -2866,8 +2866,8 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["anyio==4.1.0"]
         project4 = ["anyio==4.2.0"]
 
@@ -2906,8 +2906,8 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         ]
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["anyio==4.1.0"]
         project4 = ["anyio==4.2.0"]
 
@@ -2923,8 +2923,8 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project2] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.3.0, we can conclude that project[project1] and project[project2] are incompatible.
-          And because your project requires project[project1] and project[project2], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     // Once we declare ALL our conflicting extras, resolution succeeds.
@@ -2939,8 +2939,8 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { extra = "project1" },
-              { extra = "project2" },
+              { extra = "extra1" },
+              { extra = "extra2" },
             ],
             [
               { extra = "project3" },
@@ -2949,8 +2949,8 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         ]
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
         project3 = ["anyio==4.1.0"]
         project4 = ["anyio==4.2.0"]
 
@@ -2981,8 +2981,8 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         resolution-markers = [
         ]
         conflicts = [[
-            { package = "project", extra = "project1" },
-            { package = "project", extra = "project2" },
+            { package = "project", extra = "extra1" },
+            { package = "project", extra = "extra2" },
         ], [
             { package = "project", extra = "project3" },
             { package = "project", extra = "project4" },
@@ -3036,10 +3036,10 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         source = { editable = "." }
 
         [package.optional-dependencies]
-        project1 = [
+        extra1 = [
             { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
-        project2 = [
+        extra2 = [
             { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
         ]
         project3 = [
@@ -3053,8 +3053,8 @@ fn lock_conflicting_extra_multiple_independent() -> Result<()> {
         requires-dist = [
             { name = "anyio", marker = "extra == 'project3'", specifier = "==4.1.0" },
             { name = "anyio", marker = "extra == 'project4'", specifier = "==4.2.0" },
-            { name = "sortedcontainers", marker = "extra == 'project1'", specifier = "==2.3.0" },
-            { name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.3.0" },
+            { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.4.0" },
         ]
 
         [[package]]
@@ -3109,14 +3109,14 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { extra = "project1" },
-              { extra = "project2" },
+              { extra = "extra1" },
+              { extra = "extra2" },
             ],
         ]
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -3143,8 +3143,8 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         resolution-markers = [
         ]
         conflicts = [[
-            { package = "project", extra = "project1" },
-            { package = "project", extra = "project2" },
+            { package = "project", extra = "extra1" },
+            { package = "project", extra = "extra2" },
         ]]
 
         [options]
@@ -3156,17 +3156,17 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         source = { editable = "." }
 
         [package.optional-dependencies]
-        project1 = [
+        extra1 = [
             { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
-        project2 = [
+        extra2 = [
             { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "sortedcontainers", marker = "extra == 'project1'", specifier = "==2.3.0" },
-            { name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.3.0" },
+            { name = "sortedcontainers", marker = "extra == 'extra2'", specifier = "==2.4.0" },
         ]
 
         [[package]]
@@ -3214,8 +3214,8 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
         requires-python = ">=3.12"
 
         [project.optional-dependencies]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -3231,8 +3231,8 @@ fn lock_conflicting_extra_config_change_ignore_lockfile() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[project2] depends on sortedcontainers==2.4.0 and project[project1] depends on sortedcontainers==2.3.0, we can conclude that project[project1] and project[project2] are incompatible.
-          And because your project requires project[project1] and project[project2], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -3252,7 +3252,7 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
         version = "0.1.0"
         requires-python = "==3.12.*"
         dependencies = [
-          "proxy1[project1,project2]"
+          "proxy1[extra1,extra2]"
         ]
 
         [tool.uv.workspace]
@@ -3277,14 +3277,14 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
         dependencies = []
 
         [project.optional-dependencies]
-        project1 = ["anyio==4.1.0"]
-        project2 = ["anyio==4.2.0"]
+        extra1 = ["anyio==4.1.0"]
+        extra2 = ["anyio==4.2.0"]
 
         [tool.uv]
         conflicts = [
           [
-            { extra = "project1" },
-            { extra = "project2" },
+            { extra = "extra1" },
+            { extra = "extra2" },
           ],
         ]
         "#,
@@ -3296,7 +3296,7 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Found conflicting extra `project1` unconditionally enabled in `proxy1[project1,project2] @ file://[TEMP_DIR]/proxy1`
+    error: Found conflicting extra `extra1` unconditionally enabled in `proxy1[extra1,extra2] @ file://[TEMP_DIR]/proxy1`
     "###);
 
     // An error should occur even when only one conflicting extra is enabled.
@@ -3307,7 +3307,7 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
         version = "0.1.0"
         requires-python = "==3.12.*"
         dependencies = [
-          "proxy1[project1]"
+          "proxy1[extra1]"
         ]
 
         [tool.uv.workspace]
@@ -3327,7 +3327,7 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Found conflicting extra `project1` unconditionally enabled in `proxy1[project1] @ file://[TEMP_DIR]/proxy1`
+    error: Found conflicting extra `extra1` unconditionally enabled in `proxy1[extra1] @ file://[TEMP_DIR]/proxy1`
     "###);
 
     // And same thing for the other extra.
@@ -3338,7 +3338,7 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
         version = "0.1.0"
         requires-python = "==3.12.*"
         dependencies = [
-          "proxy1[project2]"
+          "proxy1[extra2]"
         ]
 
         [tool.uv.workspace]
@@ -3359,7 +3359,7 @@ fn lock_conflicting_extra_unconditional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Found conflicting extra `project2` unconditionally enabled in `proxy1[project2] @ file://[TEMP_DIR]/proxy1`
+    error: Found conflicting extra `extra2` unconditionally enabled in `proxy1[extra2] @ file://[TEMP_DIR]/proxy1`
     "###);
 
     Ok(())
@@ -3380,11 +3380,11 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         requires-python = "==3.12.*"
 
         [project.optional-dependencies]
-        project1 = [
-          "proxy1[project1]",
+        extra1 = [
+          "proxy1[extra1]",
         ]
-        project2 = [
-          "proxy1[project2]"
+        extra2 = [
+          "proxy1[extra2]"
         ]
 
         [tool.uv.sources]
@@ -3401,8 +3401,8 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         [tool.uv]
         conflicts = [
           [
-            { extra = "project1" },
-            { extra = "project2" },
+            { extra = "extra1" },
+            { extra = "extra2" },
           ],
         ]
         "#,
@@ -3417,11 +3417,11 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         requires-python = "==3.12.*"
 
         [project.optional-dependencies]
-        project1 = [
-          "proxy1[project1]",
+        extra1 = [
+          "proxy1[extra1]",
         ]
-        project2 = [
-          "proxy1[project2]"
+        extra2 = [
+          "proxy1[extra2]"
         ]
 
         [tool.uv.sources]
@@ -3434,8 +3434,8 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         [tool.uv]
         conflicts = [
           [
-            { extra = "project1" },
-            { extra = "project2" },
+            { extra = "extra1" },
+            { extra = "extra2" },
           ],
         ]
         "#,
@@ -3451,8 +3451,8 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         dependencies = []
 
         [project.optional-dependencies]
-        project1 = ["anyio==4.1.0"]
-        project2 = ["anyio==4.2.0"]
+        extra1 = ["anyio==4.1.0"]
+        extra2 = ["anyio==4.2.0"]
 
         [build-system]
         requires = ["hatchling"]
@@ -3460,11 +3460,11 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         "#,
     )?;
 
-    // In the scheme above, we declare that `dummy[project1]` conflicts
-    // with `dummy[project2]`, and that `dummysub[project1]` conflicts
-    // with `dummysub[project2]`. But we don't account for the fact that
-    // `dummy[project1]` conflicts with `dummysub[project2]` and that
-    // `dummy[project2]` conflicts with `dummysub[project1]`. So we end
+    // In the scheme above, we declare that `dummy[extra1]` conflicts
+    // with `dummy[extra2]`, and that `dummysub[extra1]` conflicts
+    // with `dummysub[extra2]`. But we don't account for the fact that
+    // `dummy[extra1]` conflicts with `dummysub[extra2]` and that
+    // `dummy[extra2]` conflicts with `dummysub[extra1]`. So we end
     // up with a resolution failure.
     uv_snapshot!(context.filters(), context.lock(), @r###"
     success: false
@@ -3473,12 +3473,12 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because dummy[project2] depends on proxy1[project2] and only proxy1[project2]==0.1.0 is available, we can conclude that dummy[project2] depends on proxy1[project2]==0.1.0. (1)
+      ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
 
-          Because proxy1[project1]==0.1.0 depends on anyio==4.1.0 and proxy1[project2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[project1]==0.1.0 and proxy1[project2]==0.1.0 are incompatible.
-          And because we know from (1) that dummy[project2] depends on proxy1[project2]==0.1.0, we can conclude that dummy[project2] and proxy1[project1]==0.1.0 are incompatible.
-          And because only proxy1[project1]==0.1.0 is available and dummysub[project1] depends on proxy1[project1], we can conclude that dummysub[project1] and dummy[project2] are incompatible.
-          And because your workspace requires dummy[project2] and dummysub[project1], we can conclude that your workspace's requirements are unsatisfiable.
+          Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
+          And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
+          And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
+          And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
     "###);
 
     // Now let's write out the full set of conflicts, taking
@@ -3491,11 +3491,11 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         requires-python = "==3.12.*"
 
         [project.optional-dependencies]
-        project1 = [
-          "proxy1[project1]",
+        extra1 = [
+          "proxy1[extra1]",
         ]
-        project2 = [
-          "proxy1[project2]"
+        extra2 = [
+          "proxy1[extra2]"
         ]
 
         [tool.uv.sources]
@@ -3512,20 +3512,20 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         [tool.uv]
         conflicts = [
           [
-            { extra = "project1" },
-            { extra = "project2" },
+            { extra = "extra1" },
+            { extra = "extra2" },
           ],
           [
-            { package = "dummysub", extra = "project1" },
-            { package = "dummysub", extra = "project2" },
+            { package = "dummysub", extra = "extra1" },
+            { package = "dummysub", extra = "extra2" },
           ],
           [
-            { extra = "project1" },
-            { package = "dummysub", extra = "project2" },
+            { extra = "extra1" },
+            { package = "dummysub", extra = "extra2" },
           ],
           [
-            { package = "dummysub", extra = "project1" },
-            { extra = "project2" },
+            { package = "dummysub", extra = "extra1" },
+            { extra = "extra2" },
           ],
         ]
         "#,
@@ -3540,11 +3540,11 @@ fn lock_conflicting_extra_nested_across_workspace() -> Result<()> {
         requires-python = "==3.12.*"
 
         [project.optional-dependencies]
-        project1 = [
-          "proxy1[project1]",
+        extra1 = [
+          "proxy1[extra1]",
         ]
-        project2 = [
-          "proxy1[project2]"
+        extra2 = [
+          "proxy1[extra2]"
         ]
 
         [tool.uv.sources]
@@ -3585,8 +3585,8 @@ fn lock_conflicting_group_basic() -> Result<()> {
         requires-python = ">=3.12"
 
         [dependency-groups]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        group1 = ["sortedcontainers==2.3.0"]
+        group2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -3601,8 +3601,8 @@ fn lock_conflicting_group_basic() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project:project1 depends on sortedcontainers==2.3.0 and project:project2 depends on sortedcontainers==2.4.0, we can conclude that project:project1 and project:project2 are incompatible.
-          And because your project depends on project:project1 and project:project2, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project:group2 depends on sortedcontainers==2.4.0, we can conclude that project:group1 and project:group2 are incompatible.
+          And because your project depends on project:group1 and project:group2, we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // And now with the same group configuration, we tell uv about
@@ -3620,14 +3620,14 @@ fn lock_conflicting_group_basic() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { group = "project1" },
-              { group = "project2" },
+              { group = "group1" },
+              { group = "group2" },
             ],
         ]
 
         [dependency-groups]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        group1 = ["sortedcontainers==2.3.0"]
+        group2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -3656,8 +3656,8 @@ fn lock_conflicting_group_basic() -> Result<()> {
         resolution-markers = [
         ]
         conflicts = [[
-            { package = "project", group = "project1" },
-            { package = "project", group = "project2" },
+            { package = "project", group = "group1" },
+            { package = "project", group = "group2" },
         ]]
 
         [options]
@@ -3669,18 +3669,18 @@ fn lock_conflicting_group_basic() -> Result<()> {
         source = { editable = "." }
 
         [package.dev-dependencies]
-        project1 = [
+        group1 = [
             { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
-        project2 = [
+        group2 = [
             { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.metadata]
 
         [package.metadata.requires-dev]
-        project1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
-        project2 = [{ name = "sortedcontainers", specifier = "==2.4.0" }]
+        group1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
+        group2 = [{ name = "sortedcontainers", specifier = "==2.4.0" }]
 
         [[package]]
         name = "sortedcontainers"
@@ -3729,7 +3729,7 @@ fn lock_conflicting_group_basic() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
     // Another install, but with one of the groups enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3740,7 +3740,7 @@ fn lock_conflicting_group_basic() -> Result<()> {
      + sortedcontainers==2.3.0
     "###);
     // Another install, but with the other group enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group2"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3753,13 +3753,13 @@ fn lock_conflicting_group_basic() -> Result<()> {
      + sortedcontainers==2.4.0
     "###);
     // And finally, installing both groups should error.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1").arg("--group=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--group=group2"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `project1` and `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
+    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
     "###);
 
     Ok(())
@@ -3785,15 +3785,15 @@ fn lock_conflicting_group_default() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { group = "project1" },
-              { group = "project2" },
+              { group = "group1" },
+              { group = "group2" },
             ],
         ]
-        default-groups = ["project1"]
+        default-groups = ["group1"]
 
         [dependency-groups]
-        project1 = ["sortedcontainers==2.3.0"]
-        project2 = ["sortedcontainers==2.4.0"]
+        group1 = ["sortedcontainers==2.3.0"]
+        group2 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -3822,8 +3822,8 @@ fn lock_conflicting_group_default() -> Result<()> {
         resolution-markers = [
         ]
         conflicts = [[
-            { package = "project", group = "project1" },
-            { package = "project", group = "project2" },
+            { package = "project", group = "group1" },
+            { package = "project", group = "group2" },
         ]]
 
         [options]
@@ -3835,18 +3835,18 @@ fn lock_conflicting_group_default() -> Result<()> {
         source = { editable = "." }
 
         [package.dev-dependencies]
-        project1 = [
+        group1 = [
             { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
-        project2 = [
+        group2 = [
             { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.metadata]
 
         [package.metadata.requires-dev]
-        project1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
-        project2 = [{ name = "sortedcontainers", specifier = "==2.4.0" }]
+        group1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
+        group2 = [{ name = "sortedcontainers", specifier = "==2.4.0" }]
 
         [[package]]
         name = "sortedcontainers"
@@ -3883,7 +3883,7 @@ fn lock_conflicting_group_default() -> Result<()> {
     Resolved 3 packages in [TIME]
     "###);
 
-    // Install from the lockfile, which should include the `project1` group by default.
+    // Install from the lockfile, which should include the `extra1` group by default.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
     success: true
     exit_code: 0
@@ -3897,7 +3897,7 @@ fn lock_conflicting_group_default() -> Result<()> {
     "###);
 
     // Another install, but with one of the groups enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3906,26 +3906,26 @@ fn lock_conflicting_group_default() -> Result<()> {
     Audited 2 packages in [TIME]
     "###);
 
-    // Another install, but with the other group enabled. This should error, since `project1` is
+    // Another install, but with the other group enabled. This should error, since `group1` is
     // enabled by default.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group2"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `project1` (enabled by default) and `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
+    error: Groups `group1` (enabled by default) and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // If the group is explicitly requested, we should still fail, but shouldn't mark it as
     // "enabled by default".
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1").arg("--group=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--group=group2"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `project1` and `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
+    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // If we install via `--all-groups`, we should also avoid marking the group as "enabled by
@@ -3936,11 +3936,11 @@ fn lock_conflicting_group_default() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Groups `project1` and `project2` are incompatible with the declared conflicts: {`project:project1`, `project:project2`}
+    error: Groups `group1` and `group2` are incompatible with the declared conflicts: {`project:group1`, `project:group2`}
     "###);
 
     // Disabling the default group should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-group=project1").arg("--group=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-group=group1").arg("--group=group2"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3973,10 +3973,10 @@ fn lock_conflicting_mixed() -> Result<()> {
         requires-python = ">=3.12"
 
         [dependency-groups]
-        project1 = ["sortedcontainers==2.3.0"]
+        group1 = ["sortedcontainers==2.3.0"]
 
         [project.optional-dependencies]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -3991,8 +3991,8 @@ fn lock_conflicting_mixed() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project:project1 depends on sortedcontainers==2.3.0 and project[project2] depends on sortedcontainers==2.4.0, we can conclude that project[project2] and project:project1 are incompatible.
-          And because your project depends on project:project1 and your project requires project[project2], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.4.0, we can conclude that project[extra1] and project:group1 are incompatible.
+          And because your project depends on project:group1 and your project requires project[extra1], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra/group configuration, we tell uv
@@ -4010,16 +4010,16 @@ fn lock_conflicting_mixed() -> Result<()> {
         [tool.uv]
         conflicts = [
             [
-              { group = "project1" },
-              { extra = "project2" },
+              { group = "group1" },
+              { extra = "extra1" },
             ],
         ]
 
         [dependency-groups]
-        project1 = ["sortedcontainers==2.3.0"]
+        group1 = ["sortedcontainers==2.3.0"]
 
         [project.optional-dependencies]
-        project2 = ["sortedcontainers==2.4.0"]
+        extra1 = ["sortedcontainers==2.4.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -4048,8 +4048,8 @@ fn lock_conflicting_mixed() -> Result<()> {
         resolution-markers = [
         ]
         conflicts = [[
-            { package = "project", group = "project1" },
-            { package = "project", extra = "project2" },
+            { package = "project", group = "group1" },
+            { package = "project", extra = "extra1" },
         ]]
 
         [options]
@@ -4061,20 +4061,20 @@ fn lock_conflicting_mixed() -> Result<()> {
         source = { editable = "." }
 
         [package.optional-dependencies]
-        project2 = [
+        extra1 = [
             { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.dev-dependencies]
-        project1 = [
+        group1 = [
             { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "sortedcontainers", marker = "extra == 'project2'", specifier = "==2.4.0" }]
+        requires-dist = [{ name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.4.0" }]
 
         [package.metadata.requires-dev]
-        project1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
+        group1 = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
 
         [[package]]
         name = "sortedcontainers"
@@ -4123,7 +4123,7 @@ fn lock_conflicting_mixed() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);
     // Another install, but with the group enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4134,7 +4134,7 @@ fn lock_conflicting_mixed() -> Result<()> {
      + sortedcontainers==2.3.0
     "###);
     // Another install, but with the extra enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4147,13 +4147,13 @@ fn lock_conflicting_mixed() -> Result<()> {
      + sortedcontainers==2.4.0
     "###);
     // And finally, installing both the group and the extra should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1").arg("--extra=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--extra=extra1"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `project1` and extra `project2` are incompatible with the declared conflicts: {`project:project1`, `project[project2]`}
+    error: Group `group1` and extra `extra1` are incompatible with the declared conflicts: {`project:group1`, `project[extra1]`}
     "###);
 
     Ok(())
