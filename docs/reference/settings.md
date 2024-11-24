@@ -2431,6 +2431,34 @@ included in the resolution. Equivalent to pip-compile's `--unsafe-package` optio
 
 ---
 
+#### [`no-extra`](#pip_no-extra) {: #pip_no-extra }
+<span id="no-extra"></span>
+
+Exclude the specified optional dependencies if `all-extras` is supplied.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    all-extras = true
+    no-extra = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    all-extras = true
+    no-extra = ["dev", "docs"]
+    ```
+
+---
+
 #### [`no-header`](#pip_no-header) {: #pip_no-header }
 <span id="no-header"></span>
 

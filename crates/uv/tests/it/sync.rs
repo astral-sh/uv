@@ -4349,6 +4349,18 @@ fn sync_all_extras() -> Result<()> {
      + typing-extensions==4.10.0
     "###);
 
+    // Sync all extras.
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--all-extras").arg("--no-extra").arg("types"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
+    "###);
+
     Ok(())
 }
 

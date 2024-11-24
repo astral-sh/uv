@@ -89,11 +89,11 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
-        let extras = match self.extras {
-            ExtrasSpecification::All => metadata.provides_extras.as_slice(),
-            ExtrasSpecification::None => &[],
-            ExtrasSpecification::Some(extras) => extras,
-        };
+        let extras: Vec<_> = self
+            .extras
+            .extra_names(metadata.provides_extras.iter())
+            .cloned()
+            .collect();
 
         // Determine the appropriate requirements to return based on the extras. This involves
         // evaluating the `extras` expression in any markers, but preserving the remaining marker
@@ -103,7 +103,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .into_iter()
             .map(|requirement| Requirement {
                 origin: Some(origin.clone()),
-                marker: requirement.marker.simplify_extras(extras),
+                marker: requirement.marker.simplify_extras(&extras),
                 ..requirement
             })
             .collect();

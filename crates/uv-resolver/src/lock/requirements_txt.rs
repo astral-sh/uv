@@ -77,18 +77,8 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
-                match extras {
-                    ExtrasSpecification::None => {}
-                    ExtrasSpecification::All => {
-                        for extra in dist.optional_dependencies.keys() {
-                            queue.push_back((dist, Some(extra)));
-                        }
-                    }
-                    ExtrasSpecification::Some(extras) => {
-                        for extra in extras {
-                            queue.push_back((dist, Some(extra)));
-                        }
-                    }
+                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                    queue.push_back((dist, Some(extra)));
                 }
             }
 
