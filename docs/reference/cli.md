@@ -308,7 +308,7 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt><code>--no-env-file</code></dt><dd><p>Avoid reading environment variables from a <code>.env</code> file</p>
 
 <p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p>
-</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies if <code>--all-extras</code> is supplied.</p>
+</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -1616,7 +1616,7 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
-</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies if <code>--all-extras</code> is supplied.</p>
+</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -2294,7 +2294,7 @@ uv export [OPTIONS]
 
 <p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
 
-</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies if <code>--all-extras</code> is supplied.</p>
+</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 
 <p>May be provided multiple times.</p>
 

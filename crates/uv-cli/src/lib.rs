@@ -2599,7 +2599,7 @@ pub struct RunArgs {
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
-    /// Exclude the specified optional dependencies if `--all-extras` is supplied.
+    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
     ///
     /// May be provided multiple times.
     #[arg(long)]
@@ -2842,7 +2842,7 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
-    /// Exclude the specified optional dependencies if `--all-extras` is supplied.
+    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
     ///
     /// May be provided multiple times.
     #[arg(long)]
@@ -3423,7 +3423,7 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
-    /// Exclude the specified optional dependencies if `--all-extras` is supplied.
+    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
     ///
     /// May be provided multiple times.
     #[arg(long)]
