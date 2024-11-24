@@ -34,6 +34,7 @@ pub(crate) async fn export(
     format: ExportFormat,
     all_packages: bool,
     package: Option<PackageName>,
+    prune: Vec<PackageName>,
     hashes: bool,
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
@@ -183,6 +184,7 @@ pub(crate) async fn export(
         ExportFormat::RequirementsTxt => {
             let export = RequirementsTxtExport::from_lock(
                 target,
+                &prune,
                 &extras,
                 &dev,
                 editable,

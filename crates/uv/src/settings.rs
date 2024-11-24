@@ -1279,6 +1279,7 @@ pub(crate) struct ExportSettings {
     pub(crate) format: ExportFormat,
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
+    pub(crate) prune: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
@@ -1302,6 +1303,7 @@ impl ExportSettings {
             format,
             all_packages,
             package,
+            prune,
             extra,
             all_extras,
             no_all_extras,
@@ -1337,6 +1339,7 @@ impl ExportSettings {
             format,
             all_packages,
             package,
+            prune,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
                 extra.unwrap_or_default(),
