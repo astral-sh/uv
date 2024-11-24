@@ -19621,8 +19621,6 @@ fn lock_multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
         resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform != 'darwin'",
         ]
         dependencies = [
             { name = "markupsafe" },

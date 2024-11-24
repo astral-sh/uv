@@ -2941,11 +2941,9 @@ impl Forks {
                 }
 
                 // Create a fork that excludes ALL extras.
-                let mut fork_none = fork.clone();
-                for group in set.iter() {
-                    fork_none = fork_none.exclude([group.clone()]);
+                if let Some(fork_none) = fork.clone().filter(set.iter().cloned().map(Err)) {
+                    new.push(fork_none);
                 }
-                new.push(fork_none);
 
                 // Now create a fork for each conflicting group, where
                 // that fork excludes every *other* conflicting group.
@@ -2955,13 +2953,18 @@ impl Forks {
                 // {foo, bar}, one that excludes {foo, baz} and one
                 // that excludes {bar, baz}.
                 for (i, _) in set.iter().enumerate() {
-                    let fork_allows_group = fork.clone().exclude(
-                        set.iter()
-                            .enumerate()
-                            .filter(|&(j, _)| i != j)
-                            .map(|(_, group)| group.clone()),
-                    );
-                    new.push(fork_allows_group);
+                    let fork_allows_group =
+                        fork.clone()
+                            .filter(set.iter().cloned().enumerate().map(|(j, group)| {
+                                if i == j {
+                                    Ok(group)
+                                } else {
+                                    Err(group)
+                                }
+                            }));
+                    if let Some(fork_allows_group) = fork_allows_group {
+                        new.push(fork_allows_group);
+                    }
                 }
             }
             forks = new;
@@ -3058,11 +3061,17 @@ impl Fork {
         self.conflicts.contains(&item)
     }
 
-    /// Exclude the given groups from this fork.
+    /// Include or Exclude the given groups from this fork.
     ///
     /// This removes all dependencies matching the given conflicting groups.
-    fn exclude(mut self, groups: impl IntoIterator<Item = ConflictItem>) -> Fork {
-        self.env = self.env.exclude_by_group(groups);
+    ///
+    /// If the exclusion rules would result in a fork with an unsatisfiable
+    /// resolver environment, then this returns `None`.
+    fn filter(
+        mut self,
+        rules: impl IntoIterator<Item = Result<ConflictItem, ConflictItem>>,
+    ) -> Option<Fork> {
+        self.env = self.env.filter_by_group(rules)?;
         self.dependencies.retain(|dep| {
             let Some(conflicting_item) = dep.package.conflicting_item() else {
                 return true;
@@ -3075,7 +3084,7 @@ impl Fork {
             }
             false
         });
-        self
+        Some(self)
     }
 }
 

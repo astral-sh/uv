@@ -702,6 +702,19 @@ impl MarkerTree {
         self.0 = INTERNER.lock().or(self.0, tree.0);
     }
 
+    /// Sets this to a marker equivalent to the implication of this one and the
+    /// given consequent.
+    ///
+    /// If the marker set is always `true`, then it can be said that `self`
+    /// implies `consequent`.
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn implies(&mut self, consequent: MarkerTree) {
+        // This could probably be optimized, but is clearly
+        // correct, since logical implication is `-P or Q`.
+        *self = self.negate();
+        self.or(consequent);
+    }
+
     /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e. their conjunction is always `false`.
     ///
@@ -2484,6 +2497,47 @@ mod test {
         );
     }
 
+    /// This tests marker implication.
+    ///
+    /// Specifically, these test cases come from a [bug] where `foo` and `bar`
+    /// are conflicting extras, but results in an ambiguous lock file. This
+    /// test takes `not(extra == 'foo' and extra == 'bar')` as world knowledge.
+    /// That is, since they are declared as conflicting, they cannot both be
+    /// true. This is in turn used to determine whether particular markers are
+    /// implied by this world knowledge and thus can be removed.
+    ///
+    /// [bug]: <https://github.com/astral-sh/uv/issues/9289>
+    #[test]
+    fn test_extra_implication() {
+        assert!(implies(
+            "extra != 'foo' or extra != 'bar'",
+            "extra != 'foo' or extra != 'bar'",
+        ));
+        assert!(!implies(
+            "extra != 'foo' or extra != 'bar'",
+            "extra != 'foo'",
+        ));
+        assert!(!implies(
+            "extra != 'foo' or extra != 'bar'",
+            "extra != 'bar' and extra == 'foo'",
+        ));
+
+        // This simulates the case when multiple groups of conflicts
+        // are combined into one "world knowledge" marker.
+        assert!(implies(
+            "(extra != 'foo' or extra != 'bar') and (extra != 'baz' or extra != 'quux')",
+            "extra != 'foo' or extra != 'bar'",
+        ));
+        assert!(!implies(
+            "(extra != 'foo' or extra != 'bar') and (extra != 'baz' or extra != 'quux')",
+            "extra != 'foo'",
+        ));
+        assert!(!implies(
+            "(extra != 'foo' or extra != 'bar') and (extra != 'baz' or extra != 'quux')",
+            "extra != 'bar' and extra == 'foo'",
+        ));
+    }
+
     #[test]
     fn test_marker_negation() {
         assert_eq!(
@@ -2949,6 +3003,12 @@ mod test {
     fn is_disjoint(left: impl AsRef<str>, right: impl AsRef<str>) -> bool {
         let (left, right) = (m(left.as_ref()), m(right.as_ref()));
         left.is_disjoint(&right) && right.is_disjoint(&left)
+    }
+
+    fn implies(antecedent: &str, consequent: &str) -> bool {
+        let mut marker = m(antecedent);
+        marker.implies(m(consequent));
+        marker.is_true()
     }
 
     #[test]
