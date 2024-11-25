@@ -9,6 +9,8 @@ use std::sync::LazyLock;
 use thiserror::Error;
 use url::{ParseError, Url};
 
+use uv_fs::{normalize_absolute_path, normalize_url_path};
+
 use crate::Pep508Url;
 
 /// A wrapper around [`Url`] that preserves the original string.
@@ -60,7 +62,7 @@ impl VerbatimUrl {
             Cow::Owned(base_dir.as_ref().join(path))
         };
 
-        let path = uv_fs::normalize_absolute_path(&path)
+        let path = normalize_absolute_path(&path)
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Extract the fragment, if it exists.
@@ -90,7 +92,7 @@ impl VerbatimUrl {
         };
 
         // Normalize the path.
-        let path = uv_fs::normalize_absolute_path(path)
+        let path = normalize_absolute_path(path)
             .map_err(|err| VerbatimUrlError::Normalization(path.to_path_buf(), err))?;
 
         // Extract the fragment, if it exists.
@@ -227,7 +229,7 @@ impl Pep508Url for VerbatimUrl {
                     {
                         let path = strip_host(path);
 
-                        let path = uv_fs::normalize_url_path(path);
+                        let path = normalize_url_path(path);
 
                         if let Some(working_dir) = working_dir {
                             return Ok(VerbatimUrl::from_path(path.as_ref(), working_dir)?

@@ -56,9 +56,12 @@ use std::sync::LazyLock;
 use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
 use version_ranges::Ranges;
 
+use crate::marker::lowering::{
+    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion,
+};
 use crate::marker::MarkerValueExtra;
 use crate::ExtraOperator;
-use crate::{MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion};
+use crate::{MarkerExpression, MarkerOperator, MarkerValueVersion};
 
 /// The global node interner.
 pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);
@@ -161,7 +164,7 @@ impl InternerGuard<'_> {
                 specifier,
             } => match python_version_to_full_version(normalize_specifier(specifier)) {
                 Ok(specifier) => (
-                    Variable::Version(MarkerValueVersion::PythonFullVersion),
+                    Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
                     Edges::from_specifier(specifier),
                 ),
                 Err(node) => return node,
@@ -172,16 +175,17 @@ impl InternerGuard<'_> {
                 negated,
             } => match Edges::from_python_versions(versions, negated) {
                 Ok(edges) => (
-                    Variable::Version(MarkerValueVersion::PythonFullVersion),
+                    Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
                     edges,
                 ),
                 Err(node) => return node,
             },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
-            MarkerExpression::Version { key, specifier } => {
-                (Variable::Version(key), Edges::from_specifier(specifier))
-            }
+            MarkerExpression::Version { key, specifier } => (
+                Variable::Version(key.into()),
+                Edges::from_specifier(specifier),
+            ),
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::VersionIn {
@@ -189,7 +193,7 @@ impl InternerGuard<'_> {
                 versions,
                 negated,
             } => (
-                Variable::Version(key),
+                Variable::Version(key.into()),
                 Edges::from_versions(&versions, negated),
             ),
             // The `in` and `contains` operators are a bit different than other operators.
@@ -206,38 +210,76 @@ impl InternerGuard<'_> {
                 key,
                 operator: MarkerOperator::In,
                 value,
-            } => (Variable::In { key, value }, Edges::from_bool(true)),
+            } => (
+                Variable::In {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(true),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::NotIn,
                 value,
-            } => (Variable::In { key, value }, Edges::from_bool(false)),
+            } => (
+                Variable::In {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(false),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::Contains,
                 value,
-            } => (Variable::Contains { key, value }, Edges::from_bool(true)),
+            } => (
+                Variable::Contains {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(true),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::NotContains,
                 value,
-            } => (Variable::Contains { key, value }, Edges::from_bool(false)),
+            } => (
+                Variable::Contains {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(false),
+            ),
             // A variable representing the output of a string key. Edges correspond
             // to disjoint string ranges.
             MarkerExpression::String {
                 key,
                 operator,
                 value,
-            } => (Variable::String(key), Edges::from_string(operator, value)),
+            } => (
+                Variable::String(key.into()),
+                Edges::from_string(operator, value),
+            ),
             // A variable representing the existence or absence of a particular extra.
             MarkerExpression::Extra {
-                name,
+                name: MarkerValueExtra::Extra(extra),
                 operator: ExtraOperator::Equal,
-            } => (Variable::Extra(name), Edges::from_bool(true)),
+            } => (
+                Variable::Extra(LoweredMarkerValueExtra::Extra(extra)),
+                Edges::from_bool(true),
+            ),
             MarkerExpression::Extra {
-                name,
+                name: MarkerValueExtra::Extra(extra),
                 operator: ExtraOperator::NotEqual,
-            } => (Variable::Extra(name), Edges::from_bool(false)),
+            } => (
+                Variable::Extra(LoweredMarkerValueExtra::Extra(extra)),
+                Edges::from_bool(false),
+            ),
+            // Invalid extras are always `false`.
+            MarkerExpression::Extra {
+                name: MarkerValueExtra::Arbitrary(_),
+                ..
+            } => return NodeId::FALSE,
         };
 
         self.create_node(var, children)
@@ -391,7 +433,7 @@ impl InternerGuard<'_> {
         // Look for a `python_full_version` expression, otherwise
         // we recursively simplify.
         let Node {
-            var: Variable::Version(MarkerValueVersion::PythonFullVersion),
+            var: Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
         else {
@@ -464,7 +506,7 @@ impl InternerGuard<'_> {
             return NodeId::FALSE;
         }
         if matches!(i, NodeId::TRUE) {
-            let var = Variable::Version(MarkerValueVersion::PythonFullVersion);
+            let var = Variable::Version(LoweredMarkerValueVersion::PythonFullVersion);
             let edges = Edges::Version {
                 edges: Edges::from_range(&py_range),
             };
@@ -473,7 +515,7 @@ impl InternerGuard<'_> {
 
         let node = self.shared.node(i);
         let Node {
-            var: Variable::Version(MarkerValueVersion::PythonFullVersion),
+            var: Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
         else {
@@ -569,26 +611,26 @@ pub(crate) enum Variable {
     ///
     /// This is the highest order variable as it typically contains the most complex
     /// ranges, allowing us to merge ranges at the top-level.
-    Version(MarkerValueVersion),
+    Version(LoweredMarkerValueVersion),
     /// A string marker, such as `os_name`.
-    String(MarkerValueString),
+    String(LoweredMarkerValueString),
     /// A variable representing a `<key> in <value>` expression for a particular
     /// string marker and value.
     In {
-        key: MarkerValueString,
+        key: LoweredMarkerValueString,
         value: String,
     },
     /// A variable representing a `<value> in <key>` expression for a particular
     /// string marker and value.
     Contains {
-        key: MarkerValueString,
+        key: LoweredMarkerValueString,
         value: String,
     },
     /// A variable representing the existence or absence of a given extra.
     ///
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
-    Extra(MarkerValueExtra),
+    Extra(LoweredMarkerValueExtra),
 }
 
 /// A decision node in an Algebraic Decision Diagram.

@@ -28,7 +28,8 @@ use url::Url;
 
 use cursor::Cursor;
 pub use marker::{
-    ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
+    ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, LoweredMarkerValueExtra,
+    LoweredMarkerValueString, LoweredMarkerValueVersion, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
     MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
