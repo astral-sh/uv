@@ -2775,6 +2775,38 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_empty_virtual_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create an empty directory
+    context.temp_dir.child(".venv").create_dir_all()?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` should work
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
+    "###);
+
+    Ok(())
+}
+
 /// Test for warnings when `VIRTUAL_ENV` is set but will not be respected.
 #[test]
 fn sync_legacy_non_project_warning() -> Result<()> {
