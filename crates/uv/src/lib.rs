@@ -1002,7 +1002,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(Refresh::All(Timestamp::now()));
 
             Box::pin(commands::tool_upgrade(
-                args.name,
+                args.names,
                 args.python,
                 args.install_mirrors,
                 globals.connectivity,

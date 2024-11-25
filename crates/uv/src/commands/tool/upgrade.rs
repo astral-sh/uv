@@ -1,14 +1,16 @@
-use std::{collections::BTreeSet, fmt::Write};
-
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::BTreeMap;
+use std::fmt::Write;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, TrustedHost};
+use uv_fs::CWD;
 use uv_normalize::PackageName;
+use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,
@@ -31,7 +33,7 @@ use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
-    name: Vec<PackageName>,
+    names: Vec<String>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     connectivity: Connectivity,
@@ -48,17 +50,24 @@ pub(crate) async fn upgrade(
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
-    // Collect the tools to upgrade.
-    let names: BTreeSet<PackageName> = {
-        if name.is_empty() {
+    // Collect the tools to upgrade, along with any constraints.
+    let names: BTreeMap<PackageName, Vec<Requirement>> = {
+        if names.is_empty() {
             installed_tools
                 .tools()
                 .unwrap_or_default()
                 .into_iter()
-                .map(|(name, _)| name)
+                .map(|(name, _)| (name, Vec::new()))
                 .collect()
         } else {
-            name.into_iter().collect()
+            let mut map = BTreeMap::new();
+            for name in names {
+                let requirement = Requirement::from(uv_pep508::Requirement::parse(&name, &*CWD)?);
+                map.entry(requirement.name.clone())
+                    .or_insert_with(Vec::new)
+                    .push(requirement);
+            }
+            map
         }
     };
 
@@ -102,10 +111,11 @@ pub(crate) async fn upgrade(
     let mut did_upgrade_environment = vec![];
 
     let mut errors = Vec::new();
-    for name in &names {
+    for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
         let result = upgrade_tool(
             name,
+            constraints,
             interpreter.as_ref(),
             printer,
             &installed_tools,
@@ -194,6 +204,7 @@ enum UpgradeOutcome {
 /// Upgrade a specific tool.
 async fn upgrade_tool(
     name: &PackageName,
+    constraints: &[Requirement],
     interpreter: Option<&Interpreter>,
     printer: Printer,
     installed_tools: &InstalledTools,
@@ -255,7 +266,8 @@ async fn upgrade_tool(
 
     // Resolve the requirements.
     let requirements = existing_tool_receipt.requirements();
-    let spec = RequirementsSpecification::from_requirements(requirements.to_vec());
+    let spec =
+        RequirementsSpecification::from_constraints(requirements.to_vec(), constraints.to_vec());
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -267,7 +279,7 @@ async fn upgrade_tool(
     {
         // If we're using a new interpreter, re-create the environment for each tool.
         let resolution = resolve_environment(
-            RequirementsSpecification::from_requirements(requirements.to_vec()).into(),
+            spec.into(),
             interpreter,
             settings.as_ref().into(),
             &state,

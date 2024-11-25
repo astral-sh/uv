@@ -3495,7 +3495,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>NAME</code></dt><dd><p>The name of the tool to upgrade</p>
+<dl class="cli-reference"><dt><code>NAME</code></dt><dd><p>The name of the tool to upgrade, along with an optional version specifier</p>
 
 </dd></dl>
 

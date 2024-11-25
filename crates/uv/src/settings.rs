@@ -534,7 +534,7 @@ impl ToolInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUpgradeSettings {
-    pub(crate) name: Vec<PackageName>,
+    pub(crate) names: Vec<String>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) args: ResolverInstallerOptions,
@@ -574,6 +574,9 @@ impl ToolUpgradeSettings {
         if upgrade {
             warn_user_once!("`--upgrade` is enabled by default on `uv tool upgrade`");
         }
+        if !upgrade_package.is_empty() {
+            warn_user_once!("`--upgrade-package` is enabled by default on `uv tool upgrade`");
+        }
 
         // Enable `--upgrade` by default.
         let installer = ResolverInstallerArgs {
@@ -611,7 +614,7 @@ impl ToolUpgradeSettings {
             .unwrap_or_default();
 
         Self {
-            name: if all { vec![] } else { name },
+            names: if all { vec![] } else { name },
             python: python.and_then(Maybe::into_option),
             args,
             filesystem: top_level,
