@@ -49,6 +49,10 @@ impl Libc {
             _ => Ok(Self::None),
         }
     }
+
+    pub fn is_musl(&self) -> bool {
+        matches!(self, Self::Some(target_lexicon::Environment::Musl))
+    }
 }
 
 impl FromStr for Libc {
