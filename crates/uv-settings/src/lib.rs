@@ -201,10 +201,25 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
     None
 }
 
-#[cfg(windows)]
 fn locate_system_config_windows(system_drive: &std::ffi::OsStr) -> Option<PathBuf> {
     // On Windows, use `%SYSTEMDRIVE%\ProgramData\uv\uv.toml` (e.g., `C:\ProgramData`).
-    let candidate = PathBuf::from(system_drive).join("ProgramData\\uv\\uv.toml");
+    let candidate = PathBuf::from(system_drive);
+
+    // `PathBuf::join` does not include a separator for system drives, so we need to include it
+    // manually. However, we allow arbitrary file paths in the `SYSTEMDRIVE` environment variable
+    // for testing so we check if the path is actually a drive before adding the separator.
+    //
+    // See https://github.com/rust-lang/rust/blob/7db7489f9bc274cb60c4956bfa56de0185eb1b9b/library/std/src/path.rs#L1305-L1313
+    let comps = candidate.components();
+    let prefix = if comps.prefix_len() > 0
+        && comps.prefix_len() == comps.path.len()
+        && comps.prefix.unwrap().is_drive() {
+            "\\"
+        } else {
+            ""
+        };
+
+    let candidate = candidate.join(format!("{prefix}ProgramData\\uv\\uv.toml"));
     candidate.as_path().is_file().then_some(candidate)
 }
 
