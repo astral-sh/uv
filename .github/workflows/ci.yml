@@ -138,6 +138,7 @@ jobs:
         run: rustup component add clippy
 
       - name: "Clippy"
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-dev-generate-all:
