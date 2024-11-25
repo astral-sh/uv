@@ -689,6 +689,8 @@ impl ProjectInterpreter {
                             ));
                         }
                     }
+                    // If the environment is an empty directory, it's fine to use
+                    InvalidEnvironmentKind::Empty => {}
                 };
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
@@ -807,10 +809,15 @@ pub(crate) async fn get_or_init_environment(
                 (Ok(false), Ok(false)) => false,
                 // If it's not a virtual environment, bail
                 (Ok(true), Ok(false)) => {
-                    return Err(ProjectError::InvalidProjectEnvironmentDir(
-                        venv,
-                        "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
-                    ));
+                    // Unless it's empty, in which case we just ignore it
+                    if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+                        false
+                    } else {
+                        return Err(ProjectError::InvalidProjectEnvironmentDir(
+                            venv,
+                            "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                        ));
+                    }
                 }
                 // Similarly, if we can't _tell_ if it exists we should bail
                 (_, Err(err)) | (Err(err), _) => {
