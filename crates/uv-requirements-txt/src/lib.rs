@@ -52,7 +52,6 @@ use uv_distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecific
 use uv_fs::Simplified;
 use uv_pep508::{expand_env_vars, Pep508Error, RequirementOrigin, VerbatimUrl};
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
-use uv_warnings::warn_user;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
@@ -219,16 +218,6 @@ impl RequirementsTxt {
             file: requirements_txt.to_path_buf(),
             error: err,
         })?;
-        if data == Self::default() {
-            if requirements_txt == Path::new("-") {
-                warn_user!("No dependencies found in stdin");
-            } else {
-                warn_user!(
-                    "Requirements file {} does not contain any dependencies",
-                    requirements_txt.user_display()
-                );
-            }
-        }
 
         Ok(data)
     }

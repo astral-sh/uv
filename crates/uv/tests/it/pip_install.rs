@@ -50,7 +50,7 @@ fn empty_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Audited in [TIME]
     "###
     );

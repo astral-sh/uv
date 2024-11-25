@@ -1751,7 +1751,7 @@ fn run_empty_requirements_txt() -> Result<()> {
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     "###);
 
     // Then reused in subsequent invocations
@@ -1763,7 +1763,7 @@ fn run_empty_requirements_txt() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     "###);
 
     Ok(())
