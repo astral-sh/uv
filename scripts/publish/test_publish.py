@@ -52,6 +52,7 @@ Docs: https://forgejo.org/docs/latest/user/packages/pypi/
 
 import os
 import re
+import shutil
 import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
@@ -70,6 +71,30 @@ from packaging.version import Version
 
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
 PYTHON_VERSION = os.environ.get("UV_TEST_PUBLISH_PYTHON_VERSION", "3.12")
+# `pyproject.toml` contents using all supported metadata fields, except for the
+# generated header with `[project]`, name and version.
+PYPROJECT_TAIL = """
+authors = [{ name = "konstin", email = "konstin@mailbox.org" }]
+classifiers = ["Topic :: Software Development :: Testing"]
+# Empty for simplicity with the `uv compile` check, anyio still tests,
+# optional-dependencies still test the `Requires-Dist` field.
+dependencies = []
+description = "Add your description here"
+dynamic = ["gui-scripts", "scripts"]
+keywords = ["test", "publish"]
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE*"]
+maintainers = [{ name = "konstin", email = "konstin@mailbox.org" }]
+optional-dependencies = { "async" = ["anyio>=4,<5"] }
+readme = "README.md"
+requires-python = ">=3.12"
+urls = { "github" = "https://github.com/astral-sh/uv" }
+
+# https://github.com/pypa/hatch/issues/1828
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+""".lstrip()
 
 cwd = Path(__file__).parent
 
@@ -200,12 +225,22 @@ def build_project_at_version(
         [uv, "init", "-p", PYTHON_VERSION, "--lib", "--name", project_name, dir_name],
         cwd=cwd,
     )
-    pyproject_toml = project_root.joinpath("pyproject.toml")
-
-    # Set to an unclaimed version
-    toml = pyproject_toml.read_text()
-    toml = re.sub('version = ".*"', f'version = "{version}"', toml)
-    pyproject_toml.write_text(toml)
+    project_root.joinpath("pyproject.toml").write_text(
+        "[project]\n"
+        + f'name = "{project_name}"\n'
+        # Set to an unclaimed version
+        + f'version = "{version}"\n'
+        # Add all supported metadata
+        + PYPROJECT_TAIL
+    )
+    shutil.copy(
+        cwd.parent.parent.joinpath("LICENSE-APACHE"),
+        cwd.joinpath(dir_name).joinpath("LICENSE-APACHE"),
+    )
+    shutil.copy(
+        cwd.parent.parent.joinpath("LICENSE-MIT"),
+        cwd.joinpath(dir_name).joinpath("LICENSE-MIT"),
+    )
 
     # Modify the code so we get a different source dist and wheel
     if modified:
@@ -262,8 +297,11 @@ def wait_for_index(
             break
 
         print(
-            f"uv pip compile not updated, missing 2 files for {version}: `{output.replace("\\\n    ", "")}`, "
-            f"sleeping for 2s: `{index_url}`"
+            f"uv pip compile not updated, missing 2 files for {version}, "
+            + f"sleeping for 2s: `{index_url}`:\n"
+            + "```\n"
+            + output.replace("\\\n    ", "")
+            + "```"
         )
         sleep(2)
 
