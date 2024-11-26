@@ -291,7 +291,8 @@ async fn build_impl(
     }))
     .await;
 
-    for (source, result) in &results {
+    let mut success = true;
+    for (source, result) in results {
         match result {
             Ok(assets) => match assets {
                 BuiltDistributions::Wheel(wheel) => {
@@ -318,31 +319,30 @@ async fn build_impl(
                 }
             },
             Err(err) => {
-                let mut causes = err.chain();
-
-                let message = format!(
-                    "{}: {}",
-                    "error".red().bold(),
-                    causes.next().unwrap().to_string().trim()
-                );
-                writeln!(printer.stderr(), "{}", source.annotate(&message))?;
-
-                for err in causes {
-                    writeln!(
-                        printer.stderr(),
-                        "  {}: {}",
-                        "Caused by".red().bold(),
-                        err.to_string().trim()
-                    )?;
+                #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+                #[error("Failed to build `{source}`", source = source.cyan())]
+                #[diagnostic()]
+                struct Diagnostic {
+                    source: String,
+                    #[source]
+                    cause: anyhow::Error,
                 }
+
+                let report = miette::Report::new(Diagnostic {
+                    source: source.to_string(),
+                    cause: err,
+                });
+                anstream::eprint!("{report:?}");
+
+                success = false;
             }
         }
     }
 
-    if results.iter().any(|(_, result)| result.is_err()) {
-        Ok(BuildResult::Failure)
-    } else {
+    if success {
         Ok(BuildResult::Success)
+    } else {
+        Ok(BuildResult::Failure)
     }
 }
 
@@ -814,6 +814,16 @@ impl<'a> From<Source<'a>> for AnnotatedSource<'a> {
         Self {
             source,
             package: None,
+        }
+    }
+}
+
+impl std::fmt::Display for AnnotatedSource<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(package) = &self.package {
+            write!(f, "{} @ {}", package, self.path().simplified_display())
+        } else {
+            write!(f, "{}", self.path().simplified_display())
         }
     }
 }
