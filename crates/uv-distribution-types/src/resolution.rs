@@ -188,6 +188,16 @@ pub enum Node {
     },
 }
 
+impl Node {
+    /// Returns `true` if the node should be installed.
+    pub fn install(&self) -> bool {
+        match self {
+            Self::Root => false,
+            Self::Dist { install, .. } => *install,
+        }
+    }
+}
+
 /// An edge in the resolution graph, along with the marker that must be satisfied to traverse it.
 #[derive(Debug, Clone)]
 pub enum Edge {

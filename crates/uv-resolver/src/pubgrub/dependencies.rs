@@ -3,7 +3,7 @@ use std::iter;
 use pubgrub::Ranges;
 use tracing::warn;
 
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
@@ -29,6 +29,7 @@ pub(crate) struct PubGrubDependency {
 impl PubGrubDependency {
     pub(crate) fn from_requirement<'a>(
         requirement: &'a Requirement,
+        dev: Option<&'a GroupName>,
         source_name: Option<&'a PackageName>,
     ) -> impl Iterator<Item = Self> + 'a {
         // Add the package, plus any extra variants.
@@ -45,9 +46,11 @@ impl PubGrubDependency {
                 match &*package {
                     PubGrubPackageInner::Package { name, .. } => {
                         // Detect self-dependencies.
-                        if source_name.is_some_and(|source_name| source_name == name) {
-                            warn!("{name} has a dependency on itself");
-                            return None;
+                        if dev.is_none() {
+                            if source_name.is_some_and(|source_name| source_name == name) {
+                                warn!("{name} has a dependency on itself");
+                                return None;
+                            }
                         }
 
                         Some(PubGrubDependency {
@@ -64,10 +67,13 @@ impl PubGrubDependency {
                         url,
                     }),
                     PubGrubPackageInner::Extra { name, .. } => {
-                        debug_assert!(
-                            !source_name.is_some_and(|source_name| source_name == name),
-                            "extras not flattened for {name}"
-                        );
+                        // Detect self-dependencies.
+                        if dev.is_none() {
+                            debug_assert!(
+                                !source_name.is_some_and(|source_name| source_name == name),
+                                "extras not flattened for {name}"
+                            );
+                        }
                         Some(PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),

@@ -1259,7 +1259,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 requirements
                     .iter()
-                    .flat_map(|requirement| PubGrubDependency::from_requirement(requirement, None))
+                    .flat_map(|requirement| {
+                        PubGrubDependency::from_requirement(requirement, None, None)
+                    })
                     .collect()
             }
             PubGrubPackageInner::Package {
@@ -1445,7 +1447,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let mut dependencies: Vec<_> = requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, Some(name))
+                        PubGrubDependency::from_requirement(requirement, dev.as_ref(), Some(name))
                     })
                     .collect();
 
@@ -1576,6 +1578,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut requirements = self
             .requirements_for_extra(regular_and_dev_dependencies, extra, env, python_requirement)
             .collect::<Vec<_>>();
+
+        // Dependency groups can include the project itself, so no need to flatten recursive
+        // dependencies.
+        if dev.is_some() {
+            return requirements;
+        }
 
         // Check if there are recursive self inclusions and we need to go into the expensive branch.
         if !requirements
@@ -2416,7 +2424,9 @@ impl ForkState {
                         dev: ref dependency_dev,
                         ..
                     } => {
-                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
+                        if self_dev.is_none()
+                            && self_name.is_some_and(|self_name| self_name == dependency_name)
+                        {
                             continue;
                         }
                         let to_url = self.fork_urls.get(dependency_name);
@@ -2444,7 +2454,9 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
+                        if self_dev.is_none()
+                            && self_name.is_some_and(|self_name| self_name == dependency_name)
+                        {
                             continue;
                         }
                         let to_url = self.fork_urls.get(dependency_name);
@@ -2473,7 +2485,9 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
+                        if self_dev.is_none()
+                            && self_name.is_some_and(|self_name| self_name == dependency_name)
+                        {
                             continue;
                         }
                         let to_url = self.fork_urls.get(dependency_name);
@@ -2502,7 +2516,9 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
+                        if self_dev.is_none()
+                            && self_name.is_some_and(|self_name| self_name == dependency_name)
+                        {
                             continue;
                         }
                         let to_url = self.fork_urls.get(dependency_name);

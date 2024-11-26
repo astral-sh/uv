@@ -230,7 +230,19 @@ impl<'env> InstallTarget<'env> {
                         index
                     }
                     Entry::Occupied(entry) => {
+                        // Critically, if the package is already in the graph, then it's a workspace
+                        // member. If it was omitted due to, e.g., `--only-dev`, but is itself
+                        // referenced as a development dependency, then we need to re-enable it.
                         let index = *entry.get();
+                        let node = &mut petgraph[index];
+                        if !dev.prod() {
+                            *node = self.package_to_node(
+                                dep_dist,
+                                tags,
+                                build_options,
+                                install_options,
+                            )?;
+                        }
                         index
                     }
                 };
@@ -304,7 +316,14 @@ impl<'env> InstallTarget<'env> {
                     index
                 }
                 Entry::Occupied(entry) => {
+                    // Critically, if the package is already in the graph, then it's a workspace
+                    // member. If it was omitted due to, e.g., `--only-dev`, but is itself
+                    // referenced as a development dependency, then we need to re-enable it.
                     let index = *entry.get();
+                    let node = &mut petgraph[index];
+                    if !dev.prod() {
+                        *node = self.package_to_node(dist, tags, build_options, install_options)?;
+                    }
                     index
                 }
             };

@@ -83,7 +83,7 @@ impl Display for ResolutionGraphNode {
     }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 struct PackageRef<'a> {
     package_name: &'a PackageName,
     version: &'a Version,
