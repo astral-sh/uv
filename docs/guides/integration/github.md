@@ -67,37 +67,6 @@ jobs:
 
 This will respect the Python version pinned in the project.
 
-Or, when using a matrix, as in:
-
-```yaml title="example.yml"
-strategy:
-  matrix:
-    python-version:
-      - "3.10"
-      - "3.11"
-      - "3.12"
-```
-
-Provide the version to the `python install` invocation:
-
-```yaml title="example.yml" hl_lines="14 15"
-name: Example
-
-jobs:
-  uv-example:
-    name: python
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-```
-
 Alternatively, the official GitHub `setup-python` action can be used. This can be faster, because
 GitHub caches the Python versions alongside the runner.
 
@@ -146,6 +115,33 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
+```
+
+## Multiple python versions
+
+When using a matrix strategy, use the `UV_PYTHON` environment variable to set the python version.
+This will override any python version specifications in `pyproject.toml` and `.python-version`:
+
+```yaml title="example.yml"
+jobs:
+  build:
+    name: continuous-integration
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set the python version
+        run: echo "UV_PYTHON=${{ matrix.python-version }}" >> $GITHUB_ENV
 ```
 
 ## Syncing and running
