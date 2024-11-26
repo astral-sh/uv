@@ -47,22 +47,15 @@ impl MarkerEnvironment {
     pub fn get_string(&self, key: LoweredMarkerValueString) -> &str {
         match key {
             LoweredMarkerValueString::ImplementationName => self.implementation_name(),
-            LoweredMarkerValueString::OsName | LoweredMarkerValueString::OsNameDeprecated => {
-                self.os_name()
-            }
-            LoweredMarkerValueString::PlatformMachine
-            | LoweredMarkerValueString::PlatformMachineDeprecated => self.platform_machine(),
-            LoweredMarkerValueString::PlatformPythonImplementation
-            | LoweredMarkerValueString::PlatformPythonImplementationDeprecated
-            | LoweredMarkerValueString::PythonImplementationDeprecated => {
+            LoweredMarkerValueString::OsName => self.os_name(),
+            LoweredMarkerValueString::PlatformMachine => self.platform_machine(),
+            LoweredMarkerValueString::PlatformPythonImplementation => {
                 self.platform_python_implementation()
             }
             LoweredMarkerValueString::PlatformRelease => self.platform_release(),
             LoweredMarkerValueString::PlatformSystem => self.platform_system(),
-            LoweredMarkerValueString::PlatformVersion
-            | LoweredMarkerValueString::PlatformVersionDeprecated => self.platform_version(),
-            LoweredMarkerValueString::SysPlatform
-            | LoweredMarkerValueString::SysPlatformDeprecated => self.sys_platform(),
+            LoweredMarkerValueString::PlatformVersion => self.platform_version(),
+            LoweredMarkerValueString::SysPlatform => self.sys_platform(),
         }
     }
 }
