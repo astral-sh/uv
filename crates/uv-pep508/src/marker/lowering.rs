@@ -7,14 +7,14 @@ use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
 /// Those environment markers with a PEP 440 version as value such as `python_version`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[allow(clippy::enum_variant_names)]
-pub enum LoweredMarkerValueVersion {
+pub enum CanonicalMarkerValueVersion {
     /// `implementation_version`
     ImplementationVersion,
     /// `python_full_version`
     PythonFullVersion,
 }
 
-impl Display for LoweredMarkerValueVersion {
+impl Display for CanonicalMarkerValueVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ImplementationVersion => f.write_str("implementation_version"),
@@ -23,18 +23,18 @@ impl Display for LoweredMarkerValueVersion {
     }
 }
 
-impl From<LoweredMarkerValueVersion> for MarkerValueVersion {
-    fn from(value: LoweredMarkerValueVersion) -> Self {
+impl From<CanonicalMarkerValueVersion> for MarkerValueVersion {
+    fn from(value: CanonicalMarkerValueVersion) -> Self {
         match value {
-            LoweredMarkerValueVersion::ImplementationVersion => Self::ImplementationVersion,
-            LoweredMarkerValueVersion::PythonFullVersion => Self::PythonFullVersion,
+            CanonicalMarkerValueVersion::ImplementationVersion => Self::ImplementationVersion,
+            CanonicalMarkerValueVersion::PythonFullVersion => Self::PythonFullVersion,
         }
     }
 }
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum LoweredMarkerValueString {
+pub enum CanonicalMarkerValueString {
     /// `implementation_name`
     ImplementationName,
     /// `os_name`
@@ -54,7 +54,7 @@ pub enum LoweredMarkerValueString {
     SysPlatform,
 }
 
-impl From<MarkerValueString> for LoweredMarkerValueString {
+impl From<MarkerValueString> for CanonicalMarkerValueString {
     fn from(value: MarkerValueString) -> Self {
         match value {
             MarkerValueString::ImplementationName => Self::ImplementationName,
@@ -77,24 +77,24 @@ impl From<MarkerValueString> for LoweredMarkerValueString {
     }
 }
 
-impl From<LoweredMarkerValueString> for MarkerValueString {
-    fn from(value: LoweredMarkerValueString) -> Self {
+impl From<CanonicalMarkerValueString> for MarkerValueString {
+    fn from(value: CanonicalMarkerValueString) -> Self {
         match value {
-            LoweredMarkerValueString::ImplementationName => Self::ImplementationName,
-            LoweredMarkerValueString::OsName => Self::OsName,
-            LoweredMarkerValueString::PlatformMachine => Self::PlatformMachine,
-            LoweredMarkerValueString::PlatformPythonImplementation => {
+            CanonicalMarkerValueString::ImplementationName => Self::ImplementationName,
+            CanonicalMarkerValueString::OsName => Self::OsName,
+            CanonicalMarkerValueString::PlatformMachine => Self::PlatformMachine,
+            CanonicalMarkerValueString::PlatformPythonImplementation => {
                 Self::PlatformPythonImplementation
             }
-            LoweredMarkerValueString::PlatformRelease => Self::PlatformRelease,
-            LoweredMarkerValueString::PlatformSystem => Self::PlatformSystem,
-            LoweredMarkerValueString::PlatformVersion => Self::PlatformVersion,
-            LoweredMarkerValueString::SysPlatform => Self::SysPlatform,
+            CanonicalMarkerValueString::PlatformRelease => Self::PlatformRelease,
+            CanonicalMarkerValueString::PlatformSystem => Self::PlatformSystem,
+            CanonicalMarkerValueString::PlatformVersion => Self::PlatformVersion,
+            CanonicalMarkerValueString::SysPlatform => Self::SysPlatform,
         }
     }
 }
 
-impl Display for LoweredMarkerValueString {
+impl Display for CanonicalMarkerValueString {
     /// Normalizes deprecated names to the proper ones
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -112,12 +112,12 @@ impl Display for LoweredMarkerValueString {
 
 /// The [`ExtraName`] value used in `extra` markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub enum LoweredMarkerValueExtra {
+pub enum CanonicalMarkerValueExtra {
     /// A valid [`ExtraName`].
     Extra(ExtraName),
 }
 
-impl LoweredMarkerValueExtra {
+impl CanonicalMarkerValueExtra {
     /// Returns the [`ExtraName`] value.
     pub fn extra(&self) -> &ExtraName {
         match self {
@@ -126,15 +126,15 @@ impl LoweredMarkerValueExtra {
     }
 }
 
-impl From<LoweredMarkerValueExtra> for MarkerValueExtra {
-    fn from(value: LoweredMarkerValueExtra) -> Self {
+impl From<CanonicalMarkerValueExtra> for MarkerValueExtra {
+    fn from(value: CanonicalMarkerValueExtra) -> Self {
         match value {
-            LoweredMarkerValueExtra::Extra(extra) => Self::Extra(extra),
+            CanonicalMarkerValueExtra::Extra(extra) => Self::Extra(extra),
         }
     }
 }
 
-impl Display for LoweredMarkerValueExtra {
+impl Display for CanonicalMarkerValueExtra {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Extra(extra) => extra.fmt(f),

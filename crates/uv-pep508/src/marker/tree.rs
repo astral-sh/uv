@@ -13,7 +13,7 @@ use super::algebra::{Edges, NodeId, Variable, INTERNER};
 use super::simplify;
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
-    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion,
+    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
 use crate::marker::parse;
 use crate::{
@@ -1270,13 +1270,13 @@ pub enum MarkerTreeKind<'a> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct VersionMarkerTree<'a> {
     id: NodeId,
-    key: LoweredMarkerValueVersion,
+    key: CanonicalMarkerValueVersion,
     map: &'a [(Ranges<Version>, NodeId)],
 }
 
 impl VersionMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> LoweredMarkerValueVersion {
+    pub fn key(&self) -> CanonicalMarkerValueVersion {
         self.key
     }
 
@@ -1306,13 +1306,13 @@ impl Ord for VersionMarkerTree<'_> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StringMarkerTree<'a> {
     id: NodeId,
-    key: LoweredMarkerValueString,
+    key: CanonicalMarkerValueString,
     map: &'a [(Ranges<String>, NodeId)],
 }
 
 impl StringMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> LoweredMarkerValueString {
+    pub fn key(&self) -> CanonicalMarkerValueString {
         self.key
     }
 
@@ -1341,7 +1341,7 @@ impl Ord for StringMarkerTree<'_> {
 /// A string marker node with the `in` operator, such as `os_name in 'WindowsLinux'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct InMarkerTree<'a> {
-    key: LoweredMarkerValueString,
+    key: CanonicalMarkerValueString,
     value: &'a str,
     high: NodeId,
     low: NodeId,
@@ -1349,7 +1349,7 @@ pub struct InMarkerTree<'a> {
 
 impl InMarkerTree<'_> {
     /// The key (LHS) for this expression.
-    pub fn key(&self) -> LoweredMarkerValueString {
+    pub fn key(&self) -> CanonicalMarkerValueString {
         self.key
     }
 
@@ -1391,7 +1391,7 @@ impl Ord for InMarkerTree<'_> {
 /// A string marker node with inverse of the `in` operator, such as `'nux' in os_name`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ContainsMarkerTree<'a> {
-    key: LoweredMarkerValueString,
+    key: CanonicalMarkerValueString,
     value: &'a str,
     high: NodeId,
     low: NodeId,
@@ -1399,7 +1399,7 @@ pub struct ContainsMarkerTree<'a> {
 
 impl ContainsMarkerTree<'_> {
     /// The key (LHS) for this expression.
-    pub fn key(&self) -> LoweredMarkerValueString {
+    pub fn key(&self) -> CanonicalMarkerValueString {
         self.key
     }
 
@@ -1441,14 +1441,14 @@ impl Ord for ContainsMarkerTree<'_> {
 /// A node representing the existence or absence of a given extra, such as `extra == 'bar'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ExtraMarkerTree<'a> {
-    name: &'a LoweredMarkerValueExtra,
+    name: &'a CanonicalMarkerValueExtra,
     high: NodeId,
     low: NodeId,
 }
 
 impl ExtraMarkerTree<'_> {
     /// Returns the name of the extra in this expression.
-    pub fn name(&self) -> &LoweredMarkerValueExtra {
+    pub fn name(&self) -> &CanonicalMarkerValueExtra {
         self.name
     }
 

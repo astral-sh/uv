@@ -1,6 +1,6 @@
 use pubgrub::Range;
 use uv_pep440::Version;
-use uv_pep508::{LoweredMarkerValueVersion, MarkerTree, MarkerTreeKind};
+use uv_pep508::{CanonicalMarkerValueVersion, MarkerTree, MarkerTreeKind};
 
 use crate::requires_python::{LowerBound, RequiresPythonRange, UpperBound};
 
@@ -10,14 +10,14 @@ pub(crate) fn requires_python(tree: &MarkerTree) -> Option<RequiresPythonRange> 
         match tree.kind() {
             MarkerTreeKind::True | MarkerTreeKind::False => {}
             MarkerTreeKind::Version(marker) => match marker.key() {
-                LoweredMarkerValueVersion::PythonFullVersion => {
+                CanonicalMarkerValueVersion::PythonFullVersion => {
                     for (range, tree) in marker.edges() {
                         if !tree.is_false() {
                             markers.push(range.clone());
                         }
                     }
                 }
-                LoweredMarkerValueVersion::ImplementationVersion => {
+                CanonicalMarkerValueVersion::ImplementationVersion => {
                     for (_, tree) in marker.edges() {
                         collect_python_markers(&tree, markers);
                     }

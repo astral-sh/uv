@@ -57,7 +57,7 @@ use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier}
 use version_ranges::Ranges;
 
 use crate::marker::lowering::{
-    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion,
+    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
 use crate::marker::MarkerValueExtra;
 use crate::ExtraOperator;
@@ -162,18 +162,18 @@ impl InternerGuard<'_> {
             // to disjoint version ranges.
             MarkerExpression::Version { key, specifier } => match key {
                 MarkerValueVersion::ImplementationVersion => (
-                    Variable::Version(LoweredMarkerValueVersion::ImplementationVersion),
+                    Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
                     Edges::from_specifier(specifier),
                 ),
                 MarkerValueVersion::PythonFullVersion => (
-                    Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+                    Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
                     Edges::from_specifier(specifier),
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
                     match python_version_to_full_version(normalize_specifier(specifier)) {
                         Ok(specifier) => (
-                            Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+                            Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
                             Edges::from_specifier(specifier),
                         ),
                         Err(node) => return node,
@@ -188,18 +188,18 @@ impl InternerGuard<'_> {
                 negated,
             } => match key {
                 MarkerValueVersion::ImplementationVersion => (
-                    Variable::Version(LoweredMarkerValueVersion::ImplementationVersion),
+                    Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
                     Edges::from_versions(&versions, negated),
                 ),
                 MarkerValueVersion::PythonFullVersion => (
-                    Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+                    Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
                     Edges::from_versions(&versions, negated),
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
                     match Edges::from_python_versions(versions, negated) {
                         Ok(edges) => (
-                            Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+                            Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
                             edges,
                         ),
                         Err(node) => return node,
@@ -275,14 +275,14 @@ impl InternerGuard<'_> {
                 name: MarkerValueExtra::Extra(extra),
                 operator: ExtraOperator::Equal,
             } => (
-                Variable::Extra(LoweredMarkerValueExtra::Extra(extra)),
+                Variable::Extra(CanonicalMarkerValueExtra::Extra(extra)),
                 Edges::from_bool(true),
             ),
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Extra(extra),
                 operator: ExtraOperator::NotEqual,
             } => (
-                Variable::Extra(LoweredMarkerValueExtra::Extra(extra)),
+                Variable::Extra(CanonicalMarkerValueExtra::Extra(extra)),
                 Edges::from_bool(false),
             ),
             // Invalid extras are always `false`.
@@ -443,7 +443,7 @@ impl InternerGuard<'_> {
         // Look for a `python_full_version` expression, otherwise
         // we recursively simplify.
         let Node {
-            var: Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+            var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
         else {
@@ -516,7 +516,7 @@ impl InternerGuard<'_> {
             return NodeId::FALSE;
         }
         if matches!(i, NodeId::TRUE) {
-            let var = Variable::Version(LoweredMarkerValueVersion::PythonFullVersion);
+            let var = Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion);
             let edges = Edges::Version {
                 edges: Edges::from_range(&py_range),
             };
@@ -525,7 +525,7 @@ impl InternerGuard<'_> {
 
         let node = self.shared.node(i);
         let Node {
-            var: Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+            var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
         else {
@@ -621,26 +621,26 @@ pub(crate) enum Variable {
     ///
     /// This is the highest order variable as it typically contains the most complex
     /// ranges, allowing us to merge ranges at the top-level.
-    Version(LoweredMarkerValueVersion),
+    Version(CanonicalMarkerValueVersion),
     /// A string marker, such as `os_name`.
-    String(LoweredMarkerValueString),
+    String(CanonicalMarkerValueString),
     /// A variable representing a `<key> in <value>` expression for a particular
     /// string marker and value.
     In {
-        key: LoweredMarkerValueString,
+        key: CanonicalMarkerValueString,
         value: String,
     },
     /// A variable representing a `<value> in <key>` expression for a particular
     /// string marker and value.
     Contains {
-        key: LoweredMarkerValueString,
+        key: CanonicalMarkerValueString,
         value: String,
     },
     /// A variable representing the existence or absence of a given extra.
     ///
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
-    Extra(LoweredMarkerValueExtra),
+    Extra(CanonicalMarkerValueExtra),
 }
 
 /// A decision node in an Algebraic Decision Diagram.
