@@ -189,15 +189,14 @@ fn built_by_uv_editable() -> Result<()> {
     uv_snapshot!(Command::new(context.interpreter())
         .arg("-m")
         .arg("pytest")
-        // Avoid showing absolute paths
-        .arg("--no-header")
-        // Otherwise, the header has a different length on windows
+        // Avoid showing absolute paths and column dependent layout
         .arg("--quiet")
+        .arg("--capture=no")
         .current_dir(built_by_uv), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    ..                                                                       [100%]
+    ..
     2 passed in [TIME]
 
     ----- stderr -----
