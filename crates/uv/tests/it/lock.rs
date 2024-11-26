@@ -1369,6 +1369,7 @@ fn lock_project_extra() -> Result<()> {
     Ok(())
 }
 
+/// Lock a project with `uv.tool.override-dependencies`.
 #[test]
 fn lock_project_with_overrides() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1432,6 +1433,69 @@ fn lock_project_with_overrides() -> Result<()> {
     Ok(())
 }
 
+/// Lock a project with `uv.tool.override-dependencies` that reference `tool.uv.sources`.
+#[test]
+fn lock_project_with_override_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        override-dependencies = ["idna==3.2"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Install the base dependencies from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.constraint-dependencies`.
 #[test]
 fn lock_project_with_constraints() -> Result<()> {
@@ -1485,6 +1549,69 @@ fn lock_project_with_constraints() -> Result<()> {
     Installed 4 packages in [TIME]
      + anyio==3.7.0
      + idna==3.3
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Lock a project with `uv.tool.constraint-dependencies` that reference `tool.uv.sources`.
+#[test]
+fn lock_project_with_constraint_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        constraint-dependencies = ["idna<3.4"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Install the base dependencies from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "###);
@@ -14575,6 +14702,88 @@ fn lock_non_project_group() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Lock a (legacy) non-project workspace root with `tool.uv.sources`.
+#[test]
+fn lock_non_project_sources() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [tool.uv]
+        dev-dependencies = ["idna"]
+
+        [tool.uv.sources]
+        idna = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "idna", url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }]
+
+        [[package]]
+        name = "idna"
+        version = "3.2"
+        source = { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", hash = "sha256:14475042e284991034cb48e06f6851428fb14c4dc953acd9be9a5e95c7b6dd7a" },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    "###);
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
     "###);
 
     Ok(())
