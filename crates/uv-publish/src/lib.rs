@@ -613,20 +613,49 @@ async fn form_metadata(
 ) -> Result<Vec<(&'static str, String)>, PublishPrepareError> {
     let hash_hex = hash_file(file, Hasher::from(HashAlgorithm::Sha256)).await?;
 
-    let metadata = metadata(file, filename).await?;
+    let Metadata23 {
+        metadata_version,
+        name,
+        version,
+        platforms,
+        // Not used by PyPI legacy upload
+        supported_platforms: _,
+        summary,
+        description,
+        description_content_type,
+        keywords,
+        home_page,
+        download_url,
+        author,
+        author_email,
+        maintainer,
+        maintainer_email,
+        license,
+        license_expression,
+        license_files,
+        classifiers,
+        requires_dist,
+        provides_dist,
+        obsoletes_dist,
+        requires_python,
+        requires_external,
+        project_urls,
+        provides_extras,
+        dynamic,
+    } = metadata(file, filename).await?;
 
     let mut form_metadata = vec![
         (":action", "file_upload".to_string()),
         ("sha256_digest", hash_hex.digest.to_string()),
         ("protocol_version", "1".to_string()),
-        ("metadata_version", metadata.metadata_version.clone()),
+        ("metadata_version", metadata_version.clone()),
         // Twine transforms the name with `re.sub("[^A-Za-z0-9.]+", "-", name)`
         // * <https://github.com/pypa/twine/issues/743>
         // * <https://github.com/pypa/twine/blob/5bf3f38ff3d8b2de47b7baa7b652c697d7a64776/twine/package.py#L57-L65>
         // warehouse seems to call `packaging.utils.canonicalize_name` nowadays and has a separate
         // `normalized_name`, so we'll start with this and we'll readjust if there are user reports.
-        ("name", metadata.name.clone()),
-        ("version", metadata.version.clone()),
+        ("name", name.clone()),
+        ("version", version.clone()),
         ("filetype", filename.filetype().to_string()),
     ];
 
@@ -642,27 +671,22 @@ async fn form_metadata(
         }
     };
 
-    add_option("summary", metadata.summary);
-    add_option("description", metadata.description);
-    add_option(
-        "description_content_type",
-        metadata.description_content_type,
-    );
-    add_option("author", metadata.author);
-    add_option("author_email", metadata.author_email);
-    add_option("maintainer", metadata.maintainer);
-    add_option("maintainer_email", metadata.maintainer_email);
-    add_option("license", metadata.license);
-    add_option("keywords", metadata.keywords);
-    add_option("home_page", metadata.home_page);
-    add_option("download_url", metadata.download_url);
+    add_option("author", author);
+    add_option("author_email", author_email);
+    add_option("description", description);
+    add_option("description_content_type", description_content_type);
+    add_option("download_url", download_url);
+    add_option("home_page", home_page);
+    add_option("keywords", keywords);
+    add_option("license", license);
+    add_option("license_expression", license_expression);
+    add_option("maintainer", maintainer);
+    add_option("maintainer_email", maintainer_email);
+    add_option("summary", summary);
 
     // The GitLab PyPI repository API implementation requires this metadata field and twine always
     // includes it in the request, even when it's empty.
-    form_metadata.push((
-        "requires_python",
-        metadata.requires_python.unwrap_or(String::new()),
-    ));
+    form_metadata.push(("requires_python", requires_python.unwrap_or(String::new())));
 
     let mut add_vec = |name, values: Vec<String>| {
         for i in values {
@@ -670,13 +694,16 @@ async fn form_metadata(
         }
     };
 
-    add_vec("classifiers", metadata.classifiers);
-    add_vec("platform", metadata.platforms);
-    add_vec("requires_dist", metadata.requires_dist);
-    add_vec("provides_dist", metadata.provides_dist);
-    add_vec("obsoletes_dist", metadata.obsoletes_dist);
-    add_vec("requires_external", metadata.requires_external);
-    add_vec("project_urls", metadata.project_urls);
+    add_vec("classifiers", classifiers);
+    add_vec("dynamic", dynamic);
+    add_vec("license_file", license_files);
+    add_vec("obsoletes_dist", obsoletes_dist);
+    add_vec("platform", platforms);
+    add_vec("project_urls", project_urls);
+    add_vec("provides_dist", provides_dist);
+    add_vec("provides_extra", provides_extras);
+    add_vec("requires_dist", requires_dist);
+    add_vec("requires_external", requires_external);
 
     Ok(form_metadata)
 }
@@ -848,52 +875,54 @@ mod tests {
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
         assert_snapshot!(&formatted_metadata, @r###"
-    :action: file_upload
-    sha256_digest: 89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
-    protocol_version: 1
-    metadata_version: 2.3
-    name: tqdm
-    version: 999.0.0
-    filetype: sdist
-    pyversion: source
-    description: # tqdm
+        :action: file_upload
+        sha256_digest: 89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+        protocol_version: 1
+        metadata_version: 2.3
+        name: tqdm
+        version: 999.0.0
+        filetype: sdist
+        pyversion: source
+        author_email: Charlie Marsh <charlie.r.marsh@gmail.com>
+        description: # tqdm
 
-    [![PyPI - Version](https://img.shields.io/pypi/v/tqdm.svg)](https://pypi.org/project/tqdm)
-    [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/tqdm.svg)](https://pypi.org/project/tqdm)
+        [![PyPI - Version](https://img.shields.io/pypi/v/tqdm.svg)](https://pypi.org/project/tqdm)
+        [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/tqdm.svg)](https://pypi.org/project/tqdm)
 
-    -----
+        -----
 
-    **Table of Contents**
+        **Table of Contents**
 
-    - [Installation](#installation)
-    - [License](#license)
+        - [Installation](#installation)
+        - [License](#license)
 
-    ## Installation
+        ## Installation
 
-    ```console
-    pip install tqdm
-    ```
+        ```console
+        pip install tqdm
+        ```
 
-    ## License
+        ## License
 
-    `tqdm` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
+        `tqdm` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
 
-    description_content_type: text/markdown
-    author_email: Charlie Marsh <charlie.r.marsh@gmail.com>
-    requires_python: >=3.8
-    classifiers: Development Status :: 4 - Beta
-    classifiers: Programming Language :: Python
-    classifiers: Programming Language :: Python :: 3.8
-    classifiers: Programming Language :: Python :: 3.9
-    classifiers: Programming Language :: Python :: 3.10
-    classifiers: Programming Language :: Python :: 3.11
-    classifiers: Programming Language :: Python :: 3.12
-    classifiers: Programming Language :: Python :: Implementation :: CPython
-    classifiers: Programming Language :: Python :: Implementation :: PyPy
-    project_urls: Documentation, https://github.com/unknown/tqdm#readme
-    project_urls: Issues, https://github.com/unknown/tqdm/issues
-    project_urls: Source, https://github.com/unknown/tqdm
-    "###);
+        description_content_type: text/markdown
+        license_expression: MIT
+        requires_python: >=3.8
+        classifiers: Development Status :: 4 - Beta
+        classifiers: Programming Language :: Python
+        classifiers: Programming Language :: Python :: 3.8
+        classifiers: Programming Language :: Python :: 3.9
+        classifiers: Programming Language :: Python :: 3.10
+        classifiers: Programming Language :: Python :: 3.11
+        classifiers: Programming Language :: Python :: 3.12
+        classifiers: Programming Language :: Python :: Implementation :: CPython
+        classifiers: Programming Language :: Python :: Implementation :: PyPy
+        license_file: LICENSE.txt
+        project_urls: Documentation, https://github.com/unknown/tqdm#readme
+        project_urls: Issues, https://github.com/unknown/tqdm/issues
+        project_urls: Source, https://github.com/unknown/tqdm
+        "###);
 
         let (request, _) = build_request(
             &file,
@@ -958,87 +987,92 @@ mod tests {
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
         assert_snapshot!(&formatted_metadata, @r###"
-    :action: file_upload
-    sha256_digest: 0d88ca657bc6b64995ca416e0c59c71af85cc10015d940fa446c42a8b485ee1c
-    protocol_version: 1
-    metadata_version: 2.1
-    name: tqdm
-    version: 4.66.1
-    filetype: bdist_wheel
-    pyversion: py3
-    summary: Fast, Extensible Progress Meter
-    description_content_type: text/x-rst
-    maintainer_email: tqdm developers <devs@tqdm.ml>
-    license: MPL-2.0 AND MIT
-    keywords: progressbar,progressmeter,progress,bar,meter,rate,eta,console,terminal,time
-    requires_python: >=3.7
-    classifiers: Development Status :: 5 - Production/Stable
-    classifiers: Environment :: Console
-    classifiers: Environment :: MacOS X
-    classifiers: Environment :: Other Environment
-    classifiers: Environment :: Win32 (MS Windows)
-    classifiers: Environment :: X11 Applications
-    classifiers: Framework :: IPython
-    classifiers: Framework :: Jupyter
-    classifiers: Intended Audience :: Developers
-    classifiers: Intended Audience :: Education
-    classifiers: Intended Audience :: End Users/Desktop
-    classifiers: Intended Audience :: Other Audience
-    classifiers: Intended Audience :: System Administrators
-    classifiers: License :: OSI Approved :: MIT License
-    classifiers: License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)
-    classifiers: Operating System :: MacOS
-    classifiers: Operating System :: MacOS :: MacOS X
-    classifiers: Operating System :: Microsoft
-    classifiers: Operating System :: Microsoft :: MS-DOS
-    classifiers: Operating System :: Microsoft :: Windows
-    classifiers: Operating System :: POSIX
-    classifiers: Operating System :: POSIX :: BSD
-    classifiers: Operating System :: POSIX :: BSD :: FreeBSD
-    classifiers: Operating System :: POSIX :: Linux
-    classifiers: Operating System :: POSIX :: SunOS/Solaris
-    classifiers: Operating System :: Unix
-    classifiers: Programming Language :: Python
-    classifiers: Programming Language :: Python :: 3
-    classifiers: Programming Language :: Python :: 3.7
-    classifiers: Programming Language :: Python :: 3.8
-    classifiers: Programming Language :: Python :: 3.9
-    classifiers: Programming Language :: Python :: 3.10
-    classifiers: Programming Language :: Python :: 3.11
-    classifiers: Programming Language :: Python :: 3 :: Only
-    classifiers: Programming Language :: Python :: Implementation
-    classifiers: Programming Language :: Python :: Implementation :: IronPython
-    classifiers: Programming Language :: Python :: Implementation :: PyPy
-    classifiers: Programming Language :: Unix Shell
-    classifiers: Topic :: Desktop Environment
-    classifiers: Topic :: Education :: Computer Aided Instruction (CAI)
-    classifiers: Topic :: Education :: Testing
-    classifiers: Topic :: Office/Business
-    classifiers: Topic :: Other/Nonlisted Topic
-    classifiers: Topic :: Software Development :: Build Tools
-    classifiers: Topic :: Software Development :: Libraries
-    classifiers: Topic :: Software Development :: Libraries :: Python Modules
-    classifiers: Topic :: Software Development :: Pre-processors
-    classifiers: Topic :: Software Development :: User Interfaces
-    classifiers: Topic :: System :: Installation/Setup
-    classifiers: Topic :: System :: Logging
-    classifiers: Topic :: System :: Monitoring
-    classifiers: Topic :: System :: Shells
-    classifiers: Topic :: Terminals
-    classifiers: Topic :: Utilities
-    requires_dist: colorama ; platform_system == "Windows"
-    requires_dist: pytest >=6 ; extra == 'dev'
-    requires_dist: pytest-cov ; extra == 'dev'
-    requires_dist: pytest-timeout ; extra == 'dev'
-    requires_dist: pytest-xdist ; extra == 'dev'
-    requires_dist: ipywidgets >=6 ; extra == 'notebook'
-    requires_dist: slack-sdk ; extra == 'slack'
-    requires_dist: requests ; extra == 'telegram'
-    project_urls: homepage, https://tqdm.github.io
-    project_urls: repository, https://github.com/tqdm/tqdm
-    project_urls: changelog, https://tqdm.github.io/releases
-    project_urls: wiki, https://github.com/tqdm/tqdm/wiki
-    "###);
+        :action: file_upload
+        sha256_digest: 0d88ca657bc6b64995ca416e0c59c71af85cc10015d940fa446c42a8b485ee1c
+        protocol_version: 1
+        metadata_version: 2.1
+        name: tqdm
+        version: 4.66.1
+        filetype: bdist_wheel
+        pyversion: py3
+        description_content_type: text/x-rst
+        keywords: progressbar,progressmeter,progress,bar,meter,rate,eta,console,terminal,time
+        license: MPL-2.0 AND MIT
+        maintainer_email: tqdm developers <devs@tqdm.ml>
+        summary: Fast, Extensible Progress Meter
+        requires_python: >=3.7
+        classifiers: Development Status :: 5 - Production/Stable
+        classifiers: Environment :: Console
+        classifiers: Environment :: MacOS X
+        classifiers: Environment :: Other Environment
+        classifiers: Environment :: Win32 (MS Windows)
+        classifiers: Environment :: X11 Applications
+        classifiers: Framework :: IPython
+        classifiers: Framework :: Jupyter
+        classifiers: Intended Audience :: Developers
+        classifiers: Intended Audience :: Education
+        classifiers: Intended Audience :: End Users/Desktop
+        classifiers: Intended Audience :: Other Audience
+        classifiers: Intended Audience :: System Administrators
+        classifiers: License :: OSI Approved :: MIT License
+        classifiers: License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)
+        classifiers: Operating System :: MacOS
+        classifiers: Operating System :: MacOS :: MacOS X
+        classifiers: Operating System :: Microsoft
+        classifiers: Operating System :: Microsoft :: MS-DOS
+        classifiers: Operating System :: Microsoft :: Windows
+        classifiers: Operating System :: POSIX
+        classifiers: Operating System :: POSIX :: BSD
+        classifiers: Operating System :: POSIX :: BSD :: FreeBSD
+        classifiers: Operating System :: POSIX :: Linux
+        classifiers: Operating System :: POSIX :: SunOS/Solaris
+        classifiers: Operating System :: Unix
+        classifiers: Programming Language :: Python
+        classifiers: Programming Language :: Python :: 3
+        classifiers: Programming Language :: Python :: 3.7
+        classifiers: Programming Language :: Python :: 3.8
+        classifiers: Programming Language :: Python :: 3.9
+        classifiers: Programming Language :: Python :: 3.10
+        classifiers: Programming Language :: Python :: 3.11
+        classifiers: Programming Language :: Python :: 3 :: Only
+        classifiers: Programming Language :: Python :: Implementation
+        classifiers: Programming Language :: Python :: Implementation :: IronPython
+        classifiers: Programming Language :: Python :: Implementation :: PyPy
+        classifiers: Programming Language :: Unix Shell
+        classifiers: Topic :: Desktop Environment
+        classifiers: Topic :: Education :: Computer Aided Instruction (CAI)
+        classifiers: Topic :: Education :: Testing
+        classifiers: Topic :: Office/Business
+        classifiers: Topic :: Other/Nonlisted Topic
+        classifiers: Topic :: Software Development :: Build Tools
+        classifiers: Topic :: Software Development :: Libraries
+        classifiers: Topic :: Software Development :: Libraries :: Python Modules
+        classifiers: Topic :: Software Development :: Pre-processors
+        classifiers: Topic :: Software Development :: User Interfaces
+        classifiers: Topic :: System :: Installation/Setup
+        classifiers: Topic :: System :: Logging
+        classifiers: Topic :: System :: Monitoring
+        classifiers: Topic :: System :: Shells
+        classifiers: Topic :: Terminals
+        classifiers: Topic :: Utilities
+        license_file: LICENCE
+        project_urls: homepage, https://tqdm.github.io
+        project_urls: repository, https://github.com/tqdm/tqdm
+        project_urls: changelog, https://tqdm.github.io/releases
+        project_urls: wiki, https://github.com/tqdm/tqdm/wiki
+        provides_extra: dev
+        provides_extra: notebook
+        provides_extra: slack
+        provides_extra: telegram
+        requires_dist: colorama ; platform_system == "Windows"
+        requires_dist: pytest >=6 ; extra == 'dev'
+        requires_dist: pytest-cov ; extra == 'dev'
+        requires_dist: pytest-timeout ; extra == 'dev'
+        requires_dist: pytest-xdist ; extra == 'dev'
+        requires_dist: ipywidgets >=6 ; extra == 'notebook'
+        requires_dist: slack-sdk ; extra == 'slack'
+        requires_dist: requests ; extra == 'telegram'
+        "###);
 
         let (request, _) = build_request(
             &file,
