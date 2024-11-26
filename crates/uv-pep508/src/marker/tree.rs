@@ -10,14 +10,16 @@ use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 use version_ranges::Ranges;
 
+use super::algebra::{Edges, NodeId, Variable, INTERNER};
+use super::simplify;
 use crate::cursor::Cursor;
+use crate::marker::lowering::{
+    LoweredMarkerValueExtra, LoweredMarkerValueString, LoweredMarkerValueVersion,
+};
 use crate::marker::parse;
 use crate::{
     MarkerEnvironment, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter, TracingReporter,
 };
-
-use super::algebra::{Edges, NodeId, Variable, INTERNER};
-use super::simplify;
 
 /// Ways in which marker evaluation can fail
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -823,7 +825,6 @@ impl MarkerTree {
 
     /// Does this marker apply in the given environment?
     pub fn evaluate(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
-        self.report_deprecated_options(&mut TracingReporter);
         self.evaluate_reporter_impl(env, extras, &mut TracingReporter)
     }
 
@@ -839,7 +840,6 @@ impl MarkerTree {
         env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
     ) -> bool {
-        self.report_deprecated_options(&mut TracingReporter);
         match env {
             None => self.evaluate_extras(extras),
             Some(env) => self.evaluate_reporter_impl(env, extras, &mut TracingReporter),
@@ -854,7 +854,6 @@ impl MarkerTree {
         extras: &[ExtraName],
         reporter: &mut impl Reporter,
     ) -> bool {
-        self.report_deprecated_options(reporter);
         self.evaluate_reporter_impl(env, extras, reporter)
     }
 
@@ -915,12 +914,7 @@ impl MarkerTree {
             }
             MarkerTreeKind::Extra(marker) => {
                 return marker
-                    .edge(
-                        marker
-                            .name()
-                            .as_extra()
-                            .is_some_and(|extra| extras.contains(extra)),
-                    )
+                    .edge(extras.contains(marker.name().extra()))
                     .evaluate_reporter_impl(env, extras, reporter);
             }
         }
@@ -945,7 +939,7 @@ impl MarkerTree {
             MarkerTreeKind::True => true,
             MarkerTreeKind::False => false,
             MarkerTreeKind::Version(marker) => marker.edges().any(|(range, tree)| {
-                if marker.key() == MarkerValueVersion::PythonVersion {
+                if marker.key() == LoweredMarkerValueVersion::PythonVersion {
                     if !python_versions
                         .iter()
                         .any(|version| range.contains(version))
@@ -966,12 +960,7 @@ impl MarkerTree {
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
             MarkerTreeKind::Extra(marker) => marker
-                .edge(
-                    marker
-                        .name()
-                        .as_extra()
-                        .is_some_and(|extra| extras.contains(extra)),
-                )
+                .edge(extras.contains(marker.name().extra()))
                 .evaluate_extras_and_python_version(extras, python_versions),
         }
     }
@@ -996,109 +985,8 @@ impl MarkerTree {
                 .children()
                 .any(|(_, tree)| tree.evaluate_extras(extras)),
             MarkerTreeKind::Extra(marker) => marker
-                .edge(
-                    marker
-                        .name()
-                        .as_extra()
-                        .is_some_and(|extra| extras.contains(extra)),
-                )
+                .edge(extras.contains(marker.name().extra()))
                 .evaluate_extras(extras),
-        }
-    }
-
-    /// Same as [`Self::evaluate`], but instead of using logging to warn, you get a Vec with all
-    /// warnings collected
-    pub fn evaluate_collect_warnings(
-        &self,
-        env: &MarkerEnvironment,
-        extras: &[ExtraName],
-    ) -> (bool, Vec<(MarkerWarningKind, String)>) {
-        let mut warnings = Vec::new();
-        let mut reporter = |kind, warning| {
-            warnings.push((kind, warning));
-        };
-        self.report_deprecated_options(&mut reporter);
-        let result = self.evaluate_reporter_impl(env, extras, &mut reporter);
-        (result, warnings)
-    }
-
-    /// Report the deprecated marker from <https://peps.python.org/pep-0345/#environment-markers>
-    fn report_deprecated_options(&self, reporter: &mut impl Reporter) {
-        let string_marker = match self.kind() {
-            MarkerTreeKind::True | MarkerTreeKind::False => return,
-            MarkerTreeKind::String(marker) => marker,
-            MarkerTreeKind::Version(marker) => {
-                for (_, tree) in marker.edges() {
-                    tree.report_deprecated_options(reporter);
-                }
-                return;
-            }
-            MarkerTreeKind::In(marker) => {
-                for (_, tree) in marker.children() {
-                    tree.report_deprecated_options(reporter);
-                }
-                return;
-            }
-            MarkerTreeKind::Contains(marker) => {
-                for (_, tree) in marker.children() {
-                    tree.report_deprecated_options(reporter);
-                }
-                return;
-            }
-            MarkerTreeKind::Extra(marker) => {
-                for (_, tree) in marker.children() {
-                    tree.report_deprecated_options(reporter);
-                }
-                return;
-            }
-        };
-
-        match string_marker.key() {
-            MarkerValueString::OsNameDeprecated => {
-                reporter.report(
-                    MarkerWarningKind::DeprecatedMarkerName,
-                    "os.name is deprecated in favor of os_name".to_string(),
-                );
-            }
-            MarkerValueString::PlatformMachineDeprecated => {
-                reporter.report(
-                    MarkerWarningKind::DeprecatedMarkerName,
-                    "platform.machine is deprecated in favor of platform_machine".to_string(),
-                );
-            }
-            MarkerValueString::PlatformPythonImplementationDeprecated => {
-                reporter.report(
-                    MarkerWarningKind::DeprecatedMarkerName,
-                    "platform.python_implementation is deprecated in favor of
-                        platform_python_implementation"
-                        .to_string(),
-                );
-            }
-            MarkerValueString::PythonImplementationDeprecated => {
-                reporter.report(
-                    MarkerWarningKind::DeprecatedMarkerName,
-                    "python_implementation is deprecated in favor of
-                        platform_python_implementation"
-                        .to_string(),
-                );
-            }
-            MarkerValueString::PlatformVersionDeprecated => {
-                reporter.report(
-                    MarkerWarningKind::DeprecatedMarkerName,
-                    "platform.version is deprecated in favor of platform_version".to_string(),
-                );
-            }
-            MarkerValueString::SysPlatformDeprecated => {
-                reporter.report(
-                    MarkerWarningKind::DeprecatedMarkerName,
-                    "sys.platform  is deprecated in favor of sys_platform".to_string(),
-                );
-            }
-            _ => {}
-        }
-
-        for (_, tree) in string_marker.children() {
-            tree.report_deprecated_options(reporter);
         }
     }
 
@@ -1240,13 +1128,9 @@ impl MarkerTree {
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
-        MarkerTree(INTERNER.lock().restrict(self.0, &|var| {
-            match var {
-                Variable::Extra(name) => name
-                    .as_extra()
-                    .and_then(|name| is_extra(name).then_some(true)),
-                _ => None,
-            }
+        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
+            Variable::Extra(name) => is_extra(name.extra()).then_some(true),
+            _ => None,
         }))
     }
 }
@@ -1430,13 +1314,13 @@ pub enum MarkerTreeKind<'a> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct VersionMarkerTree<'a> {
     id: NodeId,
-    key: MarkerValueVersion,
+    key: LoweredMarkerValueVersion,
     map: &'a [(Ranges<Version>, NodeId)],
 }
 
 impl VersionMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> MarkerValueVersion {
+    pub fn key(&self) -> LoweredMarkerValueVersion {
         self.key
     }
 
@@ -1466,13 +1350,13 @@ impl Ord for VersionMarkerTree<'_> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct StringMarkerTree<'a> {
     id: NodeId,
-    key: MarkerValueString,
+    key: LoweredMarkerValueString,
     map: &'a [(Ranges<String>, NodeId)],
 }
 
 impl StringMarkerTree<'_> {
     /// The key for this node.
-    pub fn key(&self) -> MarkerValueString {
+    pub fn key(&self) -> LoweredMarkerValueString {
         self.key
     }
 
@@ -1501,7 +1385,7 @@ impl Ord for StringMarkerTree<'_> {
 /// A string marker node with the `in` operator, such as `os_name in 'WindowsLinux'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct InMarkerTree<'a> {
-    key: MarkerValueString,
+    key: LoweredMarkerValueString,
     value: &'a str,
     high: NodeId,
     low: NodeId,
@@ -1509,7 +1393,7 @@ pub struct InMarkerTree<'a> {
 
 impl InMarkerTree<'_> {
     /// The key (LHS) for this expression.
-    pub fn key(&self) -> MarkerValueString {
+    pub fn key(&self) -> LoweredMarkerValueString {
         self.key
     }
 
@@ -1551,7 +1435,7 @@ impl Ord for InMarkerTree<'_> {
 /// A string marker node with inverse of the `in` operator, such as `'nux' in os_name`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ContainsMarkerTree<'a> {
-    key: MarkerValueString,
+    key: LoweredMarkerValueString,
     value: &'a str,
     high: NodeId,
     low: NodeId,
@@ -1559,7 +1443,7 @@ pub struct ContainsMarkerTree<'a> {
 
 impl ContainsMarkerTree<'_> {
     /// The key (LHS) for this expression.
-    pub fn key(&self) -> MarkerValueString {
+    pub fn key(&self) -> LoweredMarkerValueString {
         self.key
     }
 
@@ -1601,14 +1485,14 @@ impl Ord for ContainsMarkerTree<'_> {
 /// A node representing the existence or absence of a given extra, such as `extra == 'bar'`.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct ExtraMarkerTree<'a> {
-    name: &'a MarkerValueExtra,
+    name: &'a LoweredMarkerValueExtra,
     high: NodeId,
     low: NodeId,
 }
 
 impl ExtraMarkerTree<'_> {
     /// Returns the name of the extra in this expression.
-    pub fn name(&self) -> &MarkerValueExtra {
+    pub fn name(&self) -> &LoweredMarkerValueExtra {
         self.name
     }
 
@@ -2023,14 +1907,15 @@ mod test {
             let expected =  [
                 "WARN warnings4: uv_pep508: os.name is deprecated in favor of os_name",
                 "WARN warnings4: uv_pep508: platform.machine is deprecated in favor of platform_machine",
-                "WARN warnings4: uv_pep508: platform.python_implementation is deprecated in favor of",
-                "WARN warnings4: uv_pep508: sys.platform  is deprecated in favor of sys_platform",
+                "WARN warnings4: uv_pep508: platform.python_implementation is deprecated in favor of platform_python_implementation",
+                "WARN warnings4: uv_pep508: platform.version is deprecated in favor of platform_version",
+                "WARN warnings4: uv_pep508: sys.platform is deprecated in favor of sys_platform",
                 "WARN warnings4: uv_pep508: Comparing linux and posix lexicographically"
             ];
             if lines == expected {
                 Ok(())
             } else {
-                Err(format!("{lines:?}"))
+                Err(format!("{lines:#?}"))
             }
         });
     }
@@ -2043,59 +1928,52 @@ mod test {
     #[test]
     fn test_marker_version_inverted() {
         let env37 = env37();
-        let (result, warnings) = MarkerTree::from_str("python_version > '3.6'")
+        let result = MarkerTree::from_str("python_version > '3.6'")
             .unwrap()
-            .evaluate_collect_warnings(&env37, &[]);
-        assert_eq!(warnings, &[]);
+            .evaluate(&env37, &[]);
         assert!(result);
 
-        let (result, warnings) = MarkerTree::from_str("'3.6' > python_version")
+        let result = MarkerTree::from_str("'3.6' > python_version")
             .unwrap()
-            .evaluate_collect_warnings(&env37, &[]);
-        assert_eq!(warnings, &[]);
+            .evaluate(&env37, &[]);
         assert!(!result);
 
         // Meaningless expressions are ignored, so this is always true.
-        let (result, warnings) = MarkerTree::from_str("'3.*' == python_version")
+        let result = MarkerTree::from_str("'3.*' == python_version")
             .unwrap()
-            .evaluate_collect_warnings(&env37, &[]);
-        assert_eq!(warnings, &[]);
+            .evaluate(&env37, &[]);
         assert!(result);
     }
 
     #[test]
     fn test_marker_string_inverted() {
         let env37 = env37();
-        let (result, warnings) = MarkerTree::from_str("'nux' in sys_platform")
+        let result = MarkerTree::from_str("'nux' in sys_platform")
             .unwrap()
-            .evaluate_collect_warnings(&env37, &[]);
-        assert_eq!(warnings, &[]);
+            .evaluate(&env37, &[]);
         assert!(result);
 
-        let (result, warnings) = MarkerTree::from_str("sys_platform in 'nux'")
+        let result = MarkerTree::from_str("sys_platform in 'nux'")
             .unwrap()
-            .evaluate_collect_warnings(&env37, &[]);
-        assert_eq!(warnings, &[]);
+            .evaluate(&env37, &[]);
         assert!(!result);
     }
 
     #[test]
     fn test_marker_version_star() {
         let env37 = env37();
-        let (result, warnings) = MarkerTree::from_str("python_version == '3.7.*'")
+        let result = MarkerTree::from_str("python_version == '3.7.*'")
             .unwrap()
-            .evaluate_collect_warnings(&env37, &[]);
-        assert_eq!(warnings, &[]);
+            .evaluate(&env37, &[]);
         assert!(result);
     }
 
     #[test]
     fn test_tilde_equal() {
         let env37 = env37();
-        let (result, warnings) = MarkerTree::from_str("python_version ~= '3.7'")
+        let result = MarkerTree::from_str("python_version ~= '3.7'")
             .unwrap()
-            .evaluate_collect_warnings(&env37, &[]);
-        assert_eq!(warnings, &[]);
+            .evaluate(&env37, &[]);
         assert!(result);
     }
 
