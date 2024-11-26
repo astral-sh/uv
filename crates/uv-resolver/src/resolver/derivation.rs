@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
-use pubgrub::{Kind, Range, SelectedDependencies, State};
-use rustc_hash::FxHashSet;
+use pubgrub::{Id, Kind, Range, State};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
     DerivationChain, DerivationStep, DistRef, Edge, Name, Node, Resolution, ResolvedDist,
@@ -87,32 +87,35 @@ impl DerivationChainBuilder {
     ///
     /// This is used to construct a derivation chain upon resolution failure.
     pub(crate) fn from_state(
-        package: &PubGrubPackage,
+        id: Id<PubGrubPackage>,
         version: &Version,
         state: &State<UvDependencyProvider>,
     ) -> Option<DerivationChain> {
         /// Find a path from the current package to the root package.
         fn find_path(
-            package: &PubGrubPackage,
+            id: Id<PubGrubPackage>,
             version: &Version,
             state: &State<UvDependencyProvider>,
-            solution: &SelectedDependencies<UvDependencyProvider>,
+            solution: &FxHashMap<Id<PubGrubPackage>, Version>,
             path: &mut Vec<DerivationStep>,
         ) -> bool {
             // Retrieve the incompatibilities for the current package.
-            let Some(incompatibilities) = state.incompatibilities.get(package) else {
+            let Some(incompatibilities) = state.incompatibilities.get(&id) else {
                 return false;
             };
             for index in incompatibilities {
                 let incompat = &state.incompatibility_store[*index];
 
                 // Find a dependency from a package to the current package.
-                if let Kind::FromDependencyOf(p1, _, p2, v2) = &incompat.kind {
-                    if p2 == package && v2.contains(version) {
-                        if let Some(version) = solution.get(p1) {
+                if let Kind::FromDependencyOf(id1, _, id2, v2) = &incompat.kind {
+                    if id == *id2 && v2.contains(version) {
+                        if let Some(version) = solution.get(id1) {
+                            let p1 = &state.package_store[*id1];
+                            let p2 = &state.package_store[*id2];
+
                             if p1.name_no_root() == p2.name_no_root() {
                                 // Skip proxied dependencies.
-                                if find_path(p1, version, state, solution, path) {
+                                if find_path(*id1, version, state, solution, path) {
                                     return true;
                                 }
                             } else if let Some(name) = p1.name_no_root() {
@@ -126,7 +129,7 @@ impl DerivationChainBuilder {
                                 ));
 
                                 // Recursively search the next package.
-                                if find_path(p1, version, state, solution, path) {
+                                if find_path(*id1, version, state, solution, path) {
                                     return true;
                                 }
 
@@ -143,10 +146,10 @@ impl DerivationChainBuilder {
             false
         }
 
-        let solution = state.partial_solution.extract_solution();
+        let solution: FxHashMap<_, _> = state.partial_solution.extract_solution().collect();
         let path = {
             let mut path = vec![];
-            if !find_path(package, version, state, &solution, &mut path) {
+            if !find_path(id, version, state, &solution, &mut path) {
                 return None;
             }
             path.reverse();
