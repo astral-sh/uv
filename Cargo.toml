@@ -222,6 +222,7 @@ get_unwrap = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
+if_not_else = "allow"
 
 [profile.release]
 strip = true
