@@ -1077,6 +1077,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.force,
                 args.python_install_mirror,
                 args.pypy_install_mirror,
+                args.default,
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,

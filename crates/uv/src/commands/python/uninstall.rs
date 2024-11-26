@@ -142,8 +142,10 @@ async fn do_uninstall(
         // leave broken links behind, i.e., if the user created them.
         .filter(|path| {
             matching_installations.iter().any(|installation| {
-                path.file_name().and_then(|name| name.to_str())
-                    == Some(&installation.key().versioned_executable_name())
+                let name = path.file_name().and_then(|name| name.to_str());
+                name == Some(&installation.key().executable_name_minor())
+                    || name == Some(&installation.key().executable_name_major())
+                    || name == Some(&installation.key().executable_name())
             })
         })
         // Only include Python executables that match the installations
@@ -224,7 +226,7 @@ async fn do_uninstall(
                         " {} {} ({})",
                         "-".red(),
                         event.key.bold(),
-                        event.key.versioned_executable_name()
+                        event.key.executable_name_minor()
                     )?;
                 }
                 _ => unreachable!(),
