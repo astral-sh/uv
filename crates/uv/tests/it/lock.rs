@@ -17138,7 +17138,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###);
 
     let lock = context.read("uv.lock");
@@ -17150,11 +17150,6 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-            "platform_system == 'Windows' and sys_platform == 'darwin'",
-            "platform_system == 'Windows' and sys_platform != 'darwin'",
-            "platform_system != 'Windows'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -17163,23 +17158,9 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "platform_system == 'Windows' and sys_platform != 'darwin'",
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
-        ]
-
-        [[package]]
-        name = "iniconfig"
-        version = "2.0.0"
-        source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
-        resolution-markers = [
-            "platform_system == 'Windows' and sys_platform == 'darwin'",
-        ]
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
 
         [[package]]
@@ -17187,15 +17168,11 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_system == 'Windows' and sys_platform != 'darwin'" },
-            { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "platform_system == 'Windows' and sys_platform == 'darwin'" },
+            { name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform != 'darwin'" },
         ]
 
         [package.metadata]
-        requires-dist = [
-            { name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform != 'darwin'" },
-            { name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform == 'darwin'", url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" },
-        ]
+        requires-dist = [{ name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform != 'darwin'" }]
         "###
         );
     });
@@ -17207,7 +17184,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "###);
 
     Ok(())
