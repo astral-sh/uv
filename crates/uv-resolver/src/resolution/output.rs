@@ -587,8 +587,8 @@ impl ResolverOutput {
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
         use uv_pep508::{
-            LoweredMarkerValueString, LoweredMarkerValueVersion, MarkerExpression, MarkerOperator,
-            MarkerTree,
+            CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerExpression,
+            MarkerOperator, MarkerTree,
         };
 
         /// A subset of the possible marker values.
@@ -598,8 +598,8 @@ impl ResolverOutput {
         /// values based on the current marker environment.
         #[derive(Debug, Eq, Hash, PartialEq)]
         enum MarkerParam {
-            Version(LoweredMarkerValueVersion),
-            String(LoweredMarkerValueString),
+            Version(CanonicalMarkerValueVersion),
+            String(CanonicalMarkerValueString),
         }
 
         /// Add all marker parameters from the given tree to the given set.
