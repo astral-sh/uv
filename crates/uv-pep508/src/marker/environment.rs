@@ -39,7 +39,6 @@ impl MarkerEnvironment {
                 &self.implementation_version().version
             }
             LoweredMarkerValueVersion::PythonFullVersion => &self.python_full_version().version,
-            LoweredMarkerValueVersion::PythonVersion => &self.python_version().version,
         }
     }
 

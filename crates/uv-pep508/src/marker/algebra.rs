@@ -158,44 +158,54 @@ impl InternerGuard<'_> {
     /// Returns a decision node for a single marker expression.
     pub(crate) fn expression(&mut self, expr: MarkerExpression) -> NodeId {
         let (var, children) = match expr {
-            // Normalize `python_version` markers to `python_full_version` nodes.
-            MarkerExpression::Version {
-                key: MarkerValueVersion::PythonVersion,
-                specifier,
-            } => match python_version_to_full_version(normalize_specifier(specifier)) {
-                Ok(specifier) => (
+            // A variable representing the output of a version key. Edges correspond
+            // to disjoint version ranges.
+            MarkerExpression::Version { key, specifier } => match key {
+                MarkerValueVersion::ImplementationVersion => (
+                    Variable::Version(LoweredMarkerValueVersion::ImplementationVersion),
+                    Edges::from_specifier(specifier),
+                ),
+                MarkerValueVersion::PythonFullVersion => (
                     Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
                     Edges::from_specifier(specifier),
                 ),
-                Err(node) => return node,
+                // Normalize `python_version` markers to `python_full_version` nodes.
+                MarkerValueVersion::PythonVersion => {
+                    match python_version_to_full_version(normalize_specifier(specifier)) {
+                        Ok(specifier) => (
+                            Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+                            Edges::from_specifier(specifier),
+                        ),
+                        Err(node) => return node,
+                    }
+                }
             },
-            MarkerExpression::VersionIn {
-                key: MarkerValueVersion::PythonVersion,
-                versions,
-                negated,
-            } => match Edges::from_python_versions(versions, negated) {
-                Ok(edges) => (
-                    Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
-                    edges,
-                ),
-                Err(node) => return node,
-            },
-            // A variable representing the output of a version key. Edges correspond
-            // to disjoint version ranges.
-            MarkerExpression::Version { key, specifier } => (
-                Variable::Version(key.into()),
-                Edges::from_specifier(specifier),
-            ),
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::VersionIn {
                 key,
                 versions,
                 negated,
-            } => (
-                Variable::Version(key.into()),
-                Edges::from_versions(&versions, negated),
-            ),
+            } => match key {
+                MarkerValueVersion::ImplementationVersion => (
+                    Variable::Version(LoweredMarkerValueVersion::ImplementationVersion),
+                    Edges::from_versions(&versions, negated),
+                ),
+                MarkerValueVersion::PythonFullVersion => (
+                    Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+                    Edges::from_versions(&versions, negated),
+                ),
+                // Normalize `python_version` markers to `python_full_version` nodes.
+                MarkerValueVersion::PythonVersion => {
+                    match Edges::from_python_versions(versions, negated) {
+                        Ok(edges) => (
+                            Variable::Version(LoweredMarkerValueVersion::PythonFullVersion),
+                            edges,
+                        ),
+                        Err(node) => return node,
+                    }
+                }
+            },
             // The `in` and `contains` operators are a bit different than other operators.
             // In particular, they do not represent a particular value for the corresponding
             // variable, and can overlap. For example, `'nux' in os_name` and `os_name == 'Linux'`

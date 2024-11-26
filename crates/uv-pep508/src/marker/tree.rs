@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
 use std::str::FromStr;
@@ -920,49 +919,6 @@ impl MarkerTree {
         }
 
         false
-    }
-
-    /// Checks if the requirement should be activated with the given set of active extras and a set
-    /// of possible python versions (from `requires-python`) without evaluating the remaining
-    /// environment markers, i.e. if there is potentially an environment that could activate this
-    /// requirement.
-    ///
-    /// Note that unlike [`Self::evaluate`] this does not perform any checks for bogus expressions but
-    /// will simply return true. As caller you should separately perform a check with an environment
-    /// and forward all warnings.
-    pub fn evaluate_extras_and_python_version(
-        &self,
-        extras: &HashSet<ExtraName>,
-        python_versions: &[Version],
-    ) -> bool {
-        match self.kind() {
-            MarkerTreeKind::True => true,
-            MarkerTreeKind::False => false,
-            MarkerTreeKind::Version(marker) => marker.edges().any(|(range, tree)| {
-                if marker.key() == LoweredMarkerValueVersion::PythonVersion {
-                    if !python_versions
-                        .iter()
-                        .any(|version| range.contains(version))
-                    {
-                        return false;
-                    }
-                }
-
-                tree.evaluate_extras_and_python_version(extras, python_versions)
-            }),
-            MarkerTreeKind::String(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
-            MarkerTreeKind::In(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
-            MarkerTreeKind::Contains(marker) => marker
-                .children()
-                .any(|(_, tree)| tree.evaluate_extras_and_python_version(extras, python_versions)),
-            MarkerTreeKind::Extra(marker) => marker
-                .edge(extras.contains(marker.name().extra()))
-                .evaluate_extras_and_python_version(extras, python_versions),
-        }
     }
 
     /// Checks if the requirement should be activated with the given set of active extras without evaluating
