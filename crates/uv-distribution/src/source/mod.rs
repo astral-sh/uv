@@ -1433,11 +1433,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await
                 .map_err(Error::CacheWrite)?;
 
+            let git_member = GitWorkspaceMember {
+                fetch_root: fetch.path(),
+                git_source: resource,
+            };
+
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
                     &path,
-                    None,
+                    Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
