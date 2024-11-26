@@ -5,6 +5,7 @@ use std::fmt::Write;
 use std::io::stdout;
 use std::path::Path;
 use std::process::ExitCode;
+use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
 use anyhow::{bail, Result};
@@ -254,10 +255,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         )
     }))?;
 
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(globals.concurrency.installs)
-        .build_global()
-        .expect("failed to initialize global rayon pool");
+    // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
+    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::SeqCst);
 
     debug!("uv {}", uv_cli::version::version());
 
