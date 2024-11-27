@@ -6,12 +6,13 @@ use std::path::{Path, PathBuf};
 use glob::{glob, GlobError, PatternError};
 use rustc_hash::FxHashSet;
 use tracing::{debug, trace, warn};
-
 use uv_distribution_types::Index;
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
-use uv_pep508::{MarkerTree, RequirementOrigin, VerbatimUrl};
-use uv_pypi_types::{Conflicts, Requirement, RequirementSource, SupportedEnvironments};
+use uv_pep508::{MarkerTree, VerbatimUrl};
+use uv_pypi_types::{
+    Conflicts, Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl,
+};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -307,6 +308,24 @@ impl Workspace {
         })
     }
 
+    /// Returns the set of supported environments for the workspace.
+    pub fn environments(&self) -> Option<&SupportedEnvironments> {
+        self.pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.environments.as_ref())
+    }
+
+    /// Returns the set of conflicts for the workspace.
+    pub fn conflicts(&self) -> Conflicts {
+        let mut conflicting = Conflicts::empty();
+        for member in self.packages.values() {
+            conflicting.append(&mut member.pyproject_toml.conflicts());
+        }
+        conflicting
+    }
+
     /// Returns any requirements that are exclusive to the workspace root, i.e., not included in
     /// any of the workspace members.
     ///
@@ -314,7 +333,9 @@ impl Workspace {
     /// `pyproject.toml`.
     ///
     /// Otherwise, returns an empty list.
-    pub fn non_project_requirements(&self) -> Result<Vec<Requirement>, DependencyGroupError> {
+    pub fn non_project_requirements(
+        &self,
+    ) -> Result<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>, DependencyGroupError> {
         if self
             .packages
             .values()
@@ -350,16 +371,7 @@ impl Workspace {
             let dev_dependencies = dependency_groups
                 .into_iter()
                 .flat_map(|(_, requirements)| requirements)
-                .map(|requirement| {
-                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                })
-                .chain(dev_dependencies.into_iter().flatten().map(|requirement| {
-                    Requirement::from(
-                        requirement
-                            .clone()
-                            .with_origin(RequirementOrigin::Workspace),
-                    )
-                }))
+                .chain(dev_dependencies.into_iter().flatten().cloned())
                 .collect();
 
             Ok(dev_dependencies)
@@ -367,7 +379,7 @@ impl Workspace {
     }
 
     /// Returns the set of overrides for the workspace.
-    pub fn overrides(&self) -> Vec<Requirement> {
+    pub fn overrides(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         let Some(overrides) = self
             .pyproject_toml
             .tool
@@ -377,39 +389,11 @@ impl Workspace {
         else {
             return vec![];
         };
-
-        overrides
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
-    }
-
-    /// Returns the set of supported environments for the workspace.
-    pub fn environments(&self) -> Option<&SupportedEnvironments> {
-        self.pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.environments.as_ref())
-    }
-
-    /// Returns the set of conflicts for the workspace.
-    pub fn conflicts(&self) -> Conflicts {
-        let mut conflicting = Conflicts::empty();
-        for member in self.packages.values() {
-            conflicting.append(&mut member.pyproject_toml.conflicts());
-        }
-        conflicting
+        overrides.clone()
     }
 
     /// Returns the set of constraints for the workspace.
-    pub fn constraints(&self) -> Vec<Requirement> {
+    pub fn constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
         let Some(constraints) = self
             .pyproject_toml
             .tool
@@ -419,17 +403,7 @@ impl Workspace {
         else {
             return vec![];
         };
-
-        constraints
-            .iter()
-            .map(|requirement| {
-                Requirement::from(
-                    requirement
-                        .clone()
-                        .with_origin(RequirementOrigin::Workspace),
-                )
-            })
-            .collect()
+        constraints.clone()
     }
 
     /// Returns the set of all dependency group names defined in the workspace.

@@ -197,6 +197,9 @@ pub(crate) enum ProjectError {
     Requirements(#[from] uv_requirements::Error),
 
     #[error(transparent)]
+    Metadata(#[from] uv_distribution::MetadataError),
+
+    #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]

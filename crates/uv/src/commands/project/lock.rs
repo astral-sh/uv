@@ -11,7 +11,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, SourceStrategy,
+    TrustedHost, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -22,7 +23,8 @@ use uv_distribution_types::{
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{Requirement, SupportedEnvironments};
+use uv_pep508::RequirementOrigin;
+use uv_pypi_types::{Requirement, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
@@ -323,10 +325,15 @@ async fn do_lock(
 
     // Collect the requirements, etc.
     let requirements = workspace.non_project_requirements()?;
-    let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
+    let overrides = workspace.overrides();
     let constraints = workspace.constraints();
     let dev = workspace.groups().into_iter().cloned().collect::<Vec<_>>();
     let source_trees = vec![];
+
+    // If necessary, lower the overrides and constraints.
+    let requirements = lower(requirements, workspace, index_locations, sources)?;
+    let overrides = lower(overrides, workspace, index_locations, sources)?;
+    let constraints = lower(constraints, workspace, index_locations, sources)?;
 
     // Collect the list of members.
     let members = {
@@ -1115,4 +1122,37 @@ fn report_upgrades(
     }
 
     Ok(updated)
+}
+
+/// Lower a set of requirements, relative to the workspace root.
+fn lower(
+    requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    workspace: &Workspace,
+    locations: &IndexLocations,
+    sources: SourceStrategy,
+) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
+    let name = workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .map(|project| project.name.clone());
+
+    // We model these as `build-requires`, since, like build requirements, it doesn't define extras
+    // or dependency groups.
+    let metadata = uv_distribution::BuildRequires::from_workspace(
+        uv_pypi_types::BuildRequires {
+            name,
+            requires_dist: requirements,
+        },
+        workspace,
+        locations,
+        sources,
+        LowerBound::Warn,
+    )?;
+
+    Ok(metadata
+        .requires_dist
+        .into_iter()
+        .map(|requirement| requirement.with_origin(RequirementOrigin::Workspace))
+        .collect::<Vec<_>>())
 }

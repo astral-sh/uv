@@ -37,7 +37,7 @@ impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
     pub(crate) fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
-        project_name: &'data PackageName,
+        project_name: Option<&'data PackageName>,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         project_indexes: &'data [Index],
@@ -89,7 +89,7 @@ impl LoweredRequirement {
                 }))
                 // ... except for recursive self-inclusion (extras that activate other extras), e.g.
                 // `framework[machine_learning]` depends on `framework[cuda]`.
-                || &requirement.name == project_name;
+                || project_name.is_some_and(|project_name| *project_name == requirement.name);
         if !workspace_package_declared {
             return Either::Left(std::iter::once(Err(
                 LoweringError::UndeclaredWorkspacePackage,
@@ -102,7 +102,7 @@ impl LoweredRequirement {
                 // Support recursive editable inclusions.
                 if has_sources
                     && requirement.version_or_url.is_none()
-                    && &requirement.name != project_name
+                    && !project_name.is_some_and(|project_name| *project_name == requirement.name)
                 {
                     warn_user_once!(
                         "Missing version constraint (e.g., a lower bound) for `{}`",
@@ -211,11 +211,15 @@ impl LoweredRequirement {
                                     index,
                                 ));
                             };
-                            let conflict = if let Some(extra) = extra {
-                                Some(ConflictItem::from((project_name.clone(), extra)))
-                            } else {
-                                group.map(|group| ConflictItem::from((project_name.clone(), group)))
-                            };
+                            let conflict = project_name.and_then(|project_name| {
+                                if let Some(extra) = extra {
+                                    Some(ConflictItem::from((project_name.clone(), extra)))
+                                } else {
+                                    group.map(|group| {
+                                        ConflictItem::from((project_name.clone(), group))
+                                    })
+                                }
+                            });
                             let source = registry_source(
                                 &requirement,
                                 index.into_url(),

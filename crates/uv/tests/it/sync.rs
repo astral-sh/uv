@@ -1999,7 +1999,7 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
             "child",
         ]
         requirements = [
-            { name = "child" },
+            { name = "child", editable = "child" },
             { name = "typing-extensions", specifier = ">=4" },
         ]
 
