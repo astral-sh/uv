@@ -291,6 +291,8 @@ pub(crate) fn create(
                 r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#.to_string()
             }
             (true, "activate.bat") => r"%~dp0..".to_string(),
+            // https://stackoverflow.com/a/562080/3549270
+            (false, "activate.bat") => location.simplified().to_str().unwrap().replace('"', "\"\""),
             (true, "activate.fish") => {
                 r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#.to_string()
             }
