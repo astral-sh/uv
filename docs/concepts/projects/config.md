@@ -123,6 +123,15 @@ environments = [
 ]
 ```
 
+Or, to exclude alternative Python implementations:
+
+```toml title="pyproject.toml"
+[tool.uv]
+environments = [
+    "implementation_name == 'cpython'"
+]
+```
+
 Entries in the `environments` setting must be disjoint (i.e., they must not overlap). For example,
 `sys_platform == 'darwin'` and `sys_platform == 'linux'` are disjoint, but
 `sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
