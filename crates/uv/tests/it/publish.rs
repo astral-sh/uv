@@ -1,9 +1,7 @@
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, venv_bin_path, TestContext};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, PathChild};
-use std::io::Write;
-use std::process::{Command, Stdio};
-use std::{env, iter};
+use std::env;
 use uv_static::EnvVars;
 
 #[test]
@@ -207,15 +205,16 @@ fn dubious_filenames() {
 fn check_keyring_behaviours() {
     let context = TestContext::new("3.12");
 
-    // No upper bound, since we are recommending `uv tool install keyring` without upper bound to
-    // users. The keyring package had a bad release in the past, but so it hits us before it hits
-    // users.
+    // Install our keyring plugin
     context
         .pip_install()
-        .arg("keyring")
-        // Contains the plaintext keyring
-        .arg("keyrings.alt")
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
         .assert()
         .success();
 
@@ -231,12 +230,7 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/simple/")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
-        // Avoid `gi.repository.GLib.GError`
-        .env(
-            "PYTHON_KEYRING_BACKEND",
-            "keyrings.alt.file.PlaintextKeyring",
-        ), @r###"
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -259,12 +253,7 @@ fn check_keyring_behaviours() {
         .arg("subprocess")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
-        // Avoid `gi.repository.GLib.GError`
-        .env(
-            "PYTHON_KEYRING_BACKEND",
-            "keyrings.alt.file.PlaintextKeyring",
-        ),  @r###"
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"),  @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -290,12 +279,7 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/simple/")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
-        // Avoid `gi.repository.GLib.GError`
-        .env(
-            "PYTHON_KEYRING_BACKEND",
-            "keyrings.alt.file.PlaintextKeyring",
-        ),  @r###"
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"),  @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -309,40 +293,8 @@ fn check_keyring_behaviours() {
     "###
     );
 
-    let mut child = Command::new(context.interpreter())
-        .arg("-m")
-        .arg("keyring")
-        .arg("set")
-        .arg("https://test.pypi.org/legacy/?ok")
-        .arg("dummy")
-        // Don't save the dummy to the host's actual keyring!
-        .env(
-            "PYTHON_KEYRING_BACKEND",
-            "keyrings.alt.file.PlaintextKeyring",
-        )
-        // Configure keyring file location
-        .env("XDG_DATA_HOME", context.temp_dir.path())
-        .env("LOCALAPPDATA", context.temp_dir.path())
-        .stdin(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut stdin = child.stdin.take().expect("Failed to open stdin");
-    std::thread::spawn(move || {
-        stdin
-            .write_all("dummy\n".as_bytes())
-            .expect("Failed to write to stdin");
-        stdin.flush().expect("Failed to flush stdin");
-    });
-    let status = child.wait().expect("Failed to wait on child");
-    assert!(status.success(), "Setting password in keyring failed");
-
     // Ok: There is a keyring entry for the user dummy.
     // https://github.com/astral-sh/uv/issues/7963#issuecomment-2453558043
-    let path_with_venv = env::join_paths(
-        iter::once(context.interpreter().parent().unwrap().to_path_buf())
-            .chain(env::split_paths(&env::var_os("PATH").unwrap())),
-    )
-    .unwrap();
     uv_snapshot!(context.filters(), context.publish()
         .arg("-u")
         .arg("dummy")
@@ -351,15 +303,8 @@ fn check_keyring_behaviours() {
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
         .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
-        // Don't save the dummy to the host's actual keyring!
-        .env(
-            "PYTHON_KEYRING_BACKEND",
-            "keyrings.alt.file.PlaintextKeyring",
-        )
-        // Configure keyring file location
-        .env("XDG_DATA_HOME", context.temp_dir.path())
-        .env("LOCALAPPDATA", context.temp_dir.path())
-        .env("PATH", path_with_venv), @r###"
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://test.pypi.org/legacy/?ok": {"dummy": "dummy"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -367,6 +312,7 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
+    Request for dummy@https://test.pypi.org/legacy/?ok
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
