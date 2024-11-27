@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use console::Term;
 
 use uv_fs::Simplified;
-use uv_normalize::PackageName;
+use uv_pep508::PackageName;
 use uv_warnings::warn_user;
 
 #[derive(Debug, Clone)]
@@ -121,6 +121,14 @@ impl RequirementsSource {
         }
 
         Self::Package(name)
+    }
+
+    /// Parse a [`RequirementsSource`] from a [`PackageName`].
+    ///
+    /// Unlike [`RequirementsSource::from_package`], this method does not prompt the user and
+    /// expects a valid [`PackageName`] instead of an abritrary string.
+    pub fn from_package_name(name: &PackageName) -> Self {
+        Self::Package(name.to_string())
     }
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a `--with`

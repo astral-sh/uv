@@ -207,11 +207,11 @@ $ uv tool install mkdocs --with mkdocs-material
 ```
 
 Multiple related executables can be installed together in the same tool environment, using the
-`--with-commands-from` flag. For example, the following will install the executables from `ansible`,
-plus all the additional ones provided by `ansible-core` and `ansible-lint`:
+`--with-executables-from` flag. For example, the following will install the executables from
+`ansible`, plus those ones provided by `ansible-core` and `ansible-lint`:
 
 ```console
-$ uv tool install --with-commands-from ansible-core --with-commands-from ansible-lint ansible
+$ uv tool install --with-executables-from ansible-core --with-executables-from ansible-lint ansible
 ```
 
 ## Upgrading tools

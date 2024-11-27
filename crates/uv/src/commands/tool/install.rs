@@ -466,7 +466,7 @@ pub(crate) async fn install(
     let force_install = force || invalid_tool_receipt;
 
     // Find a suitable path to install into.
-    let executable_directory = uv_tool::find_executable_directory()?;
+    let executable_directory = uv_tool::tool_executable_dir()?;
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
 

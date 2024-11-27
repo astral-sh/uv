@@ -1,12 +1,10 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 use std::str::FromStr as _;
-use std::{collections::BTreeSet, fmt::Write};
 
-use anyhow::Result;
 use anyhow::{Context as _, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::BTreeMap;
-use std::fmt::Write;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -31,11 +29,10 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::warn_out_of_path;
 use crate::commands::{conjunction, tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
-
-use super::common::warn_out_of_path;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
@@ -361,7 +358,7 @@ async fn upgrade_tool(
         remove_entrypoints(&existing_tool_receipt);
 
         // Find a suitable path to install into.
-        let executable_directory = uv_tool::find_executable_directory()?;
+        let executable_directory = uv_tool::tool_executable_dir()?;
         fs_err::create_dir_all(&executable_directory)
             .context("Failed to create executable directory")?;
 

@@ -3129,9 +3129,9 @@ fn tool_install_additional_entrypoints() {
     let bin_dir = context.temp_dir.child("bin");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("--with-commands-from")
+        .arg("--with-executables-from")
         .arg("ansible-core")
-        .arg("--with-commands-from")
+        .arg("--with-executables-from")
         .arg("black")
         .arg("ansible==9.3.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
