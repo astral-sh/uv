@@ -21,7 +21,7 @@ If you're running into caching issues, uv includes a few escape hatches:
 
 - To force uv to revalidate cached data for all dependencies, pass `--refresh` to any command (e.g.,
   `uv sync --refresh` or `uv pip install --refresh ...`).
-- To force uv to revalidate cached data for a specific dependency pass `--refresh-dependency` to any
+- To force uv to revalidate cached data for a specific dependency pass `--refresh-package` to any
   command (e.g., `uv sync --refresh-package flask` or `uv pip install --refresh-package flask ...`).
 - To force uv to ignore existing installed versions, pass `--reinstall` to any installation command
   (e.g., `uv sync --reinstall` or `uv pip install --reinstall ...`).
