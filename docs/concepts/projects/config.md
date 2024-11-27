@@ -19,20 +19,82 @@ affects selection of dependency versions (they must support the same Python vers
 
 ## Entry points
 
-Projects may define entry points for the project in the `[project.scripts]` table of the
-`pyproject.toml`.
+[Entry points](https://packaging.python.org/en/latest/specifications/entry-points/#entry-points) are
+the official term for an installed package to advertise interfaces. These include:
 
-For example, to declare a command called `hello` that invokes the `hello` function in the
-`example_package_app` module:
-
-```toml title="pyproject.toml"
-[project.scripts]
-hello = "example_package_app:hello"
-```
+- [Command line interfaces]()
+- [Graphical user interfaces]()
+- [Plugin entry points]()
 
 !!! important
 
-    Using `[project.scripts]` requires a [build system](#build-systems) to be defined.
+    Using the entry point tables requires a [build system](#build-systems) to be defined.
+
+### Command-line interfaces
+
+Projects may define command line interfaces (CLIs) for the project in the `[project.scripts]` table
+of the `pyproject.toml`.
+
+For example, to declare a command called `hello` that invokes the `hello` function in the `example`
+module:
+
+```toml title="pyproject.toml"
+[project.scripts]
+hello = "example:hello"
+```
+
+Then, the command can be run from a console:
+
+```console
+$ uv run hello
+```
+
+### Graphical user interfaces
+
+Projects may define graphical user interfaces (GUIs) for the project in the `[project.gui-scripts]`
+table of the `pyproject.toml`.
+
+!!! important
+
+    These are only different from [command-line interfaces](#command-line-interfaces) on Windows, where
+    they are wrapped by a GUI executable so they can be started without a console. On other platforms,
+    they behave the same.
+
+For example, to declare a command called `hello` that invokes the `app` function in the `example`
+module:
+
+```toml title="pyproject.toml"
+[project.gui-scripts]
+hello = "example:app"
+```
+
+### Plugin entry points
+
+Projects may define entry points for plugin discovery in the
+[`\[project.entry-points\]`](https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/#using-package-metadata)
+table of the `pyproject.toml`.
+
+For example, to register the `example-plugin-a` package as a plugin for `example`:
+
+```toml title="pyproject.toml"
+[project.entry-points.'example.plugins']
+a = "example_plugin_a"
+```
+
+Then, in `example`, plugins would be loaded with:
+
+```python title="example/__init__.py"
+from importlib.metadata import entry_points
+
+for plugin in entry_points(group='example.plugins'):
+    plugin.load()
+```
+
+!!! note
+
+    The `group` key can be an arbitrary value, it does need to include the package name or
+    "plugins". However, is recommended to namespace the key by the package name to avoid collisions
+    with other packages.
 
 ## Build systems
 
