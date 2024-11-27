@@ -455,7 +455,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .term_intersection_for_package(next_id)
                             .expect("a package was chosen but we don't have a term");
 
-                        if let PubGrubPackageInner::Package { ref name, .. } = &**next_package {
+                        if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                             // Check if the decision was due to the package being unavailable
                             if let Some(entry) = self.unavailable_packages.get(name) {
                                 state
@@ -2566,15 +2566,14 @@ impl ForkState {
 
         let nodes = solution
             .into_iter()
-            .filter_map(|(package, version)| {
-                if let PubGrubPackageInner::Package {
-                    name,
-                    extra,
-                    dev,
-                    marker: None,
-                } = &*self.pubgrub.package_store[package]
-                {
-                    Some((
+            .filter_map(
+                |(package, version)| match &*self.pubgrub.package_store[package] {
+                    PubGrubPackageInner::Package {
+                        name,
+                        extra,
+                        dev,
+                        marker: None,
+                    } => Some((
                         ResolutionPackage {
                             name: name.clone(),
                             extra: extra.clone(),
@@ -2583,11 +2582,10 @@ impl ForkState {
                             index: self.fork_indexes.get(name).cloned(),
                         },
                         version,
-                    ))
-                } else {
-                    None
-                }
-            })
+                    )),
+                    _ => None,
+                },
+            )
             .collect();
 
         Resolution {

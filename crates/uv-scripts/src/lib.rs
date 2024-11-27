@@ -156,10 +156,10 @@ impl Pep723Script {
         let metadata = serialize_metadata(&default_metadata);
 
         let script = if let Some(existing_contents) = existing_contents {
-            indoc::formatdoc! {r#"
+            indoc::formatdoc! {r"
             {metadata}
             {content}
-            "#,
+            ",
             content = String::from_utf8(existing_contents).map_err(|err| Pep723Error::Utf8(err.utf8_error()))?}
         } else {
             indoc::formatdoc! {r#"
@@ -350,7 +350,7 @@ impl ScriptTag {
         let mut lines = contents.lines();
 
         // Ensure that the first line is exactly `# /// script`.
-        if !lines.next().is_some_and(|line| line == "# /// script") {
+        if lines.next().is_none_or(|line| line != "# /// script") {
             return Ok(None);
         }
 

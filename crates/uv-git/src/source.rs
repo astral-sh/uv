@@ -62,10 +62,9 @@ impl GitSource {
         let db_path = self.cache.join("db").join(&ident);
 
         // Authenticate the URL, if necessary.
-        let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
-            Cow::Owned(credentials.apply(self.git.repository.clone()))
-        } else {
-            Cow::Borrowed(&self.git.repository)
+        let remote = match GIT_STORE.get(&canonical) {
+            Some(credentials) => Cow::Owned(credentials.apply(self.git.repository.clone())),
+            _ => Cow::Borrowed(&self.git.repository),
         };
 
         let remote = GitRemote::new(&remote);
@@ -124,10 +123,9 @@ impl GitSource {
         let db_path = self.cache.join("db").join(&ident);
 
         // Authenticate the URL, if necessary.
-        let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
-            Cow::Owned(credentials.apply(self.git.repository.clone()))
-        } else {
-            Cow::Borrowed(&self.git.repository)
+        let remote = match GIT_STORE.get(&canonical) {
+            Some(credentials) => Cow::Owned(credentials.apply(self.git.repository.clone())),
+            _ => Cow::Borrowed(&self.git.repository),
         };
 
         let remote = GitRemote::new(&remote);

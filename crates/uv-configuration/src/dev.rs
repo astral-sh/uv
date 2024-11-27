@@ -292,7 +292,7 @@ impl DevGroupsSpecification {
 
         self.groups
             .as_ref()
-            .map_or(false, |groups| groups.contains(group))
+            .is_some_and(|groups| groups.contains(group))
     }
 }
 

@@ -268,7 +268,7 @@ pub fn windows_script_launcher(
     launcher.extend_from_slice(&payload);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
+        &u32::try_from(python_path.len())
             .expect("file path should be smaller than 4GB")
             .to_le_bytes(),
     );
@@ -300,7 +300,7 @@ pub fn windows_python_launcher(
     launcher.extend_from_slice(launcher_bin);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
+        &u32::try_from(python_path.len())
             .expect("file path should be smaller than 4GB")
             .to_le_bytes(),
     );

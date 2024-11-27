@@ -140,16 +140,17 @@ impl BatchPrefetcher {
                             }
                         };
                     }
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map, env)
-                    {
-                        phase = BatchPrefetchStrategy::InOrder {
-                            previous: candidate.version().clone(),
-                        };
-                        candidate
-                    } else {
-                        // Both strategies exhausted their candidates.
-                        break;
+                    match selector.select_no_preference(name, &range, version_map, env) {
+                        Some(candidate) => {
+                            phase = BatchPrefetchStrategy::InOrder {
+                                previous: candidate.version().clone(),
+                            };
+                            candidate
+                        }
+                        _ => {
+                            // Both strategies exhausted their candidates.
+                            break;
+                        }
                     }
                 }
             };

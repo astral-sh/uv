@@ -103,16 +103,18 @@ pub(crate) async fn publish(
     )
     .await?;
 
-    let (username, password) =
-        if let TrustedPublishResult::Configured(password) = &trusted_publishing_token {
+    let (username, password) = match &trusted_publishing_token {
+        TrustedPublishResult::Configured(password) => {
             (Some("__token__".to_string()), Some(password.to_string()))
-        } else {
+        }
+        _ => {
             if username.is_none() && password.is_none() {
                 prompt_username_and_password()?
             } else {
                 (username, password)
             }
-        };
+        }
+    };
 
     if password.is_some() && username.is_none() {
         bail!(

@@ -1141,15 +1141,16 @@ pub fn python_installations_for_versions(
     let selected_pythons = python_versions
         .iter()
         .map(|python_version| {
-            if let Ok(python) = PythonInstallation::find(
+            match PythonInstallation::find(
                 &PythonRequest::parse(python_version),
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
                 &cache,
             ) {
-                python.into_interpreter().sys_executable().to_owned()
-            } else {
-                panic!("Could not find Python {python_version} for test");
+                Ok(python) => python.into_interpreter().sys_executable().to_owned(),
+                _ => {
+                    panic!("Could not find Python {python_version} for test");
+                }
             }
         })
         .collect::<Vec<_>>();

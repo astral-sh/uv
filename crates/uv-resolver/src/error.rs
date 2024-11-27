@@ -610,17 +610,22 @@ fn simplify_derivation_tree_markers(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
     match tree {
-        DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
+        &mut DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::NoVersions(ref mut pkg, _)) => {
+        &mut DerivationTree::External(External::NoVersions(ref mut pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::FromDependencyOf(ref mut pkg1, _, ref mut pkg2, _)) => {
+        &mut DerivationTree::External(External::FromDependencyOf(
+            ref mut pkg1,
+            _,
+            ref mut pkg2,
+            _,
+        )) => {
             pkg1.simplify_markers(python_requirement);
             pkg2.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::Custom(ref mut pkg, _, _)) => {
+        &mut DerivationTree::External(External::Custom(ref mut pkg, _, _)) => {
             pkg.simplify_markers(python_requirement);
         }
         DerivationTree::Derived(derived) => {
@@ -808,7 +813,7 @@ impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
     }
 }
 
-impl<'range> SentinelRange<'range> {
+impl SentinelRange<'_> {
     /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]`.
     pub fn is_sentinel(&self) -> bool {
         self.0.iter().all(|(lower, upper)| {

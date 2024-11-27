@@ -55,6 +55,6 @@ impl AllowedYanks {
     pub fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
         self.0
             .get(package_name)
-            .map_or(false, |versions| versions.contains(version))
+            .is_some_and(|versions| versions.contains(version))
     }
 }

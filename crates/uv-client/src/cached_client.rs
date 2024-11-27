@@ -504,7 +504,7 @@ impl CachedClient {
         &self,
         req: Request,
         cached: DataWithCachePolicy,
-        new_cache_policy_builder: CachePolicyBuilder,
+        new_cache_policy_builder: Box<CachePolicyBuilder>,
     ) -> Result<CachedResponse, Error> {
         let url = req.url().clone();
         debug!("Sending revalidation request for: {url}");

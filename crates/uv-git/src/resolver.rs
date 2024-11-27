@@ -66,10 +66,9 @@ impl GitResolver {
         .await?;
 
         // Fetch the Git repository.
-        let source = if let Some(reporter) = reporter {
-            GitSource::new(url.clone(), client, cache).with_reporter(reporter)
-        } else {
-            GitSource::new(url.clone(), client, cache)
+        let source = match reporter {
+            Some(reporter) => GitSource::new(url.clone(), client, cache).with_reporter(reporter),
+            _ => GitSource::new(url.clone(), client, cache),
         };
         let precise = tokio::task::spawn_blocking(move || source.resolve())
             .await?
@@ -97,10 +96,9 @@ impl GitResolver {
         // If we know the precise commit already, reuse it, to ensure that all fetches within a
         // single process are consistent.
         let url = {
-            if let Some(precise) = self.get(&reference) {
-                Cow::Owned(url.clone().with_precise(*precise))
-            } else {
-                Cow::Borrowed(url)
+            match self.get(&reference) {
+                Some(precise) => Cow::Owned(url.clone().with_precise(*precise)),
+                _ => Cow::Borrowed(url),
             }
         };
 
@@ -115,10 +113,11 @@ impl GitResolver {
         .await?;
 
         // Fetch the Git repository.
-        let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), client, cache).with_reporter(reporter)
-        } else {
-            GitSource::new(url.as_ref().clone(), client, cache)
+        let source = match reporter {
+            Some(reporter) => {
+                GitSource::new(url.as_ref().clone(), client, cache).with_reporter(reporter)
+            }
+            _ => GitSource::new(url.as_ref().clone(), client, cache),
         };
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?

@@ -98,7 +98,7 @@ impl<'a> Headers<'a> {
     }
 
     /// Return all values associated with the header with the given name.
-    fn get_all_values(&self, name: &str) -> impl Iterator<Item = String> {
+    fn get_all_values(&self, name: &str) -> impl Iterator<Item = String> + use<> {
         self.headers
             .get_all_values(name)
             .into_iter()

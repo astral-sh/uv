@@ -28,34 +28,42 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
             let mut output = vec![];
 
             for field in &fields.named {
-                if let Some(attr) = field
+                match field
                     .attrs
                     .iter()
                     .find(|attr| attr.path().is_ident("option"))
                 {
-                    output.push(handle_option(field, attr)?);
-                } else if field
-                    .attrs
-                    .iter()
-                    .any(|attr| attr.path().is_ident("option_group"))
-                {
-                    output.push(handle_option_group(field)?);
-                } else if let Some(serde) = field
-                    .attrs
-                    .iter()
-                    .find(|attr| attr.path().is_ident("serde"))
-                {
-                    // If a field has the `serde(flatten)` attribute, flatten the options into the parent
-                    // by calling `Type::record` instead of `visitor.visit_set`
-                    if let (Type::Path(ty), Meta::List(list)) = (&field.ty, &serde.meta) {
-                        for token in list.tokens.clone() {
-                            if let TokenTree::Ident(ident) = token {
-                                if ident == "flatten" {
-                                    output.push(quote_spanned!(
-                                        ty.span() => (<#ty>::record(visit))
-                                    ));
+                    Some(attr) => {
+                        output.push(handle_option(field, attr)?);
+                    }
+                    _ => {
+                        if field
+                            .attrs
+                            .iter()
+                            .any(|attr| attr.path().is_ident("option_group"))
+                        {
+                            output.push(handle_option_group(field)?);
+                        } else {
+                            if let Some(serde) = field
+                                .attrs
+                                .iter()
+                                .find(|attr| attr.path().is_ident("serde"))
+                            {
+                                // If a field has the `serde(flatten)` attribute, flatten the options into the parent
+                                // by calling `Type::record` instead of `visitor.visit_set`
+                                if let (Type::Path(ty), Meta::List(list)) = (&field.ty, &serde.meta)
+                                {
+                                    for token in list.tokens.clone() {
+                                        if let TokenTree::Ident(ident) = token {
+                                            if ident == "flatten" {
+                                                output.push(quote_spanned!(
+                                                    ty.span() => (<#ty>::record(visit))
+                                                ));
 
-                                    break;
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -204,25 +212,28 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<proc_macro2::To
         quote!(None)
     };
 
-    let deprecated = if let Some(deprecated) = field
+    let deprecated = match field
         .attrs
         .iter()
         .find(|attr| attr.path().is_ident("deprecated"))
     {
-        fn quote_option(option: Option<String>) -> TokenStream {
-            match option {
-                None => quote!(None),
-                Some(value) => quote!(Some(#value)),
+        Some(deprecated) => {
+            fn quote_option(option: Option<String>) -> TokenStream {
+                match option {
+                    None => quote!(None),
+                    Some(value) => quote!(Some(#value)),
+                }
             }
+
+            let deprecated = parse_deprecated_attribute(deprecated)?;
+            let note = quote_option(deprecated.note);
+            let since = quote_option(deprecated.since);
+
+            quote!(Some(uv_options_metadata::Deprecated { since: #since, message: #note }))
         }
-
-        let deprecated = parse_deprecated_attribute(deprecated)?;
-        let note = quote_option(deprecated.note);
-        let since = quote_option(deprecated.since);
-
-        quote!(Some(uv_options_metadata::Deprecated { since: #since, message: #note }))
-    } else {
-        quote!(None)
+        _ => {
+            quote!(None)
+        }
     };
 
     let possible_values = if possible_values == Some(true) {

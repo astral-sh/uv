@@ -47,7 +47,7 @@ impl LoweredRequirement {
         workspace: &'data Workspace,
         lower_bound: LowerBound,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
-    ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
+    ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data + use<'data> {
         // Identify the source from the `tool.uv.sources` table.
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), RequirementOrigin::Project)

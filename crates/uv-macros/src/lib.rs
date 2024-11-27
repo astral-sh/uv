@@ -21,14 +21,14 @@ pub fn derive_combine(input: TokenStream) -> TokenStream {
 
 fn impl_combine(ast: &DeriveInput) -> TokenStream {
     let name = &ast.ident;
-    let fields = if let syn::Data::Struct(syn::DataStruct {
-        fields: syn::Fields::Named(ref fields),
-        ..
-    }) = ast.data
-    {
-        &fields.named
-    } else {
-        unimplemented!();
+    let fields = match ast.data {
+        syn::Data::Struct(syn::DataStruct {
+            fields: syn::Fields::Named(ref fields),
+            ..
+        }) => &fields.named,
+        _ => {
+            unimplemented!();
+        }
     };
 
     let combines = fields.iter().map(|f| {
@@ -38,7 +38,7 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
         }
     });
 
-    let gen = quote! {
+    let r#gen = quote! {
         impl crate::Combine for #name {
             fn combine(self, other: #name) -> #name {
                 #name {
@@ -47,7 +47,7 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
             }
         }
     };
-    gen.into()
+    r#gen.into()
 }
 
 fn get_doc_comment(attrs: &[Attribute]) -> String {
@@ -97,11 +97,14 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
                 // Extract the environment variable patterns.
-                if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
-                    let doc = get_doc_comment(&item.attrs);
-                    Some((pattern, doc))
-                } else {
-                    None // Skip if pattern extraction fails.
+                match get_env_var_pattern_from_attr(&item.attrs) {
+                    Some(pattern) => {
+                        let doc = get_doc_comment(&item.attrs);
+                        Some((pattern, doc))
+                    }
+                    _ => {
+                        None // Skip if pattern extraction fails.
+                    }
                 }
             }
             _ => None,

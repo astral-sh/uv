@@ -460,12 +460,9 @@ impl ResolverOutput {
                 in_memory
                     .distributions()
                     .get(&version_id)
-                    .and_then(|response| {
-                        if let MetadataResponse::Found(archive) = &*response {
-                            Some(archive.metadata.clone())
-                        } else {
-                            None
-                        }
+                    .and_then(|response| match &*response {
+                        MetadataResponse::Found(archive) => Some(archive.metadata.clone()),
+                        _ => None,
                     })
             };
 
@@ -721,7 +718,7 @@ impl ResolverOutput {
         for node in self.graph.node_weights() {
             let annotated_dist = match node {
                 ResolutionGraphNode::Root => continue,
-                ResolutionGraphNode::Dist(ref annotated_dist) => annotated_dist,
+                ResolutionGraphNode::Dist(annotated_dist) => annotated_dist,
             };
             name_to_markers
                 .entry(&annotated_dist.name)

@@ -1445,18 +1445,21 @@ impl PackageRange<'_> {
         }
 
         let mut segments = self.range.iter();
-        if let Some(segment) = segments.next() {
-            // A single unbounded compatibility segment is always plural ("all versions of").
-            if self.kind == PackageRangeKind::Compatibility {
-                if matches!(segment, (Bound::Unbounded, Bound::Unbounded)) {
-                    return true;
+        match segments.next() {
+            Some(segment) => {
+                // A single unbounded compatibility segment is always plural ("all versions of").
+                if self.kind == PackageRangeKind::Compatibility {
+                    if matches!(segment, (Bound::Unbounded, Bound::Unbounded)) {
+                        return true;
+                    }
                 }
+                // Otherwise, multiple segments are always plural.
+                segments.next().is_some()
             }
-            // Otherwise, multiple segments are always plural.
-            segments.next().is_some()
-        } else {
-            // An empty range is always singular.
-            false
+            _ => {
+                // An empty range is always singular.
+                false
+            }
         }
     }
 }

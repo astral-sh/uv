@@ -282,7 +282,7 @@ impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
         "Requirement".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
@@ -934,12 +934,12 @@ fn parse_pep508_requirement<T: Pep508Url>(
     if let Some((pos, char)) = cursor.next().filter(|(_, c)| *c != '#') {
         let message = if char == '#' {
             format!(
-                r#"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"#
+                r"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"
             )
         } else if marker.is_none() {
-            format!(r#"Expected end of input or `;`, found `{char}`"#)
+            format!(r"Expected end of input or `;`, found `{char}`")
         } else {
-            format!(r#"Expected end of input, found `{char}`"#)
+            format!(r"Expected end of input, found `{char}`")
         };
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(message),

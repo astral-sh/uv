@@ -1379,8 +1379,8 @@ impl RunCommand {
         }
 
         let metadata = target_path.metadata();
-        let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
-        let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
+        let is_file = metadata.as_ref().is_ok_and(std::fs::Metadata::is_file);
+        let is_dir = metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
 
         if target.eq_ignore_ascii_case("-") {
             let mut buf = Vec::with_capacity(1024);
@@ -1418,9 +1418,7 @@ impl RunCommand {
 fn is_python_zipapp(target: &Path) -> bool {
     if let Ok(file) = fs_err::File::open(target) {
         if let Ok(mut archive) = zip::ZipArchive::new(file) {
-            return archive
-                .by_name("__main__.py")
-                .map_or(false, |f| f.is_file());
+            return archive.by_name("__main__.py").is_ok_and(|f| f.is_file());
         }
     }
     false

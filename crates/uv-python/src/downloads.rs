@@ -750,7 +750,7 @@ where
 async fn read_url(
     url: &Url,
     client: &uv_client::BaseClient,
-) -> Result<(impl AsyncRead + Unpin, Option<u64>), Error> {
+) -> Result<(impl AsyncRead + Unpin + use<>, Option<u64>), Error> {
     if url.scheme() == "file" {
         // Loads downloaded distribution from the given `file://` URL.
         let path = url

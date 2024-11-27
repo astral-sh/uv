@@ -542,10 +542,10 @@ pub(crate) async fn add(
         let edit = match &dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
             DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
-            DependencyType::Optional(ref extra) => {
+            DependencyType::Optional(extra) => {
                 toml.add_optional_dependency(extra, &requirement, source.as_ref())?
             }
-            DependencyType::Group(ref group) => {
+            DependencyType::Group(group) => {
                 toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
             }
         };
@@ -885,12 +885,12 @@ async fn lock_and_sync(
             let dev = DevGroupsSpecification::from(DevMode::Include);
             (extras, dev)
         }
-        DependencyType::Optional(ref extra_name) => {
+        DependencyType::Optional(extra_name) => {
             let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
             let dev = DevGroupsSpecification::from(DevMode::Exclude);
             (extras, dev)
         }
-        DependencyType::Group(ref group_name) => {
+        DependencyType::Group(group_name) => {
             let extras = ExtrasSpecification::None;
             let dev =
                 DevGroupsSpecification::from(GroupsSpecification::from_group(group_name.clone()));

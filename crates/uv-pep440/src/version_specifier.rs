@@ -407,7 +407,7 @@ impl VersionSpecifier {
     /// This function is not applicable to ranges involving pre-release versions.
     pub fn from_release_only_bounds(
         bounds: (&Bound<Version>, &Bound<Version>),
-    ) -> impl Iterator<Item = VersionSpecifier> {
+    ) -> impl Iterator<Item = VersionSpecifier> + use<> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some(VersionSpecifier::equals_version(v1.clone())), None)

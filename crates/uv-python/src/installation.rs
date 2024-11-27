@@ -78,18 +78,18 @@ impl PythonInstallation {
     /// Find or fetch a [`PythonInstallation`].
     ///
     /// Unlike [`PythonInstallation::find`], if the required Python is not installed it will be installed automatically.
-    pub async fn find_or_download<'a>(
+    pub async fn find_or_download(
         request: Option<&PythonRequest>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         python_downloads: PythonDownloads,
-        client_builder: &BaseClientBuilder<'a>,
+        client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_else(|| &PythonRequest::Default);
+        let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
         match Self::find(request, environments, preference, cache) {
@@ -127,9 +127,9 @@ impl PythonInstallation {
     }
 
     /// Download and install the requested installation.
-    pub async fn fetch<'a>(
+    pub async fn fetch(
         request: PythonDownloadRequest,
-        client_builder: &BaseClientBuilder<'a>,
+        client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
