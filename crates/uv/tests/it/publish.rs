@@ -230,7 +230,8 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/simple/")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"), @r###"
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -253,7 +254,8 @@ fn check_keyring_behaviours() {
         .arg("subprocess")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"),  @r###"
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)),  @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -279,7 +281,8 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/simple/")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"),  @r###"
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -287,6 +290,8 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     warning: `uv publish` is experimental and may change without warning
     Publishing 1 file to https://test.pypi.org/legacy/?ok
+    Request for dummy@https://test.pypi.org/legacy/?ok
+    Request for dummy@test.pypi.org
     warning: Keyring has no password for URL `https://test.pypi.org/legacy/?ok` and username `dummy`
     error: Failed to query check URL
       Caused by: Package `ok` was not found in the registry
