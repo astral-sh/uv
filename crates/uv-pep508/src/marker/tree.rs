@@ -1063,6 +1063,21 @@ impl MarkerTree {
         self.simplify_extras_with(|name| extras.contains(name))
     }
 
+    /// Remove negated extras from a marker, returning `None` if the marker
+    /// tree evaluates to `true`.
+    ///
+    /// Any negated `extra` markers that are always `true` given the provided
+    /// extras will be removed. Any `extra` markers that are always `false`
+    /// given the provided extras will be left unchanged.
+    ///
+    /// For example, if `dev` is a provided extra, given `sys_platform
+    /// == 'linux' and extra != 'dev'`, the marker will be simplified to
+    /// `sys_platform == 'linux'`.
+    #[must_use]
+    pub fn simplify_not_extras(self, extras: &[ExtraName]) -> MarkerTree {
+        self.simplify_not_extras_with(|name| extras.contains(name))
+    }
+
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
     ///
     /// Any `extra` markers that are always `true` given the provided predicate will be removed.
@@ -1082,9 +1097,54 @@ impl MarkerTree {
         self.simplify_extras_with_impl(&is_extra)
     }
 
+    /// Remove negated extras from a marker, returning `None` if the marker tree evaluates to
+    /// `true`.
+    ///
+    /// Any negated `extra` markers that are always `true` given the provided
+    /// predicate will be removed. Any `extra` markers that are always `false`
+    /// given the provided predicate will be left unchanged.
+    ///
+    /// For example, if `is_extra('dev')` is true, given
+    /// `sys_platform == 'linux' and extra != 'dev'`, the marker will be simplified to
+    /// `sys_platform == 'linux'`.
+    #[must_use]
+    pub fn simplify_not_extras_with(self, is_extra: impl Fn(&ExtraName) -> bool) -> MarkerTree {
+        // Because `simplify_extras_with_impl` is recursive, and we need to use
+        // our predicate in recursive calls, we need the predicate itself to
+        // have some indirection (or else we'd have to clone it). To avoid a
+        // recursive type at codegen time, we just introduce the indirection
+        // here, but keep the calling API ergonomic.
+        self.simplify_not_extras_with_impl(&is_extra)
+    }
+
+    /// Returns a new `MarkerTree` where all `extra` expressions are removed.
+    ///
+    /// If the marker only consisted of `extra` expressions, then a marker that
+    /// is always true is returned.
+    #[must_use]
+    pub fn without_extras(self) -> MarkerTree {
+        MarkerTree(INTERNER.lock().without_extras(self.0))
+    }
+
+    /// Returns a new `MarkerTree` where only `extra` expressions are removed.
+    ///
+    /// If the marker did not contain any `extra` expressions, then a marker
+    /// that is always true is returned.
+    #[must_use]
+    pub fn only_extras(self) -> MarkerTree {
+        MarkerTree(INTERNER.lock().only_extras(self.0))
+    }
+
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
         MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(true),
+            _ => None,
+        }))
+    }
+
+    fn simplify_not_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
+        MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
+            Variable::Extra(name) => is_extra(name.extra()).then_some(false),
             _ => None,
         }))
     }
@@ -2069,6 +2129,57 @@ mod test {
     }
 
     #[test]
+    fn test_simplify_not_extras() {
+        // Given `os_name == "nt" and extra != "dev"`, simplify to `os_name == "nt"`.
+        let markers = MarkerTree::from_str(r#"os_name == "nt" and extra != "dev""#).unwrap();
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
+        let expected = MarkerTree::from_str(r#"os_name == "nt""#).unwrap();
+        assert_eq!(simplified, expected);
+
+        // Given `os_name == "nt" or extra != "dev"`, remove the marker entirely.
+        let markers = MarkerTree::from_str(r#"os_name == "nt" or extra != "dev""#).unwrap();
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(simplified, MarkerTree::TRUE);
+
+        // Given `extra != "dev"`, remove the marker entirely.
+        let markers = MarkerTree::from_str(r#"extra != "dev""#).unwrap();
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(simplified, MarkerTree::TRUE);
+
+        // Given `extra != "dev" and extra != "test"`, simplify to `extra != "test"`.
+        let markers = MarkerTree::from_str(r#"extra != "dev" and extra != "test""#).unwrap();
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
+        let expected = MarkerTree::from_str(r#"extra != "test""#).unwrap();
+        assert_eq!(simplified, expected);
+
+        // Given `os_name == "nt" and extra != "test"`, don't simplify.
+        let markers = MarkerTree::from_str(r#"os_name != "nt" and extra != "test""#).unwrap();
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(simplified, markers);
+
+        // Given `os_name == "nt" and (python_version == "3.7" or extra != "dev")`, simplify to
+        // `os_name == "nt".
+        let markers = MarkerTree::from_str(
+            r#"os_name == "nt" and (python_version == "3.7" or extra != "dev")"#,
+        )
+        .unwrap();
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
+        let expected = MarkerTree::from_str(r#"os_name == "nt""#).unwrap();
+        assert_eq!(simplified, expected);
+
+        // Given `os_name == "nt" or (python_version == "3.7" and extra != "dev")`, simplify to
+        // `os_name == "nt" or python_version == "3.7"`.
+        let markers = MarkerTree::from_str(
+            r#"os_name == "nt" or (python_version == "3.7" and extra != "dev")"#,
+        )
+        .unwrap();
+        let simplified = markers.simplify_not_extras(&[ExtraName::from_str("dev").unwrap()]);
+        let expected =
+            MarkerTree::from_str(r#"os_name == "nt" or python_version == "3.7""#).unwrap();
+        assert_eq!(simplified, expected);
+    }
+
+    #[test]
     fn test_marker_simplification() {
         assert_false("python_version == '3.9.1'");
         assert_false("python_version == '3.9.0.*'");
@@ -3006,6 +3117,73 @@ mod test {
                  and (sys_platform == 'win32' or python_full_version >= '3.8')",
             ),
             m("python_full_version >= '3.9'"),
+        );
+    }
+
+    #[test]
+    fn without_extras() {
+        assert_eq!(
+            m("os_name == 'Linux'").without_extras(),
+            m("os_name == 'Linux'"),
+        );
+        assert!(m("extra == 'foo'").without_extras().is_true());
+        assert_eq!(
+            m("os_name == 'Linux' and extra == 'foo'").without_extras(),
+            m("os_name == 'Linux'"),
+        );
+
+        assert!(m("
+                (os_name == 'Linux' and extra == 'foo')
+                or (os_name != 'Linux' and extra == 'bar')",)
+        .without_extras()
+        .is_true());
+
+        assert_eq!(
+            m("os_name == 'Linux' and extra != 'foo'").without_extras(),
+            m("os_name == 'Linux'"),
+        );
+
+        assert!(
+            m("extra != 'extra-project-bar' and extra == 'extra-project-foo'")
+                .without_extras()
+                .is_true()
+        );
+
+        assert_eq!(
+            m("(os_name == 'Darwin' and extra == 'foo') \
+               or (sys_platform == 'Linux' and extra != 'foo')")
+            .without_extras(),
+            m("os_name == 'Darwin' or sys_platform == 'Linux'"),
+        );
+    }
+
+    #[test]
+    fn only_extras() {
+        assert!(m("os_name == 'Linux'").only_extras().is_true());
+        assert_eq!(m("extra == 'foo'").only_extras(), m("extra == 'foo'"));
+        assert_eq!(
+            m("os_name == 'Linux' and extra == 'foo'").only_extras(),
+            m("extra == 'foo'"),
+        );
+        assert!(m("
+                (os_name == 'foo' and extra == 'foo')
+                or (os_name == 'bar' and extra != 'foo')",)
+        .only_extras()
+        .is_true());
+        assert_eq!(
+            m("
+                (os_name == 'Linux' and extra == 'foo')
+                or (os_name != 'Linux' and extra == 'bar')")
+            .only_extras(),
+            m("extra == 'foo' or extra == 'bar'"),
+        );
+
+        assert_eq!(
+            m("
+                (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin')
+                or (os_name == 'nt' and sys_platform == 'win32')")
+            .only_extras(),
+            m("os_name == 'Linux' or os_name != 'Linux'"),
         );
     }
 }
