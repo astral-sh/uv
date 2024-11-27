@@ -2795,7 +2795,7 @@ fn run_gui_script_not_supported() -> Result<()> {
     ----- stderr -----
     error: `--gui-script` is only supported on Windows. Did you mean `--script`?
     "###);
-    
+
     Ok(())
 }
 
