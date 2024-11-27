@@ -6,10 +6,11 @@ use uv_pep508::VerbatimUrl;
 use crate::error::Error;
 use crate::{
     BuiltDist, CachedDirectUrlDist, CachedDist, CachedRegistryDist, DirectUrlBuiltDist,
-    DirectUrlSourceDist, Dist, DistributionId, GitSourceDist, InstalledDirectUrlDist,
-    InstalledDist, InstalledEggInfoDirectory, InstalledEggInfoFile, InstalledLegacyEditable,
-    InstalledRegistryDist, InstalledVersion, LocalDist, PackageId, PathBuiltDist, PathSourceDist,
-    RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist, VersionId, VersionOrUrlRef,
+    DirectUrlSourceDist, DirectorySourceDist, Dist, DistributionId, GitSourceDist,
+    InstalledDirectUrlDist, InstalledDist, InstalledEggInfoDirectory, InstalledEggInfoFile,
+    InstalledLegacyEditable, InstalledRegistryDist, InstalledVersion, LocalDist, PackageId,
+    PathBuiltDist, PathSourceDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist,
+    VersionId, VersionOrUrlRef,
 };
 
 pub trait Name {
@@ -214,6 +215,12 @@ impl std::fmt::Display for PathBuiltDist {
 }
 
 impl std::fmt::Display for PathSourceDist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.name(), self.version_or_url())
+    }
+}
+
+impl std::fmt::Display for DirectorySourceDist {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name(), self.version_or_url())
     }

@@ -198,10 +198,10 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                     }
                     kind => Err(uv_client::Error::from(kind).into()),
                 },
-                uv_distribution::Error::VersionMismatch { .. } => {
+                uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {
                     Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
                 }
-                uv_distribution::Error::NameMismatch { .. } => {
+                uv_distribution::Error::WheelMetadataNameMismatch { .. } => {
                     Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
                 }
                 uv_distribution::Error::Metadata(err) => {
