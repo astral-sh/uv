@@ -2093,7 +2093,7 @@ fn validate_metadata(
 ) -> Result<(), Error> {
     if let Some(name) = source.name() {
         if metadata.name != *name {
-            return Err(Error::NameMismatch {
+            return Err(Error::WheelMetadataNameMismatch {
                 metadata: metadata.name.clone(),
                 given: name.clone(),
             });
@@ -2102,7 +2102,7 @@ fn validate_metadata(
 
     if let Some(version) = source.version() {
         if metadata.version != *version {
-            return Err(Error::VersionMismatch {
+            return Err(Error::WheelMetadataVersionMismatch {
                 metadata: metadata.version.clone(),
                 given: version.clone(),
             });
@@ -2121,9 +2121,9 @@ fn validate_filename(filename: &WheelFilename, metadata: &ResolutionMetadata) ->
         });
     }
 
-    if filename.version != filename.version {
+    if metadata.version != filename.version {
         return Err(Error::WheelFilenameVersionMismatch {
-            metadata: filename.version.clone(),
+            metadata: metadata.version.clone(),
             filename: filename.version.clone(),
         });
     }

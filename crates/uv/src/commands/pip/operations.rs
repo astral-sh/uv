@@ -450,8 +450,6 @@ pub(crate) async fn install(
         return Ok(Changelog::default());
     }
 
-
-
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
         vec![]

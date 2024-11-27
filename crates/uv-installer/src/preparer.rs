@@ -174,7 +174,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     // should be rejected (since at least one of the names will not match the
                     // package name).
                     if *dist.name() != cached.filename().name {
-                        let err = uv_distribution::Error::NameMismatch {
+                        let err = uv_distribution::Error::WheelMetadataNameMismatch {
                             given: dist.name().clone(),
                             metadata: cached.filename().name.clone(),
                         };
@@ -182,7 +182,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     }
                     if let Some(version) = dist.version() {
                         if *version != cached.filename().version {
-                            let err = uv_distribution::Error::VersionMismatch {
+                            let err = uv_distribution::Error::WheelMetadataVersionMismatch {
                                 given: version.clone(),
                                 metadata: cached.filename().version.clone(),
                             };
