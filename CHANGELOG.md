@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.5.5
+
+### Enhancements
+
+- Add aliases for build backend requests ([#9294](https://github.com/astral-sh/uv/pull/9294))
+- Avoid displaying empty paths ([#9312](https://github.com/astral-sh/uv/pull/9312))
+- Allow constraints in `uv tool upgrade` ([#9375](https://github.com/astral-sh/uv/pull/9375))
+- Remove conflict between `--no-sync` and `--frozen` in `uv run` ([#9400](https://github.com/astral-sh/uv/pull/9400))
+- Respect dependency sources in overrides and constraints ([#9455](https://github.com/astral-sh/uv/pull/9455))
+- Show an interpreter-focused message for `--target` and `--prefix` ([#9373](https://github.com/astral-sh/uv/pull/9373))
+- Add `--no-extra` flag and setting ([#9387](https://github.com/astral-sh/uv/pull/9387))
+- Add `uv export --prune` ([#9389](https://github.com/astral-sh/uv/pull/9389))
+- Add dedicated error message for musl install attempts ([#9430](https://github.com/astral-sh/uv/pull/9430))
+- Add various grammar changes to conflict error messages ([#9369](https://github.com/astral-sh/uv/pull/9369))
+- Annotate default groups in conflict error messages ([#9368](https://github.com/astral-sh/uv/pull/9368))
+- Report marker diagnostics during parsing, rather than evaluation ([#9338](https://github.com/astral-sh/uv/pull/9338))
+- Use consistent formatting for build system errors ([#9340](https://github.com/astral-sh/uv/pull/9340))
+- Use rich diagnostics for build failures ([#9335](https://github.com/astral-sh/uv/pull/9335))
+
+### Preview features
+
+- Improve build backend excludes ([#9281](https://github.com/astral-sh/uv/pull/9281))
+- Include PEP 639 `license-files` metadata during `uv publish` ([#9442](https://github.com/astral-sh/uv/pull/9442))
+
+### Performance
+
+- Initialize rayon lazily ([#9435](https://github.com/astral-sh/uv/pull/9435))
+- Migrate to PubGrub's arena for package names ([#9448](https://github.com/astral-sh/uv/pull/9448))
+
+### Bug fixes
+
+- Allow dependency groups to include the containing package ([#9385](https://github.com/astral-sh/uv/pull/9385))
+- Allow syncing to empty virtual environment directories ([#9427](https://github.com/astral-sh/uv/pull/9427))
+- Allow system Python discovery with `--target` and `--prefix` ([#9371](https://github.com/astral-sh/uv/pull/9371))
+- Don't warn when `--output-file` is empty ([#9417](https://github.com/astral-sh/uv/pull/9417))
+- Fix Python interpreter discovery on non-glibc hosts ([#9005](https://github.com/astral-sh/uv/pull/9005))
+- Fix `tool.uv.dependency-metadata.[].version` schema ([#9468](https://github.com/astral-sh/uv/pull/9468))
+- Only respect preferences across the same indexes ([#9302](https://github.com/astral-sh/uv/pull/9302))
+- Re-compile when `--compile` is passed to an install operation ([#9378](https://github.com/astral-sh/uv/pull/9378))
+- Remove `--upgrade`, `--no-upgrade`, and `--upgrade-package` from `uv tool upgrade` ([#9318](https://github.com/astral-sh/uv/pull/9318))
+- Remove dev dependencies in `--all-groups --no-dev` ([#9300](https://github.com/astral-sh/uv/pull/9300))
+- Surface extras and group conflicts in `uv export` ([#9365](https://github.com/astral-sh/uv/pull/9365))
+- Treat deprecated aliases as equivalent in marker algebra ([#9342](https://github.com/astral-sh/uv/pull/9342))
+- Treat less compatible tags as lower priority in resolver ([#9339](https://github.com/astral-sh/uv/pull/9339))
+
+### Documentation
+
+- Avoid referencing `scikit-build` (instead of `scikit-build-core`) ([#9320](https://github.com/astral-sh/uv/pull/9320))
+- Expand entry points documentation ([#9329](https://github.com/astral-sh/uv/pull/9329))
+- Fix example `pyproject.toml` in project concept documentation ([#9298](https://github.com/astral-sh/uv/pull/9298))
+- Fix header level of "Conflicting dependencies" page ([#9330](https://github.com/astral-sh/uv/pull/9330))
+- Touch-up the extension module guide ([#9293](https://github.com/astral-sh/uv/pull/9293))
+- Update the dependencies documentation ([#9359](https://github.com/astral-sh/uv/pull/9359))
+- Reference `--no-progress` option in related environment variable ([#9357](https://github.com/astral-sh/uv/pull/9357))
+
 ## 0.5.4
 
 ### Enhancements
