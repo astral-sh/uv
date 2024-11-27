@@ -31,7 +31,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::pip::operations::Changelog;
+use crate::commands::pip::operations::{report_interpreter, Changelog};
 use crate::commands::project::{validate_requires_python, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, SharedState};
@@ -201,48 +201,29 @@ async fn venv_impl(
     .into_diagnostic()?;
 
     // Locate the Python interpreter to use in the environment
-    let python = PythonInstallation::find_or_download(
-        python_request.as_ref(),
-        EnvironmentPreference::OnlySystem,
-        python_preference,
-        python_downloads,
-        &client_builder,
-        cache,
-        Some(&reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
-    )
-    .await
-    .into_diagnostic()?;
-
-    let managed = python.source().is_managed();
-    let implementation = python.implementation();
-    let interpreter = python.into_interpreter();
+    let interpreter = {
+        let python = PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::OnlySystem,
+            python_preference,
+            python_downloads,
+            &client_builder,
+            cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+        )
+        .await
+        .into_diagnostic()?;
+        report_interpreter(&python, false, printer).into_diagnostic()?;
+        python.into_interpreter()
+    };
 
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
             uv_auth::store_credentials(index.raw_url(), credentials);
         }
-    }
-
-    if managed {
-        writeln!(
-            printer.stderr(),
-            "Using {} {}",
-            implementation.pretty(),
-            interpreter.python_version().cyan()
-        )
-        .into_diagnostic()?;
-    } else {
-        writeln!(
-            printer.stderr(),
-            "Using {} {} interpreter at: {}",
-            implementation.pretty(),
-            interpreter.python_version(),
-            interpreter.sys_executable().user_display().cyan()
-        )
-        .into_diagnostic()?;
     }
 
     // Check if the discovered Python version is incompatible with the current workspace

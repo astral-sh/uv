@@ -864,7 +864,7 @@ fn relative_path() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
