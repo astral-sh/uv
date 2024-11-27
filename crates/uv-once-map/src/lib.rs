@@ -52,9 +52,9 @@ impl<K: Eq + Hash, V: Clone, H: BuildHasher + Clone> OnceMap<K, V, H> {
 
     /// Submit the result of a job you registered.
     pub fn done(&self, key: K, value: V) {
-        if let Some(Value::Waiting(notify)) = self.items.insert(key, Value::Filled(value)) {
+        match self.items.insert(key, Value::Filled(value)) { Some(Value::Waiting(notify)) => {
             notify.notify_waiters();
-        }
+        } _ => {}}
     }
 
     /// Wait for the result of a job that is running.

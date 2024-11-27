@@ -51,7 +51,7 @@ impl From<VersionInfo> for clap::builder::Str {
 pub fn version() -> VersionInfo {
     // Environment variables are only read at compile-time
     macro_rules! option_env_str {
-        ($name:expr) => {
+        ($name:expr_2021) => {
             option_env!($name).map(|s| s.to_string())
         };
     }

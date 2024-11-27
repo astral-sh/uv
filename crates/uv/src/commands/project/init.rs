@@ -336,7 +336,7 @@ async fn init_project(
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
         Some(PythonRequest::parse(&request))
-    } else if let Some(file) = PythonVersionFile::discover(
+    } else { match PythonVersionFile::discover(
         path,
         &VersionFileDiscoveryOptions::default()
             .with_stop_discovery_at(
@@ -348,12 +348,12 @@ async fn init_project(
             .with_no_config(no_config),
     )
     .await?
-    {
+    { Some(file) => {
         // (2) Request from `.python-version`
         file.into_version()
-    } else {
+    } _ => {
         None
-    };
+    }}};
 
     // Add a `requires-python` field to the `pyproject.toml` and return the corresponding interpreter.
     let (requires_python, python_request) = if let Some(python_request) = python_request {
@@ -469,7 +469,7 @@ async fn init_project(
                 (requires_python, python_request)
             }
         }
-    } else if let Ok(virtualenv) = PythonEnvironment::from_root(path.join(".venv"), cache) {
+    } else { match PythonEnvironment::from_root(path.join(".venv"), cache) { Ok(virtualenv) => {
         // (2) An existing Python environment in the target directory
         debug!("Using Python version from existing virtual environment in project");
         let interpreter = virtualenv.into_interpreter();
@@ -489,7 +489,7 @@ async fn init_project(
         };
 
         (requires_python, python_request)
-    } else if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
+    } _ => if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
         // (3) `requires-python` from the workspace
         debug!("Using Python version from project workspace");
         let python_request = PythonRequest::Version(VersionRequest::Range(
@@ -554,7 +554,7 @@ async fn init_project(
         };
 
         (requires_python, python_request)
-    };
+    }}};
 
     project_kind.init(
         name,

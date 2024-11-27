@@ -21,15 +21,15 @@ pub fn derive_combine(input: TokenStream) -> TokenStream {
 
 fn impl_combine(ast: &DeriveInput) -> TokenStream {
     let name = &ast.ident;
-    let fields = if let syn::Data::Struct(syn::DataStruct {
+    let fields = match ast.data
+    { syn::Data::Struct(syn::DataStruct {
         fields: syn::Fields::Named(ref fields),
         ..
-    }) = ast.data
-    {
+    }) => {
         &fields.named
-    } else {
+    } _ => {
         unimplemented!();
-    };
+    }};
 
     let combines = fields.iter().map(|f| {
         let name = &f.ident;
@@ -38,7 +38,7 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
         }
     });
 
-    let gen = quote! {
+    let r#gen = quote! {
         impl crate::Combine for #name {
             fn combine(self, other: #name) -> #name {
                 #name {
@@ -47,7 +47,7 @@ fn impl_combine(ast: &DeriveInput) -> TokenStream {
             }
         }
     };
-    gen.into()
+    r#gen.into()
 }
 
 fn get_doc_comment(attrs: &[Attribute]) -> String {
@@ -55,13 +55,13 @@ fn get_doc_comment(attrs: &[Attribute]) -> String {
         .iter()
         .filter_map(|attr| {
             if attr.path().is_ident("doc") {
-                if let syn::Meta::NameValue(meta) = &attr.meta {
-                    if let syn::Expr::Lit(expr) = &meta.value {
+                match &attr.meta { syn::Meta::NameValue(meta) => {
+                    match &meta.value { syn::Expr::Lit(expr) => {
                         if let syn::Lit::Str(str) = &expr.lit {
                             return Some(str.value().trim().to_string());
                         }
-                    }
-                }
+                    } _ => {}}
+                } _ => {}}
             }
             None
         })
@@ -97,12 +97,12 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
                 // Extract the environment variable patterns.
-                if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
+                match get_env_var_pattern_from_attr(&item.attrs) { Some(pattern) => {
                     let doc = get_doc_comment(&item.attrs);
                     Some((pattern, doc))
-                } else {
+                } _ => {
                     None // Skip if pattern extraction fails.
-                }
+                }}
             }
             _ => None,
         })

@@ -513,9 +513,9 @@ impl ArchivedCachePolicy {
             // validation even if there have been changes to the representation
             // data."
             if !etag.weak {
-                if let Ok(header) = HeaderValue::from_bytes(&etag.value) {
+                match HeaderValue::from_bytes(&etag.value) { Ok(header) => {
                     request.headers_mut().append("if-none-match", header);
-                }
+                } _ => {}}
             }
         }
         // We also set `If-Modified-Since` as per [RFC 9110 S13.1.3] and [RFC
@@ -528,13 +528,12 @@ impl ArchivedCachePolicy {
             if let Some(&last_modified_unix_timestamp) =
                 self.response.headers.last_modified_unix_timestamp.as_ref()
             {
-                if let Some(last_modified) =
-                    unix_timestamp_to_header(last_modified_unix_timestamp.into())
-                {
+                match unix_timestamp_to_header(last_modified_unix_timestamp.into())
+                { Some(last_modified) => {
                     request
                         .headers_mut()
                         .insert("if-modified-since", last_modified);
-                }
+                } _ => {}}
             }
         }
     }

@@ -62,11 +62,11 @@ impl GitSource {
         let db_path = self.cache.join("db").join(&ident);
 
         // Authenticate the URL, if necessary.
-        let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
+        let remote = match GIT_STORE.get(&canonical) { Some(credentials) => {
             Cow::Owned(credentials.apply(self.git.repository.clone()))
-        } else {
+        } _ => {
             Cow::Borrowed(&self.git.repository)
-        };
+        }};
 
         let remote = GitRemote::new(&remote);
         let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
@@ -105,9 +105,9 @@ impl GitSource {
 
         // Report the checkout operation to the reporter.
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_checkout_complete(remote.url(), short_id.as_str(), task);
-            }
+            } _ => {}}
         }
 
         Ok(actual_rev)
@@ -124,11 +124,11 @@ impl GitSource {
         let db_path = self.cache.join("db").join(&ident);
 
         // Authenticate the URL, if necessary.
-        let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
+        let remote = match GIT_STORE.get(&canonical) { Some(credentials) => {
             Cow::Owned(credentials.apply(self.git.repository.clone()))
-        } else {
+        } _ => {
             Cow::Borrowed(&self.git.repository)
-        };
+        }};
 
         let remote = GitRemote::new(&remote);
         let (db, actual_rev, task) = match (self.git.precise, remote.db_at(&db_path).ok()) {
@@ -180,9 +180,9 @@ impl GitSource {
 
         // Report the checkout operation to the reporter.
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_checkout_complete(remote.url(), short_id.as_str(), task);
-            }
+            } _ => {}}
         }
 
         Ok(Fetch {

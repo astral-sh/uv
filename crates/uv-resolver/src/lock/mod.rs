@@ -647,10 +647,10 @@ impl Lock {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(item.package().to_string()));
                     match item.conflict() {
-                        ConflictPackage::Extra(ref extra) => {
+                        &ConflictPackage::Extra(ref extra) => {
                             table.insert("extra", Value::from(extra.to_string()));
                         }
-                        ConflictPackage::Group(ref group) => {
+                        &ConflictPackage::Group(ref group) => {
                             table.insert("group", Value::from(group.to_string()));
                         }
                     }
@@ -1105,8 +1105,7 @@ impl Lock {
             // Fetch the metadata for the distribution.
             let metadata = {
                 let id = dist.version_id();
-                if let Some(archive) =
-                    index
+                match index
                         .distributions()
                         .get(&id)
                         .as_deref()
@@ -1117,10 +1116,10 @@ impl Lock {
                                 None
                             }
                         })
-                {
+                { Some(archive) => {
                     // If the metadata is already in the index, return it.
                     archive.metadata.clone()
-                } else {
+                } _ => {
                     // Run the PEP 517 build process to extract metadata from the source distribution.
                     let archive = database
                         .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
@@ -1138,7 +1137,7 @@ impl Lock {
                         .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                     metadata
-                }
+                }}
             };
 
             // Validate the `version` metadata.
@@ -1732,9 +1731,9 @@ impl Package {
         }
 
         if !no_build {
-            if let Some(sdist) = self.to_source_dist(workspace_root)? {
+            match self.to_source_dist(workspace_root)? { Some(sdist) => {
                 return Ok(Dist::Source(sdist));
-            }
+            } _ => {}}
         }
 
         match (no_binary, no_build) {
@@ -3684,7 +3683,7 @@ impl<'de> serde::Deserialize<'de> for Hash {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.as_base_url()),
+        &FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.as_base_url()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }

@@ -455,9 +455,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .term_intersection_for_package(next_id)
                             .expect("a package was chosen but we don't have a term");
 
-                        if let PubGrubPackageInner::Package { ref name, .. } = &**next_package {
+                        if let &PubGrubPackageInner::Package { ref name, .. } = &**next_package {
                             // Check if the decision was due to the package being unavailable
-                            if let Some(entry) = self.unavailable_packages.get(name) {
+                            match self.unavailable_packages.get(name) { Some(entry) => {
                                 state
                                     .pubgrub
                                     .add_incompatibility(Incompatibility::custom_term(
@@ -466,7 +466,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         UnavailableReason::Package(entry.clone()),
                                     ));
                                 continue;
-                            }
+                            } _ => {}}
                         }
 
                         state
@@ -603,12 +603,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             );
         }
         for resolution in &resolutions {
-            if let Some(env) = resolution.env.end_user_fork_display() {
+            match resolution.env.end_user_fork_display() { Some(env) => {
                 debug!(
                     "Distinct solution for {env} with {} packages",
                     resolution.nodes.len()
                 );
-            }
+            } _ => {}}
         }
         for resolution in &resolutions {
             Self::trace_resolution(resolution);
@@ -1445,9 +1445,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Err(err);
                 }
                 for dependencies in metadata.dependency_groups.values() {
-                    if let Some(err) = find_conflicting_extra(&self.conflicts, dependencies) {
+                    match find_conflicting_extra(&self.conflicts, dependencies) { Some(err) => {
                         return Err(err);
-                    }
+                    } _ => {}}
                 }
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
@@ -1980,12 +1980,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // incompatible with modern build tools.
                 if dist.wheel().is_none() {
                     if !self.selector.use_highest_version(&package_name, &env) {
-                        if let Some((lower, _)) = range.iter().next() {
+                        match range.iter().next() { Some((lower, _)) => {
                             if lower == &Bound::Unbounded {
                                 debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
                                 return Ok(None);
                             }
-                        }
+                        } _ => {}}
                     }
                 }
 
@@ -2064,16 +2064,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut unavailable_packages = FxHashMap::default();
         for package in err.packages() {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
-                if let Some(reason) = self.unavailable_packages.get(name) {
+                match self.unavailable_packages.get(name) { Some(reason) => {
                     unavailable_packages.insert(name.clone(), reason.clone());
-                }
+                } _ => {}}
             }
         }
 
         let mut incomplete_packages = FxHashMap::default();
         for package in err.packages() {
             if let PubGrubPackageInner::Package { name, .. } = &**package {
-                if let Some(versions) = self.incomplete_packages.get(name) {
+                match self.incomplete_packages.get(name) { Some(versions) => {
                     for entry in versions.iter() {
                         let (version, reason) = entry.pair();
                         incomplete_packages
@@ -2081,7 +2081,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .or_insert_with(BTreeMap::default)
                             .insert(version.clone(), reason.clone());
                     }
-                }
+                } _ => {}}
             }
         }
 
@@ -2101,8 +2101,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             } else {
                 self.index.implicit().get(name)
             };
-            if let Some(response) = versions_response {
-                if let VersionsResponse::Found(ref version_maps) = *response {
+            match versions_response { Some(response) => {
+                match *response { VersionsResponse::Found(ref version_maps) => {
                     // Track the available versions, across all indexes.
                     for version_map in version_maps {
                         available_versions
@@ -2120,8 +2120,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .iter()
                                 .filter_map(|version_map| version_map.index().cloned()),
                         );
-                }
-            }
+                } _ => {}}
+            } _ => {}}
         }
 
         ResolveError::NoSolution(NoSolutionError::new(
@@ -2142,7 +2142,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     fn on_progress(&self, package: &PubGrubPackage, version: &Version) {
-        if let Some(reporter) = self.reporter.as_ref() {
+        match self.reporter.as_ref() { Some(reporter) => {
             match &**package {
                 PubGrubPackageInner::Root(_) => {}
                 PubGrubPackageInner::Python(_) => {}
@@ -2153,13 +2153,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     reporter.on_progress(name, &VersionOrUrlRef::Version(version));
                 }
             }
-        }
+        } _ => {}}
     }
 
     fn on_complete(&self) {
-        if let Some(reporter) = self.reporter.as_ref() {
+        match self.reporter.as_ref() { Some(reporter) => {
             reporter.on_complete();
-        }
+        } _ => {}}
     }
 }
 
@@ -2292,11 +2292,11 @@ impl ForkState {
                 }
             }
 
-            if let Some(name) = self.pubgrub.package_store[for_package].name_no_root() {
+            match self.pubgrub.package_store[for_package].name_no_root() { Some(name) => {
                 debug!(
                     "Adding transitive dependency for {name}=={for_version}: {package}{version}"
                 );
-            } else {
+            } _ => {
                 // A dependency from the root package or requirements.txt.
                 debug!("Adding direct dependency: {package}{version}");
 
@@ -2316,7 +2316,7 @@ impl ForkState {
                         to avoid using outdated versions."
                     );
                 }
-            }
+            }}
 
             // Update the package priorities.
             self.priorities.insert(package, version, &self.fork_urls);
@@ -2567,13 +2567,13 @@ impl ForkState {
         let nodes = solution
             .into_iter()
             .filter_map(|(package, version)| {
-                if let PubGrubPackageInner::Package {
+                match &*self.pubgrub.package_store[package]
+                { PubGrubPackageInner::Package {
                     name,
                     extra,
                     dev,
                     marker: None,
-                } = &*self.pubgrub.package_store[package]
-                {
+                } => {
                     Some((
                         ResolutionPackage {
                             name: name.clone(),
@@ -2584,9 +2584,9 @@ impl ForkState {
                         },
                         version,
                     ))
-                } else {
+                } _ => {
                     None
-                }
+                }}
             })
             .collect();
 
@@ -2996,9 +2996,9 @@ impl Forks {
                                     Err(group)
                                 }
                             }));
-                    if let Some(fork_allows_group) = fork_allows_group {
+                    match fork_allows_group { Some(fork_allows_group) => {
                         new.push(fork_allows_group);
-                    }
+                    } _ => {}}
                 }
             }
             forks = new;

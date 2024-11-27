@@ -453,7 +453,7 @@ impl Version {
     /// last number in the release component.
     #[inline]
     fn push_release(&mut self, n: u64) {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.push_release(n) {
                 return;
             }
@@ -468,8 +468,8 @@ impl Version {
     #[inline]
     fn clear_release(&mut self) {
         match Arc::make_mut(&mut self.inner) {
-            VersionInner::Small { ref mut small } => small.clear_release(),
-            VersionInner::Full { ref mut full } => {
+            &mut VersionInner::Small { ref mut small } => small.clear_release(),
+            &mut VersionInner::Full { ref mut full } => {
                 full.release.clear();
             }
         }
@@ -479,7 +479,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_epoch(mut self, value: u64) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_epoch(value) {
                 return self;
             }
@@ -492,7 +492,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_pre(mut self, value: Option<Prerelease>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_pre(value) {
                 return self;
             }
@@ -505,7 +505,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_post(mut self, value: Option<u64>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_post(value) {
                 return self;
             }
@@ -518,7 +518,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_dev(mut self, value: Option<u64>) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_dev(value) {
                 return self;
             }
@@ -546,7 +546,7 @@ impl Version {
         match value {
             LocalVersion::Segments(segments) => self.with_local_segments(segments),
             LocalVersion::Max => {
-                if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+                if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
                     if small.set_local(LocalVersion::Max) {
                         return self;
                     }
@@ -564,7 +564,7 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn without_local(mut self) -> Self {
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_local(LocalVersion::empty()) {
                 return self;
             }
@@ -590,7 +590,7 @@ impl Version {
     pub fn with_min(mut self, value: Option<u64>) -> Self {
         debug_assert!(!self.is_pre(), "min is not allowed on pre-release versions");
         debug_assert!(!self.is_dev(), "min is not allowed on dev versions");
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_min(value) {
                 return self;
             }
@@ -612,7 +612,7 @@ impl Version {
             "max is not allowed on post-release versions"
         );
         debug_assert!(!self.is_dev(), "max is not allowed on dev versions");
-        if let VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
+        if let &mut VersionInner::Small { ref mut small } = Arc::make_mut(&mut self.inner) {
             if small.set_max(value) {
                 return self;
             }
@@ -640,7 +640,7 @@ impl Version {
             };
         }
         match Arc::make_mut(&mut self.inner) {
-            VersionInner::Full { ref mut full } => full,
+            &mut VersionInner::Full { ref mut full } => full,
             VersionInner::Small { .. } => unreachable!(),
         }
     }
@@ -1550,7 +1550,7 @@ impl LocalVersionSlice<'_> {
 
     /// Returns `true` if the local version is empty.
     pub fn is_empty(&self) -> bool {
-        matches!(self, Self::Segments(&[]))
+        matches!(self, &Self::Segments(&[]))
     }
 }
 

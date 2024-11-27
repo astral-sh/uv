@@ -461,11 +461,11 @@ impl ResolverOutput {
                     .distributions()
                     .get(&version_id)
                     .and_then(|response| {
-                        if let MetadataResponse::Found(archive) = &*response {
+                        match &*response { MetadataResponse::Found(archive) => {
                             Some(archive.metadata.clone())
-                        } else {
+                        } _ => {
                             None
-                        }
+                        }}
                     })
             };
 
@@ -493,13 +493,13 @@ impl ResolverOutput {
 
         // 2. Look for hashes for the distribution (i.e., the specific wheel or source distribution).
         if let Some(metadata_response) = in_memory.distributions().get(version_id) {
-            if let MetadataResponse::Found(ref archive) = *metadata_response {
+            match *metadata_response { MetadataResponse::Found(ref archive) => {
                 let mut digests = archive.hashes.clone();
                 digests.sort_unstable();
                 if !digests.is_empty() {
                     return digests;
                 }
-            }
+            } _ => {}}
         }
 
         // 3. Look for hashes from the registry, which are served at the package level.
@@ -510,8 +510,8 @@ impl ResolverOutput {
                 in_memory.implicit().get(name)
             };
 
-            if let Some(versions_response) = versions_response {
-                if let VersionsResponse::Found(ref version_maps) = *versions_response {
+            match versions_response { Some(versions_response) => {
+                match *versions_response { VersionsResponse::Found(ref version_maps) => {
                     if let Some(digests) = version_maps
                         .iter()
                         .find_map(|version_map| version_map.hashes(version))
@@ -524,8 +524,8 @@ impl ResolverOutput {
                             return digests;
                         }
                     }
-                }
-            }
+                } _ => {}}
+            } _ => {}}
         }
 
         vec![]
@@ -721,7 +721,7 @@ impl ResolverOutput {
         for node in self.graph.node_weights() {
             let annotated_dist = match node {
                 ResolutionGraphNode::Root => continue,
-                ResolutionGraphNode::Dist(ref annotated_dist) => annotated_dist,
+                &ResolutionGraphNode::Dist(ref annotated_dist) => annotated_dist,
             };
             name_to_markers
                 .entry(&annotated_dist.name)

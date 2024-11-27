@@ -570,7 +570,7 @@ async fn get_or_create_environment(
                         python_request.satisfied(environment.interpreter(), cache)
                     })
                 });
-        if let Some(environment) = existing_environment {
+        match existing_environment { Some(environment) => {
             // Check if the installed packages meet the requirements.
             let site_packages = SitePackages::from_environment(&environment)?;
 
@@ -592,7 +592,7 @@ async fn get_or_create_environment(
                 debug!("Using existing tool `{}`", from.name);
                 return Ok((from, environment));
             }
-        }
+        } _ => {}}
     }
 
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.

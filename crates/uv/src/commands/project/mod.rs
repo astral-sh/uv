@@ -226,8 +226,8 @@ impl std::fmt::Display for ConflictError {
             .set
             .iter()
             .map(|item| match item.conflict() {
-                ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
-                ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
+                &ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
+                &ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
             })
             .join(", ");
 
@@ -244,7 +244,7 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Extra(ref extra) => format!("`{extra}`"),
+                            &ConflictPackage::Extra(ref extra) => format!("`{extra}`"),
                             ConflictPackage::Group(..) => unreachable!(),
                         })
                         .collect()
@@ -262,9 +262,9 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Group(ref group) if self.dev.default(group) =>
+                            &ConflictPackage::Group(ref group) if self.dev.default(group) =>
                                 format!("`{group}` (enabled by default)"),
-                            ConflictPackage::Group(ref group) => format!("`{group}`"),
+                            &ConflictPackage::Group(ref group) => format!("`{group}`"),
                             ConflictPackage::Extra(..) => unreachable!(),
                         })
                         .collect()
@@ -280,11 +280,11 @@ impl std::fmt::Display for ConflictError {
                         .enumerate()
                         .map(|(i, conflict)| {
                             let conflict = match conflict {
-                                ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(ref group) if self.dev.default(group) => {
+                                &ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
+                                &ConflictPackage::Group(ref group) if self.dev.default(group) => {
                                     format!("group `{group}` (enabled by default)")
                                 }
-                                ConflictPackage::Group(ref group) => format!("group `{group}`"),
+                                &ConflictPackage::Group(ref group) => format!("group `{group}`"),
                             };
                             (i == 0).then(|| capitalize(&conflict)).unwrap_or(conflict)
                         })
@@ -498,19 +498,19 @@ impl WorkspacePython {
             let source = PythonRequestSource::UserRequest;
             let request = Some(request);
             (source, request)
-        } else if let Some(file) = PythonVersionFile::discover(
+        } else { match PythonVersionFile::discover(
             project_dir,
             &VersionFileDiscoveryOptions::default()
                 .with_stop_discovery_at(workspace_root.map(PathBuf::as_ref))
                 .with_no_config(no_config),
         )
         .await?
-        {
+        { Some(file) => {
             // (2) Request from `.python-version`
             let source = PythonRequestSource::DotPythonVersion(file.clone());
             let request = file.into_version();
             (source, request)
-        } else {
+        } _ => {
             // (3) `requires-python` in `pyproject.toml`
             let request = requires_python
                 .as_ref()
@@ -523,7 +523,7 @@ impl WorkspacePython {
                 });
             let source = PythonRequestSource::RequiresPython;
             (source, request)
-        };
+        }}};
 
         if let Some(python_request) = python_request.as_ref() {
             debug!(
@@ -1605,7 +1605,7 @@ pub(crate) async fn init_script_python_requirement(
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
         PythonRequest::parse(request)
-    } else if let (false, Some(request)) = (
+    } else { match (
         no_pin_python,
         PythonVersionFile::discover(
             directory,
@@ -1613,13 +1613,13 @@ pub(crate) async fn init_script_python_requirement(
         )
         .await?
         .and_then(PythonVersionFile::into_version),
-    ) {
+    ) { (false, Some(request)) => {
         // (2) Request from `.python-version`
         request
-    } else {
+    } _ => {
         // (3) Assume any Python version
         PythonRequest::Any
-    };
+    }}};
 
     let interpreter = PythonInstallation::find_or_download(
         Some(&python_request),

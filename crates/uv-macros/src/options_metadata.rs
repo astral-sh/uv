@@ -28,28 +28,28 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
             let mut output = vec![];
 
             for field in &fields.named {
-                if let Some(attr) = field
+                match field
                     .attrs
                     .iter()
                     .find(|attr| attr.path().is_ident("option"))
-                {
+                { Some(attr) => {
                     output.push(handle_option(field, attr)?);
-                } else if field
+                } _ => if field
                     .attrs
                     .iter()
                     .any(|attr| attr.path().is_ident("option_group"))
                 {
                     output.push(handle_option_group(field)?);
-                } else if let Some(serde) = field
+                } else { match field
                     .attrs
                     .iter()
                     .find(|attr| attr.path().is_ident("serde"))
-                {
+                { Some(serde) => {
                     // If a field has the `serde(flatten)` attribute, flatten the options into the parent
                     // by calling `Type::record` instead of `visitor.visit_set`
-                    if let (Type::Path(ty), Meta::List(list)) = (&field.ty, &serde.meta) {
+                    match (&field.ty, &serde.meta) { (Type::Path(ty), Meta::List(list)) => {
                         for token in list.tokens.clone() {
-                            if let TokenTree::Ident(ident) = token {
+                            match token { TokenTree::Ident(ident) => {
                                 if ident == "flatten" {
                                     output.push(quote_spanned!(
                                         ty.span() => (<#ty>::record(visit))
@@ -57,10 +57,10 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
 
                                     break;
                                 }
-                            }
+                            } _ => {}}
                         }
-                    }
-                }
+                    } _ => {}}
+                } _ => {}}}}
             }
 
             let docs: Vec<&Attribute> = struct_attributes
@@ -204,11 +204,11 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<proc_macro2::To
         quote!(None)
     };
 
-    let deprecated = if let Some(deprecated) = field
+    let deprecated = match field
         .attrs
         .iter()
         .find(|attr| attr.path().is_ident("deprecated"))
-    {
+    { Some(deprecated) => {
         fn quote_option(option: Option<String>) -> TokenStream {
             match option {
                 None => quote!(None),
@@ -221,9 +221,9 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<proc_macro2::To
         let since = quote_option(deprecated.since);
 
         quote!(Some(uv_options_metadata::Deprecated { since: #since, message: #note }))
-    } else {
+    } _ => {
         quote!(None)
-    };
+    }};
 
     let possible_values = if possible_values == Some(true) {
         let inner_type = get_inner_type_if_option(&field.ty).unwrap_or(&field.ty);
@@ -347,15 +347,14 @@ fn parse_deprecated_attribute(attribute: &Attribute) -> syn::Result<DeprecatedAt
 fn get_inner_type_if_option(ty: &Type) -> Option<&Type> {
     if let Type::Path(type_path) = ty {
         if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option" {
-            if let PathArguments::AngleBracketed(angle_bracketed_args) =
-                &type_path.path.segments[0].arguments
-            {
+            match &type_path.path.segments[0].arguments
+            { PathArguments::AngleBracketed(angle_bracketed_args) => {
                 if angle_bracketed_args.args.len() == 1 {
-                    if let GenericArgument::Type(inner_type) = &angle_bracketed_args.args[0] {
+                    match &angle_bracketed_args.args[0] { GenericArgument::Type(inner_type) => {
                         return Some(inner_type);
-                    }
+                    } _ => {}}
                 }
-            }
+            } _ => {}}
         }
     }
     None

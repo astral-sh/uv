@@ -111,7 +111,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             }
 
             while let Some(result) = futures.next().await {
-                if let Some(lookahead) = result? {
+                match result? { Some(lookahead) => {
                     for requirement in self
                         .constraints
                         .apply(self.overrides.apply(lookahead.requirements()))
@@ -123,7 +123,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         }
                     }
                     results.push(lookahead);
-                }
+                } _ => {}}
             }
         }
 
@@ -153,8 +153,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.version_id();
-            if let Some(archive) =
-                self.index
+            match self.index
                     .distributions()
                     .get(&id)
                     .as_deref()
@@ -165,10 +164,10 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                             None
                         }
                     })
-            {
+            { Some(archive) => {
                 // If the metadata is already in the index, return it.
                 archive.metadata.clone()
-            } else {
+            } _ => {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = self
                     .database
@@ -184,7 +183,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                 metadata
-            }
+            }}
         };
 
         // Respect recursive extras by propagating the source extras to the dependencies.

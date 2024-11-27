@@ -405,9 +405,9 @@ impl PyProjectToml {
 
         // Check that the license expression is a valid SPDX identifier.
         if let Some(license_expression) = &license_expression {
-            if let Err(err) = spdx::Expression::parse(license_expression) {
+            match spdx::Expression::parse(license_expression) { Err(err) => {
                 return Err(ValidationError::InvalidSpdx(license_expression.clone(), err).into());
-            }
+            } _ => {}}
         }
 
         // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)

@@ -81,7 +81,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = dist.version_id();
-            if let Some(archive) = index
+            match index
                 .distributions()
                 .get(&id)
                 .as_deref()
@@ -92,10 +92,10 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                         None
                     }
                 })
-            {
+            { Some(archive) => {
                 // If the metadata is already in the index, return it.
                 archive.metadata.clone()
-            } else {
+            } _ => {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let archive = database
                     .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
@@ -110,7 +110,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                 metadata
-            }
+            }}
         };
 
         // Sort extras for consistency.

@@ -184,17 +184,17 @@ impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
                     return Err(serde::de::Error::custom("missing field `include-group`"));
                 }
 
-                if let Some(include_group) = map_data
+                match map_data
                     .get("include-group")
                     .map(String::as_str)
                     .map(GroupName::from_str)
                     .transpose()
                     .map_err(serde::de::Error::custom)?
-                {
+                { Some(include_group) => {
                     Ok(DependencyGroupSpecifier::IncludeGroup { include_group })
-                } else {
+                } _ => {
                     Ok(DependencyGroupSpecifier::Object(map_data))
-                }
+                }}
             }
         }
 
@@ -612,8 +612,8 @@ impl schemars::JsonSchema for SerdePattern {
         <String as schemars::JsonSchema>::schema_name()
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        <String as schemars::JsonSchema>::json_schema(gen)
+    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        <String as schemars::JsonSchema>::json_schema(r#gen)
     }
 }
 

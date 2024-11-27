@@ -161,7 +161,7 @@ pub(crate) async fn pip_compile(
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
     if source_trees.is_empty() {
-        if let ExtrasSpecification::Some(extras) = &extras {
+        match &extras { ExtrasSpecification::Some(extras) => {
             let mut unused_extras = extras
                 .iter()
                 .filter(|extra| !used_extras.contains(extra))
@@ -175,7 +175,7 @@ pub(crate) async fn pip_compile(
                     unused_extras.iter().join(", ")
                 ));
             }
-        }
+        } _ => {}}
     }
 
     // Find an interpreter to use for building distributions
@@ -439,7 +439,7 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        if let Some(marker_env) = resolver_env.marker_environment() {
+        match resolver_env.marker_environment() { Some(marker_env) => {
             let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
             if let Some(relevant_markers) = relevant_markers.contents() {
                 writeln!(
@@ -449,7 +449,7 @@ pub(crate) async fn pip_compile(
                 )?;
                 writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
             }
-        }
+        } _ => {}}
     }
 
     let mut wrote_preamble = false;

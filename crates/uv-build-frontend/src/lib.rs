@@ -417,16 +417,16 @@ impl SourceBuild {
         Ok(
             if pep517_backend.requirements == default_backend.requirements {
                 let mut resolution = source_build_context.default_resolution.lock().await;
-                if let Some(resolved_requirements) = &*resolution {
+                match &*resolution { Some(resolved_requirements) => {
                     resolved_requirements.clone()
-                } else {
+                } _ => {
                     let resolved_requirements = build_context
                         .resolve(&default_backend.requirements)
                         .await
                         .map_err(|err| Error::RequirementsResolve("`setup.py` build", err))?;
                     *resolution = Some(resolved_requirements.clone());
                     resolved_requirements
-                }
+                }}
             } else {
                 build_context
                     .resolve(&pep517_backend.requirements)

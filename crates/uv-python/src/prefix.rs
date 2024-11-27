@@ -20,7 +20,7 @@ impl Prefix {
     }
 
     /// Return an iterator over the `site-packages` directories inside the environment.
-    pub fn site_packages(&self, virtualenv: &Scheme) -> impl Iterator<Item = PathBuf> {
+    pub fn site_packages(&self, virtualenv: &Scheme) -> impl Iterator<Item = PathBuf> + use<> {
         std::iter::once(self.0.join(&virtualenv.purelib))
     }
 

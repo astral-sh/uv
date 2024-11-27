@@ -91,7 +91,7 @@ struct Changelog {
 }
 
 impl Changelog {
-    fn events(&self) -> impl Iterator<Item = ChangeEvent> {
+    fn events(&self) -> impl Iterator<Item = ChangeEvent> + use<> {
         let reinstalled = self
             .uninstalled
             .intersection(&self.installed)

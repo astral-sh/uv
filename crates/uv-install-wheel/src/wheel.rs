@@ -56,9 +56,9 @@ pub(crate) fn read_scripts_from_section(
     for (script_name, python_location) in scripts_section {
         match python_location {
             Some(value) => {
-                if let Some(script) = Script::from_value(script_name, value, extras)? {
+                match Script::from_value(script_name, value, extras)? { Some(script) => {
                     scripts.push(script);
-                }
+                } _ => {}}
             }
             None => {
                 return Err(Error::InvalidWheel(format!(

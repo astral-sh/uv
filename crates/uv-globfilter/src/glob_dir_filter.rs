@@ -58,9 +58,9 @@ impl GlobDirFilter {
                     .determinize_size_limit(Some(DFA_SIZE_LIMIT)),
             )
             .build_many(&regexes);
-        let dfa = if let Ok(dfa) = dfa_builder {
+        let dfa = match dfa_builder { Ok(dfa) => {
             Some(dfa)
-        } else {
+        } _ => {
             // TODO(konsti): `regex_automata::dfa::dense::BuildError` should allow asking whether
             // is a size error
             warn!(
@@ -68,7 +68,7 @@ impl GlobDirFilter {
                     falling back to full directory traversal!"
             );
             None
-        };
+        }};
 
         Ok(Self { glob_set, dfa })
     }

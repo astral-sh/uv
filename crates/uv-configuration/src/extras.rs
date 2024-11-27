@@ -94,7 +94,7 @@ mod tests {
         () => (
             Vec::new()
         );
-        ($($x:expr),+ $(,)?) => (
+        ($($x:expr_2021),+ $(,)?) => (
             vec![$(ExtraName::new($x.into()).unwrap()),+]
         )
     }

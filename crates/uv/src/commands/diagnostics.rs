@@ -308,9 +308,8 @@ pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) 
 fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
     /// Format a step in the [`DerivationChain`] as a human-readable error message.
     fn format_step(step: &DerivationStep, range: Option<Ranges<Version>>) -> String {
-        if let Some(range) =
-            range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
-        {
+        match range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
+        { Some(range) => {
             if let Some(extra) = &step.extra {
                 // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)`
                 format!(
@@ -336,7 +335,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
                     format!("v{}", step.version).cyan(),
                 )
             }
-        } else {
+        } _ => {
             if let Some(extra) = &step.extra {
                 // Ex) `flask[dotenv]` (v1.2.3)`
                 format!(
@@ -359,7 +358,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
                     format!("v{}", step.version).cyan()
                 )
             }
-        }
+        }}
     }
 
     let mut message = if let Some(version) = version {
@@ -380,11 +379,11 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
         }
         range = Some(SentinelRange::from(&step.range).strip());
     }
-    if let Some(range) = range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
-    {
+    match range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
+    { Some(range) => {
         message = format!("{message} `{}{}`", name.cyan(), range.cyan());
-    } else {
+    } _ => {
         message = format!("{message} `{}`", name.cyan());
-    }
+    }}
     message
 }

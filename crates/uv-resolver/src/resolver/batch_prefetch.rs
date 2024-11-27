@@ -105,9 +105,8 @@ impl BatchPrefetcher {
                     compatible,
                     previous,
                 } => {
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map, env)
-                    {
+                    match selector.select_no_preference(name, &compatible, version_map, env)
+                    { Some(candidate) => {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
                         );
@@ -116,12 +115,12 @@ impl BatchPrefetcher {
                             previous: candidate.version().clone(),
                         };
                         candidate
-                    } else {
+                    } _ => {
                         // We exhausted the compatible version, switch to ignoring the existing
                         // constraints on the package and instead going through versions in order.
                         phase = BatchPrefetchStrategy::InOrder { previous };
                         continue;
-                    }
+                    }}
                 }
                 BatchPrefetchStrategy::InOrder { previous } => {
                     let mut range = if selector.use_highest_version(name, env) {
@@ -140,17 +139,16 @@ impl BatchPrefetcher {
                             }
                         };
                     }
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map, env)
-                    {
+                    match selector.select_no_preference(name, &range, version_map, env)
+                    { Some(candidate) => {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),
                         };
                         candidate
-                    } else {
+                    } _ => {
                         // Both strategies exhausted their candidates.
                         break;
-                    }
+                    }}
                 }
             };
 

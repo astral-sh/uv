@@ -453,9 +453,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_build_complete(source, task);
-            }
+            } _ => {}}
         }
 
         // Store the metadata.
@@ -600,9 +600,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_build_complete(source, task);
-            }
+            } _ => {}}
         }
 
         Ok(ArchiveMetadata {
@@ -760,9 +760,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_build_complete(source, task);
-            }
+            } _ => {}}
         }
 
         // Store the metadata.
@@ -885,9 +885,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_build_complete(source, task);
-            }
+            } _ => {}}
         }
 
         // Store the metadata.
@@ -1021,9 +1021,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_build_complete(source, task);
-            }
+            } _ => {}}
         }
 
         // Store the metadata.
@@ -1167,9 +1167,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_build_complete(source, task);
-            }
+            } _ => {}}
         }
 
         // Store the metadata.
@@ -1216,11 +1216,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?
             .is_fresh()
         {
-            if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
+            match LocalRevisionPointer::read_from(&entry)? { Some(pointer) => {
                 if *pointer.cache_info() == cache_info {
                     return Ok(pointer);
                 }
-            }
+            } _ => {}}
         }
 
         // Otherwise, we need to create a new revision.
@@ -1298,9 +1298,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_build_complete(source, task);
-            }
+            } _ => {}}
         }
 
         // Store the metadata.
@@ -1388,7 +1388,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?
             .is_fresh()
         {
-            if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
+            match read_cached_metadata(&metadata_entry).await? { Some(metadata) => {
                 let path = if let Some(subdirectory) = resource.subdirectory {
                     Cow::Owned(fetch.path().join(subdirectory))
                 } else {
@@ -1407,7 +1407,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     )
                     .await?,
                 ));
-            }
+            } _ => {}}
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -1467,9 +1467,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await?;
 
         if let Some(task) = task {
-            if let Some(reporter) = self.reporter.as_ref() {
+            match self.reporter.as_ref() { Some(reporter) => {
                 reporter.on_build_complete(source, task);
-            }
+            } _ => {}}
         }
 
         // Store the metadata.

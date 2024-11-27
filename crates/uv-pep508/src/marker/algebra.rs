@@ -442,7 +442,7 @@ impl InternerGuard<'_> {
         let node = self.shared.node(i);
         // Look for a `python_full_version` expression, otherwise
         // we recursively simplify.
-        let Node {
+        let &Node {
             var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
@@ -524,7 +524,7 @@ impl InternerGuard<'_> {
         }
 
         let node = self.shared.node(i);
-        let Node {
+        let &Node {
             var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node

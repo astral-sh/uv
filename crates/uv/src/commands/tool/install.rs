@@ -363,7 +363,7 @@ pub(crate) async fn install(
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
-    let environment = if let Some(environment) = existing_environment {
+    let environment = match existing_environment { Some(environment) => {
         let environment = match update_environment(
             environment,
             spec,
@@ -396,7 +396,7 @@ pub(crate) async fn install(
         }
 
         environment
-    } else {
+    } _ => {
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
         let resolution = match resolve_environment(
@@ -459,7 +459,7 @@ pub(crate) async fn install(
             }
             Err(err) => return Err(err.into()),
         }
-    };
+    }};
 
     install_executables(
         &environment,

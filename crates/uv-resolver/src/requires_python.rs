@@ -66,11 +66,11 @@ impl RequiresPython {
             .into_iter()
             .map(|specifier| release_specifiers_to_ranges(specifier.clone()))
             .fold(None, |range: Option<Range<Version>>, requires_python| {
-                if let Some(range) = range {
+                match range { Some(range) => {
                     Some(range.intersection(&requires_python))
-                } else {
+                } _ => {
                     Some(requires_python)
-                }
+                }}
             })?;
 
         // Extract the bounds.

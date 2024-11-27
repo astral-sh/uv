@@ -398,15 +398,15 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        if let Err(err) = self.0.file().unlock() {
+        match self.0.file().unlock() { Err(err) => {
             error!(
                 "Failed to unlock {}; program may be stuck: {}",
                 self.0.path().display(),
                 err
             );
-        } else {
+        } _ => {
             debug!("Released lock at `{}`", self.0.path().display());
-        }
+        }}
     }
 }
 

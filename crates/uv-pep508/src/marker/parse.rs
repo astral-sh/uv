@@ -575,12 +575,12 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
             value if value == op => {
                 cursor.take_while(|c| !c.is_whitespace());
 
-                if let Some(expression) = parse_inner(cursor, reporter)? {
+                match parse_inner(cursor, reporter)? { Some(expression) => {
                     match tree {
                         Some(ref mut tree) => apply(tree, expression),
                         None => tree = Some(expression),
                     }
-                }
+                } _ => {}}
             }
             _ => return Ok(tree),
         }

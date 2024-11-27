@@ -53,7 +53,7 @@ impl<'a> RegistryWheelIndex<'a> {
     /// Return an iterator over available wheels for a given package.
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
-    pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry> {
+    pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry> + use<'_> {
         self.get_impl(name).iter().rev()
     }
 
@@ -172,20 +172,20 @@ impl<'a> RegistryWheelIndex<'a> {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         let revision_entry = cache_shard.entry(HTTP_REVISION);
-                        if let Ok(Some(pointer)) = HttpRevisionPointer::read_from(revision_entry) {
+                        match HttpRevisionPointer::read_from(revision_entry) { Ok(Some(pointer)) => {
                             Some(pointer.into_revision())
-                        } else {
+                        } _ => {
                             None
-                        }
+                        }}
                     }
                     // Add files from local registries (e.g., `--find-links`).
                     IndexUrl::Path(_) => {
                         let revision_entry = cache_shard.entry(LOCAL_REVISION);
-                        if let Ok(Some(pointer)) = LocalRevisionPointer::read_from(revision_entry) {
+                        match LocalRevisionPointer::read_from(revision_entry) { Ok(Some(pointer)) => {
                             Some(pointer.into_revision())
-                        } else {
+                        } _ => {
                             None
-                        }
+                        }}
                     }
                 };
 

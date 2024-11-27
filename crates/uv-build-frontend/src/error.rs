@@ -259,18 +259,17 @@ impl Error {
     ) -> Self {
         // In the cases I've seen it was the 5th and 3rd last line (see test case), 10 seems like a reasonable cutoff.
         let missing_library = output.stderr.iter().rev().take(10).find_map(|line| {
-            if let Some((_, [header])) = MISSING_HEADER_RE_GCC
+            match MISSING_HEADER_RE_GCC
                 .captures(line.trim())
                 .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
                 .or(MISSING_HEADER_RE_MSVC.captures(line.trim()))
                 .map(|c| c.extract())
-            {
+            { Some((_, [header])) => {
                 Some(MissingLibrary::Header(header.to_string()))
-            } else if let Some((_, [library])) =
-                LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
-            {
+            } _ => { match LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
+            { Some((_, [library])) => {
                 Some(MissingLibrary::Linker(library.to_string()))
-            } else if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
+            } _ => if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::BuildDependency("wheel".to_string()))
             } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
                 Some(MissingLibrary::BuildDependency("torch".to_string()))
@@ -281,7 +280,7 @@ impl Error {
                 ))
             } else {
                 None
-            }
+            }}}}
         });
 
         if let Some(missing_library) = missing_library {

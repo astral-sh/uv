@@ -272,7 +272,7 @@ impl MarkerOperator {
     /// Returns the marker operator and value whose union represents the given range.
     pub fn from_bounds(
         bounds: (&Bound<String>, &Bound<String>),
-    ) -> impl Iterator<Item = (MarkerOperator, String)> {
+    ) -> impl Iterator<Item = (MarkerOperator, String)> + use<> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some((MarkerOperator::Equal, v1.clone())), None)
@@ -1359,7 +1359,7 @@ impl InMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to the boolean evaluation of the expression.
-    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> + use<> {
         [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
     }
 
@@ -1409,7 +1409,7 @@ impl ContainsMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to the boolean evaluation of the expression.
-    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> + use<> {
         [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
     }
 
@@ -1453,7 +1453,7 @@ impl ExtraMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to the boolean evaluation of the expression.
-    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> {
+    pub fn children(&self) -> impl Iterator<Item = (bool, MarkerTree)> + use<> {
         [(true, MarkerTree(self.high)), (false, MarkerTree(self.low))].into_iter()
     }
 
@@ -1556,7 +1556,7 @@ impl schemars::JsonSchema for MarkerTree {
         "MarkerTree".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {

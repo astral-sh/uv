@@ -120,19 +120,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     } else if matches!(&*cli.command, Commands::Tool(_)) {
         // For commands that operate at the user-level, ignore local configuration.
         FilesystemOptions::user()?.combine(FilesystemOptions::system()?)
-    } else if let Ok(workspace) =
-        Workspace::discover(&project_dir, &DiscoveryOptions::default()).await
-    {
+    } else { match Workspace::discover(&project_dir, &DiscoveryOptions::default()).await
+    { Ok(workspace) => {
         let project = FilesystemOptions::find(workspace.install_path())?;
         let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
         project.combine(user).combine(system)
-    } else {
+    } _ => {
         let project = FilesystemOptions::find(&project_dir)?;
         let system = FilesystemOptions::system()?;
         let user = FilesystemOptions::user()?;
         project.combine(user).combine(system)
-    };
+    }}};
 
     // Parse the external command, if necessary.
     let run_command = if let Commands::Project(command) = &mut *cli.command {
@@ -262,13 +261,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Write out any resolved settings.
     macro_rules! show_settings {
-        ($arg:expr) => {
+        ($arg:expr_2021) => {
             if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
                 return Ok(ExitStatus::Success);
             }
         };
-        ($arg:expr, false) => {
+        ($arg:expr_2021, false) => {
             if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
             }
@@ -1245,13 +1244,13 @@ async fn run_project(
 ) -> Result<ExitStatus> {
     // Write out any resolved settings.
     macro_rules! show_settings {
-        ($arg:expr) => {
+        ($arg:expr_2021) => {
             if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
                 return Ok(ExitStatus::Success);
             }
         };
-        ($arg:expr, false) => {
+        ($arg:expr_2021, false) => {
             if globals.show_settings {#
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
             }

@@ -107,7 +107,7 @@ impl DerivationChainBuilder {
                 let incompat = &state.incompatibility_store[*index];
 
                 // Find a dependency from a package to the current package.
-                if let Kind::FromDependencyOf(id1, _, id2, v2) = &incompat.kind {
+                match &incompat.kind { Kind::FromDependencyOf(id1, _, id2, v2) => {
                     if id == *id2 && v2.contains(version) {
                         if let Some(version) = solution.get(id1) {
                             let p1 = &state.package_store[*id1];
@@ -141,7 +141,7 @@ impl DerivationChainBuilder {
                             }
                         }
                     }
-                }
+                } _ => {}}
             }
             false
         }

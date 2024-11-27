@@ -232,7 +232,7 @@ impl Preferences {
     pub(crate) fn get(
         &self,
         package_name: &PackageName,
-    ) -> impl Iterator<Item = (&UniversalMarker, Option<&IndexUrl>, &Version)> {
+    ) -> impl Iterator<Item = (&UniversalMarker, Option<&IndexUrl>, &Version)> + use<'_> {
         self.0
             .get(package_name)
             .into_iter()

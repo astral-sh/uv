@@ -45,7 +45,7 @@ impl Error {
 
     /// Returns `true` if this error corresponds to an I/O "not found" error.
     pub(crate) fn is_file_not_exists(&self) -> bool {
-        let ErrorKind::Io(ref err) = &*self.kind else {
+        let &ErrorKind::Io(ref err) = &*self.kind else {
             return false;
         };
         matches!(err.kind(), std::io::ErrorKind::NotFound)

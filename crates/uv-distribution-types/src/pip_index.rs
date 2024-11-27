@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::{Index, IndexUrl};
 
 macro_rules! impl_index {
-    ($name:ident, $from:expr) => {
+    ($name:ident, $from:expr_2021) => {
         #[derive(Debug, Clone, Eq, PartialEq)]
         pub struct $name(Index);
 
@@ -47,8 +47,8 @@ macro_rules! impl_index {
                 IndexUrl::schema_name()
             }
 
-            fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-                IndexUrl::json_schema(gen)
+            fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+                IndexUrl::json_schema(r#gen)
             }
         }
     };
