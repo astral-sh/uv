@@ -68,7 +68,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
                 use std::fs::Permissions;
                 use std::os::unix::fs::PermissionsExt;
 
-                match file.unix_mode() { Some(mode) => {
+                if let Some(mode) = file.unix_mode() {
                     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
                     let has_any_executable_bit = mode & 0o111;
                     if has_any_executable_bit != 0 {
@@ -80,7 +80,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
                             )?;
                         }
                     }
-                } _ => {}}
+                }
             }
 
             Ok(())

@@ -577,13 +577,16 @@ pub(crate) fn fetch(
                 .collect::<Vec<_>>();
 
             if errors.len() == refspecs.len() {
-                match errors.pop() { Some(result) => {
-                    // Use the last error for the message
-                    result
-                } _ => {
-                    // Can only occur if there were no refspecs to fetch
-                    Ok(())
-                }}
+                match errors.pop() {
+                    Some(result) => {
+                        // Use the last error for the message
+                        result
+                    }
+                    _ => {
+                        // Can only occur if there were no refspecs to fetch
+                        Ok(())
+                    }
+                }
             } else {
                 Ok(())
             }

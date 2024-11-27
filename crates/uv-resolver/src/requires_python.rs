@@ -65,13 +65,13 @@ impl RequiresPython {
         let range = specifiers
             .into_iter()
             .map(|specifier| release_specifiers_to_ranges(specifier.clone()))
-            .fold(None, |range: Option<Range<Version>>, requires_python| {
-                match range { Some(range) => {
-                    Some(range.intersection(&requires_python))
-                } _ => {
-                    Some(requires_python)
-                }}
-            })?;
+            .fold(
+                None,
+                |range: Option<Range<Version>>, requires_python| match range {
+                    Some(range) => Some(range.intersection(&requires_python)),
+                    _ => Some(requires_python),
+                },
+            )?;
 
         // Extract the bounds.
         let (lower_bound, upper_bound) = range

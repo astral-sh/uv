@@ -90,9 +90,9 @@ pub(crate) async fn pin(
                 virtual_project,
             )?;
         } else {
-            match &python { Some(python) => {
+            if let Some(python) = &python {
                 // Warn if the resolved Python is incompatible with the Python requirement unless --resolved is used
-                match assert_pin_compatible_with_project(
+                if let Err(err) = assert_pin_compatible_with_project(
                     &Pin {
                         request: &request,
                         version: python.python_version(),
@@ -100,13 +100,13 @@ pub(crate) async fn pin(
                         existing: false,
                     },
                     virtual_project,
-                ) { Err(err) => {
+                ) {
                     if resolved {
                         return Err(err);
                     };
                     warn_user_once!("{err}");
-                } _ => {}}
-            } _ => {}}
+                }
+            }
         };
     }
 
@@ -189,7 +189,7 @@ fn warn_if_existing_pin_incompatible_with_project(
 ) {
     // Check if the pinned version is compatible with the project.
     if let Some(pin_version) = pep440_version_from_request(pin) {
-        match assert_pin_compatible_with_project(
+        if let Err(err) = assert_pin_compatible_with_project(
             &Pin {
                 request: pin,
                 version: &pin_version,
@@ -197,10 +197,10 @@ fn warn_if_existing_pin_incompatible_with_project(
                 existing: true,
             },
             virtual_project,
-        ) { Err(err) => {
+        ) {
             warn_user_once!("{err}");
             return;
-        } _ => {}}
+        }
     }
 
     // If the there is not a version in the pinned request, attempt to resolve the pin into an interpreter
@@ -218,7 +218,7 @@ fn warn_if_existing_pin_incompatible_with_project(
                 pin, python_version
             );
             // Warn on incompatibilities when viewing existing pins
-            match assert_pin_compatible_with_project(
+            if let Err(err) = assert_pin_compatible_with_project(
                 &Pin {
                     request: pin,
                     version: python_version,
@@ -226,9 +226,9 @@ fn warn_if_existing_pin_incompatible_with_project(
                     existing: true,
                 },
                 virtual_project,
-            ) { Err(err) => {
+            ) {
                 warn_user_once!("{err}");
-            } _ => {}}
+            }
         }
         Err(err) => {
             warn_user_once!(

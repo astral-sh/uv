@@ -133,14 +133,14 @@ pub async fn compile_tree(
         // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
         if entry.metadata()?.is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
             source_files += 1;
-            match sender.send(entry.path().to_owned()).await { Err(err) => {
+            if let Err(err) = sender.send(entry.path().to_owned()).await {
                 // The workers exited.
                 // If e.g. something with the Python interpreter is wrong, the workers have exited
                 // with an error. We try to report this informative error and only if that fails,
                 // report the send error.
                 send_error = Some(err);
                 break;
-            } _ => {}}
+            }
         }
     }
 
@@ -185,10 +185,11 @@ async fn worker(
     let wait_until_ready = async {
         loop {
             // If the interpreter started successful, return it, else retry.
-            match launch_bytecode_compiler(&dir, &interpreter, &pip_compileall_py).await?
-            { Some(child) => {
+            if let Some(child) =
+                launch_bytecode_compiler(&dir, &interpreter, &pip_compileall_py).await?
+            {
                 break Ok::<_, CompileError>(child);
-            } _ => {}}
+            }
         }
     };
     // Handle a broken `python` by using a timeout, one that's higher than any compilation

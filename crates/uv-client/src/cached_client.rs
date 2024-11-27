@@ -268,18 +268,18 @@ impl CachedClient {
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let fresh_req = req.try_clone().expect("HTTP request must be cloneable");
-        let cached_response = match Self::read_cache(cache_entry).await { Some(cached) => {
+        let cached_response = if let Some(cached) = Self::read_cache(cache_entry).await {
             self.send_cached(req, cache_control, cached)
                 .boxed_local()
                 .await?
-        } _ => {
+        } else {
             debug!("No cache entry for: {}", req.url());
             let (response, cache_policy) = self.fresh_request(req).await?;
             CachedResponse::ModifiedOrNew {
                 response,
                 cache_policy,
             }
-        }};
+        };
         match cached_response {
             CachedResponse::FreshCache(cached) => match Payload::from_aligned_bytes(cached.data) {
                 Ok(payload) => Ok(payload),
@@ -504,7 +504,7 @@ impl CachedClient {
         &self,
         req: Request,
         cached: DataWithCachePolicy,
-        new_cache_policy_builder: CachePolicyBuilder,
+        new_cache_policy_builder: Box<CachePolicyBuilder>,
     ) -> Result<CachedResponse, Error> {
         let url = req.url().clone();
         debug!("Sending revalidation request for: {url}");

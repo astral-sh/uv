@@ -43,19 +43,19 @@ impl CachedEnvironment {
     ) -> Result<Self, ProjectError> {
         // When caching, always use the base interpreter, rather than that of the virtual
         // environment.
-        let interpreter = match interpreter.to_base_interpreter(cache)? { Some(interpreter) => {
+        let interpreter = if let Some(interpreter) = interpreter.to_base_interpreter(cache)? {
             debug!(
                 "Caching via base interpreter: `{}`",
                 interpreter.sys_executable().display()
             );
             interpreter
-        } _ => {
+        } else {
             debug!(
                 "Caching via interpreter: `{}`",
                 interpreter.sys_executable().display()
             );
             interpreter
-        }};
+        };
 
         // Resolve the requirements with the interpreter.
         let resolution = Resolution::from(
@@ -93,9 +93,9 @@ impl CachedEnvironment {
 
         if cache.refresh().is_none() {
             if let Ok(root) = fs_err::read_link(cache_entry.path()) {
-                match PythonEnvironment::from_root(root, cache) { Ok(environment) => {
+                if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
                     return Ok(Self(environment));
-                } _ => {}}
+                }
             }
         }
 

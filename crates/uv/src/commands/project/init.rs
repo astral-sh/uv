@@ -336,24 +336,27 @@ async fn init_project(
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
         Some(PythonRequest::parse(&request))
-    } else { match PythonVersionFile::discover(
-        path,
-        &VersionFileDiscoveryOptions::default()
-            .with_stop_discovery_at(
-                workspace
-                    .as_ref()
-                    .map(Workspace::install_path)
-                    .map(PathBuf::as_ref),
-            )
-            .with_no_config(no_config),
-    )
-    .await?
-    { Some(file) => {
-        // (2) Request from `.python-version`
-        file.into_version()
-    } _ => {
-        None
-    }}};
+    } else {
+        match PythonVersionFile::discover(
+            path,
+            &VersionFileDiscoveryOptions::default()
+                .with_stop_discovery_at(
+                    workspace
+                        .as_ref()
+                        .map(Workspace::install_path)
+                        .map(PathBuf::as_ref),
+                )
+                .with_no_config(no_config),
+        )
+        .await?
+        {
+            Some(file) => {
+                // (2) Request from `.python-version`
+                file.into_version()
+            }
+            _ => None,
+        }
+    };
 
     // Add a `requires-python` field to the `pyproject.toml` and return the corresponding interpreter.
     let (requires_python, python_request) = if let Some(python_request) = python_request {
@@ -469,92 +472,100 @@ async fn init_project(
                 (requires_python, python_request)
             }
         }
-    } else { match PythonEnvironment::from_root(path.join(".venv"), cache) { Ok(virtualenv) => {
-        // (2) An existing Python environment in the target directory
-        debug!("Using Python version from existing virtual environment in project");
-        let interpreter = virtualenv.into_interpreter();
-
-        let requires_python =
-            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-
-        // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
-            Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                interpreter.python_major(),
-                interpreter.python_minor(),
-                PythonVariant::Default,
-            )))
-        };
-
-        (requires_python, python_request)
-    } _ => if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
-        // (3) `requires-python` from the workspace
-        debug!("Using Python version from project workspace");
-        let python_request = PythonRequest::Version(VersionRequest::Range(
-            requires_python.specifiers().clone(),
-            PythonVariant::Default,
-        ));
-
-        // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
-            let interpreter = PythonInstallation::find_or_download(
-                Some(&python_request),
-                EnvironmentPreference::OnlySystem,
-                python_preference,
-                python_downloads,
-                &client_builder,
-                cache,
-                Some(&reporter),
-                install_mirrors.python_install_mirror.as_deref(),
-                install_mirrors.pypy_install_mirror.as_deref(),
-            )
-            .await?
-            .into_interpreter();
-
-            Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                interpreter.python_major(),
-                interpreter.python_minor(),
-                PythonVariant::Default,
-            )))
-        };
-
-        (requires_python, python_request)
     } else {
-        // (4) Default to the system Python
-        let interpreter = PythonInstallation::find_or_download(
-            None,
-            EnvironmentPreference::OnlySystem,
-            python_preference,
-            python_downloads,
-            &client_builder,
-            cache,
-            Some(&reporter),
-            install_mirrors.python_install_mirror.as_deref(),
-            install_mirrors.pypy_install_mirror.as_deref(),
-        )
-        .await?
-        .into_interpreter();
+        match PythonEnvironment::from_root(path.join(".venv"), cache) {
+            Ok(virtualenv) => {
+                // (2) An existing Python environment in the target directory
+                debug!("Using Python version from existing virtual environment in project");
+                let interpreter = virtualenv.into_interpreter();
 
-        let requires_python =
-            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+                let requires_python =
+                    RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
 
-        // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
-            Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                interpreter.python_major(),
-                interpreter.python_minor(),
-                PythonVariant::Default,
-            )))
-        };
+                // Pin to the minor version.
+                let python_request = if no_pin_python {
+                    None
+                } else {
+                    Some(PythonRequest::Version(VersionRequest::MajorMinor(
+                        interpreter.python_major(),
+                        interpreter.python_minor(),
+                        PythonVariant::Default,
+                    )))
+                };
 
-        (requires_python, python_request)
-    }}};
+                (requires_python, python_request)
+            }
+            _ => {
+                if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
+                    // (3) `requires-python` from the workspace
+                    debug!("Using Python version from project workspace");
+                    let python_request = PythonRequest::Version(VersionRequest::Range(
+                        requires_python.specifiers().clone(),
+                        PythonVariant::Default,
+                    ));
+
+                    // Pin to the minor version.
+                    let python_request = if no_pin_python {
+                        None
+                    } else {
+                        let interpreter = PythonInstallation::find_or_download(
+                            Some(&python_request),
+                            EnvironmentPreference::OnlySystem,
+                            python_preference,
+                            python_downloads,
+                            &client_builder,
+                            cache,
+                            Some(&reporter),
+                            install_mirrors.python_install_mirror.as_deref(),
+                            install_mirrors.pypy_install_mirror.as_deref(),
+                        )
+                        .await?
+                        .into_interpreter();
+
+                        Some(PythonRequest::Version(VersionRequest::MajorMinor(
+                            interpreter.python_major(),
+                            interpreter.python_minor(),
+                            PythonVariant::Default,
+                        )))
+                    };
+
+                    (requires_python, python_request)
+                } else {
+                    // (4) Default to the system Python
+                    let interpreter = PythonInstallation::find_or_download(
+                        None,
+                        EnvironmentPreference::OnlySystem,
+                        python_preference,
+                        python_downloads,
+                        &client_builder,
+                        cache,
+                        Some(&reporter),
+                        install_mirrors.python_install_mirror.as_deref(),
+                        install_mirrors.pypy_install_mirror.as_deref(),
+                    )
+                    .await?
+                    .into_interpreter();
+
+                    let requires_python = RequiresPython::greater_than_equal_version(
+                        &interpreter.python_minor_version(),
+                    );
+
+                    // Pin to the minor version.
+                    let python_request = if no_pin_python {
+                        None
+                    } else {
+                        Some(PythonRequest::Version(VersionRequest::MajorMinor(
+                            interpreter.python_major(),
+                            interpreter.python_minor(),
+                            PythonVariant::Default,
+                        )))
+                    };
+
+                    (requires_python, python_request)
+                }
+            }
+        }
+    };
 
     project_kind.init(
         name,
@@ -961,7 +972,7 @@ fn pyproject_build_backend_prerequisites(
             if !build_file.try_exists()? {
                 fs_err::write(
                     build_file,
-                    indoc::formatdoc! {r#"
+                    indoc::formatdoc! {r"
                     cmake_minimum_required(VERSION 3.15)
                     project(${{SKBUILD_PROJECT_NAME}} LANGUAGES CXX)
 
@@ -970,7 +981,7 @@ fn pyproject_build_backend_prerequisites(
 
                     pybind11_add_module(_core MODULE src/main.cpp)
                     install(TARGETS _core DESTINATION ${{SKBUILD_PROJECT_NAME}})
-                "#},
+                "},
                 )?;
             }
         }
@@ -1007,19 +1018,19 @@ fn generate_package_scripts(
 
     // Python script for binary-based packaged apps or libs
     let binary_call_script = if is_lib {
-        indoc::formatdoc! {r#"
+        indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
 
         def hello() -> str:
             return hello_from_bin()
-        "#}
+        "}
     } else {
-        indoc::formatdoc! {r#"
+        indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
 
         def main() -> None:
             print(hello_from_bin())
-        "#}
+        "}
     };
 
     // .pyi file for binary script

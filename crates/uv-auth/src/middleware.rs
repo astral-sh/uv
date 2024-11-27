@@ -188,27 +188,40 @@ impl Middleware for AuthMiddleware {
             let credentials = match self
                 .cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
-            { Some(credentials) => {
-                request = credentials.authenticate(request);
-                // Do not insert already-cached credentials
-                None
-            } _ => { match self
-                .cache()
-                .get_url(request.url(), &credentials.to_username())
-            { Some(credentials) => {
-                request = credentials.authenticate(request);
-                // Do not insert already-cached credentials
-                None
-            } _ => { match self
-                .fetch_credentials(Some(&credentials), request.url())
-                .await
-            { Some(credentials) => {
-                request = credentials.authenticate(request);
-                Some(credentials)
-            } _ => {
-                // If we don't find a password, we'll still attempt the request with the existing credentials
-                Some(credentials)
-            }}}}}};
+            {
+                Some(credentials) => {
+                    request = credentials.authenticate(request);
+                    // Do not insert already-cached credentials
+                    None
+                }
+                _ => {
+                    match self
+                        .cache()
+                        .get_url(request.url(), &credentials.to_username())
+                    {
+                        Some(credentials) => {
+                            request = credentials.authenticate(request);
+                            // Do not insert already-cached credentials
+                            None
+                        }
+                        _ => {
+                            match self
+                                .fetch_credentials(Some(&credentials), request.url())
+                                .await
+                            {
+                                Some(credentials) => {
+                                    request = credentials.authenticate(request);
+                                    Some(credentials)
+                                }
+                                _ => {
+                                    // If we don't find a password, we'll still attempt the request with the existing credentials
+                                    Some(credentials)
+                                }
+                            }
+                        }
+                    }
+                }
+            };
 
             return self
                 .complete_request(credentials, request, extensions, next)
@@ -322,13 +335,12 @@ impl Middleware for AuthMiddleware {
             }
         }
 
-        match response { Some(response) => {
-            Ok(response)
-        } _ => {
-            Err(Error::Middleware(format_err!(
+        match response {
+            Some(response) => Ok(response),
+            _ => Err(Error::Middleware(format_err!(
                 "Missing credentials for {url}"
-            )))
-        }}
+            ))),
+        }
     }
 }
 
@@ -408,30 +420,37 @@ impl AuthMiddleware {
                     .as_ref()
                     .and_then(|credentials| credentials.username()),
             )
-        }) { Some(credentials) => {
-            debug!("Found credentials in netrc file for {url}");
-            Some(credentials)
-        // N.B. The keyring provider performs lookups for the exact URL then
-        //      falls back to the host, but we cache the result per realm so if a keyring
-        //      implementation returns different credentials for different URLs in the
-        //      same realm we will use the wrong credentials.
-        } _ => if let Some(credentials) = match self.keyring {
-            Some(ref keyring) => {
-                if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
-                    debug!("Checking keyring for credentials for {username}@{url}");
-                    keyring.fetch(url, username).await
+        }) {
+            Some(credentials) => {
+                debug!("Found credentials in netrc file for {url}");
+                Some(credentials)
+                // N.B. The keyring provider performs lookups for the exact URL then
+                //      falls back to the host, but we cache the result per realm so if a keyring
+                //      implementation returns different credentials for different URLs in the
+                //      same realm we will use the wrong credentials.
+            }
+            _ => {
+                if let Some(credentials) = match self.keyring {
+                    Some(ref keyring) => {
+                        if let Some(username) =
+                            credentials.and_then(|credentials| credentials.username())
+                        {
+                            debug!("Checking keyring for credentials for {username}@{url}");
+                            keyring.fetch(url, username).await
+                        } else {
+                            debug!("Skipping keyring lookup for {url} with no username");
+                            None
+                        }
+                    }
+                    None => None,
+                } {
+                    debug!("Found credentials in keyring for {url}");
+                    Some(credentials)
                 } else {
-                    debug!("Skipping keyring lookup for {url} with no username");
                     None
                 }
             }
-            None => None,
-        } {
-            debug!("Found credentials in keyring for {url}");
-            Some(credentials)
-        } else {
-            None
-        }}
+        }
         .map(Arc::new);
 
         // Register the fetch for this key
@@ -741,7 +760,7 @@ mod tests {
         let mut netrc_file = NamedTempFile::new()?;
         writeln!(
             netrc_file,
-            r#"machine {} login {username} password {password}"#,
+            r"machine {} login {username} password {password}",
             base_url.host_str().unwrap()
         )?;
 
@@ -788,7 +807,7 @@ mod tests {
         let mut netrc_file = NamedTempFile::new()?;
         writeln!(
             netrc_file,
-            r#"machine example.com login {username} password {password}"#,
+            r"machine example.com login {username} password {password}",
         )?;
 
         let client = test_client_builder()
@@ -829,7 +848,7 @@ mod tests {
         let mut netrc_file = NamedTempFile::new()?;
         writeln!(
             netrc_file,
-            r#"machine {} login {username} password {password}"#,
+            r"machine {} login {username} password {password}",
             base_url.host_str().unwrap()
         )?;
 

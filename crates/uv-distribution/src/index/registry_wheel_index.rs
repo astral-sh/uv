@@ -172,20 +172,18 @@ impl<'a> RegistryWheelIndex<'a> {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                         let revision_entry = cache_shard.entry(HTTP_REVISION);
-                        match HttpRevisionPointer::read_from(revision_entry) { Ok(Some(pointer)) => {
-                            Some(pointer.into_revision())
-                        } _ => {
-                            None
-                        }}
+                        match HttpRevisionPointer::read_from(revision_entry) {
+                            Ok(Some(pointer)) => Some(pointer.into_revision()),
+                            _ => None,
+                        }
                     }
                     // Add files from local registries (e.g., `--find-links`).
                     IndexUrl::Path(_) => {
                         let revision_entry = cache_shard.entry(LOCAL_REVISION);
-                        match LocalRevisionPointer::read_from(revision_entry) { Ok(Some(pointer)) => {
-                            Some(pointer.into_revision())
-                        } _ => {
-                            None
-                        }}
+                        match LocalRevisionPointer::read_from(revision_entry) {
+                            Ok(Some(pointer)) => Some(pointer.into_revision()),
+                            _ => None,
+                        }
                     }
                 };
 

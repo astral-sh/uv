@@ -95,8 +95,8 @@ impl InstalledDist {
             let version = Version::from_str(version).map_err(|err| anyhow!(err))?;
             let cache_info = Self::cache_info(path)?;
 
-            return match Self::direct_url(path)? { Some(direct_url) => {
-                match Url::try_from(&direct_url) {
+            return match Self::direct_url(path)? {
+                Some(direct_url) => match Url::try_from(&direct_url) {
                     Ok(url) => Ok(Some(Self::Url(InstalledDirectUrlDist {
                         name,
                         version,
@@ -115,15 +115,14 @@ impl InstalledDist {
                             cache_info,
                         })))
                     }
-                }
-            } _ => {
-                Ok(Some(Self::Registry(InstalledRegistryDist {
+                },
+                _ => Ok(Some(Self::Registry(InstalledRegistryDist {
                     name,
                     version,
                     path: path.to_path_buf(),
                     cache_info,
-                })))
-            }};
+                }))),
+            };
         }
 
         // Ex) `zstandard-0.22.0-py3.12.egg-info` or `vtk-9.2.6.egg-info`

@@ -308,57 +308,59 @@ pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) 
 fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
     /// Format a step in the [`DerivationChain`] as a human-readable error message.
     fn format_step(step: &DerivationStep, range: Option<Ranges<Version>>) -> String {
-        match range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
-        { Some(range) => {
-            if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)`
-                format!(
-                    "`{}{}` ({})",
-                    format!("{}[{}]", step.name, extra).cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
-            } else if let Some(group) = &step.group {
-                // Ex) `flask:dev>=1.0.0` (v1.2.3)`
-                format!(
-                    "`{}{}` ({})",
-                    format!("{}:{}", step.name, group).cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
-            } else {
-                // Ex) `flask>=1.0.0` (v1.2.3)`
-                format!(
-                    "`{}{}` ({})",
-                    step.name.cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+        match range.filter(|range| *range != Ranges::empty() && *range != Ranges::full()) {
+            Some(range) => {
+                if let Some(extra) = &step.extra {
+                    // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)`
+                    format!(
+                        "`{}{}` ({})",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        range.cyan(),
+                        format!("v{}", step.version).cyan(),
+                    )
+                } else if let Some(group) = &step.group {
+                    // Ex) `flask:dev>=1.0.0` (v1.2.3)`
+                    format!(
+                        "`{}{}` ({})",
+                        format!("{}:{}", step.name, group).cyan(),
+                        range.cyan(),
+                        format!("v{}", step.version).cyan(),
+                    )
+                } else {
+                    // Ex) `flask>=1.0.0` (v1.2.3)`
+                    format!(
+                        "`{}{}` ({})",
+                        step.name.cyan(),
+                        range.cyan(),
+                        format!("v{}", step.version).cyan(),
+                    )
+                }
             }
-        } _ => {
-            if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]` (v1.2.3)`
-                format!(
-                    "`{}` ({})",
-                    format!("{}[{}]", step.name, extra).cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
-            } else if let Some(group) = &step.group {
-                // Ex) `flask:dev` (v1.2.3)`
-                format!(
-                    "`{}` ({})",
-                    format!("{}:{}", step.name, group).cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
-            } else {
-                // Ex) `flask` (v1.2.3)`
-                format!(
-                    "`{}` ({})",
-                    step.name.cyan(),
-                    format!("v{}", step.version).cyan()
-                )
+            _ => {
+                if let Some(extra) = &step.extra {
+                    // Ex) `flask[dotenv]` (v1.2.3)`
+                    format!(
+                        "`{}` ({})",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        format!("v{}", step.version).cyan(),
+                    )
+                } else if let Some(group) = &step.group {
+                    // Ex) `flask:dev` (v1.2.3)`
+                    format!(
+                        "`{}` ({})",
+                        format!("{}:{}", step.name, group).cyan(),
+                        format!("v{}", step.version).cyan(),
+                    )
+                } else {
+                    // Ex) `flask` (v1.2.3)`
+                    format!(
+                        "`{}` ({})",
+                        step.name.cyan(),
+                        format!("v{}", step.version).cyan()
+                    )
+                }
             }
-        }}
+        }
     }
 
     let mut message = if let Some(version) = version {
@@ -379,11 +381,13 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
         }
         range = Some(SentinelRange::from(&step.range).strip());
     }
-    match range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
-    { Some(range) => {
-        message = format!("{message} `{}{}`", name.cyan(), range.cyan());
-    } _ => {
-        message = format!("{message} `{}`", name.cyan());
-    }}
+    match range.filter(|range| *range != Ranges::empty() && *range != Ranges::full()) {
+        Some(range) => {
+            message = format!("{message} `{}{}`", name.cyan(), range.cyan());
+        }
+        _ => {
+            message = format!("{message} `{}`", name.cyan());
+        }
+    }
     message
 }

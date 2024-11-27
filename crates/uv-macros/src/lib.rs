@@ -21,15 +21,15 @@ pub fn derive_combine(input: TokenStream) -> TokenStream {
 
 fn impl_combine(ast: &DeriveInput) -> TokenStream {
     let name = &ast.ident;
-    let fields = match ast.data
-    { syn::Data::Struct(syn::DataStruct {
-        fields: syn::Fields::Named(ref fields),
-        ..
-    }) => {
-        &fields.named
-    } _ => {
-        unimplemented!();
-    }};
+    let fields = match ast.data {
+        syn::Data::Struct(syn::DataStruct {
+            fields: syn::Fields::Named(ref fields),
+            ..
+        }) => &fields.named,
+        _ => {
+            unimplemented!();
+        }
+    };
 
     let combines = fields.iter().map(|f| {
         let name = &f.ident;
@@ -55,13 +55,13 @@ fn get_doc_comment(attrs: &[Attribute]) -> String {
         .iter()
         .filter_map(|attr| {
             if attr.path().is_ident("doc") {
-                match &attr.meta { syn::Meta::NameValue(meta) => {
-                    match &meta.value { syn::Expr::Lit(expr) => {
+                if let syn::Meta::NameValue(meta) = &attr.meta {
+                    if let syn::Expr::Lit(expr) = &meta.value {
                         if let syn::Lit::Str(str) = &expr.lit {
                             return Some(str.value().trim().to_string());
                         }
-                    } _ => {}}
-                } _ => {}}
+                    }
+                }
             }
             None
         })
@@ -97,12 +97,15 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
                 // Extract the environment variable patterns.
-                match get_env_var_pattern_from_attr(&item.attrs) { Some(pattern) => {
-                    let doc = get_doc_comment(&item.attrs);
-                    Some((pattern, doc))
-                } _ => {
-                    None // Skip if pattern extraction fails.
-                }}
+                match get_env_var_pattern_from_attr(&item.attrs) {
+                    Some(pattern) => {
+                        let doc = get_doc_comment(&item.attrs);
+                        Some((pattern, doc))
+                    }
+                    _ => {
+                        None // Skip if pattern extraction fails.
+                    }
+                }
             }
             _ => None,
         })

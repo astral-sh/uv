@@ -647,10 +647,10 @@ impl Lock {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(item.package().to_string()));
                     match item.conflict() {
-                        &ConflictPackage::Extra(ref extra) => {
+                        ConflictPackage::Extra(extra) => {
                             table.insert("extra", Value::from(extra.to_string()));
                         }
-                        &ConflictPackage::Group(ref group) => {
+                        ConflictPackage::Group(group) => {
                             table.insert("group", Value::from(group.to_string()));
                         }
                     }
@@ -912,7 +912,7 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| matches!(package.id.source, Source::Virtual(_)));
-                if actual.map_or(true, |actual| actual != expected) {
+                if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedSources(name.clone(), expected));
                 }
             }
@@ -932,7 +932,7 @@ impl Lock {
                     .ok()
                     .flatten()
                     .map(|package| &package.id.version);
-                if actual.map_or(true, |actual| actual != expected) {
+                if actual != Some(expected) {
                     return Ok(SatisfiesResult::MismatchedVersion(
                         name.clone(),
                         expected.clone(),
@@ -1105,7 +1105,8 @@ impl Lock {
             // Fetch the metadata for the distribution.
             let metadata = {
                 let id = dist.version_id();
-                match index
+                if let Some(archive) =
+                    index
                         .distributions()
                         .get(&id)
                         .as_deref()
@@ -1116,10 +1117,10 @@ impl Lock {
                                 None
                             }
                         })
-                { Some(archive) => {
+                {
                     // If the metadata is already in the index, return it.
                     archive.metadata.clone()
-                } _ => {
+                } else {
                     // Run the PEP 517 build process to extract metadata from the source distribution.
                     let archive = database
                         .get_or_build_wheel_metadata(&dist, hasher.get(&dist))
@@ -1137,7 +1138,7 @@ impl Lock {
                         .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                     metadata
-                }}
+                }
             };
 
             // Validate the `version` metadata.
@@ -1731,9 +1732,9 @@ impl Package {
         }
 
         if !no_build {
-            match self.to_source_dist(workspace_root)? { Some(sdist) => {
+            if let Some(sdist) = self.to_source_dist(workspace_root)? {
                 return Ok(Dist::Source(sdist));
-            } _ => {}}
+            }
         }
 
         match (no_binary, no_build) {
@@ -2753,7 +2754,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySource {
     {
         struct Visitor;
 
-        impl<'de> serde::de::Visitor<'de> for Visitor {
+        impl serde::de::Visitor<'_> for Visitor {
             type Value = RegistrySource;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -3683,7 +3684,7 @@ impl<'de> serde::Deserialize<'de> for Hash {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        &FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.as_base_url()),
+        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.as_base_url()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }

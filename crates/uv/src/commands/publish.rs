@@ -103,16 +103,18 @@ pub(crate) async fn publish(
     )
     .await?;
 
-    let (username, password) =
-        match &trusted_publishing_token { TrustedPublishResult::Configured(password) => {
+    let (username, password) = match &trusted_publishing_token {
+        TrustedPublishResult::Configured(password) => {
             (Some("__token__".to_string()), Some(password.to_string()))
-        } _ => {
+        }
+        _ => {
             if username.is_none() && password.is_none() {
                 prompt_username_and_password()?
             } else {
                 (username, password)
             }
-        }};
+        }
+    };
 
     if password.is_some() && username.is_none() {
         bail!(
@@ -124,7 +126,7 @@ pub(crate) async fn publish(
 
     if username.is_none() && password.is_none() && keyring_provider == KeyringProviderType::Disabled
     {
-        match trusted_publishing_token { TrustedPublishResult::Ignored(err) => {
+        if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
             // The user has configured something incorrectly:
             // * The user forgot to configure credentials.
             // * The user forgot to forward the secrets as env vars (or used the wrong ones).
@@ -148,7 +150,7 @@ pub(crate) async fn publish(
                     source.to_string().trim()
                 )?;
             }
-        } _ => {}}
+        }
     }
 
     for (file, raw_filename, filename) in files {

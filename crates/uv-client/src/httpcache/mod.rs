@@ -347,13 +347,13 @@ impl ArchivedCachePolicy {
                 request.url(),
             );
             self.set_revalidation_headers(request);
-            return BeforeRequest::Stale(self.new_cache_policy_builder(request));
+            return BeforeRequest::Stale(Box::new(self.new_cache_policy_builder(request)));
         }
         // "the stored response does not contain the no-cache directive, unless
         // it is successfully validated, and..."
         if self.response.headers.cc.no_cache {
             self.set_revalidation_headers(request);
-            return BeforeRequest::Stale(self.new_cache_policy_builder(request));
+            return BeforeRequest::Stale(Box::new(self.new_cache_policy_builder(request)));
         }
         // "the stored response is one of the following: ..."
         //
@@ -366,7 +366,7 @@ impl ArchivedCachePolicy {
         //
         // In this case, callers will need to send a revalidation request.
         self.set_revalidation_headers(request);
-        BeforeRequest::Stale(self.new_cache_policy_builder(request))
+        BeforeRequest::Stale(Box::new(self.new_cache_policy_builder(request)))
     }
 
     /// This implements the logic for handling the response to a request that
@@ -392,7 +392,7 @@ impl ArchivedCachePolicy {
     /// [RFC 9111 S4.3.4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.3.4
     pub fn after_response(
         &self,
-        cache_policy_builder: CachePolicyBuilder,
+        cache_policy_builder: Box<CachePolicyBuilder>,
         response: &reqwest::Response,
     ) -> AfterResponse {
         let mut new_policy = cache_policy_builder.build(response);
@@ -513,9 +513,9 @@ impl ArchivedCachePolicy {
             // validation even if there have been changes to the representation
             // data."
             if !etag.weak {
-                match HeaderValue::from_bytes(&etag.value) { Ok(header) => {
+                if let Ok(header) = HeaderValue::from_bytes(&etag.value) {
                     request.headers_mut().append("if-none-match", header);
-                } _ => {}}
+                }
             }
         }
         // We also set `If-Modified-Since` as per [RFC 9110 S13.1.3] and [RFC
@@ -528,12 +528,13 @@ impl ArchivedCachePolicy {
             if let Some(&last_modified_unix_timestamp) =
                 self.response.headers.last_modified_unix_timestamp.as_ref()
             {
-                match unix_timestamp_to_header(last_modified_unix_timestamp.into())
-                { Some(last_modified) => {
+                if let Some(last_modified) =
+                    unix_timestamp_to_header(last_modified_unix_timestamp.into())
+                {
                     request
                         .headers_mut()
                         .insert("if-modified-since", last_modified);
-                } _ => {}}
+                }
             }
         }
     }
@@ -999,7 +1000,7 @@ pub enum BeforeRequest {
     /// request and then call `CachePolicy::after_response` to determine
     /// whether the cached response is actually fresh, or if it's stale and
     /// needs to be updated.
-    Stale(CachePolicyBuilder),
+    Stale(Box<CachePolicyBuilder>),
     /// The given request does not match the cache policy identification.
     /// Generally speaking, this is usually implies a bug with the cache in
     /// that it loaded a cache policy that does not match the request.

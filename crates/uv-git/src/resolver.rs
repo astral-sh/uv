@@ -66,11 +66,10 @@ impl GitResolver {
         .await?;
 
         // Fetch the Git repository.
-        let source = match reporter { Some(reporter) => {
-            GitSource::new(url.clone(), client, cache).with_reporter(reporter)
-        } _ => {
-            GitSource::new(url.clone(), client, cache)
-        }};
+        let source = match reporter {
+            Some(reporter) => GitSource::new(url.clone(), client, cache).with_reporter(reporter),
+            _ => GitSource::new(url.clone(), client, cache),
+        };
         let precise = tokio::task::spawn_blocking(move || source.resolve())
             .await?
             .map_err(GitResolverError::Git)?;
@@ -97,11 +96,10 @@ impl GitResolver {
         // If we know the precise commit already, reuse it, to ensure that all fetches within a
         // single process are consistent.
         let url = {
-            match self.get(&reference) { Some(precise) => {
-                Cow::Owned(url.clone().with_precise(*precise))
-            } _ => {
-                Cow::Borrowed(url)
-            }}
+            match self.get(&reference) {
+                Some(precise) => Cow::Owned(url.clone().with_precise(*precise)),
+                _ => Cow::Borrowed(url),
+            }
         };
 
         // Avoid races between different processes, too.
@@ -115,11 +113,12 @@ impl GitResolver {
         .await?;
 
         // Fetch the Git repository.
-        let source = match reporter { Some(reporter) => {
-            GitSource::new(url.as_ref().clone(), client, cache).with_reporter(reporter)
-        } _ => {
-            GitSource::new(url.as_ref().clone(), client, cache)
-        }};
+        let source = match reporter {
+            Some(reporter) => {
+                GitSource::new(url.as_ref().clone(), client, cache).with_reporter(reporter)
+            }
+            _ => GitSource::new(url.as_ref().clone(), client, cache),
+        };
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
             .map_err(GitResolverError::Git)?;

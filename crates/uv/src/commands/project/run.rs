@@ -376,7 +376,7 @@ pub(crate) async fn run(
 
     // Discover and sync the base environment.
     let temp_dir;
-    let base_interpreter = match script_interpreter { Some(script_interpreter) => {
+    let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
         if no_project {
             debug!(
@@ -427,7 +427,7 @@ pub(crate) async fn run(
         }
 
         script_interpreter
-    } _ => {
+    } else {
         let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
@@ -817,7 +817,7 @@ pub(crate) async fn run(
         };
 
         interpreter
-    }};
+    };
 
     debug!(
         "Using Python {} interpreter at: {}",
@@ -1379,8 +1379,8 @@ impl RunCommand {
         }
 
         let metadata = target_path.metadata();
-        let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
-        let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
+        let is_file = metadata.as_ref().is_ok_and(std::fs::Metadata::is_file);
+        let is_dir = metadata.as_ref().is_ok_and(std::fs::Metadata::is_dir);
 
         if target.eq_ignore_ascii_case("-") {
             let mut buf = Vec::with_capacity(1024);
@@ -1417,11 +1417,9 @@ impl RunCommand {
 /// Returns `true` if the target is a ZIP archive containing a `__main__.py` file.
 fn is_python_zipapp(target: &Path) -> bool {
     if let Ok(file) = fs_err::File::open(target) {
-        match zip::ZipArchive::new(file) { Ok(mut archive) => {
-            return archive
-                .by_name("__main__.py")
-                .map_or(false, |f| f.is_file());
-        } _ => {}}
+        if let Ok(mut archive) = zip::ZipArchive::new(file) {
+            return archive.by_name("__main__.py").is_ok_and(|f| f.is_file());
+        }
     }
     false
 }

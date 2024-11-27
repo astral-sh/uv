@@ -157,7 +157,8 @@ impl VersionMap {
     pub(crate) fn iter(
         &self,
         range: &Range<Version>,
-    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator + use<'_> {
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator + use<'_>
+    {
         // Performance optimization: If we only have a single version, return that version directly.
         if let Some(version) = range.as_singleton() {
             either::Either::Left(match self.inner {

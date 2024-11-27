@@ -137,9 +137,9 @@ pub(crate) async fn add(
 
         // If we found a script, add to the existing metadata. Otherwise, create a new inline
         // metadata tag.
-        let script = match Pep723Script::read(&script).await? { Some(script) => {
+        let script = if let Some(script) = Pep723Script::read(&script).await? {
             script
-        } _ => {
+        } else {
             let requires_python = init_script_python_requirement(
                 python.as_deref(),
                 install_mirrors.clone(),
@@ -154,7 +154,7 @@ pub(crate) async fn add(
             )
             .await?;
             Pep723Script::init(&script, requires_python.specifiers()).await?
-        }};
+        };
 
         let ScriptPython {
             source,
@@ -383,7 +383,7 @@ pub(crate) async fn add(
 
     // If any of the requirements are self-dependencies, bail.
     if matches!(dependency_type, DependencyType::Production) {
-        match &target { Target::Project(project, _) => {
+        if let Target::Project(project, _) = &target {
             if let Some(project_name) = project.project_name() {
                 for requirement in &requirements {
                     if requirement.name == *project_name {
@@ -396,7 +396,7 @@ pub(crate) async fn add(
                     }
                 }
             }
-        } _ => {}}
+        }
     }
 
     // If the user provides a single, named index, pin all requirements to that index.
@@ -542,10 +542,10 @@ pub(crate) async fn add(
         let edit = match &dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
             DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
-            &DependencyType::Optional(ref extra) => {
+            DependencyType::Optional(extra) => {
                 toml.add_optional_dependency(extra, &requirement, source.as_ref())?
             }
-            &DependencyType::Group(ref group) => {
+            DependencyType::Group(group) => {
                 toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
             }
         };
@@ -885,12 +885,12 @@ async fn lock_and_sync(
             let dev = DevGroupsSpecification::from(DevMode::Include);
             (extras, dev)
         }
-        &DependencyType::Optional(ref extra_name) => {
+        DependencyType::Optional(extra_name) => {
             let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
             let dev = DevGroupsSpecification::from(DevMode::Exclude);
             (extras, dev)
         }
-        &DependencyType::Group(ref group_name) => {
+        DependencyType::Group(group_name) => {
             let extras = ExtrasSpecification::None;
             let dev =
                 DevGroupsSpecification::from(GroupsSpecification::from_group(group_name.clone()));

@@ -1086,10 +1086,10 @@ pub fn find_best_python_installation(
     } {
         debug!("Looking for relaxed patch version {request}");
         let result = find_python_installation(&request, environments, preference, cache)?;
-        match result { Ok(ref installation) => {
+        if let Ok(ref installation) = result {
             warn_on_unsupported_python(installation.interpreter());
             return Ok(result);
-        } _ => {}}
+        }
     }
 
     // If a Python version was requested but cannot be fulfilled, just take any version
@@ -1290,16 +1290,16 @@ impl PythonRequest {
         }
         // e.g. `python3.12.1`
         if let Some(remainder) = value.strip_prefix("python") {
-            match VersionRequest::from_str(remainder) { Ok(version) => {
+            if let Ok(version) = VersionRequest::from_str(remainder) {
                 return Self::Version(version);
-            } _ => {}}
+            }
         }
         // e.g. `pypy@3.12`
         if let Some((first, second)) = value.split_once('@') {
             if let Ok(implementation) = ImplementationName::from_str(first) {
-                match VersionRequest::from_str(second) { Ok(version) => {
+                if let Ok(version) = VersionRequest::from_str(second) {
                     return Self::ImplementationVersion(implementation, version);
-                } _ => {}}
+                }
             }
         }
         for implementation in
@@ -1314,13 +1314,13 @@ impl PythonRequest {
                     );
                 }
                 // e.g. `pypy3.12` or `pp312`
-                match VersionRequest::from_str(remainder) { Ok(version) => {
+                if let Ok(version) = VersionRequest::from_str(remainder) {
                     return Self::ImplementationVersion(
                         // Safety: The name matched the possible names above
                         ImplementationName::from_str(implementation).unwrap(),
                         version,
                     );
-                } _ => {}}
+                }
             }
         }
         let value_as_path = PathBuf::from(value);
@@ -1411,16 +1411,16 @@ impl PythonRequest {
                 // created from within a virtual environment will _not_ evaluate to the same
                 // `sys.executable`, but will have the same `sys._base_executable`.
                 if cfg!(windows) {
-                    match Interpreter::query(file, cache) { Ok(file_interpreter) => {
-                        match (
+                    if let Ok(file_interpreter) = Interpreter::query(file, cache) {
+                        if let (Some(file_base), Some(interpreter_base)) = (
                             file_interpreter.sys_base_executable(),
                             interpreter.sys_base_executable(),
-                        ) { (Some(file_base), Some(interpreter_base)) => {
+                        ) {
                             if is_same_executable(file_base, interpreter_base) {
                                 return true;
                             }
-                        } _ => {}}
-                    } _ => {}}
+                        }
+                    }
                 }
                 false
             }

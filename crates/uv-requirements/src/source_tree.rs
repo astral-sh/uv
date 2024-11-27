@@ -190,7 +190,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = VersionId::from_url(source.url());
-            match self.index
+            if let Some(archive) =
+                self.index
                     .distributions()
                     .get(&id)
                     .as_deref()
@@ -201,10 +202,10 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                             None
                         }
                     })
-            { Some(archive) => {
+            {
                 // If the metadata is already in the index, return it.
                 archive.metadata.clone()
-            } _ => {
+            } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
                 let archive = self.database.build_wheel_metadata(&source, hashes).await?;
@@ -215,7 +216,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                     .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
 
                 archive.metadata
-            }}
+            }
         };
 
         Ok(RequiresDist::from(metadata))

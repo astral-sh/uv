@@ -99,9 +99,9 @@ impl Resolution {
     pub fn map(mut self, predicate: impl Fn(&ResolvedDist) -> Option<ResolvedDist>) -> Self {
         for node in self.graph.node_weights_mut() {
             if let Node::Dist { dist, .. } = node {
-                match predicate(dist) { Some(transformed) => {
+                if let Some(transformed) = predicate(dist) {
                     *dist = transformed;
-                } _ => {}}
+                }
             }
         }
         self

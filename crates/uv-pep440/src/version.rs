@@ -467,9 +467,9 @@ impl Version {
     /// since all versions should have at least one release number.
     #[inline]
     fn clear_release(&mut self) {
-        match Arc::make_mut(&mut self.inner) {
-            &mut VersionInner::Small { ref mut small } => small.clear_release(),
-            &mut VersionInner::Full { ref mut full } => {
+        match *Arc::make_mut(&mut self.inner) {
+            VersionInner::Small { ref mut small } => small.clear_release(),
+            VersionInner::Full { ref mut full } => {
                 full.release.clear();
             }
         }
@@ -3926,7 +3926,7 @@ mod tests {
     /// assertion failure messages.
     struct VersionBloatedDebug<'a>(&'a Version);
 
-    impl<'a> std::fmt::Debug for VersionBloatedDebug<'a> {
+    impl std::fmt::Debug for VersionBloatedDebug<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Version")
                 .field("epoch", &self.0.epoch())

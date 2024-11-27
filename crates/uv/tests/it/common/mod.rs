@@ -1146,11 +1146,12 @@ pub fn python_installations_for_versions(
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
                 &cache,
-            ) { Ok(python) => {
-                python.into_interpreter().sys_executable().to_owned()
-            } _ => {
-                panic!("Could not find Python {python_version} for test");
-            }}
+            ) {
+                Ok(python) => python.into_interpreter().sys_executable().to_owned(),
+                _ => {
+                    panic!("Could not find Python {python_version} for test");
+                }
+            }
         })
         .collect::<Vec<_>>();
 

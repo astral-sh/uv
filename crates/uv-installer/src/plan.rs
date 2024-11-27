@@ -119,7 +119,7 @@ impl<'a> Planner<'a> {
             // Identify any cached distributions that satisfy the requirement.
             match dist {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
-                    match registry_index.get(wheel.name()).find_map(|entry| {
+                    if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
                         if *entry.index.url() != wheel.best_wheel().index {
                             return None;
                         }
@@ -133,11 +133,11 @@ impl<'a> Planner<'a> {
                             return None;
                         }
                         Some(&entry.dist)
-                    }) { Some(distribution) => {
+                    }) {
                         debug!("Requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
-                    } _ => {}}
+                    }
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
@@ -164,7 +164,7 @@ impl<'a> Planner<'a> {
                         .entry(format!("{}.http", wheel.filename.stem()));
 
                     // Read the HTTP pointer.
-                    match HttpArchivePointer::read_from(&cache_entry)? { Some(pointer) => {
+                    if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
                         let archive = pointer.into_archive();
                         if archive.satisfies(hasher.get(dist)) {
                             let cached_dist = CachedDirectUrlDist::from_url(
@@ -179,7 +179,7 @@ impl<'a> Planner<'a> {
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
                         }
-                    } _ => {}}
+                    }
                 }
                 Dist::Built(BuiltDist::Path(wheel)) => {
                     // Validate that the path exists.
@@ -210,7 +210,7 @@ impl<'a> Planner<'a> {
                         )
                         .entry(format!("{}.rev", wheel.filename.stem()));
 
-                    match LocalArchivePointer::read_from(&cache_entry)? { Some(pointer) => {
+                    if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
                         let timestamp = Timestamp::from_path(&wheel.install_path)?;
                         if pointer.is_up_to_date(timestamp) {
                             let cache_info = pointer.to_cache_info();
@@ -229,10 +229,10 @@ impl<'a> Planner<'a> {
                                 continue;
                             }
                         }
-                    } _ => {}}
+                    }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    match registry_index.get(sdist.name()).find_map(|entry| {
+                    if let Some(distribution) = registry_index.get(sdist.name()).find_map(|entry| {
                         if *entry.index.url() != sdist.index {
                             return None;
                         }
@@ -246,21 +246,21 @@ impl<'a> Planner<'a> {
                             return None;
                         }
                         Some(&entry.dist)
-                    }) { Some(distribution) => {
+                    }) {
                         debug!("Requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
-                    } _ => {}}
+                    }
                 }
                 Dist::Source(SourceDist::DirectUrl(sdist)) => {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
-                    match built_index.url(sdist)? { Some(wheel) => {
+                    if let Some(wheel) = built_index.url(sdist)? {
                         let cached_dist = wheel.into_url_dist(sdist.url.clone());
                         debug!("URL source requirement already cached: {cached_dist}");
                         cached.push(CachedDist::Url(cached_dist));
                         continue;
-                    } _ => {}}
+                    }
                 }
                 Dist::Source(SourceDist::Git(sdist)) => {
                     // Find the most-compatible wheel from the cache, since we don't know
@@ -280,12 +280,12 @@ impl<'a> Planner<'a> {
 
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
-                    match built_index.path(sdist)? { Some(wheel) => {
+                    if let Some(wheel) = built_index.path(sdist)? {
                         let cached_dist = wheel.into_url_dist(sdist.url.clone());
                         debug!("Path source requirement already cached: {cached_dist}");
                         cached.push(CachedDist::Url(cached_dist));
                         continue;
-                    } _ => {}}
+                    }
                 }
                 Dist::Source(SourceDist::Directory(sdist)) => {
                     // Validate that the path exists.
@@ -295,7 +295,7 @@ impl<'a> Planner<'a> {
 
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
-                    match built_index.directory(sdist)? { Some(wheel) => {
+                    if let Some(wheel) = built_index.directory(sdist)? {
                         let cached_dist = if sdist.editable {
                             wheel.into_editable(sdist.url.clone())
                         } else {
@@ -304,7 +304,7 @@ impl<'a> Planner<'a> {
                         debug!("Directory source requirement already cached: {cached_dist}");
                         cached.push(CachedDist::Url(cached_dist));
                         continue;
-                    } _ => {}}
+                    }
                 }
             }
 

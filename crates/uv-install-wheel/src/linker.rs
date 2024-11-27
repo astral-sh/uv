@@ -330,12 +330,12 @@ fn clone_wheel_files(
     #[allow(clippy::disallowed_types)]
     match std::fs::File::open(site_packages.as_ref()) {
         Ok(dir) => {
-            match dir.set_modified(now) { Err(err) => {
+            if let Err(err) = dir.set_modified(now) {
                 debug!(
                     "Failed to update mtime for {}: {err}",
                     site_packages.as_ref().display()
                 );
-            } _ => {}}
+            }
         }
         Err(err) => debug!(
             "Failed to open {} to update mtime: {err}",

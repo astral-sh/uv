@@ -190,11 +190,12 @@ impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
                     .map(GroupName::from_str)
                     .transpose()
                     .map_err(serde::de::Error::custom)?
-                { Some(include_group) => {
-                    Ok(DependencyGroupSpecifier::IncludeGroup { include_group })
-                } _ => {
-                    Ok(DependencyGroupSpecifier::Object(map_data))
-                }}
+                {
+                    Some(include_group) => {
+                        Ok(DependencyGroupSpecifier::IncludeGroup { include_group })
+                    }
+                    _ => Ok(DependencyGroupSpecifier::Object(map_data)),
+                }
             }
         }
 

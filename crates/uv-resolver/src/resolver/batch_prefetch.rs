@@ -105,8 +105,9 @@ impl BatchPrefetcher {
                     compatible,
                     previous,
                 } => {
-                    match selector.select_no_preference(name, &compatible, version_map, env)
-                    { Some(candidate) => {
+                    if let Some(candidate) =
+                        selector.select_no_preference(name, &compatible, version_map, env)
+                    {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
                         );
@@ -115,12 +116,12 @@ impl BatchPrefetcher {
                             previous: candidate.version().clone(),
                         };
                         candidate
-                    } _ => {
+                    } else {
                         // We exhausted the compatible version, switch to ignoring the existing
                         // constraints on the package and instead going through versions in order.
                         phase = BatchPrefetchStrategy::InOrder { previous };
                         continue;
-                    }}
+                    }
                 }
                 BatchPrefetchStrategy::InOrder { previous } => {
                     let mut range = if selector.use_highest_version(name, env) {
@@ -139,16 +140,18 @@ impl BatchPrefetcher {
                             }
                         };
                     }
-                    match selector.select_no_preference(name, &range, version_map, env)
-                    { Some(candidate) => {
-                        phase = BatchPrefetchStrategy::InOrder {
-                            previous: candidate.version().clone(),
-                        };
-                        candidate
-                    } _ => {
-                        // Both strategies exhausted their candidates.
-                        break;
-                    }}
+                    match selector.select_no_preference(name, &range, version_map, env) {
+                        Some(candidate) => {
+                            phase = BatchPrefetchStrategy::InOrder {
+                                previous: candidate.version().clone(),
+                            };
+                            candidate
+                        }
+                        _ => {
+                            // Both strategies exhausted their candidates.
+                            break;
+                        }
+                    }
                 }
             };
 

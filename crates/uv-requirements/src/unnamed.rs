@@ -274,7 +274,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let name = {
             let id = VersionId::from_url(source.url());
-            match index
+            if let Some(archive) = index
                 .distributions()
                 .get(&id)
                 .as_deref()
@@ -285,10 +285,10 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                         None
                     }
                 })
-            { Some(archive) => {
+            {
                 // If the metadata is already in the index, return it.
                 archive.metadata.name.clone()
-            } _ => {
+            } else {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let hashes = hasher.get_url(source.url());
                 let source = BuildableSource::Url(source);
@@ -302,7 +302,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     .done(id, Arc::new(MetadataResponse::Found(archive)));
 
                 name
-            }}
+            }
         };
 
         Ok(uv_pep508::Requirement {

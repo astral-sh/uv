@@ -176,17 +176,22 @@ impl Workspace {
             } else if pyproject_toml.project.is_none() {
                 // Without a project, it can't be an implicit root
                 return Err(WorkspaceError::MissingProject(pyproject_path));
-            } else { match find_workspace(&project_path, options).await? { Some(workspace) => {
-                // We have found an explicit root above.
-                workspace
-            } _ => {
-                // Support implicit single project workspaces.
-                (
-                    project_path.clone(),
-                    ToolUvWorkspace::default(),
-                    pyproject_toml.clone(),
-                )
-            }}};
+            } else {
+                match find_workspace(&project_path, options).await? {
+                    Some(workspace) => {
+                        // We have found an explicit root above.
+                        workspace
+                    }
+                    _ => {
+                        // Support implicit single project workspaces.
+                        (
+                            project_path.clone(),
+                            ToolUvWorkspace::default(),
+                            pyproject_toml.clone(),
+                        )
+                    }
+                }
+            };
 
         debug!(
             "Found workspace root: `{}`",
@@ -1001,7 +1006,7 @@ impl ProjectWorkspace {
         let project = pyproject_toml
             .project
             .clone()
-            .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path))?;
+            .ok_or(WorkspaceError::MissingProject(pyproject_path))?;
 
         Self::from_project(project_root, &project, &pyproject_toml, options).await
     }

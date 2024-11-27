@@ -211,6 +211,7 @@ impl Metadata23 {
                 writer.push_str(&format!("{}{}\n", " ".repeat(key.len() + 2), line));
             }
         }
+        #[allow(clippy::ref_option)]
         fn write_opt_str(writer: &mut String, key: &str, value: &Option<impl Display>) {
             if let Some(value) = value {
                 write_str(writer, key, value);

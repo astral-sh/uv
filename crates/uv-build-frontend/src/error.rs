@@ -264,23 +264,26 @@ impl Error {
                 .or(MISSING_HEADER_RE_CLANG.captures(line.trim()))
                 .or(MISSING_HEADER_RE_MSVC.captures(line.trim()))
                 .map(|c| c.extract())
-            { Some((_, [header])) => {
-                Some(MissingLibrary::Header(header.to_string()))
-            } _ => { match LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract())
-            { Some((_, [library])) => {
-                Some(MissingLibrary::Linker(library.to_string()))
-            } _ => if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::BuildDependency("wheel".to_string()))
-            } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::BuildDependency("torch".to_string()))
-            } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
-                Some(MissingLibrary::DeprecatedModule(
-                    "distutils".to_string(),
-                    Version::new([3, 12]),
-                ))
-            } else {
-                None
-            }}}}
+            {
+                Some((_, [header])) => Some(MissingLibrary::Header(header.to_string())),
+                _ => match LD_NOT_FOUND_RE.captures(line.trim()).map(|c| c.extract()) {
+                    Some((_, [library])) => Some(MissingLibrary::Linker(library.to_string())),
+                    _ => {
+                        if WHEEL_NOT_FOUND_RE.is_match(line.trim()) {
+                            Some(MissingLibrary::BuildDependency("wheel".to_string()))
+                        } else if TORCH_NOT_FOUND_RE.is_match(line.trim()) {
+                            Some(MissingLibrary::BuildDependency("torch".to_string()))
+                        } else if DISTUTILS_NOT_FOUND_RE.is_match(line.trim()) {
+                            Some(MissingLibrary::DeprecatedModule(
+                                "distutils".to_string(),
+                                Version::new([3, 12]),
+                            ))
+                        } else {
+                            None
+                        }
+                    }
+                },
+            }
         });
 
         if let Some(missing_library) = missing_library {

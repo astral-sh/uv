@@ -326,7 +326,7 @@ pub fn is_temporary(path: impl AsRef<Path>) -> bool {
     path.as_ref()
         .file_name()
         .and_then(|name| name.to_str())
-        .map_or(false, |name| name.starts_with(".tmp"))
+        .is_some_and(|name| name.starts_with(".tmp"))
 }
 
 /// A file lock that is automatically released when dropped.
@@ -398,15 +398,18 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        match self.0.file().unlock() { Err(err) => {
-            error!(
-                "Failed to unlock {}; program may be stuck: {}",
-                self.0.path().display(),
-                err
-            );
-        } _ => {
-            debug!("Released lock at `{}`", self.0.path().display());
-        }}
+        match fs2::FileExt::unlock(self.0.file()) {
+            Err(err) => {
+                error!(
+                    "Failed to unlock {}; program may be stuck: {}",
+                    self.0.path().display(),
+                    err
+                );
+            }
+            _ => {
+                debug!("Released lock at `{}`", self.0.path().display());
+            }
+        }
     }
 }
 

@@ -249,7 +249,8 @@ impl ManagedPythonInstallations {
     pub fn find_version<'a>(
         &self,
         version: &'a PythonVersion,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a + use<'a>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a + use<'a>, Error>
+    {
         Ok(self
             .find_matching_current_platform()?
             .filter(move |installation| {

@@ -719,19 +719,19 @@ impl PubGrubReportFormatter<'_> {
             if let Some(found_index) = available_indexes.get(name).and_then(BTreeSet::first) {
                 // Determine whether the index is the last-available index. If not, then some
                 // indexes were not queried, and could contain a compatible version.
-                match index_locations
+                if let Some(next_index) = index_locations
                     .indexes()
                     .map(Index::url)
                     .skip_while(|url| *url != found_index)
                     .nth(1)
-                { Some(next_index) => {
+                {
                     hints.insert(PubGrubHint::UncheckedIndex {
                         package: package.clone(),
                         range: set.clone(),
                         found_index: found_index.clone(),
                         next_index: next_index.clone(),
                     });
-                } _ => {}}
+                }
             }
         }
 
@@ -1445,19 +1445,22 @@ impl PackageRange<'_> {
         }
 
         let mut segments = self.range.iter();
-        match segments.next() { Some(segment) => {
-            // A single unbounded compatibility segment is always plural ("all versions of").
-            if self.kind == PackageRangeKind::Compatibility {
-                if matches!(segment, (Bound::Unbounded, Bound::Unbounded)) {
-                    return true;
+        match segments.next() {
+            Some(segment) => {
+                // A single unbounded compatibility segment is always plural ("all versions of").
+                if self.kind == PackageRangeKind::Compatibility {
+                    if matches!(segment, (Bound::Unbounded, Bound::Unbounded)) {
+                        return true;
+                    }
                 }
+                // Otherwise, multiple segments are always plural.
+                segments.next().is_some()
             }
-            // Otherwise, multiple segments are always plural.
-            segments.next().is_some()
-        } _ => {
-            // An empty range is always singular.
-            false
-        }}
+            _ => {
+                // An empty range is always singular.
+                false
+            }
+        }
     }
 }
 

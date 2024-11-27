@@ -21,7 +21,7 @@ pub(crate) struct LatestClient<'env> {
     pub(crate) requires_python: &'env RequiresPython,
 }
 
-impl<'env> LatestClient<'env> {
+impl LatestClient<'_> {
     /// Find the latest version of a package from an index.
     pub(crate) async fn find_latest(
         &self,
