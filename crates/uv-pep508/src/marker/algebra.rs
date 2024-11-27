@@ -412,13 +412,77 @@ impl InternerGuard<'_> {
                 // Restrict this variable to the given output by merging it
                 // with the relevant child.
                 let node = if value { high } else { low };
-                return node.negate(i);
+                return self.restrict(node.negate(i), f);
             }
         }
 
         // Restrict all nodes recursively.
         let children = node.children.map(i, |node| self.restrict(node, f));
         self.create_node(node.var.clone(), children)
+    }
+
+    /// Returns a new tree where the only nodes remaining are non-`extra`
+    /// nodes.
+    ///
+    /// If there are only `extra` nodes, then this returns a tree that is
+    /// always true.
+    ///
+    /// This works by assuming all `extra` nodes are always true.
+    ///
+    /// For example, given a marker like
+    /// `((os_name == ... and extra == foo) or (sys_platform == ... and extra != foo))`,
+    /// this would return a marker
+    /// `os_name == ... or sys_platform == ...`.
+    pub(crate) fn without_extras(&mut self, mut i: NodeId) -> NodeId {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return i;
+        }
+
+        let parent = i;
+        let node = self.shared.node(i);
+        if matches!(node.var, Variable::Extra(_)) {
+            i = NodeId::FALSE;
+            for child in node.children.nodes() {
+                i = self.or(i, child.negate(parent));
+            }
+            if i.is_true() {
+                return NodeId::TRUE;
+            }
+            self.without_extras(i)
+        } else {
+            // Restrict all nodes recursively.
+            let children = node.children.map(i, |node| self.without_extras(node));
+            self.create_node(node.var.clone(), children)
+        }
+    }
+
+    /// Returns a new tree where the only nodes remaining are `extra` nodes.
+    ///
+    /// If there are no extra nodes, then this returns a tree that is always
+    /// true.
+    ///
+    /// This works by assuming all non-`extra` nodes are always true.
+    pub(crate) fn only_extras(&mut self, mut i: NodeId) -> NodeId {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return i;
+        }
+
+        let parent = i;
+        let node = self.shared.node(i);
+        if !matches!(node.var, Variable::Extra(_)) {
+            i = NodeId::FALSE;
+            for child in node.children.nodes() {
+                i = self.or(i, child.negate(parent));
+            }
+            if i.is_true() {
+                return NodeId::TRUE;
+            }
+            self.only_extras(i)
+        } else {
+            // Restrict all nodes recursively.
+            let children = node.children.map(i, |node| self.only_extras(node));
+            self.create_node(node.var.clone(), children)
+        }
     }
 
     /// Simplify this tree by *assuming* that the Python version range provided
