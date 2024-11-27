@@ -1164,7 +1164,7 @@ jobs:
       - name: "Add password to keyring"
         run: |
           # `keyrings.alt` contains the plaintext keyring
-          ./uv tool install --with keyrings.alt "keyring<25.4.0" # TODO(konsti): Remove upper bound once fix is released
+          ./uv tool install --with keyrings.alt keyring
           echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
         env:
           UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}

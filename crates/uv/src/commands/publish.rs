@@ -8,7 +8,7 @@ use std::fmt::Write;
 use std::iter;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::info;
+use tracing::{debug, info};
 use url::Url;
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClientBuilder, Connectivity, RegistryClientBuilder};
@@ -17,6 +17,7 @@ use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
     check_trusted_publishing, files_for_publishing, upload, CheckUrlClient, TrustedPublishResult,
 };
+use uv_warnings::warn_user_once;
 
 pub(crate) async fn publish(
     paths: Vec<String>,
@@ -68,7 +69,7 @@ pub(crate) async fn publish(
         .wrap_existing(&upload_client);
 
     // Initialize the registry client.
-    let check_url_client = if let Some(index_url) = check_url {
+    let check_url_client = if let Some(index_url) = &check_url {
         let index_urls = IndexLocations::new(
             vec![Index::from_index_url(index_url.clone())],
             Vec::new(),
@@ -82,7 +83,7 @@ pub(crate) async fn publish(
             .keyring(keyring_provider)
             .allow_insecure_host(allow_insecure_host.to_vec());
         Some(CheckUrlClient {
-            index_url,
+            index_url: index_url.clone(),
             registry_client_builder,
             client: &upload_client,
             index_capabilities: IndexCapabilities::default(),
@@ -103,7 +104,7 @@ pub(crate) async fn publish(
     )
     .await?;
 
-    let (username, password) =
+    let (username, mut password) =
         if let TrustedPublishResult::Configured(password) = &trusted_publishing_token {
             (Some("__token__".to_string()), Some(password.to_string()))
         } else {
@@ -148,6 +149,34 @@ pub(crate) async fn publish(
                     source.to_string().trim()
                 )?;
             }
+        }
+    }
+
+    // If applicable, fetch the password from the keyring eagerly to avoid user confusion about
+    // missing keyring entries later.
+    if let Some(keyring_provider) = keyring_provider.to_provider() {
+        if password.is_none() {
+            if let Some(username) = &username {
+                debug!("Fetching password from keyring");
+                if let Some(keyring_password) = keyring_provider
+                    .fetch(&publish_url, username)
+                    .await
+                    .as_ref()
+                    .and_then(|credentials| credentials.password())
+                {
+                    password = Some(keyring_password.to_string());
+                } else {
+                    warn_user_once!(
+                        "Keyring has no password for URL `{publish_url}` and username `{username}`"
+                    );
+                }
+            }
+        } else if check_url.is_none() {
+            warn_user_once!(
+                "Using `--keyring-provider` with a password or token and no check url has no effect"
+            );
+        } else {
+            // We may be using the keyring for the simple index.
         }
     }
 
