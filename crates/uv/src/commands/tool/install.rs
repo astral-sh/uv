@@ -41,7 +41,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
-    extra_entrypoints_packages: BTreeSet<PackageName>,
+    with_executables_from: BTreeSet<PackageName>,
     python: Option<String>,
     force: bool,
     options: ResolverInstallerOptions,
@@ -408,21 +408,18 @@ pub(crate) async fn install(
         .await?
     };
 
-    // TODO(lucab): we support performing multiple installs in the same environment.
-    // This force-installs, maybe it can be modeled in a more graceful way instead?
-    let force_install = force || invalid_tool_receipt || !extra_entrypoints_packages.is_empty();
+    let force_install = force || invalid_tool_receipt;
 
     // Find a suitable path to install into.
     let executable_directory = uv_tool::find_executable_directory()?;
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
 
-    // Install additional entrypoints from dependencies,
-    // if any was explicitly requested.
-    let mut deps_entrypoints = vec![];
-    for pkg in extra_entrypoints_packages {
+    // Install additional executables, if any was explicitly requested.
+    let mut installed_executables = vec![];
+    for pkg in with_executables_from {
         debug!(
-            "Installing entrypoints for {} as part of tool {}",
+            "Installing executables for `{}` as part of tool `{}`",
             pkg, from.name
         );
         let mut entrypoints = install_executables(
@@ -430,7 +427,7 @@ pub(crate) async fn install(
             &from.name,
             &pkg,
             &installed_tools,
-            &deps_entrypoints,
+            &installed_executables,
             &executable_directory,
             options.clone(),
             force_install,
@@ -438,17 +435,17 @@ pub(crate) async fn install(
             requirements.clone(),
             printer,
         )?;
-        deps_entrypoints.append(&mut entrypoints);
+        installed_executables.append(&mut entrypoints);
     }
 
     // Install entrypoints from the target package.
-    debug!("Installing entrypoints for tool {}", from.name);
+    debug!("Installing executables for tool `{}`", from.name);
     install_executables(
         &environment,
         &from.name,
         &from.name,
         &installed_tools,
-        &deps_entrypoints,
+        &installed_executables,
         &executable_directory,
         options,
         force_install,

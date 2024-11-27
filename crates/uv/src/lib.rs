@@ -895,7 +895,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_package)
                 .chain(
-                    args.extra_entrypoints_packages
+                    args.with_executables_from
                         .iter()
                         .map(RequirementsSource::from_package_name),
                 );
@@ -914,7 +914,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 args.from,
                 &requirements,
-                args.extra_entrypoints_packages,
+                args.with_executables_from,
                 args.python,
                 args.force,
                 args.options,
