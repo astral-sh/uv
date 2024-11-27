@@ -1263,7 +1263,7 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of foo was invalid:
+          hint: The structure of `foo` was invalid:
             The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "###
     );
@@ -2616,7 +2616,7 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of foo was invalid:
+          hint: The structure of `foo` was invalid:
             Failed to read from zip file
     "###
     );
