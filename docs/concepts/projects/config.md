@@ -19,6 +19,8 @@ affects selection of dependency versions (they must support the same Python vers
 
 ## Entry points
 
+### Scripts
+
 Projects may define entry points for the project in the `[project.scripts]` table of the
 `pyproject.toml`.
 
@@ -33,6 +35,32 @@ hello = "example_package_app:hello"
 !!! important
 
     Using `[project.scripts]` requires a [build system](#build-systems) to be defined.
+
+### Plugins
+
+Projects may define plugins that attach to frameworks of other projects. These plugins
+can be declared in the `[project.entry-points]` table if the `pyproject.toml`.
+
+For example, to declare a [flake8 plugin](https://flake8.pycqa.org/en/stable/plugin-development)
+with a check extension rule error code of `X`, attached to a class `ExamplePlugin` in the
+`flake8_example` module:
+
+```toml title="pyproject.toml"
+[project.entry-points."flake8.extension"]
+X = "flake8_example:ExamplePlugin"
+```
+
+Or to create a [Hatch plugin](https://hatch.pypa.io/latest/plugins/about#discovery) named `foo`,
+which refers to the registration hooks module `pkg.hooks`:
+
+```toml title="pyproject.toml"
+[project.entry-points.hatch]
+foo = "pkg.hooks"
+```
+
+!!! important
+
+    Using `[project.entry-points]` requires a [build system](#build-systems) to be defined.
 
 ## Build systems
 
