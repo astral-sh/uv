@@ -6243,6 +6243,111 @@ fn lock_exclusion() -> Result<()> {
     Ok(())
 }
 
+/// Lock a workspace member with a non-workspace source.
+#[test]
+fn lock_non_workspace_source() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `child`
+      ╰─▶ `child` is included as a workspace member, but references a path in `tool.uv.sources`. Workspace members must be declared as workspace sources (e.g., `child = { workspace = true }`).
+    "###);
+
+    Ok(())
+}
+
+/// Lock a workspace member with a non-workspace source.
+#[test]
+fn lock_no_workspace_source() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `child`
+      ╰─▶ `child` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `child = { workspace = true }`)
+    "###);
+
+    Ok(())
+}
+
 /// Ensure that development dependencies are omitted for non-workspace members. Below, `bar` depends
 /// on `foo`, but `bar/uv.lock` should omit `anyio`, but should include `typing-extensions`.
 #[test]

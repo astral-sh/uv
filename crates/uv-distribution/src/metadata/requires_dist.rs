@@ -587,7 +587,7 @@ mod test {
 
         assert_snapshot!(format_err(input).await, @r###"
         error: Failed to parse entry: `tqdm`
-          Caused by: Package is not included as workspace package in `tool.uv.workspace`
+          Caused by: `tqdm` references a workspace in `tool.uv.sources` (e.g., `tqdm = { workspace = true }`), but is not a workspace member
         "###);
     }
 
