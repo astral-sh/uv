@@ -1659,8 +1659,7 @@
       "description": "A subset of the Python Package Metadata 2.3 standard as specified in <https://packaging.python.org/specifications/core-metadata/>.",
       "type": "object",
       "required": [
-        "name",
-        "version"
+        "name"
       ],
       "properties": {
         "name": {
@@ -1689,7 +1688,10 @@
         },
         "version": {
           "description": "PEP 440-style package version, e.g., `1.2.3`",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
