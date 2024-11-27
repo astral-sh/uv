@@ -126,7 +126,7 @@ impl RequirementsSource {
     /// Parse a [`RequirementsSource`] from a [`PackageName`].
     ///
     /// Unlike [`RequirementsSource::from_package`], this method does not prompt the user and
-    /// expects a valid [`PackageName`] instead of an abritrary string.
+    /// expects a valid [`PackageName`] instead of an arbitrary string.
     pub fn from_package_name(name: &PackageName) -> Self {
         Self::Package(name.to_string())
     }
