@@ -62,6 +62,20 @@ pub enum Error {
     },
     #[error("Package metadata version `{metadata}` does not match given version `{given}`")]
     VersionMismatch { given: Version, metadata: Version },
+    #[error(
+        "Package metadata name `{metadata}` does not match `{filename}` from the wheel filename"
+    )]
+    WheelFilenameNameMismatch {
+        filename: PackageName,
+        metadata: PackageName,
+    },
+    #[error(
+        "Package metadata version `{metadata}` does not match `{filename}` from the wheel filename"
+    )]
+    WheelFilenameVersionMismatch {
+        filename: Version,
+        metadata: Version,
+    },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
     #[error("Failed to read metadata: `{}`", _0.user_display())]

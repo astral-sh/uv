@@ -6,6 +6,8 @@ use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::Hashed;
 use uv_fs::files;
+use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_pypi_types::HashDigest;
 
@@ -55,6 +57,12 @@ impl BuiltWheelMetadata {
     pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
         self.hashes = hashes;
         self
+    }
+
+    /// Returns `true` if the wheel matches the given package name and version.
+    pub(crate) fn matches(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
+        name.map_or(true, |name| self.filename.name == *name)
+            && version.map_or(true, |version| self.filename.version == *version)
     }
 }
 
