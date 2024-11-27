@@ -1412,22 +1412,22 @@ macro_rules! function_name {
 /// filter them out and decrease the package counts by one for each match.
 #[allow(unused_macros)]
 macro_rules! uv_snapshot {
-    ($spawnable:expr_2021, @$snapshot:literal) => {{
+    ($spawnable:expr, @$snapshot:literal) => {{
         uv_snapshot!($crate::common::INSTA_FILTERS.to_vec(), $spawnable, @$snapshot)
     }};
-    ($filters:expr_2021, $spawnable:expr_2021, @$snapshot:literal) => {{
+    ($filters:expr, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Platform));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
-    ($filters:expr_2021, windows_filters=false, $spawnable:expr_2021, @$snapshot:literal) => {{
+    ($filters:expr, windows_filters=false, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), None);
         ::insta::assert_snapshot!(snapshot, @$snapshot);
         output
     }};
-    ($filters:expr_2021, universal_windows_filters=true, $spawnable:expr_2021, @$snapshot:literal) => {{
+    ($filters:expr, universal_windows_filters=true, $spawnable:expr, @$snapshot:literal) => {{
         // Take a reference for backwards compatibility with the vec-expecting insta filters.
         let (snapshot, output) = $crate::common::run_and_format($spawnable, &$filters, $crate::function_name!(), Some($crate::common::WindowsFilters::Universal));
         ::insta::assert_snapshot!(snapshot, @$snapshot);
