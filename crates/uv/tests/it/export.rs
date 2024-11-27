@@ -731,7 +731,7 @@ fn frozen() -> Result<()> {
     ----- stderr -----
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `child`
-      ╰─▶ Package is not included as workspace package in `tool.uv.workspace`
+      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     "###);
 
     uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r###"
