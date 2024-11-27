@@ -50,17 +50,18 @@ use std::ops::Bound;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
 
-use itertools::Either;
-use pubgrub::Range;
+use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
-use uv_pep440::Operator;
-use uv_pep440::{Version, VersionSpecifier};
-use uv_pubgrub::PubGrubSpecifier;
+use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
+use version_ranges::Ranges;
 
+use crate::marker::lowering::{
+    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+};
 use crate::marker::MarkerValueExtra;
 use crate::ExtraOperator;
-use crate::{MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion};
+use crate::{MarkerExpression, MarkerOperator, MarkerValueVersion};
 
 /// The global node interner.
 pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);
@@ -157,43 +158,54 @@ impl InternerGuard<'_> {
     /// Returns a decision node for a single marker expression.
     pub(crate) fn expression(&mut self, expr: MarkerExpression) -> NodeId {
         let (var, children) = match expr {
-            // Normalize `python_version` markers to `python_full_version` nodes.
-            MarkerExpression::Version {
-                key: MarkerValueVersion::PythonVersion,
-                specifier,
-            } => match python_version_to_full_version(normalize_specifier(specifier)) {
-                Ok(specifier) => (
-                    Variable::Version(MarkerValueVersion::PythonFullVersion),
-                    Edges::from_specifier(specifier),
-                ),
-                Err(node) => return node,
-            },
-            MarkerExpression::VersionIn {
-                key: MarkerValueVersion::PythonVersion,
-                versions,
-                negated,
-            } => match Edges::from_python_versions(versions, negated) {
-                Ok(edges) => (
-                    Variable::Version(MarkerValueVersion::PythonFullVersion),
-                    edges,
-                ),
-                Err(node) => return node,
-            },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
-            MarkerExpression::Version { key, specifier } => {
-                (Variable::Version(key), Edges::from_specifier(specifier))
-            }
+            MarkerExpression::Version { key, specifier } => match key {
+                MarkerValueVersion::ImplementationVersion => (
+                    Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
+                    Edges::from_specifier(specifier),
+                ),
+                MarkerValueVersion::PythonFullVersion => (
+                    Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                    Edges::from_specifier(specifier),
+                ),
+                // Normalize `python_version` markers to `python_full_version` nodes.
+                MarkerValueVersion::PythonVersion => {
+                    match python_version_to_full_version(normalize_specifier(specifier)) {
+                        Ok(specifier) => (
+                            Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                            Edges::from_specifier(specifier),
+                        ),
+                        Err(node) => return node,
+                    }
+                }
+            },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::VersionIn {
                 key,
                 versions,
                 negated,
-            } => (
-                Variable::Version(key),
-                Edges::from_versions(&versions, negated),
-            ),
+            } => match key {
+                MarkerValueVersion::ImplementationVersion => (
+                    Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
+                    Edges::from_versions(&versions, negated),
+                ),
+                MarkerValueVersion::PythonFullVersion => (
+                    Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                    Edges::from_versions(&versions, negated),
+                ),
+                // Normalize `python_version` markers to `python_full_version` nodes.
+                MarkerValueVersion::PythonVersion => {
+                    match Edges::from_python_versions(versions, negated) {
+                        Ok(edges) => (
+                            Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                            edges,
+                        ),
+                        Err(node) => return node,
+                    }
+                }
+            },
             // The `in` and `contains` operators are a bit different than other operators.
             // In particular, they do not represent a particular value for the corresponding
             // variable, and can overlap. For example, `'nux' in os_name` and `os_name == 'Linux'`
@@ -208,38 +220,76 @@ impl InternerGuard<'_> {
                 key,
                 operator: MarkerOperator::In,
                 value,
-            } => (Variable::In { key, value }, Edges::from_bool(true)),
+            } => (
+                Variable::In {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(true),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::NotIn,
                 value,
-            } => (Variable::In { key, value }, Edges::from_bool(false)),
+            } => (
+                Variable::In {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(false),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::Contains,
                 value,
-            } => (Variable::Contains { key, value }, Edges::from_bool(true)),
+            } => (
+                Variable::Contains {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(true),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::NotContains,
                 value,
-            } => (Variable::Contains { key, value }, Edges::from_bool(false)),
+            } => (
+                Variable::Contains {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(false),
+            ),
             // A variable representing the output of a string key. Edges correspond
             // to disjoint string ranges.
             MarkerExpression::String {
                 key,
                 operator,
                 value,
-            } => (Variable::String(key), Edges::from_string(operator, value)),
+            } => (
+                Variable::String(key.into()),
+                Edges::from_string(operator, value),
+            ),
             // A variable representing the existence or absence of a particular extra.
             MarkerExpression::Extra {
-                name,
+                name: MarkerValueExtra::Extra(extra),
                 operator: ExtraOperator::Equal,
-            } => (Variable::Extra(name), Edges::from_bool(true)),
+            } => (
+                Variable::Extra(CanonicalMarkerValueExtra::Extra(extra)),
+                Edges::from_bool(true),
+            ),
             MarkerExpression::Extra {
-                name,
+                name: MarkerValueExtra::Extra(extra),
                 operator: ExtraOperator::NotEqual,
-            } => (Variable::Extra(name), Edges::from_bool(false)),
+            } => (
+                Variable::Extra(CanonicalMarkerValueExtra::Extra(extra)),
+                Edges::from_bool(false),
+            ),
+            // Invalid extras are always `false`.
+            MarkerExpression::Extra {
+                name: MarkerValueExtra::Arbitrary(_),
+                ..
+            } => return NodeId::FALSE,
         };
 
         self.create_node(var, children)
@@ -393,7 +443,7 @@ impl InternerGuard<'_> {
         // Look for a `python_full_version` expression, otherwise
         // we recursively simplify.
         let Node {
-            var: Variable::Version(MarkerValueVersion::PythonFullVersion),
+            var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
         else {
@@ -403,7 +453,7 @@ impl InternerGuard<'_> {
             });
             return self.create_node(node.var.clone(), children);
         };
-        let py_range = Range::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
+        let py_range = Ranges::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
         if py_range.is_empty() {
             // Oops, the bounds imply there is nothing that can match,
             // so we always evaluate to false.
@@ -428,12 +478,12 @@ impl InternerGuard<'_> {
         // are known to be satisfied.
         let &(ref first_range, first_node_id) = new.first().unwrap();
         let first_upper = first_range.bounding_range().unwrap().1;
-        let clipped = Range::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
+        let clipped = Ranges::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
         *new.first_mut().unwrap() = (clipped, first_node_id);
 
         let &(ref last_range, last_node_id) = new.last().unwrap();
         let last_lower = last_range.bounding_range().unwrap().0;
-        let clipped = Range::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
+        let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
         *new.last_mut().unwrap() = (clipped, last_node_id);
 
         self.create_node(node.var.clone(), Edges::Version { edges: new })
@@ -459,14 +509,14 @@ impl InternerGuard<'_> {
             return i;
         }
 
-        let py_range = Range::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
+        let py_range = Ranges::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
         if py_range.is_empty() {
             // Oops, the bounds imply there is nothing that can match,
             // so we always evaluate to false.
             return NodeId::FALSE;
         }
         if matches!(i, NodeId::TRUE) {
-            let var = Variable::Version(MarkerValueVersion::PythonFullVersion);
+            let var = Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion);
             let edges = Edges::Version {
                 edges: Edges::from_range(&py_range),
             };
@@ -475,7 +525,7 @@ impl InternerGuard<'_> {
 
         let node = self.shared.node(i);
         let Node {
-            var: Variable::Version(MarkerValueVersion::PythonFullVersion),
+            var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
         else {
@@ -521,14 +571,14 @@ impl InternerGuard<'_> {
             // adjacent ranges map to the same node, which would not be
             // a canonical representation.
             if exclude_node_id == first_node_id {
-                let clipped = Range::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
                 *new.first_mut().unwrap() = (clipped, first_node_id);
             } else {
-                let clipped = Range::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
                 *new.first_mut().unwrap() = (clipped, first_node_id);
 
                 let py_range_lower =
-                    Range::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
+                    Ranges::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
                 new.insert(0, (py_range_lower.complement(), NodeId::FALSE.negate(i)));
             }
         }
@@ -539,14 +589,14 @@ impl InternerGuard<'_> {
             // same reasoning applies here: to maintain a canonical
             // representation.
             if exclude_node_id == last_node_id {
-                let clipped = Range::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
+                let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
                 *new.last_mut().unwrap() = (clipped, last_node_id);
             } else {
-                let clipped = Range::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
                 *new.last_mut().unwrap() = (clipped, last_node_id);
 
                 let py_range_upper =
-                    Range::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
+                    Ranges::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
                 new.push((py_range_upper.complement(), exclude_node_id));
             }
         }
@@ -571,26 +621,26 @@ pub(crate) enum Variable {
     ///
     /// This is the highest order variable as it typically contains the most complex
     /// ranges, allowing us to merge ranges at the top-level.
-    Version(MarkerValueVersion),
+    Version(CanonicalMarkerValueVersion),
     /// A string marker, such as `os_name`.
-    String(MarkerValueString),
+    String(CanonicalMarkerValueString),
     /// A variable representing a `<key> in <value>` expression for a particular
     /// string marker and value.
     In {
-        key: MarkerValueString,
+        key: CanonicalMarkerValueString,
         value: String,
     },
     /// A variable representing a `<value> in <key>` expression for a particular
     /// string marker and value.
     Contains {
-        key: MarkerValueString,
+        key: CanonicalMarkerValueString,
         value: String,
     },
     /// A variable representing the existence or absence of a given extra.
     ///
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
-    Extra(MarkerValueExtra),
+    Extra(CanonicalMarkerValueExtra),
 }
 
 /// A decision node in an Algebraic Decision Diagram.
@@ -688,7 +738,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     Version {
-        edges: SmallVec<(Range<Version>, NodeId)>,
+        edges: SmallVec<(Ranges<Version>, NodeId)>,
     },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
@@ -696,7 +746,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     String {
-        edges: SmallVec<(Range<String>, NodeId)>,
+        edges: SmallVec<(Ranges<String>, NodeId)>,
     },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
@@ -727,13 +777,13 @@ impl Edges {
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
     fn from_string(operator: MarkerOperator, value: String) -> Edges {
-        let range: Range<String> = match operator {
-            MarkerOperator::Equal => Range::singleton(value),
-            MarkerOperator::NotEqual => Range::singleton(value).complement(),
-            MarkerOperator::GreaterThan => Range::strictly_higher_than(value),
-            MarkerOperator::GreaterEqual => Range::higher_than(value),
-            MarkerOperator::LessThan => Range::strictly_lower_than(value),
-            MarkerOperator::LessEqual => Range::lower_than(value),
+        let range: Ranges<String> = match operator {
+            MarkerOperator::Equal => Ranges::singleton(value),
+            MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
+            MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
+            MarkerOperator::GreaterEqual => Ranges::higher_than(value),
+            MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
+            MarkerOperator::LessEqual => Ranges::lower_than(value),
             MarkerOperator::TildeEqual => unreachable!("string comparisons with ~= are ignored"),
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
@@ -745,10 +795,9 @@ impl Edges {
 
     /// Returns the [`Edges`] for a version specifier.
     fn from_specifier(specifier: VersionSpecifier) -> Edges {
-        let specifier =
-            PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
+        let specifier = release_specifier_to_range(normalize_specifier(specifier));
         Edges::Version {
-            edges: Edges::from_range(&specifier.into()),
+            edges: Edges::from_range(&specifier),
         }
     }
 
@@ -756,17 +805,15 @@ impl Edges {
     ///
     /// Only for use when the `key` is a `PythonVersion`. Normalizes to `PythonFullVersion`.
     fn from_python_versions(versions: Vec<Version>, negated: bool) -> Result<Edges, NodeId> {
-        let mut range = Range::empty();
-
-        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
-        // seem efficient.
-        for version in versions {
-            let specifier = VersionSpecifier::equals_version(version.clone());
-            let specifier = python_version_to_full_version(specifier)?;
-            let pubgrub_specifier =
-                PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
-            range = range.union(&pubgrub_specifier.into());
-        }
+        let mut range: Ranges<Version> = versions
+            .into_iter()
+            .map(|version| {
+                let specifier = VersionSpecifier::equals_version(version.clone());
+                let specifier = python_version_to_full_version(specifier)?;
+                Ok(release_specifier_to_range(normalize_specifier(specifier)))
+            })
+            .flatten_ok()
+            .collect::<Result<Ranges<_>, NodeId>>()?;
 
         if negated {
             range = range.complement();
@@ -778,14 +825,16 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &Vec<Version>, negated: bool) -> Edges {
-        let mut range = Range::empty();
-
-        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
-        // seem efficient.
-        for version in versions {
-            range = range.union(&Range::singleton(version.clone()));
-        }
+    fn from_versions(versions: &[Version], negated: bool) -> Edges {
+        let mut range: Ranges<Version> = versions
+            .iter()
+            .map(|version| {
+                (
+                    Bound::Included(version.clone()),
+                    Bound::Included(version.clone()),
+                )
+            })
+            .collect();
 
         if negated {
             range = range.complement();
@@ -797,7 +846,7 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_range<T>(range: &Range<T>) -> SmallVec<(Range<T>, NodeId)>
+    fn from_range<T>(range: &Ranges<T>) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Ord + Clone,
     {
@@ -805,13 +854,13 @@ impl Edges {
 
         // Add the `true` edges.
         for (start, end) in range.iter() {
-            let range = Range::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::TRUE));
         }
 
         // Add the `false` edges.
         for (start, end) in range.complement().iter() {
-            let range = Range::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::FALSE));
         }
 
@@ -860,8 +909,8 @@ impl Edges {
                     low: right_low,
                 },
             ) => Edges::Boolean {
-                high: apply(high.negate(parent), right_high.negate(parent)),
-                low: apply(low.negate(parent), right_low.negate(parent)),
+                high: apply(high.negate(parent), right_high.negate(right_parent)),
+                low: apply(low.negate(parent), right_low.negate(right_parent)),
             },
             _ => unreachable!("cannot merge two `Edges` of different types"),
         }
@@ -891,12 +940,12 @@ impl Edges {
     /// In that case, we drop any ranges that do not exist in the domain of both edges. Note that
     /// this should not occur in practice because `requires-python` bounds are global.
     fn apply_ranges<T>(
-        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
         left_parent: NodeId,
-        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> SmallVec<(Range<T>, NodeId)>
+    ) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Clone + Ord,
     {
@@ -959,8 +1008,8 @@ impl Edges {
                     low: right_low,
                 },
             ) => {
-                interner.is_disjoint(high.negate(parent), right_high.negate(parent))
-                    && interner.is_disjoint(low.negate(parent), right_low.negate(parent))
+                interner.is_disjoint(high.negate(parent), right_high.negate(right_parent))
+                    && interner.is_disjoint(low.negate(parent), right_low.negate(right_parent))
             }
             _ => unreachable!("cannot merge two `Edges` of different types"),
         }
@@ -968,9 +1017,9 @@ impl Edges {
 
     // Returns `true` if all intersecting ranges in two range maps are disjoint.
     fn is_disjoint_ranges<T>(
-        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
         left_parent: NodeId,
-        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
     ) -> bool
@@ -1179,7 +1228,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
 }
 
 /// Compares the start of two ranges that are known to be disjoint.
-fn compare_disjoint_range_start<T>(range1: &Range<T>, range2: &Range<T>) -> Ordering
+fn compare_disjoint_range_start<T>(range1: &Ranges<T>, range2: &Ranges<T>) -> Ordering
 where
     T: Ord,
 {
@@ -1199,7 +1248,7 @@ where
 }
 
 /// Returns `true` if two disjoint ranges can be conjoined seamlessly without introducing a gap.
-fn can_conjoin<T>(range1: &Range<T>, range2: &Range<T>) -> bool
+fn can_conjoin<T>(range1: &Ranges<T>, range2: &Ranges<T>) -> bool
 where
     T: Ord + Clone,
 {

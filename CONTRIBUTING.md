@@ -49,6 +49,30 @@ cargo run python install
 
 The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
 
+### Snapshot testing
+
+uv uses [insta](https://insta.rs/) for snapshot testing. It's recommended (but not necessary) to use
+`cargo-insta` for a better snapshot review experience. See the
+[installation guide](https://insta.rs/docs/cli/) for more information.
+
+In tests, you can use `uv_snapshot!` macro to simplify creating snapshots for uv commands. For
+example:
+
+```rust
+#[test]
+fn test_add() {
+    let context = TestContext::new("3.12");
+    uv_snapshot!(context.filters(), context.add().arg("requests"), @"");
+}
+```
+
+To run and review a specific snapshot test:
+
+```shell
+cargo test --package <package> --test <test> -- <test_name> -- --exact
+cargo insta review
+```
+
 ### Local testing
 
 You can invoke your development version of uv with `cargo run -- <args>`. For example:
@@ -64,10 +88,10 @@ When testing debug builds on Windows, the stack can overflow resulting in a `STA
 error code. This is due to a small stack size limit on Windows that we encounter when running
 unoptimized builds — the release builds do not have this problem. We
 [added a `UV_STACK_SIZE` variable](https://github.com/astral-sh/uv/pull/941) to bypass this problem
-during testing. We recommend bumping the stack size from the default of 1MB to 2MB, for example:
+during testing. We recommend bumping the stack size from the default of 1MB to 3MB, for example:
 
 ```powershell
-$Env:UV_STACK_SIZE = '2000000'
+$Env:UV_STACK_SIZE = '3000000'
 ```
 
 ## Running inside a Docker container
@@ -176,7 +200,7 @@ Releases can only be performed by Astral team members.
 
 Changelog entries and version bumps are automated. First, run:
 
-```
+```shell
 ./scripts/release.sh
 ```
 

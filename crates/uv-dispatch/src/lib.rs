@@ -15,7 +15,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, Reinstall,
+    SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -25,11 +26,11 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, Resolver,
-    ResolverMarkers,
+    DerivationChainBuilder, ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest,
+    OptionsBuilder, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -56,6 +57,7 @@ pub struct BuildDispatch<'a> {
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
+    bounds: LowerBound,
     sources: SourceStrategy,
     concurrency: Concurrency,
 }
@@ -80,6 +82,7 @@ impl<'a> BuildDispatch<'a> {
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
+        bounds: LowerBound,
         sources: SourceStrategy,
         concurrency: Concurrency,
     ) -> Self {
@@ -104,6 +107,7 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
+            bounds,
             sources,
             concurrency,
         }
@@ -127,6 +131,10 @@ impl<'a> BuildDispatch<'a> {
 
 impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
+
+    fn interpreter(&self) -> &Interpreter {
+        self.interpreter
+    }
 
     fn cache(&self) -> &Cache {
         self.cache
@@ -152,17 +160,21 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.config_settings
     }
 
+    fn bounds(&self) -> LowerBound {
+        self.bounds
+    }
+
     fn sources(&self) -> SourceStrategy {
         self.sources
     }
 
-    fn index_locations(&self) -> &IndexLocations {
+    fn locations(&self) -> &IndexLocations {
         self.index_locations
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
-        let markers = self.interpreter.resolver_markers();
+        let marker_env = self.interpreter.resolver_marker_environment();
         let tags = self.interpreter.tags()?;
 
         let resolver = Resolver::new(
@@ -170,9 +182,13 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer)
                 .index_strategy(self.index_strategy)
+                .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
-            ResolverMarkers::specific_environment(markers),
+            ResolverEnvironment::specific(marker_env),
+            // Conflicting groups only make sense when doing
+            // universal resolution.
+            Conflicts::empty(),
             Some(tags),
             self.flat_index,
             self.index,
@@ -181,7 +197,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
-        let graph = resolver.resolve().await.with_context(|| {
+        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements
@@ -189,8 +205,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                     .map(|requirement| format!("`{requirement}`"))
                     .join(", ")
             )
-        })?;
-        Ok(Resolution::from(graph))
+        })?);
+        Ok(resolution)
     }
 
     #[instrument(
@@ -228,7 +244,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         } = Planner::new(resolution).build(
             site_packages,
             &Reinstall::default(),
-            &BuildOptions::default(),
+            self.build_options,
             self.hasher,
             self.index_locations,
             self.config_settings,
@@ -265,7 +281,30 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             preparer
                 .prepare(remote, self.in_flight)
                 .await
-                .context("Failed to prepare distributions")?
+                .map_err(|err| match err {
+                    uv_installer::PrepareError::DownloadAndBuild(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)
+                    }
+                    uv_installer::PrepareError::Download(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::Download(dist, chain, err)
+                    }
+                    uv_installer::PrepareError::Build(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::Build(dist, chain, err)
+                    }
+                    _ => err,
+                })?
         };
 
         // Remove any unnecessary packages.
@@ -309,8 +348,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         source: &'data Path,
         subdirectory: Option<&'data Path>,
+        install_path: &'data Path,
         version_id: Option<String>,
         dist: Option<&'data SourceDist>,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
@@ -342,12 +383,15 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let builder = SourceBuild::setup(
             source,
             subdirectory,
+            install_path,
             dist_name,
             dist_version,
             self.interpreter,
             self,
             self.source_build_context.clone(),
             version_id,
+            self.index_locations,
+            sources,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,

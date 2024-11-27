@@ -64,6 +64,11 @@ impl<T: AsRef<Path>> Simplified for T {
             return path.display();
         }
 
+        if path.as_os_str() == "" {
+            // Avoid printing an empty string for the current directory
+            return Path::new(".").display();
+        }
+
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
         let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
@@ -84,6 +89,11 @@ impl<T: AsRef<Path>> Simplified for T {
         let path = path
             .strip_prefix(base.as_ref())
             .unwrap_or_else(|_| path.strip_prefix(CWD.simplified()).unwrap_or(path));
+
+        if path.as_os_str() == "" {
+            // Avoid printing an empty string for the current directory
+            return Path::new(".").display();
+        }
 
         path.display()
     }

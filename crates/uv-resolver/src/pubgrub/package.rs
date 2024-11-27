@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, MarkerTreeContents};
+use uv_pypi_types::ConflictItemRef;
 
 use crate::python_requirement::PythonRequirement;
 
@@ -166,6 +167,67 @@ impl PubGrubPackage {
         }
     }
 
+    /// Returns the extra name associated with this PubGrub package, if it has
+    /// one.
+    ///
+    /// Note that if this returns `Some`, then `dev` must return `None`.
+    pub(crate) fn extra(&self) -> Option<&ExtraName> {
+        match &**self {
+            // A root can never be a dependency of another package, and a `Python` pubgrub
+            // package is never returned by `get_dependencies`. So these cases never occur.
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::Package { extra: None, .. }
+            | PubGrubPackageInner::Dev { .. }
+            | PubGrubPackageInner::Marker { .. } => None,
+            PubGrubPackageInner::Package {
+                extra: Some(ref extra),
+                ..
+            }
+            | PubGrubPackageInner::Extra { ref extra, .. } => Some(extra),
+        }
+    }
+
+    /// Returns the dev (aka "group") name associated with this PubGrub
+    /// package, if it has one.
+    ///
+    /// Note that if this returns `Some`, then `extra` must return `None`.
+    pub(crate) fn dev(&self) -> Option<&GroupName> {
+        match &**self {
+            // A root can never be a dependency of another package, and a `Python` pubgrub
+            // package is never returned by `get_dependencies`. So these cases never occur.
+            PubGrubPackageInner::Root(_)
+            | PubGrubPackageInner::Python(_)
+            | PubGrubPackageInner::Package { dev: None, .. }
+            | PubGrubPackageInner::Extra { .. }
+            | PubGrubPackageInner::Marker { .. } => None,
+            PubGrubPackageInner::Package {
+                dev: Some(ref dev), ..
+            }
+            | PubGrubPackageInner::Dev { ref dev, .. } => Some(dev),
+        }
+    }
+
+    /// Extracts a possible conflicting group from this package.
+    ///
+    /// If this package can't possibly be classified as a conflicting group,
+    /// then this returns `None`.
+    pub(crate) fn conflicting_item(&self) -> Option<ConflictItemRef<'_>> {
+        let package = self.name_no_root()?;
+        match (self.extra(), self.dev()) {
+            (None, None) => None,
+            (Some(extra), None) => Some(ConflictItemRef::from((package, extra))),
+            (None, Some(group)) => Some(ConflictItemRef::from((package, group))),
+            (Some(extra), Some(group)) => {
+                unreachable!(
+                    "PubGrub package cannot have both an extra and a group, \
+                     but found extra=`{extra}` and group=`{group}` for \
+                     package `{package}`",
+                )
+            }
+        }
+    }
+
     /// Returns `true` if this PubGrub package is a proxy package.
     pub(crate) fn is_proxy(&self) -> bool {
         matches!(
@@ -205,6 +267,7 @@ impl PubGrubPackage {
         }
     }
 
+    /// This isn't actually used anywhere, but can be useful for printf-debugging.
     #[allow(dead_code)]
     pub(crate) fn kind(&self) -> &'static str {
         match &**self {

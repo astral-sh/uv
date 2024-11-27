@@ -1,5 +1,4 @@
 use url::Url;
-
 use uv_git::{GitReference, GitResolver};
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
@@ -17,9 +16,8 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
     let Some(new_git_url) = git.precise(git_url.clone()) else {
         debug_assert!(
             matches!(git_url.reference(), GitReference::FullCommit(_)),
-            "Unseen Git URL: {}, {:?}",
+            "Unseen Git URL: {}, {git_url:?}",
             url.verbatim,
-            git_url
         );
         return url;
     };
@@ -136,8 +134,9 @@ mod tests {
         // We should preserve subdirectory fragments.
         let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git#subdirectory=src")?
             .with_given("git+https://github.com/flask.git#subdirectory=src");
-        let redirect =
-            Url::parse("https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src")?;
+        let redirect = Url::parse(
+            "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src",
+        )?;
 
         let expected = VerbatimUrl::parse_url(
             "https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe#subdirectory=src",

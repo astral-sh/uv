@@ -235,25 +235,25 @@ mod tests {
     #[test]
     fn test_parse_pyproject_toml() {
         let s = r#"
-            [project]
-            name = "asdf"
-        "#;
+        [project]
+        name = "asdf"
+    "#;
         let meta = parse_pyproject_toml(s);
         assert!(matches!(meta, Err(MetadataError::FieldNotFound("version"))));
 
         let s = r#"
-            [project]
-            name = "asdf"
-            dynamic = ["version"]
-        "#;
+        [project]
+        name = "asdf"
+        dynamic = ["version"]
+    "#;
         let meta = parse_pyproject_toml(s);
         assert!(matches!(meta, Err(MetadataError::DynamicField("version"))));
 
         let s = r#"
-            [project]
-            name = "asdf"
-            version = "1.0"
-        "#;
+        [project]
+        name = "asdf"
+        version = "1.0"
+    "#;
         let meta = parse_pyproject_toml(s).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
@@ -262,11 +262,11 @@ mod tests {
         assert!(meta.provides_extras.is_empty());
 
         let s = r#"
-            [project]
-            name = "asdf"
-            version = "1.0"
-            requires-python = ">=3.6"
-        "#;
+        [project]
+        name = "asdf"
+        version = "1.0"
+        requires-python = ">=3.6"
+    "#;
         let meta = parse_pyproject_toml(s).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
@@ -275,12 +275,12 @@ mod tests {
         assert!(meta.provides_extras.is_empty());
 
         let s = r#"
-            [project]
-            name = "asdf"
-            version = "1.0"
-            requires-python = ">=3.6"
-            dependencies = ["foo"]
-        "#;
+        [project]
+        name = "asdf"
+        version = "1.0"
+        requires-python = ">=3.6"
+        dependencies = ["foo"]
+    "#;
         let meta = parse_pyproject_toml(s).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
@@ -289,15 +289,15 @@ mod tests {
         assert!(meta.provides_extras.is_empty());
 
         let s = r#"
-            [project]
-            name = "asdf"
-            version = "1.0"
-            requires-python = ">=3.6"
-            dependencies = ["foo"]
+        [project]
+        name = "asdf"
+        version = "1.0"
+        requires-python = ">=3.6"
+        dependencies = ["foo"]
 
-            [project.optional-dependencies]
-            dotenv = ["bar"]
-        "#;
+        [project.optional-dependencies]
+        dotenv = ["bar"]
+    "#;
         let meta = parse_pyproject_toml(s).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));

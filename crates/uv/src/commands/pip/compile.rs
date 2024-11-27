@@ -4,26 +4,26 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use tracing::debug;
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    LowerBound, NoBinary, NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DependencyMetadata, IndexCapabilities, IndexLocations, NameRequirementSpecification,
-    UnresolvedRequirementSpecification, Verbatim,
+    DependencyMetadata, Index, IndexCapabilities, IndexLocations, NameRequirementSpecification,
+    Origin, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
 use uv_git::GitResolver;
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
-use uv_pypi_types::{Requirement, SupportedEnvironments};
+use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,
@@ -34,7 +34,7 @@ use uv_requirements::{
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
-    ResolutionMode, ResolverMarkers,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 use uv_warnings::warn_user;
@@ -76,7 +76,7 @@ pub(crate) async fn pip_compile(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
+    allow_insecure_host: &[TrustedHost],
     config_settings: ConfigSettings,
     connectivity: Connectivity,
     no_build_isolation: bool,
@@ -110,7 +110,7 @@ pub(crate) async fn pip_compile(
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host);
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -251,15 +251,15 @@ pub(crate) async fn pip_compile(
     };
 
     // Determine the environment for the resolution.
-    let (tags, markers) = if universal {
+    let (tags, resolver_env) = if universal {
         (
             None,
-            ResolverMarkers::universal(environments.into_markers()),
+            ResolverEnvironment::universal(environments.into_markers()),
         )
     } else {
-        let (tags, markers) =
+        let (tags, marker_env) =
             resolution_environment(python_version, python_platform, &interpreter)?;
-        (Some(tags), ResolverMarkers::specific_environment(markers))
+        (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
     // Generate, but don't enforce hashes for the requirements.
@@ -273,12 +273,26 @@ pub(crate) async fn pip_compile(
     let dev = Vec::default();
 
     // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    let index_locations = index_locations.combine(
+        extra_index_urls
+            .into_iter()
+            .map(Index::from_extra_index_url)
+            .chain(index_url.map(Index::from_index_url))
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        find_links
+            .into_iter()
+            .map(Index::from_find_links)
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        no_index,
+    );
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -301,7 +315,9 @@ pub(crate) async fn pip_compile(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };
 
@@ -347,6 +363,7 @@ pub(crate) async fn pip_compile(
         &build_options,
         &build_hashes,
         exclude_newer,
+        LowerBound::Warn,
         sources,
         concurrency,
     );
@@ -375,8 +392,9 @@ pub(crate) async fn pip_compile(
         &Reinstall::None,
         &upgrade,
         tags.as_deref(),
-        markers.clone(),
+        resolver_env.clone(),
         python_requirement,
+        Conflicts::empty(),
         &client,
         &flat_index,
         &top_level_index,
@@ -389,19 +407,11 @@ pub(crate) async fn pip_compile(
     .await
     {
         Ok(resolution) => resolution,
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::FetchAndBuild(dist, err))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(err) => return Err(err.into()),
     };
 
     // Write the resolved dependencies to the output channel.
@@ -429,8 +439,8 @@ pub(crate) async fn pip_compile(
     }
 
     if include_marker_expression {
-        if let ResolverMarkers::SpecificEnvironment(markers) = &markers {
-            let relevant_markers = resolution.marker_tree(&top_level_index, markers)?;
+        if let Some(marker_env) = resolver_env.marker_environment() {
+            let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
             if let Some(relevant_markers) = relevant_markers.contents() {
                 writeln!(
                     writer,
@@ -446,20 +456,23 @@ pub(crate) async fn pip_compile(
 
     // If necessary, include the `--index-url` and `--extra-index-url` locations.
     if include_index_url {
-        if let Some(index) = index_locations.index() {
-            writeln!(writer, "--index-url {}", index.verbatim())?;
+        if let Some(index) = index_locations.default_index() {
+            writeln!(writer, "--index-url {}", index.url().verbatim())?;
             wrote_preamble = true;
         }
-        for extra_index in index_locations.extra_index() {
-            writeln!(writer, "--extra-index-url {}", extra_index.verbatim())?;
-            wrote_preamble = true;
+        let mut seen = FxHashSet::default();
+        for extra_index in index_locations.implicit_indexes() {
+            if seen.insert(extra_index.url()) {
+                writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
+                wrote_preamble = true;
+            }
         }
     }
 
     // If necessary, include the `--find-links` locations.
     if include_find_links {
-        for flat_index in index_locations.flat_index() {
-            writeln!(writer, "--find-links {}", flat_index.verbatim())?;
+        for flat_index in index_locations.flat_indexes() {
+            writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
             wrote_preamble = true;
         }
     }
@@ -504,7 +517,7 @@ pub(crate) async fn pip_compile(
         "{}",
         DisplayResolutionGraph::new(
             &resolution,
-            &markers,
+            &resolver_env,
             &no_emit_packages,
             generate_hashes,
             include_extras,
@@ -563,14 +576,24 @@ fn cmd(
 
             // Skip any index URLs, unless requested.
             if !include_index_url {
-                if arg.starts_with("--extra-index-url=") || arg.starts_with("--index-url=") {
+                if arg.starts_with("--extra-index-url=")
+                    || arg.starts_with("--index-url=")
+                    || arg.starts_with("-i=")
+                    || arg.starts_with("--index=")
+                    || arg.starts_with("--default-index=")
+                {
                     // Reset state; skip this iteration.
                     *skip_next = None;
                     return Some(None);
                 }
 
                 // Mark the next item as (to be) skipped.
-                if arg == "--index-url" || arg == "--extra-index-url" {
+                if arg == "--index-url"
+                    || arg == "--extra-index-url"
+                    || arg == "-i"
+                    || arg == "--index"
+                    || arg == "--default-index"
+                {
                     *skip_next = Some(true);
                     return Some(None);
                 }

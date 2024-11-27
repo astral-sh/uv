@@ -1,5 +1,6 @@
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+use tracing::{debug, warn};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
@@ -20,22 +21,57 @@ impl DependencyMetadata {
     }
 
     /// Retrieve a [`StaticMetadata`] entry by [`PackageName`] and [`Version`].
-    pub fn get(&self, package: &PackageName, version: &Version) -> Option<ResolutionMetadata> {
+    pub fn get(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+    ) -> Option<ResolutionMetadata> {
         let versions = self.0.get(package)?;
 
-        // Search for an exact, then a global match.
-        let metadata = versions
-            .iter()
-            .find(|v| v.version.as_ref() == Some(version))
-            .or_else(|| versions.iter().find(|v| v.version.is_none()))?;
-
-        Some(ResolutionMetadata {
-            name: metadata.name.clone(),
-            version: version.clone(),
-            requires_dist: metadata.requires_dist.clone(),
-            requires_python: metadata.requires_python.clone(),
-            provides_extras: metadata.provides_extras.clone(),
-        })
+        if let Some(version) = version {
+            // If a specific version was requested, search for an exact match, then a global match.
+            let metadata = versions
+                .iter()
+                .find(|v| v.version.as_ref() == Some(version))
+                .inspect(|_| {
+                    debug!("Found dependency metadata entry for `{package}=={version}`",);
+                })
+                .or_else(|| versions.iter().find(|v| v.version.is_none()))
+                .inspect(|_| {
+                    debug!("Found global metadata entry for `{package}`",);
+                });
+            let Some(metadata) = metadata else {
+                warn!("No dependency metadata entry found for `{package}=={version}`");
+                return None;
+            };
+            debug!("Found dependency metadata entry for `{package}=={version}`",);
+            Some(ResolutionMetadata {
+                name: metadata.name.clone(),
+                version: version.clone(),
+                requires_dist: metadata.requires_dist.clone(),
+                requires_python: metadata.requires_python.clone(),
+                provides_extras: metadata.provides_extras.clone(),
+            })
+        } else {
+            // If no version was requested (i.e., it's a direct URL dependency), allow a single
+            // versioned match.
+            let [metadata] = versions.as_slice() else {
+                warn!("Multiple dependency metadata entries found for `{package}`");
+                return None;
+            };
+            let Some(version) = metadata.version.clone() else {
+                warn!("No version found in dependency metadata entry for `{package}`");
+                return None;
+            };
+            debug!("Found dependency metadata entry for `{package}` (assuming: `{version}`)");
+            Some(ResolutionMetadata {
+                name: metadata.name.clone(),
+                version,
+                requires_dist: metadata.requires_dist.clone(),
+                requires_python: metadata.requires_python.clone(),
+                provides_extras: metadata.provides_extras.clone(),
+            })
+        }
     }
 
     /// Retrieve all [`StaticMetadata`] entries.
@@ -55,7 +91,7 @@ pub struct StaticMetadata {
     #[cfg_attr(
         feature = "schemars",
         schemars(
-            with = "String",
+            with = "Option<String>",
             description = "PEP 440-style package version, e.g., `1.2.3`"
         )
     )]

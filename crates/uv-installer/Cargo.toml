@@ -9,6 +9,9 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[lib]
+doctest = false
+
 [lints]
 workspace = true
 
@@ -19,7 +22,6 @@ uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
-uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-normalize = { workspace = true }
@@ -28,6 +30,7 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
+uv-static = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 

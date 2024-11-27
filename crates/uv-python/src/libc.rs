@@ -244,11 +244,11 @@ mod tests {
         let ver_str = glibc_ldd_output_to_version(
             "stdout",
             indoc! {br"ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.
-                Copyright (C) 2024 Free Software Foundation, Inc.
-                This is free software; see the source for copying conditions.
-                There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
-                PARTICULAR PURPOSE.
-            "},
+            Copyright (C) 2024 Free Software Foundation, Inc.
+            This is free software; see the source for copying conditions.
+            There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
+            PARTICULAR PURPOSE.
+        "},
         )
         .unwrap();
         assert_eq!(
@@ -272,7 +272,7 @@ musl libc (x86_64)
 Version 1.2.4_git20230717
 Dynamic Program Loader
 Usage: /lib/ld-musl-x86_64.so.1 [options] [--] pathname [args]\
-        ";
+    ";
         let got = musl_ld_output_to_version("stderr", output).unwrap();
         assert_eq!(got, LibcVersion::Musllinux { major: 1, minor: 2 });
     }

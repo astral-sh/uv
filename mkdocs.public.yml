@@ -4,3 +4,5 @@ plugins:
   - search
 validation:
   anchors: warn
+watch:
+  - mkdocs.template.yml

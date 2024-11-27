@@ -1,6 +1,9 @@
 //! Find requested Python interpreters and query interpreters for information.
 use thiserror::Error;
 
+#[cfg(test)]
+use uv_static::EnvVars;
+
 pub use crate::discovery::{
     find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
     PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
@@ -14,10 +17,12 @@ pub use crate::prefix::Prefix;
 pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
 pub use crate::version_files::{
+    DiscoveryOptions as VersionFileDiscoveryOptions, FilePreference as VersionFilePreference,
     PythonVersionFile, PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
+mod cpuinfo;
 mod discovery;
 pub mod downloads;
 mod environment;
@@ -37,7 +42,6 @@ mod python_version;
 mod target;
 mod version_files;
 mod virtualenv;
-mod which;
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
@@ -46,7 +50,7 @@ pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
 
 #[cfg(test)]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
-    std::env::var_os("PWD")
+    std::env::var_os(EnvVars::PWD)
         .map(std::path::PathBuf::from)
         .map(Ok)
         .unwrap_or(std::env::current_dir())
@@ -99,6 +103,7 @@ mod tests {
     use indoc::{formatdoc, indoc};
     use temp_env::with_vars;
     use test_log::test;
+    use uv_static::EnvVars;
 
     use uv_cache::Cache;
 
@@ -176,13 +181,13 @@ mod tests {
 
             let mut run_vars = vec![
                 // Ensure `PATH` is used
-                ("UV_TEST_PYTHON_PATH", None),
+                (EnvVars::UV_TEST_PYTHON_PATH, None),
                 // Ignore active virtual environments (i.e. that the dev is using)
-                ("VIRTUAL_ENV", None),
-                ("PATH", path.as_deref()),
+                (EnvVars::VIRTUAL_ENV, None),
+                (EnvVars::PATH, path.as_deref()),
                 // Use the temporary python directory
                 (
-                    "UV_PYTHON_INSTALL_DIR",
+                    EnvVars::UV_PYTHON_INSTALL_DIR,
                     Some(self.installations.root().as_os_str()),
                 ),
                 // Set a working directory
@@ -204,57 +209,57 @@ mod tests {
             free_threaded: bool,
         ) -> Result<()> {
             let json = indoc! {r##"
-                    {
-                        "result": "success",
-                        "platform": {
-                            "os": {
-                                "name": "manylinux",
-                                "major": 2,
-                                "minor": 38
-                            },
-                            "arch": "x86_64"
+                {
+                    "result": "success",
+                    "platform": {
+                        "os": {
+                            "name": "manylinux",
+                            "major": 2,
+                            "minor": 38
                         },
-                        "manylinux_compatible": true,
-                        "markers": {
-                            "implementation_name": "{IMPLEMENTATION}",
-                            "implementation_version": "{FULL_VERSION}",
-                            "os_name": "posix",
-                            "platform_machine": "x86_64",
-                            "platform_python_implementation": "{IMPLEMENTATION}",
-                            "platform_release": "6.5.0-13-generic",
-                            "platform_system": "Linux",
-                            "platform_version": "#13-Ubuntu SMP PREEMPT_DYNAMIC Fri Nov  3 12:16:05 UTC 2023",
-                            "python_full_version": "{FULL_VERSION}",
-                            "python_version": "{VERSION}",
-                            "sys_platform": "linux"
-                        },
-                        "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                        "sys_base_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                        "sys_prefix": "{PREFIX}",
-                        "sys_executable": "{PATH}",
-                        "sys_path": [
-                            "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/lib/python{VERSION}",
-                            "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
-                        ],
-                        "stdlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}",
-                        "scheme": {
-                            "data": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
-                            "include": "/home/ferris/.pyenv/versions/{FULL_VERSION}/include",
-                            "platlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages",
-                            "purelib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages",
-                            "scripts": "/home/ferris/.pyenv/versions/{FULL_VERSION}/bin"
-                        },
-                        "virtualenv": {
-                            "data": "",
-                            "include": "include",
-                            "platlib": "lib/python{VERSION}/site-packages",
-                            "purelib": "lib/python{VERSION}/site-packages",
-                            "scripts": "bin"
-                        },
-                        "pointer_size": "64",
-                        "gil_disabled": {FREE_THREADED}
-                    }
-                "##};
+                        "arch": "x86_64"
+                    },
+                    "manylinux_compatible": true,
+                    "markers": {
+                        "implementation_name": "{IMPLEMENTATION}",
+                        "implementation_version": "{FULL_VERSION}",
+                        "os_name": "posix",
+                        "platform_machine": "x86_64",
+                        "platform_python_implementation": "{IMPLEMENTATION}",
+                        "platform_release": "6.5.0-13-generic",
+                        "platform_system": "Linux",
+                        "platform_version": "#13-Ubuntu SMP PREEMPT_DYNAMIC Fri Nov  3 12:16:05 UTC 2023",
+                        "python_full_version": "{FULL_VERSION}",
+                        "python_version": "{VERSION}",
+                        "sys_platform": "linux"
+                    },
+                    "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
+                    "sys_base_prefix": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
+                    "sys_prefix": "{PREFIX}",
+                    "sys_executable": "{PATH}",
+                    "sys_path": [
+                        "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/lib/python{VERSION}",
+                        "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages"
+                    ],
+                    "stdlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}",
+                    "scheme": {
+                        "data": "/home/ferris/.pyenv/versions/{FULL_VERSION}",
+                        "include": "/home/ferris/.pyenv/versions/{FULL_VERSION}/include",
+                        "platlib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages",
+                        "purelib": "/home/ferris/.pyenv/versions/{FULL_VERSION}/lib/python{VERSION}/site-packages",
+                        "scripts": "/home/ferris/.pyenv/versions/{FULL_VERSION}/bin"
+                    },
+                    "virtualenv": {
+                        "data": "",
+                        "include": "include",
+                        "platlib": "lib/python{VERSION}/site-packages",
+                        "purelib": "lib/python{VERSION}/site-packages",
+                        "scripts": "bin"
+                    },
+                    "pointer_size": "64",
+                    "gil_disabled": {FREE_THREADED}
+                }
+            "##};
 
             let json = if system {
                 json.replace("{PREFIX}", "/home/ferris/.pyenv/versions/{FULL_VERSION}")
@@ -276,9 +281,9 @@ mod tests {
             fs_err::write(
                 path,
                 formatdoc! {r##"
-                    #!/bin/bash
-                    echo '{json}'
-                    "##},
+                #!/bin/bash
+                echo '{json}'
+                "##},
             )?;
 
             fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
@@ -290,17 +295,17 @@ mod tests {
         /// invocation of Python 2 with the `-I` flag as done by our query script.
         fn create_mock_python2_interpreter(path: &Path) -> Result<()> {
             let output = indoc! { r"
-                    Unknown option: -I
-                    usage: /usr/bin/python [option] ... [-c cmd | -m mod | file | -] [arg] ...
-                    Try `python -h` for more information.
-                "};
+                Unknown option: -I
+                usage: /usr/bin/python [option] ... [-c cmd | -m mod | file | -] [arg] ...
+                Try `python -h` for more information.
+            "};
 
             fs_err::write(
                 path,
                 formatdoc! {r##"
-                    #!/bin/bash
-                    echo '{output}' 1>&2
-                    "##},
+                #!/bin/bash
+                echo '{output}' 1>&2
+                "##},
             )?;
 
             fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
@@ -470,10 +475,7 @@ mod tests {
             )
         });
         assert!(
-            matches!(
-                result,
-                Ok(Err(PythonNotFound { .. }))
-            ),
+            matches!(result, Ok(Err(PythonNotFound { .. }))),
             "With an non-executable Python, no Python installation should be detected; got {result:?}"
         );
 
@@ -522,9 +524,9 @@ mod tests {
         fs_err::write(
             children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
             formatdoc! {r##"
-            #!/bin/bash
-            echo 'foo'
-            "##},
+        #!/bin/bash
+        echo 'foo'
+        "##},
         )?;
         fs_err::set_permissions(
             children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
@@ -624,12 +626,12 @@ mod tests {
         })??;
         assert!(
             matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPath,
-                    interpreter: _
-                }
-            ),
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPath,
+                interpreter: _
+            }
+        ),
             "We should skip the Python 2 installation and find the Python 3 interpreter; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python3.path());
@@ -915,7 +917,7 @@ mod tests {
         context.add_python_versions(&["3.10.1"])?;
 
         let python =
-            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_best_python_installation(
                     &PythonRequest::parse("3.10"),
                     EnvironmentPreference::Any,
@@ -925,12 +927,12 @@ mod tests {
             })??;
         assert!(
             matches!(
-                python,
-                PythonInstallation {
-                    source: PythonSource::SearchPath,
-                    interpreter: _
-                }
-            ),
+            python,
+            PythonInstallation {
+                source: PythonSource::SearchPath,
+                interpreter: _
+            }
+        ),
             "We should skip the active environment in favor of the requested version; got {python:?}"
         );
 
@@ -945,7 +947,7 @@ mod tests {
         context.add_python_versions(&["3.10.3"])?;
 
         let python =
-            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_best_python_installation(
                     &PythonRequest::parse("3.10.2"),
                     EnvironmentPreference::Any,
@@ -979,7 +981,7 @@ mod tests {
         TestContext::mock_venv(&venv, "3.12.0")?;
 
         let python =
-            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_python_installation(
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
@@ -1004,7 +1006,7 @@ mod tests {
         TestContext::mock_venv(&venv, "3.13.0rc1")?;
 
         let python =
-            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_python_installation(
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
@@ -1027,8 +1029,9 @@ mod tests {
         let condaenv = context.tempdir.child("condaenv");
         TestContext::mock_conda_prefix(&condaenv, "3.12.0")?;
 
-        let python =
-            context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
+        let python = context.run_with_vars(
+            &[(EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str()))],
+            || {
                 // Note this python is not treated as a system interpreter
                 find_python_installation(
                     &PythonRequest::Default,
@@ -1036,11 +1039,80 @@ mod tests {
                     PythonPreference::OnlySystem,
                     &context.cache,
                 )
-            })??;
+            },
+        )??;
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.12.0",
             "We should allow the active conda python"
+        );
+
+        let baseenv = context.tempdir.child("base");
+        TestContext::mock_conda_prefix(&baseenv, "3.12.1")?;
+
+        // But not if it's a base environment
+        let result = context.run_with_vars(
+            &[
+                ("CONDA_PREFIX", Some(baseenv.as_os_str())),
+                ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::OnlyVirtual,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )?;
+
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
+            "We should not allow the non-virtual environment; got {result:?}"
+        );
+
+        // Unless, system interpreters are included...
+        let python = context.run_with_vars(
+            &[
+                ("CONDA_PREFIX", Some(baseenv.as_os_str())),
+                ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.1",
+            "We should find the base conda environment"
+        );
+
+        // If the environment name doesn't match the default, we should not treat it as system
+        let python = context.run_with_vars(
+            &[
+                ("CONDA_PREFIX", Some(condaenv.as_os_str())),
+                ("CONDA_DEFAULT_ENV", Some(&OsString::from("base"))),
+            ],
+            || {
+                find_python_installation(
+                    &PythonRequest::Default,
+                    EnvironmentPreference::OnlyVirtual,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            },
+        )??;
+
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.12.0",
+            "We should find the conda environment"
         );
 
         Ok(())
@@ -1056,8 +1128,8 @@ mod tests {
 
         let python = context.run_with_vars(
             &[
-                ("VIRTUAL_ENV", Some(venv.as_os_str())),
-                ("CONDA_PREFIX", Some(condaenv.as_os_str())),
+                (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
+                (EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str())),
             ],
             || {
                 find_python_installation(
@@ -1077,15 +1149,17 @@ mod tests {
         // Put a virtual environment in the working directory
         let venv = context.workdir.child(".venv");
         TestContext::mock_venv(venv, "3.12.2")?;
-        let python =
-            context.run_with_vars(&[("CONDA_PREFIX", Some(condaenv.as_os_str()))], || {
+        let python = context.run_with_vars(
+            &[(EnvVars::CONDA_PREFIX, Some(condaenv.as_os_str()))],
+            || {
                 find_python_installation(
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
                 )
-            })??;
+            },
+        )??;
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.12.1",
@@ -1148,7 +1222,7 @@ mod tests {
         fs_err::remove_file(venv.join("pyvenv.cfg"))?;
 
         let python =
-            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_python_installation(
                     &PythonRequest::Default,
                     EnvironmentPreference::Any,
@@ -1181,7 +1255,10 @@ mod tests {
         )?;
 
         let python = context.run_with_vars(
-            &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
+            &[(
+                EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                Some(parent.as_os_str()),
+            )],
             || {
                 find_python_installation(
                     &PythonRequest::Default,
@@ -1203,8 +1280,11 @@ mod tests {
         context.add_python_versions(&["3.12.3"])?;
         let python = context.run_with_vars(
             &[
-                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
-                ("VIRTUAL_ENV", Some(venv.as_os_str())),
+                (
+                    EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                    Some(parent.as_os_str()),
+                ),
+                (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
             ],
             || {
                 find_python_installation(
@@ -1224,8 +1304,11 @@ mod tests {
         // Test with `EnvironmentPreference::ExplicitSystem`
         let python = context.run_with_vars(
             &[
-                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
-                ("VIRTUAL_ENV", Some(venv.as_os_str())),
+                (
+                    EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                    Some(parent.as_os_str()),
+                ),
+                (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
             ],
             || {
                 find_python_installation(
@@ -1245,8 +1328,11 @@ mod tests {
         // Test with `EnvironmentPreference::OnlySystem`
         let python = context.run_with_vars(
             &[
-                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
-                ("VIRTUAL_ENV", Some(venv.as_os_str())),
+                (
+                    EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                    Some(parent.as_os_str()),
+                ),
+                (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
             ],
             || {
                 find_python_installation(
@@ -1266,8 +1352,11 @@ mod tests {
         // Test with `EnvironmentPreference::OnlyVirtual`
         let python = context.run_with_vars(
             &[
-                ("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str())),
-                ("VIRTUAL_ENV", Some(venv.as_os_str())),
+                (
+                    EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                    Some(parent.as_os_str()),
+                ),
+                (EnvVars::VIRTUAL_ENV, Some(venv.as_os_str())),
             ],
             || {
                 find_python_installation(
@@ -1302,7 +1391,10 @@ mod tests {
         )?;
 
         let python = context.run_with_vars(
-            &[("UV_INTERNAL__PARENT_INTERPRETER", Some(parent.as_os_str()))],
+            &[(
+                EnvVars::UV_INTERNAL__PARENT_INTERPRETER,
+                Some(parent.as_os_str()),
+            )],
             || {
                 find_python_installation(
                     &PythonRequest::Default,
@@ -1330,7 +1422,7 @@ mod tests {
 
         // Without a specific request
         let python =
-            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_python_installation(
                     &PythonRequest::Default,
                     EnvironmentPreference::OnlySystem,
@@ -1346,7 +1438,7 @@ mod tests {
 
         // With a requested minor version
         let python =
-            context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
+            context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
                 find_python_installation(
                     &PythonRequest::parse("3.12"),
                     EnvironmentPreference::OnlySystem,
@@ -1361,14 +1453,15 @@ mod tests {
         );
 
         // With a patch version that cannot be python
-        let result = context.run_with_vars(&[("VIRTUAL_ENV", Some(venv.as_os_str()))], || {
-            find_python_installation(
-                &PythonRequest::parse("3.12.3"),
-                EnvironmentPreference::OnlySystem,
-                PythonPreference::OnlySystem,
-                &context.cache,
-            )
-        })?;
+        let result =
+            context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
+                find_python_installation(
+                    &PythonRequest::parse("3.12.3"),
+                    EnvironmentPreference::OnlySystem,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })?;
         assert!(
             result.is_err(),
             "We should not find an python; got {result:?}"
@@ -1397,7 +1490,7 @@ mod tests {
 
         // With an invalid virtual environment variable
         let result = context.run_with_vars(
-            &[("VIRTUAL_ENV", Some(context.tempdir.as_os_str()))],
+            &[(EnvVars::VIRTUAL_ENV, Some(context.tempdir.as_os_str()))],
             || {
                 find_python_installation(
                     &PythonRequest::parse("3.12.3"),
@@ -1640,15 +1733,17 @@ mod tests {
         let other_venv = context.tempdir.child("foobar").child(".venv");
         TestContext::mock_venv(&other_venv, "3.11.1")?;
         context.add_python_versions(&["3.12.2"])?;
-        let python =
-            context.run_with_vars(&[("VIRTUAL_ENV", Some(other_venv.as_os_str()))], || {
+        let python = context.run_with_vars(
+            &[(EnvVars::VIRTUAL_ENV, Some(other_venv.as_os_str()))],
+            || {
                 find_python_installation(
                     &PythonRequest::parse(venv.to_str().unwrap()),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
                 )
-            })??;
+            },
+        )??;
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.10.0",
@@ -2100,83 +2195,7 @@ mod tests {
     }
 
     #[test]
-    fn find_python_prefers_generic_executable_over_implementation_name() -> Result<()> {
-        let mut context = TestContext::new()?;
-
-        // We prefer `python` executables over `graalpy` executables in the same directory
-        // if they are both GraalPy
-        TestContext::create_mock_interpreter(
-            &context.tempdir.join("python"),
-            &PythonVersion::from_str("3.10.0").unwrap(),
-            ImplementationName::GraalPy,
-            true,
-            false,
-        )?;
-        TestContext::create_mock_interpreter(
-            &context.tempdir.join("graalpy"),
-            &PythonVersion::from_str("3.10.1").unwrap(),
-            ImplementationName::GraalPy,
-            true,
-            false,
-        )?;
-        context.add_to_search_path(context.tempdir.to_path_buf());
-
-        let python = context.run(|| {
-            find_python_installation(
-                &PythonRequest::parse("graalpy@3.10"),
-                EnvironmentPreference::Any,
-                PythonPreference::OnlySystem,
-                &context.cache,
-            )
-        })??;
-        assert_eq!(
-            python.interpreter().python_full_version().to_string(),
-            "3.10.0",
-        );
-
-        // And `python` executables earlier in the search path will take precedence
-        context.reset_search_path();
-        context.add_python_interpreters(&[
-            (true, ImplementationName::GraalPy, "python", "3.10.2"),
-            (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
-        ])?;
-        let python = context.run(|| {
-            find_python_installation(
-                &PythonRequest::parse("graalpy@3.10"),
-                EnvironmentPreference::Any,
-                PythonPreference::OnlySystem,
-                &context.cache,
-            )
-        })??;
-        assert_eq!(
-            python.interpreter().python_full_version().to_string(),
-            "3.10.2",
-        );
-
-        // But `graalpy` executables earlier in the search path will take precedence
-        context.reset_search_path();
-        context.add_python_interpreters(&[
-            (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
-            (true, ImplementationName::GraalPy, "python", "3.10.2"),
-        ])?;
-        let python = context.run(|| {
-            find_python_installation(
-                &PythonRequest::parse("graalpy@3.10"),
-                EnvironmentPreference::Any,
-                PythonPreference::OnlySystem,
-                &context.cache,
-            )
-        })??;
-        assert_eq!(
-            python.interpreter().python_full_version().to_string(),
-            "3.10.3",
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn find_python_prefers_generic_executable_over_one_with_version() -> Result<()> {
+    fn find_python_executable_name_preference() -> Result<()> {
         let mut context = TestContext::new()?;
         TestContext::create_mock_interpreter(
             &context.tempdir.join("pypy3.10"),
@@ -2194,18 +2213,38 @@ mod tests {
         )?;
         context.add_to_search_path(context.tempdir.to_path_buf());
 
-        let python = context.run(|| {
-            find_python_installation(
-                &PythonRequest::parse("pypy@3.10"),
-                EnvironmentPreference::Any,
-                PythonPreference::OnlySystem,
-                &context.cache,
-            )
-        })??;
+        let python = context
+            .run(|| {
+                find_python_installation(
+                    &PythonRequest::parse("pypy@3.10"),
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.0",
+            "We should prefer the versioned one when a version is requested"
+        );
+
+        let python = context
+            .run(|| {
+                find_python_installation(
+                    &PythonRequest::parse("pypy"),
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })
+            .unwrap()
+            .unwrap();
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
             "3.10.1",
-            "We should prefer the generic executable over one with the version number"
+            "We should prefer the generic one when no version is requested"
         );
 
         let mut context = TestContext::new()?;
@@ -2223,20 +2262,126 @@ mod tests {
             true,
             false,
         )?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python"),
+            &PythonVersion::from_str("3.10.2").unwrap(),
+            ImplementationName::PyPy,
+            true,
+            false,
+        )?;
         context.add_to_search_path(context.tempdir.to_path_buf());
 
-        let python = context.run(|| {
-            find_python_installation(
-                &PythonRequest::parse("pypy@3.10"),
-                EnvironmentPreference::Any,
-                PythonPreference::OnlySystem,
-                &context.cache,
-            )
-        })??;
+        let python = context
+            .run(|| {
+                find_python_installation(
+                    &PythonRequest::parse("pypy@3.10"),
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })
+            .unwrap()
+            .unwrap();
         assert_eq!(
             python.interpreter().python_full_version().to_string(),
-            "3.10.0",
-            "We should prefer the generic name with a version over one the implementation name"
+            "3.10.1",
+            "We should prefer the implementation name over the generic name"
+        );
+
+        let python = context
+            .run(|| {
+                find_python_installation(
+                    &PythonRequest::parse("default"),
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.2",
+            "We should prefer the generic name over the implementation name, but not the versioned name"
+        );
+
+        // We prefer `python` executables over `graalpy` executables in the same directory
+        // if they are both GraalPy
+        let mut context = TestContext::new()?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("python"),
+            &PythonVersion::from_str("3.10.0").unwrap(),
+            ImplementationName::GraalPy,
+            true,
+            false,
+        )?;
+        TestContext::create_mock_interpreter(
+            &context.tempdir.join("graalpy"),
+            &PythonVersion::from_str("3.10.1").unwrap(),
+            ImplementationName::GraalPy,
+            true,
+            false,
+        )?;
+        context.add_to_search_path(context.tempdir.to_path_buf());
+
+        let python = context
+            .run(|| {
+                find_python_installation(
+                    &PythonRequest::parse("graalpy@3.10"),
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.1",
+        );
+
+        // And `python` executables earlier in the search path will take precedence
+        context.reset_search_path();
+        context.add_python_interpreters(&[
+            (true, ImplementationName::GraalPy, "python", "3.10.2"),
+            (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
+        ])?;
+        let python = context
+            .run(|| {
+                find_python_installation(
+                    &PythonRequest::parse("graalpy@3.10"),
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.2",
+        );
+
+        // And `graalpy` executables earlier in the search path will take precedence
+        context.reset_search_path();
+        context.add_python_interpreters(&[
+            (true, ImplementationName::GraalPy, "graalpy", "3.10.3"),
+            (true, ImplementationName::GraalPy, "python", "3.10.2"),
+        ])?;
+        let python = context
+            .run(|| {
+                find_python_installation(
+                    &PythonRequest::parse("graalpy@3.10"),
+                    EnvironmentPreference::Any,
+                    PythonPreference::OnlySystem,
+                    &context.cache,
+                )
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            python.interpreter().python_full_version().to_string(),
+            "3.10.3",
         );
 
         Ok(())

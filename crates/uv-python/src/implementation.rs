@@ -33,6 +33,10 @@ impl ImplementationName {
         ["cpython", "pypy", "graalpy"].into_iter()
     }
 
+    pub(crate) fn iter_all() -> impl Iterator<Item = Self> {
+        [Self::CPython, Self::PyPy, Self::GraalPy].into_iter()
+    }
+
     pub fn pretty(self) -> &'static str {
         match self {
             Self::CPython => "CPython",

@@ -18,6 +18,7 @@ use uv_pypi_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_settings::ToolOptions;
 use uv_shell::Shell;
+use uv_tool::{entrypoint_paths, tool_executable_dir, InstalledTools, Tool, ToolEntrypoint};
 use uv_tool::{entrypoint_paths, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::warn_user;
 
@@ -81,6 +82,11 @@ pub(crate) fn install_executables(
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
     };
+
+    // Find a suitable path to install into
+    let executable_directory = tool_executable_dir()?;
+    fs_err::create_dir_all(&executable_directory)
+        .context("Failed to create executable directory")?;
 
     debug!(
         "Installing tool executables into: {}",

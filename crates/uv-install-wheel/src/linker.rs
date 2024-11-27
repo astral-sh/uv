@@ -17,7 +17,7 @@ use reflink_copy as reflink;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_pypi_types::{DirectUrl, Metadata12};
@@ -74,13 +74,13 @@ pub fn install_wheel(
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
-    debug!(?name, "Extracting file");
+    trace!(?name, "Extracting file");
     let site_packages = match lib_kind {
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
     let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks)?;
-    debug!(?name, "Extracted {num_unpacked} files");
+    trace!(?name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
     let mut record_file = File::open(
@@ -94,9 +94,9 @@ pub fn install_wheel(
         parse_scripts(&wheel, &dist_info_prefix, None, layout.python_version.1)?;
 
     if console_scripts.is_empty() && gui_scripts.is_empty() {
-        debug!(?name, "No entrypoints");
+        trace!(?name, "No entrypoints");
     } else {
-        debug!(?name, "Writing entrypoints");
+        trace!(?name, "Writing entrypoints");
 
         fs_err::create_dir_all(&layout.scheme.scripts)?;
         write_script_entrypoints(
@@ -121,7 +121,7 @@ pub fn install_wheel(
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
     let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
     if data_dir.is_dir() {
-        debug!(?name, "Installing data");
+        trace!(?name, "Installing data");
         install_data(
             layout,
             relocatable,
@@ -137,10 +137,10 @@ pub fn install_wheel(
         // 2.e Remove empty distribution-1.0.data directory.
         fs::remove_dir_all(data_dir)?;
     } else {
-        debug!(?name, "No data");
+        trace!(?name, "No data");
     }
 
-    debug!(?name, "Writing extra metadata");
+    trace!(?name, "Writing extra metadata");
     extra_dist_info(
         site_packages,
         &dist_info_prefix,
@@ -151,7 +151,7 @@ pub fn install_wheel(
         &mut record,
     )?;
 
-    debug!(?name, "Writing record");
+    trace!(?name, "Writing record");
     let mut record_writer = csv::WriterBuilder::new()
         .has_headers(false)
         .escape(b'"')
@@ -370,7 +370,7 @@ fn clone_recursive(
     let from = entry.path();
     let to = site_packages.join(from.strip_prefix(wheel).unwrap());
 
-    debug!("Cloning {} to {}", from.display(), to.display());
+    trace!("Cloning {} to {}", from.display(), to.display());
 
     if (cfg!(windows) || cfg!(target_os = "linux")) && from.is_dir() {
         // On Windows, reflinking directories is not supported, so we copy each file instead.
@@ -470,7 +470,7 @@ fn copy_wheel_files(
         let entry = entry?;
         let path = entry.path();
 
-        let relative = path.strip_prefix(&wheel).unwrap();
+        let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {
@@ -500,7 +500,7 @@ fn hardlink_wheel_files(
         let entry = entry?;
         let path = entry.path();
 
-        let relative = path.strip_prefix(&wheel).unwrap();
+        let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
         if entry.file_type().is_dir() {

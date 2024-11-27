@@ -35,7 +35,6 @@ impl<'dist> RequirementsTxtDist<'dist> {
     pub(crate) fn to_requirements_txt(
         &self,
         requires_python: &RequiresPython,
-        include_extras: bool,
         include_markers: bool,
     ) -> Cow<str> {
         // If the URL is editable, write it as an editable requirement.
@@ -106,7 +105,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
             }
         }
 
-        if self.extras.is_empty() || !include_extras {
+        if self.extras.is_empty() {
             if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers.clone())
                 .try_to_string()
                 .filter(|_| include_markers)
@@ -141,6 +140,8 @@ impl<'dist> RequirementsTxtDist<'dist> {
         }
     }
 
+    /// Convert the [`RequirementsTxtDist`] to a comparator that can be used to sort the requirements
+    /// in a `requirements.txt` file.
     pub(crate) fn to_comparator(&self) -> RequirementsTxtComparator {
         if self.dist.is_editable() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
@@ -153,22 +154,33 @@ impl<'dist> RequirementsTxtDist<'dist> {
                 name: self.name(),
                 version: self.version,
                 url: Some(url.verbatim()),
+                extras: &self.extras,
             }
         } else {
             RequirementsTxtComparator::Name {
                 name: self.name(),
                 version: self.version,
                 url: None,
+                extras: &self.extras,
             }
         }
     }
 
     pub(crate) fn from_annotated_dist(annotated: &'dist AnnotatedDist) -> Self {
+        assert!(
+            annotated.marker.conflict().is_true(),
+            "found dist {annotated} with non-trivial conflicting marker {marker}, \
+             which cannot be represented in a `requirements.txt` format",
+            marker = annotated.marker,
+        );
         Self {
             dist: &annotated.dist,
             version: &annotated.version,
             hashes: &annotated.hashes,
-            markers: &annotated.marker,
+            // OK because we've asserted above that this dist
+            // does not have a non-trivial conflicting marker
+            // that we would otherwise need to care about.
+            markers: annotated.marker.pep508(),
             extras: if let Some(extra) = annotated.extra.clone() {
                 vec![extra]
             } else {
@@ -178,8 +190,10 @@ impl<'dist> RequirementsTxtDist<'dist> {
     }
 }
 
+/// A comparator for sorting requirements in a `requirements.txt` file.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum RequirementsTxtComparator<'a> {
+    /// Sort by URL for editable requirements.
     Url(Cow<'a, str>),
     /// In universal mode, we can have multiple versions for a package, so we track the version and
     /// the URL (for non-index packages) to have a stable sort for those, too.
@@ -187,6 +201,7 @@ pub(crate) enum RequirementsTxtComparator<'a> {
         name: &'a PackageName,
         version: &'a Version,
         url: Option<Cow<'a, str>>,
+        extras: &'a [ExtraName],
     },
 }
 

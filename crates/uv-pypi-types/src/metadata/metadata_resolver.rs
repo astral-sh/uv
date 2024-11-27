@@ -158,11 +158,13 @@ impl ResolutionMetadata {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::MetadataError;
     use std::str::FromStr;
+
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+
+    use super::*;
+    use crate::MetadataError;
 
     #[test]
     fn test_parse_metadata() {

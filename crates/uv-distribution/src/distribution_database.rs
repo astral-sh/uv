@@ -87,7 +87,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.client.unmanaged.timeout()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
+                    self.client.unmanaged.timeout().as_secs()
                 ),
             )
         } else {
@@ -354,7 +355,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ///
     /// While hashes will be generated in some cases, hash-checking is _not_ enforced and should
     /// instead be enforced by the caller.
-    pub async fn get_wheel_metadata(
+    async fn get_wheel_metadata(
         &self,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
@@ -363,7 +364,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if let Some(metadata) = self
             .build_context
             .dependency_metadata()
-            .get(dist.name(), dist.version())
+            .get(dist.name(), Some(dist.version()))
         {
             return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
@@ -425,14 +426,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<ArchiveMetadata, Error> {
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
-            if let Some(version) = dist.version() {
-                if let Some(metadata) = self
-                    .build_context
-                    .dependency_metadata()
-                    .get(dist.name(), version)
-                {
-                    return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
-                }
+            if let Some(metadata) = self
+                .build_context
+                .dependency_metadata()
+                .get(dist.name(), dist.version())
+            {
+                // If we skipped the build, we should still resolve any Git dependencies to precise
+                // commits.
+                self.builder.resolve_revision(source, &self.client).await?;
+
+                return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
             }
         }
 
@@ -553,9 +556,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = self
             .client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &http_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -575,7 +581,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(|client| async {
                     client
                         .cached_client()
-                        .skip_cache(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,
@@ -707,9 +713,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = self
             .client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &http_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -729,7 +738,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(|client| async {
                     client
                         .cached_client()
-                        .skip_cache(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,

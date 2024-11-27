@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
@@ -6,7 +5,7 @@ use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_pep440::Version;
+use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
     find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
@@ -17,7 +16,7 @@ use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
 use crate::{
     downloads, Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference,
-    PythonSource, PythonVersion,
+    PythonSource, PythonVariant, PythonVersion,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -87,6 +86,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or_else(|| &PythonRequest::Default);
 
@@ -101,7 +102,16 @@ impl PythonInstallation {
             {
                 if let Some(request) = PythonDownloadRequest::from_request(request) {
                     debug!("Requested Python not found, checking for available download...");
-                    match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
+                    match Self::fetch(
+                        request.fill()?,
+                        client_builder,
+                        cache,
+                        reporter,
+                        python_install_mirror,
+                        pypy_install_mirror,
+                    )
+                    .await
+                    {
                         Ok(installation) => Ok(installation),
                         Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
                             Err(Error::MissingPython(err))
@@ -122,6 +132,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
@@ -133,7 +145,15 @@ impl PythonInstallation {
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(&client, installations_dir, &cache_dir, reporter)
+            .fetch_with_retry(
+                &client,
+                installations_dir,
+                &cache_dir,
+                false,
+                python_install_mirror,
+                pypy_install_mirror,
+                reporter,
+            )
             .await?;
 
         let path = match result {
@@ -143,6 +163,7 @@ impl PythonInstallation {
 
         let installed = ManagedPythonInstallation::new(path)?;
         installed.ensure_externally_managed()?;
+        installed.ensure_canonical_executables()?;
 
         Ok(Self {
             source: PythonSource::Managed,
@@ -224,10 +245,11 @@ pub struct PythonInstallationKey {
     pub(crate) major: u8,
     pub(crate) minor: u8,
     pub(crate) patch: u8,
-    pub(crate) prerelease: Cow<'static, str>,
+    pub(crate) prerelease: Option<Prerelease>,
     pub(crate) os: Os,
     pub(crate) arch: Arch,
     pub(crate) libc: Libc,
+    pub(crate) variant: PythonVariant,
 }
 
 impl PythonInstallationKey {
@@ -236,20 +258,22 @@ impl PythonInstallationKey {
         major: u8,
         minor: u8,
         patch: u8,
-        prerelease: String,
+        prerelease: Option<Prerelease>,
         os: Os,
         arch: Arch,
         libc: Libc,
+        variant: PythonVariant,
     ) -> Self {
         Self {
             implementation,
             major,
             minor,
             patch,
-            prerelease: Cow::Owned(prerelease),
+            prerelease,
             os,
             arch,
             libc,
+            variant,
         }
     }
 
@@ -259,16 +283,18 @@ impl PythonInstallationKey {
         os: Os,
         arch: Arch,
         libc: Libc,
+        variant: PythonVariant,
     ) -> Self {
         Self {
             implementation,
             major: version.major(),
             minor: version.minor(),
             patch: version.patch().unwrap_or_default(),
-            prerelease: Cow::Owned(version.pre().map(|pre| pre.to_string()).unwrap_or_default()),
+            prerelease: version.pre(),
             os,
             arch,
             libc,
+            variant,
         }
     }
 
@@ -279,7 +305,12 @@ impl PythonInstallationKey {
     pub fn version(&self) -> PythonVersion {
         PythonVersion::from_str(&format!(
             "{}.{}.{}{}",
-            self.major, self.minor, self.patch, self.prerelease
+            self.major,
+            self.minor,
+            self.patch,
+            self.prerelease
+                .map(|pre| pre.to_string())
+                .unwrap_or_default()
         ))
         .expect("Python installation keys must have valid Python versions")
     }
@@ -295,18 +326,36 @@ impl PythonInstallationKey {
     pub fn libc(&self) -> &Libc {
         &self.libc
     }
+
+    /// Return a canonical name for a versioned executable.
+    pub fn versioned_executable_name(&self) -> String {
+        format!(
+            "python{maj}.{min}{var}{exe}",
+            maj = self.major,
+            min = self.minor,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
 }
 
 impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let variant = match self.variant {
+            PythonVariant::Default => String::new(),
+            PythonVariant::Freethreaded => format!("+{}", self.variant),
+        };
         write!(
             f,
-            "{}-{}.{}.{}{}-{}-{}-{}",
+            "{}-{}.{}.{}{}{}-{}-{}-{}",
             self.implementation,
             self.major,
             self.minor,
             self.patch,
-            self.prerelease,
+            self.prerelease
+                .map(|pre| pre.to_string())
+                .unwrap_or_default(),
+            variant,
             self.os,
             self.arch,
             self.libc
@@ -343,6 +392,19 @@ impl FromStr for PythonInstallationKey {
             PythonInstallationKeyError::ParseError(key.to_string(), format!("invalid libc: {err}"))
         })?;
 
+        let (version, variant) = match version.split_once('+') {
+            Some((version, variant)) => {
+                let variant = PythonVariant::from_str(variant).map_err(|()| {
+                    PythonInstallationKeyError::ParseError(
+                        key.to_string(),
+                        format!("invalid Python variant: {variant}"),
+                    )
+                })?;
+                (version, variant)
+            }
+            None => (*version, PythonVariant::Default),
+        };
+
         let version = PythonVersion::from_str(version).map_err(|err| {
             PythonInstallationKeyError::ParseError(
                 key.to_string(),
@@ -356,6 +418,7 @@ impl FromStr for PythonInstallationKey {
             os,
             arch,
             libc,
+            variant,
         ))
     }
 }
@@ -374,5 +437,6 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
             .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
+            .then_with(|| self.variant.cmp(&other.variant))
     }
 }

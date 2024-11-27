@@ -1,37 +1,63 @@
 use std::cmp::max;
 use std::fmt::Write;
 
+use anstream::println;
 use anyhow::Result;
+use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashMap;
 use serde::Serialize;
 use unicode_width::UnicodeWidthStr;
 
-use uv_cache::Cache;
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
-use uv_distribution_types::{Diagnostic, InstalledDist, Name};
+use uv_client::{Connectivity, RegistryClientBuilder};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, TrustedHost};
+use uv_distribution_filename::DistFilename;
+use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment};
+use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
 
+use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
+use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
-pub(crate) fn pip_list(
+pub(crate) async fn pip_list(
     editable: Option<bool>,
     exclude: &[PackageName],
     format: &ListFormat,
+    outdated: bool,
+    prerelease: PrereleaseMode,
+    index_locations: IndexLocations,
+    index_strategy: IndexStrategy,
+    keyring_provider: KeyringProviderType,
+    allow_insecure_host: Vec<TrustedHost>,
+    connectivity: Connectivity,
+    concurrency: Concurrency,
     strict: bool,
+    exclude_newer: Option<ExcludeNewer>,
     python: Option<&str>,
     system: bool,
+    native_tls: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    // Disallow `--outdated` with `--format freeze`.
+    if outdated && matches!(format, ListFormat::Freeze) {
+        anyhow::bail!("`--outdated` cannot be used with `--format freeze`");
+    }
+
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
@@ -52,11 +78,102 @@ pub(crate) fn pip_list(
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .collect_vec();
 
+    // Determine the latest version for each package.
+    let latest = if outdated && !results.is_empty() {
+        let capabilities = IndexCapabilities::default();
+
+        // Initialize the registry client.
+        let client =
+            RegistryClientBuilder::new(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
+                .native_tls(native_tls)
+                .connectivity(connectivity)
+                .index_urls(index_locations.index_urls())
+                .index_strategy(index_strategy)
+                .keyring(keyring_provider)
+                .allow_insecure_host(allow_insecure_host.clone())
+                .markers(environment.interpreter().markers())
+                .platform(environment.interpreter().platform())
+                .build();
+
+        // Determine the platform tags.
+        let interpreter = environment.interpreter();
+        let tags = interpreter.tags()?;
+        let requires_python =
+            RequiresPython::greater_than_equal_version(interpreter.python_full_version());
+
+        // Initialize the client to fetch the latest version of each package.
+        let client = LatestClient {
+            client: &client,
+            capabilities: &capabilities,
+            prerelease,
+            exclude_newer,
+            tags: Some(tags),
+            requires_python: &requires_python,
+        };
+
+        let reporter = LatestVersionReporter::from(printer).with_length(results.len() as u64);
+
+        // Fetch the latest version for each package.
+        let mut fetches = futures::stream::iter(&results)
+            .map(|dist| async {
+                let latest = client.find_latest(dist.name(), None).await?;
+                Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((dist.name(), latest))
+            })
+            .buffer_unordered(concurrency.downloads);
+
+        let mut map = FxHashMap::default();
+        while let Some((package, version)) = fetches.next().await.transpose()? {
+            if let Some(version) = version.as_ref() {
+                reporter.on_fetch_version(package, version.version());
+            } else {
+                reporter.on_fetch_progress();
+            }
+            map.insert(package, version);
+        }
+        reporter.on_fetch_complete();
+        map
+    } else {
+        FxHashMap::default()
+    };
+
+    // Remove any up-to-date packages from the results.
+    let results = if outdated {
+        results
+            .into_iter()
+            .filter(|dist| {
+                latest[dist.name()]
+                    .as_ref()
+                    .is_some_and(|filename| filename.version() > dist.version())
+            })
+            .collect_vec()
+    } else {
+        results
+    };
+
     match format {
         ListFormat::Json => {
-            let rows = results.iter().copied().map(Entry::from).collect_vec();
+            let rows = results
+                .iter()
+                .copied()
+                .map(|dist| Entry {
+                    name: dist.name().clone(),
+                    version: dist.version().clone(),
+                    latest_version: latest
+                        .get(dist.name())
+                        .and_then(|filename| filename.as_ref())
+                        .map(DistFilename::version)
+                        .cloned(),
+                    latest_filetype: latest
+                        .get(dist.name())
+                        .and_then(|filename| filename.as_ref())
+                        .map(FileType::from),
+                    editable_project_location: dist
+                        .as_editable()
+                        .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+                })
+                .collect_vec();
             let output = serde_json::to_string(&rows)?;
-            writeln!(printer.stdout(), "{output}")?;
+            println!("{output}");
         }
         ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
@@ -79,6 +196,39 @@ pub(crate) fn pip_list(
                 },
             ];
 
+            // The latest version and type are only displayed if outdated.
+            if outdated {
+                columns.push(Column {
+                    header: String::from("Latest"),
+                    rows: results
+                        .iter()
+                        .map(|dist| {
+                            latest
+                                .get(dist.name())
+                                .and_then(|filename| filename.as_ref())
+                                .map(DistFilename::version)
+                                .map(ToString::to_string)
+                                .unwrap_or_default()
+                        })
+                        .collect_vec(),
+                });
+                columns.push(Column {
+                    header: String::from("Type"),
+                    rows: results
+                        .iter()
+                        .map(|dist| {
+                            latest
+                                .get(dist.name())
+                                .and_then(|filename| filename.as_ref())
+                                .map(FileType::from)
+                                .as_ref()
+                                .map(ToString::to_string)
+                                .unwrap_or_default()
+                        })
+                        .collect_vec(),
+                });
+            }
+
             // Editable column is only displayed if at least one editable package is found.
             if results.iter().copied().any(InstalledDist::is_editable) {
                 columns.push(Column {
@@ -97,18 +247,13 @@ pub(crate) fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                writeln!(printer.stdout(), "{}", elems.join(" ").trim_end())?;
+                println!("{}", elems.join(" ").trim_end());
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
-                writeln!(
-                    printer.stdout(),
-                    "{}=={}",
-                    dist.name().bold(),
-                    dist.version()
-                )?;
+                println!("{}=={}", dist.name().bold(), dist.version());
             }
         }
     }
@@ -116,7 +261,7 @@ pub(crate) fn pip_list(
     // Validate that the environment is consistent.
     if strict {
         // Determine the markers to use for resolution.
-        let markers = environment.interpreter().resolver_markers();
+        let markers = environment.interpreter().resolver_marker_environment();
 
         for diagnostic in site_packages.diagnostics(&markers)? {
             writeln!(
@@ -132,27 +277,58 @@ pub(crate) fn pip_list(
     Ok(ExitStatus::Success)
 }
 
-/// An entry in a JSON list of installed packages.
-#[derive(Debug, Serialize)]
-struct Entry {
-    name: String,
-    version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    editable_project_location: Option<String>,
+#[derive(Debug)]
+enum FileType {
+    /// A wheel distribution (i.e., a `.whl` file).
+    Wheel,
+    /// A source distribution (e.g., a `.tar.gz` file).
+    SourceDistribution,
 }
 
-impl From<&InstalledDist> for Entry {
-    fn from(dist: &InstalledDist) -> Self {
-        Self {
-            name: dist.name().to_string(),
-            version: dist.version().to_string(),
-            editable_project_location: dist
-                .as_editable()
-                .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+impl std::fmt::Display for FileType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Wheel => write!(f, "wheel"),
+            Self::SourceDistribution => write!(f, "sdist"),
         }
     }
 }
 
+impl Serialize for FileType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Wheel => serializer.serialize_str("wheel"),
+            Self::SourceDistribution => serializer.serialize_str("sdist"),
+        }
+    }
+}
+
+impl From<&DistFilename> for FileType {
+    fn from(filename: &DistFilename) -> Self {
+        match filename {
+            DistFilename::WheelFilename(_) => Self::Wheel,
+            DistFilename::SourceDistFilename(_) => Self::SourceDistribution,
+        }
+    }
+}
+
+/// An entry in a JSON list of installed packages.
+#[derive(Debug, Serialize)]
+struct Entry {
+    name: PackageName,
+    version: Version,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_version: Option<Version>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_filetype: Option<FileType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    editable_project_location: Option<String>,
+}
+
+/// A column in a table.
 #[derive(Debug)]
 struct Column {
     /// The header of the column.
@@ -185,7 +361,8 @@ impl<'a> Column {
 }
 
 /// Zip an unknown number of iterators.
-/// Combination of [`itertools::multizip`] and [`itertools::izip`].
+///
+/// A combination of [`itertools::multizip`] and [`itertools::izip`].
 #[derive(Debug)]
 struct MultiZip<T>(Vec<T>);
 

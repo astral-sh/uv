@@ -86,7 +86,8 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, LowerBound,
+        SourceStrategy,
     };
     use uv_dispatch::BuildDispatch;
     use uv_distribution::DistributionDatabase;
@@ -96,11 +97,11 @@ mod resolver {
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, Tags};
-    use uv_pypi_types::ResolverMarkerEnvironment;
+    use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{
         FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
-        ResolutionGraph, Resolver, ResolverMarkers,
+        Resolver, ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -138,7 +139,7 @@ mod resolver {
         client: &RegistryClient,
         interpreter: &Interpreter,
         universal: bool,
-    ) -> Result<ResolutionGraph> {
+    ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
@@ -162,6 +163,7 @@ mod resolver {
         let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
         let sources = SourceStrategy::default();
         let dependency_metadata = DependencyMetadata::default();
+        let conflicts = Conflicts::empty();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -191,14 +193,15 @@ mod resolver {
             &build_options,
             &hashes,
             exclude_newer,
+            LowerBound::default(),
             sources,
             concurrency,
         );
 
         let markers = if universal {
-            ResolverMarkers::universal(vec![])
+            ResolverEnvironment::universal(vec![])
         } else {
-            ResolverMarkers::specific_environment(ResolverMarkerEnvironment::from(MARKERS.clone()))
+            ResolverEnvironment::specific(ResolverMarkerEnvironment::from(MARKERS.clone()))
         };
 
         let resolver = Resolver::new(
@@ -206,6 +209,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
+            conflicts,
             Some(&TAGS),
             &flat_index,
             &index,

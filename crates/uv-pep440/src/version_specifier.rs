@@ -2,11 +2,12 @@ use std::cmp::Ordering;
 use std::ops::Bound;
 use std::str::FromStr;
 
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-
 use crate::{
     version, Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError,
 };
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "tracing")]
+use tracing::warn;
 
 /// Sorted version specifiers, such as `>=2.1,<3`.
 ///
@@ -23,19 +24,12 @@ use crate::{
 /// // VersionSpecifiers derefs into a list of specifiers
 /// assert_eq!(version_specifiers.iter().position(|specifier| *specifier.operator() == Operator::LessThan), Some(1));
 /// ```
-#[derive(
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Debug,
-    Clone,
-    Hash,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-#[rkyv(derive(Debug))]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VersionSpecifiers(Vec<VersionSpecifier>);
 
 impl std::ops::Deref for VersionSpecifiers {
@@ -57,7 +51,7 @@ impl VersionSpecifiers {
         self.iter().all(|specifier| specifier.contains(version))
     }
 
-    /// Returns `true` if the specifiers are empty is empty.
+    /// Returns `true` if there are no specifiers.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -69,11 +63,61 @@ impl VersionSpecifiers {
         specifiers.sort_by(|a, b| a.version().cmp(b.version()));
         Self(specifiers)
     }
+
+    /// Returns the [`VersionSpecifiers`] whose union represents the given range.
+    ///
+    /// This function is not applicable to ranges involving pre-release versions.
+    pub fn from_release_only_bounds<'a>(
+        mut bounds: impl Iterator<Item = (&'a Bound<Version>, &'a Bound<Version>)>,
+    ) -> Self {
+        let mut specifiers = Vec::new();
+
+        let Some((start, mut next)) = bounds.next() else {
+            return Self::empty();
+        };
+
+        // Add specifiers for the holes between the bounds.
+        for (lower, upper) in bounds {
+            match (next, lower) {
+                // Ex) [3.7, 3.8.5), (3.8.5, 3.9] -> >=3.7,!=3.8.5,<=3.9
+                (Bound::Excluded(prev), Bound::Excluded(lower)) if prev == lower => {
+                    specifiers.push(VersionSpecifier::not_equals_version(prev.clone()));
+                }
+                // Ex) [3.7, 3.8), (3.8, 3.9] -> >=3.7,!=3.8.*,<=3.9
+                (Bound::Excluded(prev), Bound::Included(lower))
+                    if prev.release().len() == 2
+                        && lower.release() == [prev.release()[0], prev.release()[1] + 1] =>
+                {
+                    specifiers.push(VersionSpecifier::not_equals_star_version(prev.clone()));
+                }
+                _ => {
+                    #[cfg(feature = "tracing")]
+                    warn!("Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}");
+                }
+            }
+            next = upper;
+        }
+        let end = next;
+
+        // Add the specifiers for the bounding range.
+        specifiers.extend(VersionSpecifier::from_release_only_bounds((start, end)));
+
+        Self::from_unsorted(specifiers)
+    }
 }
 
 impl FromIterator<VersionSpecifier> for VersionSpecifiers {
     fn from_iter<T: IntoIterator<Item = VersionSpecifier>>(iter: T) -> Self {
         Self::from_unsorted(iter.into_iter().collect())
+    }
+}
+
+impl IntoIterator for VersionSpecifiers {
+    type Item = VersionSpecifier;
+    type IntoIter = std::vec::IntoIter<VersionSpecifier>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -188,7 +232,7 @@ impl VersionSpecifiersParseError {
 
 impl std::error::Error for VersionSpecifiersParseError {}
 
-/// A version range such such as `>1.2.3`, `<=4!5.6.7-a8.post9.dev0` or `== 4.1.*`. Parse with
+/// A version range such as `>1.2.3`, `<=4!5.6.7-a8.post9.dev0` or `== 4.1.*`. Parse with
 /// `VersionSpecifier::from_str`
 ///
 /// ```rust
@@ -199,19 +243,12 @@ impl std::error::Error for VersionSpecifiersParseError {}
 /// let version_specifier = VersionSpecifier::from_str("== 1.*").unwrap();
 /// assert!(version_specifier.contains(&version));
 /// ```
-#[derive(
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Debug,
-    Clone,
-    Hash,
-    rkyv::Archive,
-    rkyv::Deserialize,
-    rkyv::Serialize,
+#[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Clone, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
 )]
-#[rkyv(derive(Debug))]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VersionSpecifier {
     /// ~=|==|!=|<=|>=|<|>|===, plus whether the version ended with a star
     pub(crate) operator: Operator,
@@ -615,12 +652,7 @@ impl std::fmt::Display for VersionSpecifierBuildError {
                 operator: ref op,
                 ref version,
             } => {
-                let local = version
-                    .local()
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<String>>()
-                    .join(".");
+                let local = version.local();
                 write!(
                     f,
                     "Operator {op} is incompatible with versions \
@@ -1281,10 +1313,10 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             indoc! {r"
-                Failed to parse version: Unexpected end of version specifier, expected operator:
-                ~= 0.9, %‍= 1.0, != 1.3.4.*
-                       ^^^^^^^
-            "}
+            Failed to parse version: Unexpected end of version specifier, expected operator:
+            ~= 0.9, %‍= 1.0, != 1.3.4.*
+                   ^^^^^^^
+        "}
         );
     }
 
@@ -1344,7 +1376,8 @@ mod tests {
                 ParseErrorKind::InvalidSpecifier(
                     BuildErrorKind::OperatorLocalCombo {
                         operator: Operator::TildeEqual,
-                        version: Version::new([1, 0]).with_local(vec![LocalSegment::Number(5)]),
+                        version: Version::new([1, 0])
+                            .with_local_segments(vec![LocalSegment::Number(5)]),
                     }
                     .into(),
                 )
@@ -1355,8 +1388,9 @@ mod tests {
                 ParseErrorKind::InvalidSpecifier(
                     BuildErrorKind::OperatorLocalCombo {
                         operator: Operator::GreaterThanEqual,
-                        version: Version::new([1, 0])
-                            .with_local(vec![LocalSegment::String("deadbeef".to_string())]),
+                        version: Version::new([1, 0]).with_local_segments(vec![
+                            LocalSegment::String("deadbeef".to_string()),
+                        ]),
                     }
                     .into(),
                 )
@@ -1368,7 +1402,7 @@ mod tests {
                     BuildErrorKind::OperatorLocalCombo {
                         operator: Operator::LessThanEqual,
                         version: Version::new([1, 0])
-                            .with_local(vec![LocalSegment::String("abc123".to_string())]),
+                            .with_local_segments(vec![LocalSegment::String("abc123".to_string())]),
                     }
                     .into(),
                 )
@@ -1380,7 +1414,7 @@ mod tests {
                     BuildErrorKind::OperatorLocalCombo {
                         operator: Operator::GreaterThan,
                         version: Version::new([1, 0])
-                            .with_local(vec![LocalSegment::String("watwat".to_string())]),
+                            .with_local_segments(vec![LocalSegment::String("watwat".to_string())]),
                     }
                     .into(),
                 )
@@ -1391,8 +1425,10 @@ mod tests {
                 ParseErrorKind::InvalidSpecifier(
                     BuildErrorKind::OperatorLocalCombo {
                         operator: Operator::LessThan,
-                        version: Version::new([1, 0])
-                            .with_local(vec![LocalSegment::Number(1), LocalSegment::Number(0)]),
+                        version: Version::new([1, 0]).with_local_segments(vec![
+                            LocalSegment::Number(1),
+                            LocalSegment::Number(0),
+                        ]),
                     }
                     .into(),
                 )

@@ -8,6 +8,7 @@ pub use crate::path::*;
 
 pub mod cachedir;
 mod path;
+pub mod which;
 
 /// Reads data from the path and requires that it be valid UTF-8 or UTF-16.
 ///
@@ -101,6 +102,27 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(unix)]
 pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
+}
+
+/// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
+///
+/// This does not replace an existing symlink or file at `dst`.
+///
+/// This does not fallback to copying on Unix.
+///
+/// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
+/// instead; it will use a junction on Windows, which is more performant.
+pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        fs_err::copy(src.as_ref(), dst.as_ref())?;
+    }
+    #[cfg(unix)]
+    {
+        fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+    }
+
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -324,10 +346,10 @@ impl LockedFile {
                 Ok(Self(file))
             }
             Err(err) => {
-                // Log error code and enum kind to help debugging more exotic failures
-                // TODO(zanieb): When `raw_os_error` stabilizes, use that to avoid displaying
-                // the error when it is `WouldBlock`, which is expected and noisy otherwise.
-                trace!("Try lock error: {err:?}");
+                // Log error code and enum kind to help debugging more exotic failures.
+                if err.kind() != std::io::ErrorKind::WouldBlock {
+                    debug!("Try lock error: {err:?}");
+                }
                 info!(
                     "Waiting to acquire lock for `{resource}` at `{}`",
                     file.path().user_display(),
@@ -420,4 +442,19 @@ impl<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin> tokio::i
                 (self.callback)(buf.filled().len());
             })
     }
+}
+
+/// Recursively copy a directory and its contents.
+pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs_err::create_dir_all(&dst)?;
+    for entry in fs_err::read_dir(src.as_ref())? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs_err::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }

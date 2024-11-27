@@ -3,7 +3,7 @@ use std::path::{Component, Path, PathBuf};
 
 use fs_err as fs;
 use std::sync::{LazyLock, Mutex};
-use tracing::debug;
+use tracing::trace;
 use uv_fs::write_atomic_sync;
 
 use crate::wheel::read_record_file;
@@ -33,13 +33,42 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     let mut file_count = 0usize;
     let mut dir_count = 0usize;
 
+    #[cfg(windows)]
+    let itself = std::env::current_exe().ok();
+
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
     for entry in &record {
         let path = site_packages.join(&entry.path);
+
+        // On Windows, deleting the current executable is a special case.
+        #[cfg(windows)]
+        if let Some(itself) = itself.as_ref() {
+            if itself
+                .file_name()
+                .is_some_and(|itself| path.file_name().is_some_and(|path| itself == path))
+            {
+                if same_file::is_same_file(itself, &path).unwrap_or(false) {
+                    tracing::debug!("Detected self-delete of executable: {}", path.display());
+                    match self_replace::self_delete_outside_path(site_packages) {
+                        Ok(()) => {
+                            trace!("Removed file: {}", path.display());
+                            file_count += 1;
+                            if let Some(parent) = path.parent() {
+                                visited.insert(normalize_path(parent));
+                            }
+                        }
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(err.into()),
+                    }
+                    continue;
+                }
+            }
+        }
+
         match fs::remove_file(&path) {
             Ok(()) => {
-                debug!("Removed file: {}", path.display());
+                trace!("Removed file: {}", path.display());
                 file_count += 1;
                 if let Some(parent) = path.parent() {
                     visited.insert(normalize_path(parent));
@@ -48,7 +77,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => match fs::remove_dir_all(&path) {
                 Ok(()) => {
-                    debug!("Removed directory: {}", path.display());
+                    trace!("Removed directory: {}", path.display());
                     dir_count += 1;
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -81,7 +110,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
             let pycache = path.join("__pycache__");
             match fs::remove_dir_all(&pycache) {
                 Ok(()) => {
-                    debug!("Removed directory: {}", pycache.display());
+                    trace!("Removed directory: {}", pycache.display());
                     dir_count += 1;
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -103,7 +132,7 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
 
             fs::remove_dir(path)?;
 
-            debug!("Removed directory: {}", path.display());
+            trace!("Removed directory: {}", path.display());
             dir_count += 1;
 
             if let Some(parent) = path.parent() {
@@ -169,7 +198,7 @@ pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
         // Remove as a directory.
         match fs_err::remove_dir_all(&path) {
             Ok(()) => {
-                debug!("Removed directory: {}", path.display());
+                trace!("Removed directory: {}", path.display());
                 dir_count += 1;
                 continue;
             }
@@ -182,7 +211,7 @@ pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
             let path = path.with_extension(extension);
             match fs_err::remove_file(&path) {
                 Ok(()) => {
-                    debug!("Removed file: {}", path.display());
+                    trace!("Removed file: {}", path.display());
                     file_count += 1;
                     break;
                 }
@@ -195,7 +224,7 @@ pub fn uninstall_egg(egg_info: &Path) -> Result<Uninstall, Error> {
     // Remove the `.egg-info` directory.
     match fs_err::remove_dir_all(egg_info) {
         Ok(()) => {
-            debug!("Removed directory: {}", egg_info.display());
+            trace!("Removed directory: {}", egg_info.display());
             dir_count += 1;
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -245,7 +274,7 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
 
     match fs::remove_file(egg_link) {
         Ok(()) => {
-            debug!("Removed file: {}", egg_link.display());
+            trace!("Removed file: {}", egg_link.display());
             file_count += 1;
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -277,7 +306,7 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
     }
     if removed {
         write_atomic_sync(&easy_install, new_content)?;
-        debug!("Removed line from `easy-install.pth`: {target_line}");
+        trace!("Removed line from `easy-install.pth`: {target_line}");
     }
 
     Ok(Uninstall {

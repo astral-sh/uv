@@ -16,8 +16,48 @@ use uv_workspace::pyproject::Sources;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
-/// A PEP 723 script, including its [`Pep723Metadata`].
+/// A PEP 723 item, either read from a script on disk or provided via `stdin`.
 #[derive(Debug)]
+pub enum Pep723Item {
+    /// A PEP 723 script read from disk.
+    Script(Pep723Script),
+    /// A PEP 723 script provided via `stdin`.
+    Stdin(Pep723Metadata),
+    /// A PEP 723 script provided via a remote URL.
+    Remote(Pep723Metadata),
+}
+
+impl Pep723Item {
+    /// Return the [`Pep723Metadata`] associated with the item.
+    pub fn metadata(&self) -> &Pep723Metadata {
+        match self {
+            Self::Script(script) => &script.metadata,
+            Self::Stdin(metadata) => metadata,
+            Self::Remote(metadata) => metadata,
+        }
+    }
+
+    /// Consume the item and return the associated [`Pep723Metadata`].
+    pub fn into_metadata(self) -> Pep723Metadata {
+        match self {
+            Self::Script(script) => script.metadata,
+            Self::Stdin(metadata) => metadata,
+            Self::Remote(metadata) => metadata,
+        }
+    }
+
+    /// Return the path of the PEP 723 item, if any.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Script(script) => Some(&script.path),
+            Self::Stdin(_) => None,
+            Self::Remote(_) => None,
+        }
+    }
+}
+
+/// A PEP 723 script, including its [`Pep723Metadata`].
+#[derive(Debug, Clone)]
 pub struct Pep723Script {
     /// The path to the Python script.
     pub path: PathBuf,
@@ -149,14 +189,16 @@ impl Pep723Script {
             self.postlude
         );
 
-        Ok(fs_err::tokio::write(&self.path, content).await?)
+        fs_err::tokio::write(&self.path, content).await?;
+
+        Ok(())
     }
 }
 
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
 /// See: <https://peps.python.org/pep-0723/>
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
     pub dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
@@ -165,6 +207,42 @@ pub struct Pep723Metadata {
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
+}
+
+impl Pep723Metadata {
+    /// Parse the PEP 723 metadata from `stdin`.
+    pub fn parse(contents: &[u8]) -> Result<Option<Self>, Pep723Error> {
+        // Extract the `script` tag.
+        let ScriptTag { metadata, .. } = match ScriptTag::parse(contents) {
+            Ok(Some(tag)) => tag,
+            Ok(None) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        // Parse the metadata.
+        Ok(Some(Self::from_str(&metadata)?))
+    }
+
+    /// Read the PEP 723 `script` metadata from a Python file, if it exists.
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    pub async fn read(file: impl AsRef<Path>) -> Result<Option<Self>, Pep723Error> {
+        let contents = match fs_err::tokio::read(&file).await {
+            Ok(contents) => contents,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+
+        // Extract the `script` tag.
+        let ScriptTag { metadata, .. } = match ScriptTag::parse(&contents) {
+            Ok(Some(tag)) => tag,
+            Ok(None) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+        // Parse the metadata.
+        Ok(Some(Self::from_str(&metadata)?))
+    }
 }
 
 impl FromStr for Pep723Metadata {
@@ -180,19 +258,21 @@ impl FromStr for Pep723Metadata {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolUv {
     #[serde(flatten)]
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+    pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
 
@@ -418,10 +498,10 @@ mod tests {
     #[test]
     fn missing_space() {
         let contents = indoc::indoc! {r"
-            # /// script
-            #requires-python = '>=3.11'
-            # ///
-        "};
+        # /// script
+        #requires-python = '>=3.11'
+        # ///
+    "};
 
         assert!(matches!(
             ScriptTag::parse(contents.as_bytes()),
@@ -432,13 +512,13 @@ mod tests {
     #[test]
     fn no_closing_pragma() {
         let contents = indoc::indoc! {r"
-            # /// script
-            # requires-python = '>=3.11'
-            # dependencies = [
-            #   'requests<3',
-            #   'rich',
-            # ]
-        "};
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+    "};
 
         assert!(matches!(
             ScriptTag::parse(contents.as_bytes()),
@@ -449,16 +529,16 @@ mod tests {
     #[test]
     fn leading_content() {
         let contents = indoc::indoc! {r"
-            pass # /// script
-            # requires-python = '>=3.11'
-            # dependencies = [
-            #   'requests<3',
-            #   'rich',
-            # ]
-            # ///
-            #
-            #
-        "};
+        pass # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #   'requests<3',
+        #   'rich',
+        # ]
+        # ///
+        #
+        #
+    "};
 
         assert_eq!(ScriptTag::parse(contents.as_bytes()).unwrap(), None);
     }
@@ -466,37 +546,37 @@ mod tests {
     #[test]
     fn simple() {
         let contents = indoc::indoc! {r"
-            # /// script
-            # requires-python = '>=3.11'
-            # dependencies = [
-            #   'requests<3',
-            #   'rich',
-            # ]
-            # ///
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
 
-            import requests
-            from rich.pretty import pprint
+        import requests
+        from rich.pretty import pprint
 
-            resp = requests.get('https://peps.python.org/api/peps.json')
-            data = resp.json()
-        "};
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
 
         let expected_metadata = indoc::indoc! {r"
-            requires-python = '>=3.11'
-            dependencies = [
-              'requests<3',
-              'rich',
-            ]
-        "};
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
 
         let expected_data = indoc::indoc! {r"
 
-            import requests
-            from rich.pretty import pprint
+        import requests
+        from rich.pretty import pprint
 
-            resp = requests.get('https://peps.python.org/api/peps.json')
-            data = resp.json()
-        "};
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
 
         let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
 
@@ -508,38 +588,38 @@ mod tests {
     #[test]
     fn simple_with_shebang() {
         let contents = indoc::indoc! {r"
-            #!/usr/bin/env python3
-            # /// script
-            # requires-python = '>=3.11'
-            # dependencies = [
-            #   'requests<3',
-            #   'rich',
-            # ]
-            # ///
+        #!/usr/bin/env python3
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
 
-            import requests
-            from rich.pretty import pprint
+        import requests
+        from rich.pretty import pprint
 
-            resp = requests.get('https://peps.python.org/api/peps.json')
-            data = resp.json()
-        "};
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
 
         let expected_metadata = indoc::indoc! {r"
-            requires-python = '>=3.11'
-            dependencies = [
-              'requests<3',
-              'rich',
-            ]
-        "};
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
 
         let expected_data = indoc::indoc! {r"
 
-            import requests
-            from rich.pretty import pprint
+        import requests
+        from rich.pretty import pprint
 
-            resp = requests.get('https://peps.python.org/api/peps.json')
-            data = resp.json()
-        "};
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
 
         let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
 
@@ -550,26 +630,26 @@ mod tests {
     #[test]
     fn embedded_comment() {
         let contents = indoc::indoc! {r"
-            # /// script
-            # embedded-csharp = '''
-            # /// <summary>
-            # /// text
-            # ///
-            # /// </summary>
-            # public class MyClass { }
-            # '''
-            # ///
-        "};
+        # /// script
+        # embedded-csharp = '''
+        # /// <summary>
+        # /// text
+        # ///
+        # /// </summary>
+        # public class MyClass { }
+        # '''
+        # ///
+    "};
 
         let expected = indoc::indoc! {r"
-            embedded-csharp = '''
-            /// <summary>
-            /// text
-            ///
-            /// </summary>
-            public class MyClass { }
-            '''
-        "};
+        embedded-csharp = '''
+        /// <summary>
+        /// text
+        ///
+        /// </summary>
+        public class MyClass { }
+        '''
+    "};
 
         let actual = ScriptTag::parse(contents.as_bytes())
             .unwrap()
@@ -582,24 +662,24 @@ mod tests {
     #[test]
     fn trailing_lines() {
         let contents = indoc::indoc! {r"
-            # /// script
-            # requires-python = '>=3.11'
-            # dependencies = [
-            #   'requests<3',
-            #   'rich',
-            # ]
-            # ///
-            #
-            #
-        "};
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
+        #
+        #
+    "};
 
         let expected = indoc::indoc! {r"
-            requires-python = '>=3.11'
-            dependencies = [
-              'requests<3',
-              'rich',
-            ]
-        "};
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
 
         let actual = ScriptTag::parse(contents.as_bytes())
             .unwrap()
@@ -612,22 +692,22 @@ mod tests {
     #[test]
     fn test_serialize_metadata_formatting() {
         let metadata = indoc::indoc! {r"
-            requires-python = '>=3.11'
-            dependencies = [
-              'requests<3',
-              'rich',
-            ]
-        "};
+        requires-python = '>=3.11'
+        dependencies = [
+          'requests<3',
+          'rich',
+        ]
+    "};
 
         let expected_output = indoc::indoc! {r"
-            # /// script
-            # requires-python = '>=3.11'
-            # dependencies = [
-            #   'requests<3',
-            #   'rich',
-            # ]
-            # ///
-        "};
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #   'requests<3',
+        #   'rich',
+        # ]
+        # ///
+    "};
 
         let result = serialize_metadata(metadata);
         assert_eq!(result, expected_output);

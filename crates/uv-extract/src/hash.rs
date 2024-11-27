@@ -6,40 +6,6 @@ use tokio::io::{AsyncReadExt, ReadBuf};
 
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
-pub struct Sha256Reader<'a, R> {
-    reader: R,
-    hasher: &'a mut sha2::Sha256,
-}
-
-impl<'a, R> Sha256Reader<'a, R>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    pub fn new(reader: R, hasher: &'a mut sha2::Sha256) -> Self {
-        Sha256Reader { reader, hasher }
-    }
-}
-
-impl<'a, R> tokio::io::AsyncRead for Sha256Reader<'a, R>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        let reader = Pin::new(&mut self.reader);
-        match reader.poll_read(cx, buf) {
-            Poll::Ready(Ok(())) => {
-                self.hasher.update(buf.filled());
-                Poll::Ready(Ok(()))
-            }
-            other => other,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum Hasher {
     Md5(md5::Md5),
@@ -55,15 +21,6 @@ impl Hasher {
             Hasher::Sha256(hasher) => hasher.update(data),
             Hasher::Sha384(hasher) => hasher.update(data),
             Hasher::Sha512(hasher) => hasher.update(data),
-        }
-    }
-
-    pub fn finalize(self) -> Vec<u8> {
-        match self {
-            Hasher::Md5(hasher) => hasher.finalize().to_vec(),
-            Hasher::Sha256(hasher) => hasher.finalize().to_vec(),
-            Hasher::Sha384(hasher) => hasher.finalize().to_vec(),
-            Hasher::Sha512(hasher) => hasher.finalize().to_vec(),
         }
     }
 }

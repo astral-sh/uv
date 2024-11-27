@@ -274,8 +274,7 @@ impl HashStrategy {
     ) -> Result<Self, HashStrategyError> {
         let mut hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
 
-        for dist in resolution.distributions() {
-            let digests = resolution.get_hashes(dist.name());
+        for (dist, digests) in resolution.hashes() {
             if digests.is_empty() {
                 // Under `--require-hashes`, every requirement must include a hash.
                 if mode.is_require() {

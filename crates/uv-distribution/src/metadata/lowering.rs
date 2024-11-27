@@ -1,25 +1,32 @@
-use either::Either;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use either::Either;
 use thiserror::Error;
 use url::Url;
 
+use uv_configuration::LowerBound;
 use uv_distribution_filename::DistExtension;
+use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
 use uv_git::GitReference;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
-use uv_pypi_types::{ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ConflictItem, ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl,
+};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
+
+use crate::metadata::GitWorkspaceMember;
 
 #[derive(Debug, Clone)]
 pub struct LoweredRequirement(Requirement);
 
 #[derive(Debug, Clone, Copy)]
-enum Origin {
+enum RequirementOrigin {
     /// The `tool.uv.sources` were read from the project.
     Project,
     /// The `tool.uv.sources` were read from the workspace root.
@@ -30,19 +37,48 @@ impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
     pub(crate) fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
-        project_name: &'data PackageName,
+        project_name: Option<&'data PackageName>,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
+        project_indexes: &'data [Index],
+        extra: Option<&ExtraName>,
+        group: Option<&GroupName>,
+        locations: &'data IndexLocations,
         workspace: &'data Workspace,
-    ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
+        lower_bound: LowerBound,
+        git_member: Option<&'data GitWorkspaceMember<'data>>,
+    ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
+        // Identify the source from the `tool.uv.sources` table.
         let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
-            (Some(source), Origin::Project)
+            (Some(source), RequirementOrigin::Project)
         } else if let Some(source) = workspace.sources().get(&requirement.name) {
-            (Some(source), Origin::Workspace)
+            (Some(source), RequirementOrigin::Workspace)
         } else {
-            (None, Origin::Project)
+            (None, RequirementOrigin::Project)
         };
-        let source = source.cloned();
+
+        // If the source only applies to a given extra or dependency group, filter it out.
+        let source = source.map(|source| {
+            source
+                .iter()
+                .filter(|source| {
+                    if let Some(target) = source.extra() {
+                        if extra != Some(target) {
+                            return false;
+                        }
+                    }
+
+                    if let Some(target) = source.group() {
+                        if group != Some(target) {
+                            return false;
+                        }
+                    }
+
+                    true
+                })
+                .cloned()
+                .collect::<Sources>()
+        });
 
         let workspace_package_declared =
             // We require that when you use a package that's part of the workspace, ...
@@ -53,7 +89,7 @@ impl LoweredRequirement {
                 }))
                 // ... except for recursive self-inclusion (extras that activate other extras), e.g.
                 // `framework[machine_learning]` depends on `framework[cuda]`.
-                || &requirement.name == project_name;
+                || project_name.is_some_and(|project_name| *project_name == requirement.name);
         if !workspace_package_declared {
             return Either::Left(std::iter::once(Err(
                 LoweringError::UndeclaredWorkspacePackage,
@@ -62,15 +98,17 @@ impl LoweredRequirement {
 
         let Some(source) = source else {
             let has_sources = !project_sources.is_empty() || !workspace.sources().is_empty();
-            // Support recursive editable inclusions.
-            if has_sources
-                && requirement.version_or_url.is_none()
-                && &requirement.name != project_name
-            {
-                warn_user_once!(
-                    "Missing version constraint (e.g., a lower bound) for `{}`",
-                    requirement.name
-                );
+            if matches!(lower_bound, LowerBound::Warn) {
+                // Support recursive editable inclusions.
+                if has_sources
+                    && requirement.version_or_url.is_none()
+                    && !project_name.is_some_and(|project_name| *project_name == requirement.name)
+                {
+                    warn_user_once!(
+                        "Missing version constraint (e.g., a lower bound) for `{}`",
+                        requirement.name
+                    );
+                }
             }
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
@@ -81,7 +119,7 @@ impl LoweredRequirement {
             // Determine the space covered by the sources.
             let mut total = MarkerTree::FALSE;
             for source in source.iter() {
-                total.or(source.marker());
+                total.or(source.marker().clone());
             }
 
             // Determine the space covered by the requirement.
@@ -106,6 +144,7 @@ impl LoweredRequirement {
                             tag,
                             branch,
                             marker,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -123,6 +162,7 @@ impl LoweredRequirement {
                             url,
                             subdirectory,
                             marker,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -134,6 +174,7 @@ impl LoweredRequirement {
                             path,
                             editable,
                             marker,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -147,13 +188,50 @@ impl LoweredRequirement {
                             )?;
                             (source, marker)
                         }
-                        Source::Registry { index, marker } => {
-                            let source = registry_source(&requirement, index)?;
+                        Source::Registry {
+                            index,
+                            marker,
+                            extra,
+                            group,
+                        } => {
+                            // Identify the named index from either the project indexes or the workspace indexes,
+                            // in that order.
+                            let Some(index) = locations
+                                .indexes()
+                                .filter(|index| matches!(index.origin, Some(Origin::Cli)))
+                                .chain(project_indexes.iter())
+                                .chain(workspace.indexes().iter())
+                                .find(|Index { name, .. }| {
+                                    name.as_ref().is_some_and(|name| *name == index)
+                                })
+                                .map(|Index { url: index, .. }| index.clone())
+                            else {
+                                return Err(LoweringError::MissingIndex(
+                                    requirement.name.clone(),
+                                    index,
+                                ));
+                            };
+                            let conflict = project_name.and_then(|project_name| {
+                                if let Some(extra) = extra {
+                                    Some(ConflictItem::from((project_name.clone(), extra)))
+                                } else {
+                                    group.map(|group| {
+                                        ConflictItem::from((project_name.clone(), group))
+                                    })
+                                }
+                            });
+                            let source = registry_source(
+                                &requirement,
+                                index.into_url(),
+                                conflict,
+                                lower_bound,
+                            )?;
                             (source, marker)
                         }
                         Source::Workspace {
                             workspace: is_workspace,
                             marker,
+                            ..
                         } => {
                             if !is_workspace {
                                 return Err(LoweringError::WorkspaceFalse);
@@ -192,7 +270,24 @@ impl LoweredRequirement {
                                 ))
                             })?;
 
-                            let source = if member.pyproject_toml().is_package() {
+                            let source = if let Some(git_member) = &git_member {
+                                // If the workspace comes from a git dependency, all workspace
+                                // members need to be git deps, too.
+                                let subdirectory =
+                                    uv_fs::relative_to(member.root(), git_member.fetch_root)
+                                        .expect("Workspace member must be relative");
+                                RequirementSource::Git {
+                                    repository: git_member.git_source.git.repository().clone(),
+                                    reference: git_member.git_source.git.reference().clone(),
+                                    precise: git_member.git_source.git.precise(),
+                                    subdirectory: if subdirectory == PathBuf::new() {
+                                        None
+                                    } else {
+                                        Some(subdirectory)
+                                    },
+                                    url,
+                                }
+                            } else if member.pyproject_toml().is_package() {
                                 RequirementSource::Directory {
                                     install_path,
                                     url,
@@ -235,12 +330,29 @@ impl LoweredRequirement {
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         dir: &'data Path,
         sources: &'data BTreeMap<PackageName, Sources>,
-    ) -> impl Iterator<Item = Result<LoweredRequirement, LoweringError>> + 'data {
+        indexes: &'data [Index],
+        locations: &'data IndexLocations,
+        lower_bound: LowerBound,
+    ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         let source = sources.get(&requirement.name).cloned();
 
         let Some(source) = source else {
             return Either::Left(std::iter::once(Ok(Self(Requirement::from(requirement)))));
         };
+
+        // If the source only applies to a given extra, filter it out.
+        let source = source
+            .iter()
+            .filter(|source| {
+                source.extra().map_or(true, |target| {
+                    requirement
+                        .marker
+                        .top_level_extra_name()
+                        .is_some_and(|extra| extra == *target)
+                })
+            })
+            .cloned()
+            .collect::<Sources>();
 
         // Determine whether the markers cover the full space for the requirement. If not, fill the
         // remaining space with the negation of the sources.
@@ -248,7 +360,7 @@ impl LoweredRequirement {
             // Determine the space covered by the sources.
             let mut total = MarkerTree::FALSE;
             for source in source.iter() {
-                total.or(source.marker());
+                total.or(source.marker().clone());
             }
 
             // Determine the space covered by the requirement.
@@ -273,6 +385,7 @@ impl LoweredRequirement {
                             tag,
                             branch,
                             marker,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -290,6 +403,7 @@ impl LoweredRequirement {
                             url,
                             subdirectory,
                             marker,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
@@ -301,21 +415,42 @@ impl LoweredRequirement {
                             path,
                             editable,
                             marker,
+                            ..
                         } => {
                             if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
                                 return Err(LoweringError::ConflictingUrls);
                             }
                             let source = path_source(
                                 PathBuf::from(path),
-                                Origin::Project,
+                                RequirementOrigin::Project,
                                 dir,
                                 dir,
                                 editable.unwrap_or(false),
                             )?;
                             (source, marker)
                         }
-                        Source::Registry { index, marker } => {
-                            let source = registry_source(&requirement, index)?;
+                        Source::Registry { index, marker, .. } => {
+                            let Some(index) = locations
+                                .indexes()
+                                .filter(|index| matches!(index.origin, Some(Origin::Cli)))
+                                .chain(indexes.iter())
+                                .find(|Index { name, .. }| {
+                                    name.as_ref().is_some_and(|name| *name == index)
+                                })
+                                .map(|Index { url: index, .. }| index.clone())
+                            else {
+                                return Err(LoweringError::MissingIndex(
+                                    requirement.name.clone(),
+                                    index,
+                                ));
+                            };
+                            let conflict = None;
+                            let source = registry_source(
+                                &requirement,
+                                index.into_url(),
+                                conflict,
+                                lower_bound,
+                            )?;
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
@@ -355,6 +490,8 @@ pub enum LoweringError {
     UndeclaredWorkspacePackage,
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
+    #[error("Package `{0}` references an undeclared index: `{1}`")]
+    MissingIndex(PackageName, IndexName),
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
     #[error(transparent)]
@@ -445,22 +582,28 @@ fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSour
 /// Convert a registry source into a [`RequirementSource`].
 fn registry_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    index: String,
+    index: Url,
+    conflict: Option<ConflictItem>,
+    bounds: LowerBound,
 ) -> Result<RequirementSource, LoweringError> {
     match &requirement.version_or_url {
         None => {
-            warn_user_once!(
-                "Missing version constraint (e.g., a lower bound) for `{}`",
-                requirement.name
-            );
+            if matches!(bounds, LowerBound::Warn) {
+                warn_user_once!(
+                    "Missing version constraint (e.g., a lower bound) for `{}`",
+                    requirement.name
+                );
+            }
             Ok(RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: Some(index),
+                conflict,
             })
         }
         Some(VersionOrUrl::VersionSpecifier(version)) => Ok(RequirementSource::Registry {
             specifier: version.clone(),
             index: Some(index),
+            conflict,
         }),
         Some(VersionOrUrl::Url(_)) => Err(LoweringError::ConflictingUrls),
     }
@@ -469,15 +612,15 @@ fn registry_source(
 /// Convert a path string to a file or directory source.
 fn path_source(
     path: impl AsRef<Path>,
-    origin: Origin,
+    origin: RequirementOrigin,
     project_dir: &Path,
     workspace_root: &Path,
     editable: bool,
 ) -> Result<RequirementSource, LoweringError> {
     let path = path.as_ref();
     let base = match origin {
-        Origin::Project => project_dir,
-        Origin::Workspace => workspace_root,
+        RequirementOrigin::Project => project_dir,
+        RequirementOrigin::Workspace => workspace_root,
     };
     let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
     let install_path = url.to_file_path().map_err(|()| {
