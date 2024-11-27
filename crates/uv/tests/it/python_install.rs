@@ -87,7 +87,7 @@ fn python_install() {
     ----- stderr -----
     Searching for Python versions matching: Python 3.13
     Uninstalled Python 3.13.0 in [TIME]
-     - cpython-3.13.0-[PLATFORM] (python3.13)
+     - cpython-3.13.0-[PLATFORM]
     "###);
 }
 
@@ -222,7 +222,7 @@ fn python_install_preview() {
     ----- stderr -----
     Searching for Python versions matching: Python 3.13
     Uninstalled Python 3.13.0 in [TIME]
-     - cpython-3.13.0-[PLATFORM] (python3.13)
+     - cpython-3.13.0-[PLATFORM] (python, python3, python3.13)
     "###);
 
     // The executable should be removed
@@ -437,7 +437,7 @@ fn python_install_freethreaded() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled 2 versions in [TIME]
-     - cpython-3.13.0-[PLATFORM] (python3.13)
+     - cpython-3.13.0-[PLATFORM]
      - cpython-3.13.0+freethreaded-[PLATFORM] (python3.13t)
     "###);
 }
@@ -551,7 +551,7 @@ fn python_install_default() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled Python 3.13.0 in [TIME]
-     - cpython-3.13.0-[PLATFORM] (python3.13)
+     - cpython-3.13.0-[PLATFORM] (python, python3, python3.13)
     "###);
 
     // The executables should be removed
@@ -584,7 +584,7 @@ fn python_install_default() {
     ----- stderr -----
     Searching for Python versions matching: Python 3.13
     Uninstalled Python 3.13.0 in [TIME]
-     - cpython-3.13.0-[PLATFORM] (python3.13)
+     - cpython-3.13.0-[PLATFORM] (python, python3, python3.13)
     "###);
 
     // We should remove all the executables

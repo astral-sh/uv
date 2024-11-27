@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use futures::stream::FuturesUnordered;
@@ -7,12 +8,14 @@ use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
-use uv_python::PythonRequest;
+use uv_python::{PythonInstallationKey, PythonRequest};
 
+use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
@@ -123,8 +126,10 @@ async fn do_uninstall(
         return Ok(ExitStatus::Failure);
     }
 
-    // Collect files in a directory
-    let executables = python_executable_dir()?
+    // Find and remove all relevant Python executables
+    let mut uninstalled_executables: FxHashMap<PythonInstallationKey, FxHashSet<PathBuf>> =
+        FxHashMap::default();
+    for executable in python_executable_dir()?
         .read_dir()
         .into_iter()
         .flatten()
@@ -148,17 +153,25 @@ async fn do_uninstall(
                     || name == Some(&installation.key().executable_name())
             })
         })
-        // Only include Python executables that match the installations
-        .filter(|path| {
-            matching_installations
-                .iter()
-                .any(|installation| installation.is_bin_link(path.as_path()))
-        })
-        .collect::<BTreeSet<_>>();
+        .sorted()
+    {
+        let Some(installation) = matching_installations
+            .iter()
+            .find(|installation| installation.is_bin_link(executable.as_path()))
+        else {
+            continue;
+        };
 
-    for executable in &executables {
-        fs_err::remove_file(executable)?;
-        debug!("Removed {}", executable.user_display());
+        fs_err::remove_file(&executable)?;
+        debug!(
+            "Removed `{}` for `{}`",
+            executable.simplified_display(),
+            installation.key()
+        );
+        uninstalled_executables
+            .entry(installation.key().clone())
+            .or_default()
+            .insert(executable);
     }
 
     let mut tasks = FuturesUnordered::new();
@@ -218,15 +231,15 @@ async fn do_uninstall(
             })
             .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
         {
+            let executables = format_executables(&event, &uninstalled_executables);
             match event.kind {
-                // TODO(zanieb): Track removed executables and report them all here
                 ChangeEventKind::Removed => {
                     writeln!(
                         printer.stderr(),
-                        " {} {} ({})",
+                        " {} {}{}",
                         "-".red(),
                         event.key.bold(),
-                        event.key.executable_name_minor()
+                        executables,
                     )?;
                 }
                 _ => unreachable!(),
