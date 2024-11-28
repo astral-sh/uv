@@ -119,8 +119,8 @@ jobs:
 
 ## Multiple python versions
 
-When using a matrix strategy, use the `UV_PYTHON` environment variable to set the python version.
-This will override any python version specifications in `pyproject.toml` and `.python-version`:
+When using a matrix strategy, set the python version under `astral-sh/setup-uv`, overriding any
+python version specifications in `pyproject.toml` and `.python-version`:
 
 ```yaml title="example.yml"
 jobs:
@@ -137,11 +137,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
+      - name: Install uv and set the python version
         uses: astral-sh/setup-uv@v4
-
-      - name: Set the python version
-        run: echo "UV_PYTHON=${{ matrix.python-version }}" >> $GITHUB_ENV
+        with:
+          python-version: ${{ matrix.python-version }}
 ```
 
 ## Syncing and running
