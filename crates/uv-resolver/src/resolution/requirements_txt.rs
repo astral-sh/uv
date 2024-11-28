@@ -45,7 +45,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
             }
         }
 
-        // If the URL is not _definitively_ an absolute `file://` URL, write it as a relative path.
+        // If the URL is not _definitively_ a `file://` URL, write it as a relative path.
         if self.dist.is_local() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
                 let given = url.verbatim();
@@ -72,11 +72,12 @@ impl<'dist> RequirementsTxtDist<'dist> {
                                     {
                                         Some(Cow::Owned(path.to_string()))
                                     } else {
+                                        // Ex) `file:///flask-3.0.3-py3-none-any.whl`
                                         None
                                     }
                                 } else {
                                     // Ex) `file:./flask-3.0.3-py3-none-any.whl`
-                                    Some(given)
+                                    None
                                 }
                             }
                             Some(_) => None,
