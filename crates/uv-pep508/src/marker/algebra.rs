@@ -60,8 +60,7 @@ use crate::marker::lowering::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
 use crate::marker::MarkerValueExtra;
-use crate::ExtraOperator;
-use crate::{MarkerExpression, MarkerOperator, MarkerValueVersion};
+use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueVersion};
 
 /// The global node interner.
 pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);

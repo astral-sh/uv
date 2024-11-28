@@ -686,186 +686,6 @@ impl MarkerTree {
         self.0.is_false()
     }
 
-    /// Whether the marker is known to be unsatisfiable.
-    ///
-    /// For example, while the marker specification and grammar do not _forbid_ it, we know that
-    /// both `sys_platform == 'win32'` and `platform_system == 'Darwin'` will never true at the
-    /// same time.
-    ///
-    /// This method thus encodes assumptions about the environment that are not guaranteed by the
-    /// PEP 508 specification alone.
-    pub fn is_conflicting(&self) -> bool {
-        static MUTUAL_EXCLUSIONS: LazyLock<MarkerTree> = LazyLock::new(|| {
-            let mut tree = MarkerTree::FALSE;
-            for (a, b) in [
-                // sys_platform == 'darwin' and platform_system == 'Windows'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "darwin".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Windows".to_string(),
-                    },
-                ),
-                // sys_platform == 'darwin' and platform_system == 'Linux'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "darwin".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Linux".to_string(),
-                    },
-                ),
-                // sys_platform == 'win32' and platform_system == 'Darwin'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "win32".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Darwin".to_string(),
-                    },
-                ),
-                // sys_platform == 'win32' and platform_system == 'Linux'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "win32".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Linux".to_string(),
-                    },
-                ),
-                // sys_platform == 'linux' and platform_system == 'Darwin'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "linux".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Darwin".to_string(),
-                    },
-                ),
-                // sys_platform == 'linux' and platform_system == 'Windows'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "linux".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Windows".to_string(),
-                    },
-                ),
-                // os_name == 'nt' and sys_platform == 'darwin'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::OsName,
-                        operator: MarkerOperator::Equal,
-                        value: "nt".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "darwin".to_string(),
-                    },
-                ),
-                // os_name == 'nt' and sys_platform == 'linux'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::OsName,
-                        operator: MarkerOperator::Equal,
-                        value: "nt".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "linux".to_string(),
-                    },
-                ),
-                // os_name == 'posix' and sys_platform == 'win32'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::OsName,
-                        operator: MarkerOperator::Equal,
-                        value: "posix".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: "win32".to_string(),
-                    },
-                ),
-                // os_name == 'nt' and platform_system == 'Darwin'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::OsName,
-                        operator: MarkerOperator::Equal,
-                        value: "nt".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Darwin".to_string(),
-                    },
-                ),
-                // os_name == 'nt' and platform_system == 'Linux'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::OsName,
-                        operator: MarkerOperator::Equal,
-                        value: "nt".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Linux".to_string(),
-                    },
-                ),
-                // os_name == 'posix' and platform_system == 'Windows'
-                (
-                    MarkerExpression::String {
-                        key: MarkerValueString::OsName,
-                        operator: MarkerOperator::Equal,
-                        value: "posix".to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: "Windows".to_string(),
-                    },
-                ),
-            ] {
-                let mut a = MarkerTree::expression(a);
-                let b = MarkerTree::expression(b);
-                a.and(b);
-                tree.or(a);
-            }
-            tree.negate()
-        });
-
-        self.is_disjoint(&MUTUAL_EXCLUSIONS)
-    }
-
     /// Returns a new marker tree that is the negation of this one.
     #[must_use]
     pub fn negate(self) -> MarkerTree {
@@ -876,12 +696,14 @@ impl MarkerTree {
     #[allow(clippy::needless_pass_by_value)]
     pub fn and(&mut self, tree: MarkerTree) {
         self.0 = INTERNER.lock().and(self.0, tree.0);
+        self.simplify();
     }
 
     /// Combine this marker tree with the one given via a disjunction.
     #[allow(clippy::needless_pass_by_value)]
     pub fn or(&mut self, tree: MarkerTree) {
         self.0 = INTERNER.lock().or(self.0, tree.0);
+        self.simplify();
     }
 
     /// Sets this to a marker equivalent to the implication of this one and the
@@ -895,6 +717,23 @@ impl MarkerTree {
         // correct, since logical implication is `-P or Q`.
         *self = self.negate();
         self.or(consequent);
+    }
+
+    /// Simplify the marker, namely, by detecting known impossible conditions.
+    ///
+    /// For example, while the marker specification and grammar do not _forbid_ it, we know that
+    /// both `sys_platform == 'win32'` and `platform_system == 'Darwin'` will never true at the
+    /// same time.
+    ///
+    /// This method thus encodes assumptions about the environment that are not guaranteed by the
+    /// PEP 508 specification alone.
+    fn simplify(&mut self) {
+        if !self.0.is_false() {
+            let mutex = &*MUTUAL_EXCLUSIONS;
+            if INTERNER.lock().is_disjoint(self.0, mutex.0) {
+                *self = MarkerTree::FALSE;
+            }
+        }
     }
 
     /// Returns `true` if there is no environment in which both marker trees can apply,
@@ -1810,6 +1649,175 @@ impl schemars::JsonSchema for MarkerTree {
         .into()
     }
 }
+
+static MUTUAL_EXCLUSIONS: LazyLock<MarkerTree> = LazyLock::new(|| {
+    let mut tree = NodeId::FALSE;
+    for (a, b) in [
+        // sys_platform == 'darwin' and platform_system == 'Windows'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "darwin".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Windows".to_string(),
+            },
+        ),
+        // sys_platform == 'darwin' and platform_system == 'Linux'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "darwin".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Linux".to_string(),
+            },
+        ),
+        // sys_platform == 'win32' and platform_system == 'Darwin'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "win32".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Darwin".to_string(),
+            },
+        ),
+        // sys_platform == 'win32' and platform_system == 'Linux'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "win32".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Linux".to_string(),
+            },
+        ),
+        // sys_platform == 'linux' and platform_system == 'Darwin'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "linux".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Darwin".to_string(),
+            },
+        ),
+        // sys_platform == 'linux' and platform_system == 'Windows'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "linux".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Windows".to_string(),
+            },
+        ),
+        // os_name == 'nt' and sys_platform == 'darwin'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::OsName,
+                operator: MarkerOperator::Equal,
+                value: "nt".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "darwin".to_string(),
+            },
+        ),
+        // os_name == 'nt' and sys_platform == 'linux'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::OsName,
+                operator: MarkerOperator::Equal,
+                value: "nt".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "linux".to_string(),
+            },
+        ),
+        // os_name == 'posix' and sys_platform == 'win32'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::OsName,
+                operator: MarkerOperator::Equal,
+                value: "posix".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::SysPlatform,
+                operator: MarkerOperator::Equal,
+                value: "win32".to_string(),
+            },
+        ),
+        // os_name == 'nt' and platform_system == 'Darwin'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::OsName,
+                operator: MarkerOperator::Equal,
+                value: "nt".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Darwin".to_string(),
+            },
+        ),
+        // os_name == 'nt' and platform_system == 'Linux'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::OsName,
+                operator: MarkerOperator::Equal,
+                value: "nt".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Linux".to_string(),
+            },
+        ),
+        // os_name == 'posix' and platform_system == 'Windows'
+        (
+            MarkerExpression::String {
+                key: MarkerValueString::OsName,
+                operator: MarkerOperator::Equal,
+                value: "posix".to_string(),
+            },
+            MarkerExpression::String {
+                key: MarkerValueString::PlatformSystem,
+                operator: MarkerOperator::Equal,
+                value: "Windows".to_string(),
+            },
+        ),
+    ] {
+        let mut interner = INTERNER.lock();
+        let a = interner.expression(a);
+        let b = interner.expression(b);
+        let a_and_b = interner.and(a, b);
+        tree = interner.or(tree, a_and_b);
+    }
+    MarkerTree(tree).negate()
+});
 
 #[cfg(test)]
 mod test {
