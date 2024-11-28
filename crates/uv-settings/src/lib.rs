@@ -202,26 +202,13 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
-#[derive(Debug)]
-enum SystemDrive<'a> {
-    /// A system drive letter (e.g., `C:`).
-    ///
-    /// When joining to a system drive, we must insert a backslash to separate the drive letter
-    /// from the rest of the path.
-    OsStr(&'a std::ffi::OsStr),
-    /// An arbitrary path, guaranteed to be longer than the system drive letter (e.g., `C:\P
-    Path(&'a Path),
-}
-
-#[cfg(windows)]
-fn locate_system_config_windows(system_drive: SystemDrive<'_>) -> Option<PathBuf> {
+fn locate_system_config_windows(system_drive: impl AsRef<Path>) -> Option<PathBuf> {
     // On Windows, use `%SYSTEMDRIVE%\ProgramData\uv\uv.toml` (e.g., `C:\ProgramData`).
-    let candidate = match system_drive {
-        SystemDrive::OsStr(system_drive) => {
-            PathBuf::from(system_drive).join("\\ProgramData\\uv\\uv.toml")
-        }
-        SystemDrive::Path(system_drive) => system_drive.join("ProgramData\\uv\\uv.toml"),
-    };
+    let candidate = system_drive
+        .as_ref()
+        .join("ProgramData")
+        .join("uv")
+        .join("uv.toml");
     candidate.as_path().is_file().then_some(candidate)
 }
 
@@ -234,9 +221,9 @@ fn locate_system_config_windows(system_drive: SystemDrive<'_>) -> Option<PathBuf
 fn system_config_file() -> Option<PathBuf> {
     #[cfg(windows)]
     {
-        env::var_os(EnvVars::SYSTEMDRIVE).and_then(|system_drive| {
-            locate_system_config_windows(SystemDrive::OsStr(&system_drive))
-        })
+        env::var(EnvVars::SYSTEMDRIVE)
+            .ok()
+            .and_then(|system_drive| locate_system_config_windows(format!("{system_drive}\\")))
     }
 
     #[cfg(not(windows))]
@@ -318,10 +305,10 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
+    #[cfg(windows)]
+    use crate::locate_system_config_windows;
     #[cfg(not(windows))]
     use crate::locate_system_config_xdg;
-    #[cfg(windows)]
-    use crate::{locate_system_config_windows, SystemDrive};
 
     use assert_fs::fixture::FixtureError;
     use assert_fs::prelude::*;
@@ -387,7 +374,7 @@ mod test {
         // This is typically only a drive (that is, letter and colon) but we
         // allow anything, including a path to the test fixtures...
         assert_eq!(
-            locate_system_config_windows(SystemDrive::Path(context.path())).unwrap(),
+            locate_system_config_windows(context.path()).unwrap(),
             context
                 .child("ProgramData")
                 .child("uv")
@@ -397,10 +384,7 @@ mod test {
 
         // This does not have a `ProgramData` child, so contains no config.
         let context = assert_fs::TempDir::new()?;
-        assert_eq!(
-            locate_system_config_windows(SystemDrive::Path(context.path())),
-            None
-        );
+        assert_eq!(locate_system_config_windows(context.path()), None);
 
         Ok(())
     }
