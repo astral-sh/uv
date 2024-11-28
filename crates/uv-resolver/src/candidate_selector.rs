@@ -135,7 +135,7 @@ impl CandidateSelector {
         is_excluded: bool,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
-    ) -> Option<Candidate> {
+    ) -> Option<Candidate<'a>> {
         // In the branches, we "sort" the preferences by marker-matching through an iterator that
         // first has the matching half and then the mismatching half.
         let preferences_match = preferences
@@ -282,7 +282,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         env: &ResolverEnvironment,
-    ) -> Option<Candidate> {
+    ) -> Option<Candidate<'a>> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),

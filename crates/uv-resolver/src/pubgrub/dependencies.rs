@@ -70,7 +70,7 @@ impl PubGrubDependency {
                         // Detect self-dependencies.
                         if dev.is_none() {
                             debug_assert!(
-                                !source_name.is_some_and(|source_name| source_name == name),
+                                source_name.is_none_or(|source_name| source_name != name),
                                 "extras not flattened for {name}"
                             );
                         }

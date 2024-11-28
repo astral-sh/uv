@@ -23,7 +23,7 @@ pub enum WheelCache<'a> {
     Git(&'a Url, &'a str),
 }
 
-impl<'a> WheelCache<'a> {
+impl WheelCache<'_> {
     /// The root directory for a cache bucket.
     pub fn root(&self) -> PathBuf {
         match self {
