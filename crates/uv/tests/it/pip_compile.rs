@@ -2887,7 +2887,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
         # via flask
     click==8.1.7
         # via flask
-    file:flask-3.0.0-py3-none-any.whl
+    flask @ file:flask-3.0.0-py3-none-any.whl
         # via -r requirements.in
     itsdangerous==2.1.2
         # via flask
