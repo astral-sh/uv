@@ -2309,7 +2309,7 @@ impl ForkState {
                     resolution_strategy,
                     ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
                 );
-                if !has_url && missing_lower_bound && strategy_lowest {
+                if !has_url && missing_lower_bound && strategy_lowest && !package.is_proxy() {
                     warn_user_once!(
                         "The direct dependency `{package}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
