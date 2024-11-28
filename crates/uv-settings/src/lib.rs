@@ -202,9 +202,13 @@ fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
-fn locate_system_config_windows(system_drive: &std::ffi::OsStr) -> Option<PathBuf> {
+fn locate_system_config_windows(system_drive: impl AsRef<Path>) -> Option<PathBuf> {
     // On Windows, use `%SYSTEMDRIVE%\ProgramData\uv\uv.toml` (e.g., `C:\ProgramData`).
-    let candidate = PathBuf::from(system_drive).join("ProgramData\\uv\\uv.toml");
+    let candidate = system_drive
+        .as_ref()
+        .join("ProgramData")
+        .join("uv")
+        .join("uv.toml");
     candidate.as_path().is_file().then_some(candidate)
 }
 
@@ -217,8 +221,9 @@ fn locate_system_config_windows(system_drive: &std::ffi::OsStr) -> Option<PathBu
 fn system_config_file() -> Option<PathBuf> {
     #[cfg(windows)]
     {
-        env::var_os(EnvVars::SYSTEMDRIVE)
-            .and_then(|system_drive| locate_system_config_windows(&system_drive))
+        env::var(EnvVars::SYSTEMDRIVE)
+            .ok()
+            .and_then(|system_drive| locate_system_config_windows(format!("{system_drive}\\")))
     }
 
     #[cfg(not(windows))]
@@ -369,7 +374,7 @@ mod test {
         // This is typically only a drive (that is, letter and colon) but we
         // allow anything, including a path to the test fixtures...
         assert_eq!(
-            locate_system_config_windows(context.path().as_os_str()).unwrap(),
+            locate_system_config_windows(context.path()).unwrap(),
             context
                 .child("ProgramData")
                 .child("uv")
@@ -379,10 +384,7 @@ mod test {
 
         // This does not have a `ProgramData` child, so contains no config.
         let context = assert_fs::TempDir::new()?;
-        assert_eq!(
-            locate_system_config_windows(context.path().as_os_str()),
-            None
-        );
+        assert_eq!(locate_system_config_windows(context.path()), None);
 
         Ok(())
     }
