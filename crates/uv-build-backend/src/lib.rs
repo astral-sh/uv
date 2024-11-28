@@ -1,6 +1,6 @@
 mod metadata;
 
-use crate::metadata::{PyProjectToml, ValidationError};
+use crate::metadata::{BuildBackendSettings, PyProjectToml, ValidationError};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
@@ -49,6 +49,8 @@ pub enum Error {
         #[source]
         err: globset::Error,
     },
+    #[error("`pyproject.toml` must not be excluded from source distribution build")]
+    PyprojectTomlExcluded,
     #[error("Failed to walk source tree: `{}`", root.user_display())]
     WalkDir {
         root: PathBuf,
@@ -303,6 +305,10 @@ pub fn build_wheel(
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
     pyproject_toml.check_build_system("1.0.0+test");
+    let settings = pyproject_toml
+        .settings()
+        .cloned()
+        .unwrap_or_else(BuildBackendSettings::default);
 
     check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
@@ -320,28 +326,23 @@ pub fn build_wheel(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     // Wheel excludes
-    // TODO(konstin): The must be stronger than the source dist excludes, otherwise we can get more
-    // files in source tree -> wheel than for source tree -> source dist -> wheel.
-    let default_excludes: &[String] = &[
-        "__pycache__".to_string(),
-        "*.pyc".to_string(),
-        "*.pyo".to_string(),
-    ];
-    let excludes = pyproject_toml
-        .wheel_settings()
-        .and_then(|settings| settings.exclude.as_deref())
-        .unwrap_or(default_excludes);
+    let mut excludes: Vec<String> = settings.wheel_exclude;
+    // The wheel must not include any files excluded by the source distribution (at least until we
+    // have files generated in the source dist -> wheel build step).
+    for exclude in settings.source_exclude {
+        // Avoid duplicate entries.
+        if !excludes.contains(&exclude) {
+            excludes.push(exclude);
+        }
+    }
+    debug!("Wheel excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
 
     debug!("Adding content files to {}", wheel_path.user_display());
-    let module_root = pyproject_toml
-        .wheel_settings()
-        .and_then(|wheel_settings| wheel_settings.module_root.as_deref())
-        .unwrap_or_else(|| Path::new("src"));
-    if module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(module_root.to_path_buf()));
+    if settings.module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
-    let strip_root = source_tree.join(module_root);
+    let strip_root = source_tree.join(settings.module_root);
     let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
@@ -364,21 +365,28 @@ pub fn build_wheel(
             );
         }
 
-        let relative_path = entry
+        // We only want to take the module root, but since excludes start at the source tree root,
+        // we strip higher than we iterate.
+        let match_path = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+        let wheel_path = entry
             .path()
             .strip_prefix(&strip_root)
             .expect("walkdir starts with root");
-        if exclude_matcher.is_match(relative_path) {
-            trace!("Excluding from module: `{}`", relative_path.user_display());
+        if exclude_matcher.is_match(match_path) {
+            trace!("Excluding from module: `{}`", match_path.user_display());
+            continue;
         }
-        let relative_path = relative_path.user_display().to_string();
+        let wheel_path = wheel_path.user_display().to_string();
 
-        debug!("Adding to wheel: `{relative_path}`");
+        debug!("Adding to wheel: `{wheel_path}`");
 
         if entry.file_type().is_dir() {
-            wheel_writer.write_directory(&relative_path)?;
+            wheel_writer.write_directory(&wheel_path)?;
         } else if entry.file_type().is_file() {
-            wheel_writer.write_file(&relative_path, entry.path())?;
+            wheel_writer.write_file(&wheel_path, entry.path())?;
         } else {
             // TODO(konsti): We may want to support symlinks, there is support for installing them.
             return Err(Error::UnsupportedFileType(
@@ -408,12 +416,7 @@ pub fn build_wheel(
     }
 
     // Add the data files
-    for (name, directory) in pyproject_toml
-        .wheel_settings()
-        .and_then(|wheel_settings| wheel_settings.data.clone())
-        .unwrap_or_default()
-        .iter()
-    {
+    for (name, directory) in settings.data.iter() {
         debug!("Adding {name} data files from: `{directory}`");
         let data_dir = format!(
             "{}-{}.data/{}/",
@@ -427,7 +430,7 @@ pub fn build_wheel(
             &data_dir,
             &["**".to_string()],
             &mut wheel_writer,
-            &format!("tool.uv.wheel.data.{name}"),
+            &format!("tool.uv.build-backend.data.{name}"),
         )?;
     }
 
@@ -454,6 +457,10 @@ pub fn build_editable(
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
     pyproject_toml.check_build_system("1.0.0+test");
+    let settings = pyproject_toml
+        .settings()
+        .cloned()
+        .unwrap_or_else(BuildBackendSettings::default);
 
     check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
@@ -471,14 +478,10 @@ pub fn build_editable(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding pth file to {}", wheel_path.user_display());
-    let module_root = pyproject_toml
-        .wheel_settings()
-        .and_then(|wheel_settings| wheel_settings.module_root.as_deref())
-        .unwrap_or_else(|| Path::new("src"));
-    if module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(module_root.to_path_buf()));
+    if settings.module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
-    let src_root = source_tree.join(module_root);
+    let src_root = source_tree.join(settings.module_root);
     let module_root = src_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
@@ -581,57 +584,19 @@ fn wheel_subdir_from_globs(
     Ok(())
 }
 
-/// TODO(konsti): Wire this up with actual settings and remove this struct.
-///
-/// To select which files to include in the source distribution, we first add the includes, then
-/// remove the excludes from that.
-pub struct SourceDistSettings {
-    /// Glob expressions which files and directories to include in the source distribution.
-    ///
-    /// Includes are anchored, which means that `pyproject.toml` includes only
-    /// `<project root>/pyproject.toml`. Use for example `assets/**/sample.csv` to include for all
-    /// `sample.csv` files in `<project root>/assets` or any child directory. To recursively include
-    /// all files under a directory, use a `/**` suffix, e.g. `src/**`. For performance and
-    /// reproducibility, avoid unanchored matches such as `**/sample.csv`.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-    include: Vec<String>,
-    /// Glob expressions which files and directories to exclude from the previous source
-    /// distribution includes.
-    ///
-    /// Excludes are not anchored, which means that `__pycache__` excludes all directories named
-    /// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
-    /// `/dist` will exclude only `<project root>/dist`.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-    exclude: Vec<String>,
-}
-
-impl Default for SourceDistSettings {
-    fn default() -> Self {
-        Self {
-            include: vec!["src/**".to_string(), "pyproject.toml".to_string()],
-            exclude: vec![
-                "__pycache__".to_string(),
-                "*.pyc".to_string(),
-                "*.pyo".to_string(),
-            ],
-        }
-    }
-}
-
 /// Build a source distribution from the source tree and place it in the output directory.
 pub fn build_source_dist(
     source_tree: &Path,
     source_dist_directory: &Path,
-    settings: SourceDistSettings,
     uv_version: &str,
 ) -> Result<SourceDistFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
     pyproject_toml.check_build_system(uv_version);
+    let settings = pyproject_toml
+        .settings()
+        .cloned()
+        .unwrap_or_else(BuildBackendSettings::default);
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -664,11 +629,22 @@ pub fn build_source_dist(
     )
     .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
 
-    // The user (or default) includes
+    // File and directories to include in the source directory
     let mut include_globs = Vec::new();
-    for include in settings.include {
+    let mut includes: Vec<String> = settings.source_include;
+    // pyproject.toml is always included.
+    includes.push(globset::escape("pyproject.toml"));
+    // The wheel must not include any files included by the source distribution (at least until we
+    // have files generated in the source dist -> wheel build step).
+    let import_path = &settings
+        .module_root
+        .join(pyproject_toml.name().as_dist_info_name().as_ref())
+        .simplified_display()
+        .to_string();
+    includes.push(format!("{}/**", globset::escape(import_path)));
+    for include in includes {
         let glob = parse_portable_glob(&include).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.source-dist.include".to_string(),
+            field: "tool.uv.build-backend.source-include".to_string(),
             source: err,
         })?;
         include_globs.push(glob.clone());
@@ -698,16 +674,11 @@ pub fn build_source_dist(
     }
 
     // Include the data files
-    for (name, directory) in pyproject_toml
-        .wheel_settings()
-        .and_then(|wheel_settings| wheel_settings.data.clone())
-        .unwrap_or_default()
-        .iter()
-    {
+    for (name, directory) in settings.data.iter() {
         let glob =
             parse_portable_glob(&format!("{}/**", globset::escape(directory))).map_err(|err| {
                 Error::PortableGlob {
-                    field: format!("tool.uv.wheel.data.{name}"),
+                    field: format!("tool.uv.build-backend.data.{name}"),
                     source: err,
                 }
             })?;
@@ -717,11 +688,17 @@ pub fn build_source_dist(
 
     let include_matcher =
         GlobDirFilter::from_globs(&include_globs).map_err(|err| Error::GlobSetTooLarge {
-            field: "tool.uv.source-dist.include".to_string(),
+            field: "tool.uv.build-backend.source-include".to_string(),
             source: err,
         })?;
 
-    let exclude_matcher = build_exclude_matcher(&settings.exclude)?;
+    let mut excludes: Vec<String> = Vec::new();
+    excludes.extend(settings.source_exclude);
+    debug!("Source dist excludes: {:?}", excludes);
+    let exclude_matcher = build_exclude_matcher(excludes)?;
+    if exclude_matcher.is_match("pyproject.toml") {
+        return Err(Error::PyprojectTomlExcluded);
+    }
 
     let mut files_visited = 0;
     for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
@@ -773,9 +750,12 @@ pub fn build_source_dist(
 }
 
 /// Build a globset matcher for excludes.
-fn build_exclude_matcher(excludes: &[String]) -> Result<GlobSet, Error> {
+fn build_exclude_matcher(
+    excludes: impl IntoIterator<Item = impl AsRef<str>>,
+) -> Result<GlobSet, Error> {
     let mut exclude_builder = GlobSetBuilder::new();
     for exclude in excludes {
+        let exclude = exclude.as_ref();
         // Excludes are unanchored
         let exclude = if let Some(exclude) = exclude.strip_prefix("/") {
             exclude.to_string()
@@ -783,7 +763,7 @@ fn build_exclude_matcher(excludes: &[String]) -> Result<GlobSet, Error> {
             format!("**/{exclude}").to_string()
         };
         let glob = parse_portable_glob(&exclude).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.source-dist.exclude".to_string(),
+            field: "tool.uv.build-backend.*-exclude".to_string(),
             source: err,
         })?;
         exclude_builder.add(glob);
@@ -791,7 +771,7 @@ fn build_exclude_matcher(excludes: &[String]) -> Result<GlobSet, Error> {
     let exclude_matcher = exclude_builder
         .build()
         .map_err(|err| Error::GlobSetTooLarge {
-            field: "tool.uv.source-dist.exclude".to_string(),
+            field: "tool.uv.build-backend.*-exclude".to_string(),
             source: err,
         })?;
     Ok(exclude_matcher)
@@ -1096,27 +1076,30 @@ mod tests {
             .path()
             .join("built_by_uv-0.1.0.dist-info/METADATA");
         assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @r###"
-    Metadata-Version: 2.4
-    Name: built-by-uv
-    Version: 0.1.0
-    Summary: A package to be built with the uv build backend that uses all features exposed by the build backend
-    Requires-Dist: anyio>=4,<5
-    Requires-Python: >=3.12
-    Description-Content-Type: text/markdown
+        Metadata-Version: 2.4
+        Name: built-by-uv
+        Version: 0.1.0
+        Summary: A package to be built with the uv build backend that uses all features exposed by the build backend
+        License-File: LICENSE-APACHE
+        License-File: LICENSE-MIT
+        License-File: third-party-licenses/PEP-401.txt
+        Requires-Dist: anyio>=4,<5
+        Requires-Python: >=3.12
+        Description-Content-Type: text/markdown
 
-    # built_by_uv
+        # built_by_uv
 
-    A package to be built with the uv build backend that uses all features exposed by the build backend.
-    "###);
+        A package to be built with the uv build backend that uses all features exposed by the build backend.
+        "###);
 
         let record_file = metadata_dir
             .path()
             .join("built_by_uv-0.1.0.dist-info/RECORD");
         assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-    built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
-    built_by_uv-0.1.0.dist-info/METADATA,sha256=acb91f5a18cb53fa57b45eb4590ea13195a774c856a9dd8cf27cc5435d6451b6,372
-    built_by_uv-0.1.0.dist-info/RECORD,,
-    "###);
+        built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
+        built_by_uv-0.1.0.dist-info/METADATA,sha256=9ba12456f2ab1a6ab1e376ff551e392c70f7ec86713d80b4348e90c7dfd45cb1,474
+        built_by_uv-0.1.0.dist-info/RECORD,,
+        "###);
 
         let wheel_file = metadata_dir
             .path()
@@ -1180,13 +1163,7 @@ mod tests {
 
         // Build a source dist from the source tree
         let source_dist_dir = TempDir::new().unwrap();
-        build_source_dist(
-            src.path(),
-            source_dist_dir.path(),
-            SourceDistSettings::default(),
-            "1.0.0+test",
-        )
-        .unwrap();
+        build_source_dist(src.path(), source_dist_dir.path(), "1.0.0+test").unwrap();
 
         // Build a wheel from the source dist
         let sdist_tree = TempDir::new().unwrap();
@@ -1213,26 +1190,6 @@ mod tests {
             "1.0.0+test",
         )
         .unwrap();
-
-        // Check the contained files and directories
-        assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
-            built_by_uv-0.1.0/LICENSE-APACHE
-            built_by_uv-0.1.0/LICENSE-MIT
-            built_by_uv-0.1.0/PKG-INFO
-            built_by_uv-0.1.0/README.md
-            built_by_uv-0.1.0/assets/data.csv
-            built_by_uv-0.1.0/header/built_by_uv.h
-            built_by_uv-0.1.0/pyproject.toml
-            built_by_uv-0.1.0/scripts/whoami.sh
-            built_by_uv-0.1.0/src/built_by_uv
-            built_by_uv-0.1.0/src/built_by_uv/__init__.py
-            built_by_uv-0.1.0/src/built_by_uv/arithmetic
-            built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
-            built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
-            built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
-            built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
-        ");
-
         let wheel = zip::ZipArchive::new(
             File::open(
                 indirect_output_dir
@@ -1246,28 +1203,55 @@ mod tests {
         indirect_wheel_contents.sort_unstable();
         assert_eq!(indirect_wheel_contents, direct_wheel_contents);
 
-        assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
-            built_by_uv-0.1.0.data/data/
-            built_by_uv-0.1.0.data/data/data.csv
-            built_by_uv-0.1.0.data/headers/
-            built_by_uv-0.1.0.data/headers/built_by_uv.h
-            built_by_uv-0.1.0.data/scripts/
-            built_by_uv-0.1.0.data/scripts/whoami.sh
-            built_by_uv-0.1.0.dist-info/
-            built_by_uv-0.1.0.dist-info/METADATA
-            built_by_uv-0.1.0.dist-info/RECORD
-            built_by_uv-0.1.0.dist-info/WHEEL
-            built_by_uv-0.1.0.dist-info/licenses/
-            built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
-            built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
-            built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
-            built_by_uv/
-            built_by_uv/__init__.py
-            built_by_uv/arithmetic/
-            built_by_uv/arithmetic/__init__.py
-            built_by_uv/arithmetic/circle.py
-            built_by_uv/arithmetic/pi.txt
-        ");
+        // Check the contained files and directories
+        assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
+        built_by_uv-0.1.0/
+        built_by_uv-0.1.0/LICENSE-APACHE
+        built_by_uv-0.1.0/LICENSE-MIT
+        built_by_uv-0.1.0/PKG-INFO
+        built_by_uv-0.1.0/README.md
+        built_by_uv-0.1.0/assets
+        built_by_uv-0.1.0/assets/data.csv
+        built_by_uv-0.1.0/header
+        built_by_uv-0.1.0/header/built_by_uv.h
+        built_by_uv-0.1.0/pyproject.toml
+        built_by_uv-0.1.0/scripts
+        built_by_uv-0.1.0/scripts/whoami.sh
+        built_by_uv-0.1.0/src
+        built_by_uv-0.1.0/src/built_by_uv
+        built_by_uv-0.1.0/src/built_by_uv/__init__.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
+        built_by_uv-0.1.0/src/built_by_uv/build-only.h
+        built_by_uv-0.1.0/third-party-licenses
+        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
+        "###);
+
+        assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
+        built_by_uv-0.1.0.data/data/
+        built_by_uv-0.1.0.data/data/data.csv
+        built_by_uv-0.1.0.data/headers/
+        built_by_uv-0.1.0.data/headers/built_by_uv.h
+        built_by_uv-0.1.0.data/scripts/
+        built_by_uv-0.1.0.data/scripts/whoami.sh
+        built_by_uv-0.1.0.dist-info/
+        built_by_uv-0.1.0.dist-info/METADATA
+        built_by_uv-0.1.0.dist-info/RECORD
+        built_by_uv-0.1.0.dist-info/WHEEL
+        built_by_uv-0.1.0.dist-info/licenses/
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
+        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/
+        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
+        built_by_uv/
+        built_by_uv/__init__.py
+        built_by_uv/arithmetic/
+        built_by_uv/arithmetic/__init__.py
+        built_by_uv/arithmetic/circle.py
+        built_by_uv/arithmetic/pi.txt
+        "###);
 
         // Check that we write deterministic wheels.
         let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";

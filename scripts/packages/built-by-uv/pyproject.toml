@@ -7,7 +7,15 @@ requires-python = ">=3.12"
 dependencies = ["anyio>=4,<5"]
 license-files = ["LICENSE*", "third-party-licenses/*"]
 
-[tool.uv.wheel.data]
+[tool.uv.build-backend]
+# A file we need for the source dist -> wheel step, but not in the wheel itself (currently unused)
+source-include = ["data/build-script.py"]
+# A temporary or generated file we want to ignore
+source-exclude = ["/src/built_by_uv/not-packaged.txt", "__pycache__", "*.pyc", "*.pyo"]
+# Headers are build-only
+wheel-exclude = ["build-*.h", "__pycache__", "*.pyc", "*.pyo"]
+
+[tool.uv.build-backend.data]
 scripts = "scripts"
 data = "assets"
 headers = "header"
