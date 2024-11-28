@@ -92,9 +92,9 @@ for plugin in entry_points(group='example.plugins'):
 
 !!! note
 
-    The `group` key can be an arbitrary value, it does need to include the package name or
-    "plugins". However, is recommended to namespace the key by the package name to avoid collisions
-    with other packages.
+    The `group` key can be an arbitrary value, it does not need to include the package name or
+    "plugins". However, it is recommended to namespace the key by the package name to avoid
+    collisions with other packages.
 
 ## Build systems
 
