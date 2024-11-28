@@ -743,8 +743,10 @@ impl MarkerTree {
     /// never both evaluate to `true` in a given environment. However, this method may return
     /// false negatives, i.e. it may not be able to detect that two markers are disjoint for
     /// complex expressions.
-    pub fn is_disjoint(self, other: MarkerTree) -> bool {
-        INTERNER.lock().is_disjoint(self.0, other.0)
+    pub fn is_disjoint(&self, other: MarkerTree) -> bool {
+        let mutex = &*MUTUAL_EXCLUSIONS;
+        let node = INTERNER.lock().and(self.0, other.0);
+        node.is_false() || INTERNER.lock().is_disjoint(node, mutex.0)
     }
 
     /// Returns the contents of this marker tree, if it contains at least one expression.
@@ -2803,19 +2805,18 @@ mod test {
 
         assert_simplifies(
             "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
-            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
+            "os_name == 'nt' and sys_platform == 'win32'",
         );
 
         assert_simplifies(
-            "(sys_platform == 'darwin' or sys_platform == 'win32')
-                and ((implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
-            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
+            "(sys_platform == 'darwin' or sys_platform == 'win32') and ((implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
+            "os_name == 'nt' and sys_platform == 'win32'",
         );
 
         assert_simplifies(
             "(sys_platform == 'darwin' or sys_platform == 'win32')
                 and ((platform_version != '1' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
-            "(os_name == 'nt' and platform_version != '1' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
+            "os_name == 'nt' and sys_platform == 'win32'",
         );
 
         assert_simplifies(
