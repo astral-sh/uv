@@ -473,14 +473,18 @@ fn copy_wheel_files(
         let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
-        if entry.file_type().is_dir() {
-            fs::create_dir_all(&out_path)?;
-            continue;
+        match synchronized_copy(path, &out_path, locks) {
+            Ok(()) => {
+                count += 1;
+            }
+            Err(err) => {
+                if entry.file_type().is_dir() {
+                    fs::create_dir_all(&out_path)?;
+                } else {
+                    return Err(err.into());
+                }
+            }
         }
-
-        synchronized_copy(path, &out_path, locks)?;
-
-        count += 1;
     }
 
     Ok(count)
