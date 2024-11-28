@@ -712,8 +712,6 @@ pub fn build_source_dist(
 
     let exclude_matcher = build_exclude_matcher(&settings.exclude)?;
 
-    // TODO(konsti): Add files linked by pyproject.toml
-
     for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
         // TODO(konsti): This should be prettier.
         let relative = entry
