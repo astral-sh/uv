@@ -18,7 +18,7 @@ pub enum PortableGlobError {
         pos: usize,
         invalid: char,
     },
-    #[error("Invalid character `{invalid}` at position {pos} in glob: `{glob}`")]
+    #[error("Invalid character `{invalid}` in range at position {pos} in glob: `{glob}`")]
     InvalidCharacterRange {
         glob: String,
         pos: usize,

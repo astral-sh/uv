@@ -376,9 +376,7 @@ impl PyProjectToml {
                     }
 
                     debug!("License files match: `{}`", relative.user_display());
-                    let license_file = relative.to_string_lossy().to_string();
-
-                    license_files.push(license_file);
+                    license_files.push(relative.portable_display().to_string());
                 }
 
                 // The glob order may be unstable
