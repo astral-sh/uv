@@ -42,6 +42,6 @@ assert_fs = { version = "1.1.2" }
 indoc = { version = "2.0.5" }
 insta = { version = "1.40.0", features = ["filters"] }
 itertools = { version = "0.13.0" }
-tempfile = { version = "3.12.0" }
+tempfile = { workspace = true }
 test-case = { version = "3.3.1" }
 tokio = { version = "1.40.0" }
