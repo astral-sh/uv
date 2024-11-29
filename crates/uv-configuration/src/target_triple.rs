@@ -628,6 +628,44 @@ impl TargetTriple {
         }
     }
 
+    /// Return `true` if the platform is compatible with manylinux.
+    pub fn manylinux_compatible(self) -> bool {
+        match self {
+            Self::Windows | Self::X8664PcWindowsMsvc => false,
+            Self::Linux | Self::X8664UnknownLinuxGnu => true,
+            Self::Macos | Self::Aarch64AppleDarwin => false,
+            Self::I686PcWindowsMsvc => false,
+            Self::X8664AppleDarwin => false,
+            Self::Aarch64UnknownLinuxGnu => true,
+            Self::Aarch64UnknownLinuxMusl => true,
+            Self::X8664UnknownLinuxMusl => true,
+            Self::X8664Manylinux217 => true,
+            Self::X8664Manylinux228 => true,
+            Self::X8664Manylinux231 => true,
+            Self::X8664Manylinux232 => true,
+            Self::X8664Manylinux233 => true,
+            Self::X8664Manylinux234 => true,
+            Self::X8664Manylinux235 => true,
+            Self::X8664Manylinux236 => true,
+            Self::X8664Manylinux237 => true,
+            Self::X8664Manylinux238 => true,
+            Self::X8664Manylinux239 => true,
+            Self::X8664Manylinux240 => true,
+            Self::Aarch64Manylinux217 => true,
+            Self::Aarch64Manylinux228 => true,
+            Self::Aarch64Manylinux231 => true,
+            Self::Aarch64Manylinux232 => true,
+            Self::Aarch64Manylinux233 => true,
+            Self::Aarch64Manylinux234 => true,
+            Self::Aarch64Manylinux235 => true,
+            Self::Aarch64Manylinux236 => true,
+            Self::Aarch64Manylinux237 => true,
+            Self::Aarch64Manylinux238 => true,
+            Self::Aarch64Manylinux239 => true,
+            Self::Aarch64Manylinux240 => true,
+        }
+    }
+
     /// Return a [`MarkerEnvironment`] compatible with the given [`TargetTriple`], based on
     /// a base [`MarkerEnvironment`].
     ///
