@@ -379,7 +379,7 @@ pub fn build_wheel(
             trace!("Excluding from module: `{}`", match_path.user_display());
             continue;
         }
-        let wheel_path = wheel_path.user_display().to_string();
+        let wheel_path = wheel_path.portable_display().to_string();
 
         debug!("Adding to wheel: `{wheel_path}`");
 
@@ -639,7 +639,7 @@ pub fn build_source_dist(
     let import_path = &settings
         .module_root
         .join(pyproject_toml.name().as_dist_info_name().as_ref())
-        .simplified_display()
+        .portable_display()
         .to_string();
     includes.push(format!("{}/**", globset::escape(import_path)));
     for include in includes {
