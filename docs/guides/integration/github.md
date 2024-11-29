@@ -122,7 +122,7 @@ jobs:
 When using a matrix strategy, set the python version under `astral-sh/setup-uv`, overriding any
 python version specifications in `pyproject.toml` and `.python-version`:
 
-```yaml title="example.yml"
+```yaml title="example.yml" hl_lines="17 18"
 jobs:
   build:
     name: continuous-integration
