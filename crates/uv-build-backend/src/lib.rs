@@ -17,6 +17,7 @@ use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename, WheelFilename};
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter, PortableGlobError};
+use uv_warnings::warn_user_once;
 use walkdir::{DirEntry, WalkDir};
 use zip::{CompressionMethod, ZipWriter};
 
@@ -345,6 +346,7 @@ pub fn build_wheel(
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
     }
+    let mut files_visited = 0;
     for entry in WalkDir::new(module_root)
         .into_iter()
         .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
@@ -353,6 +355,14 @@ pub fn build_wheel(
             root: source_tree.to_path_buf(),
             err,
         })?;
+
+        files_visited += 1;
+        if files_visited > 10000 {
+            warn_user_once!(
+                "Visited more than 10,000 files for wheel build. \
+                Consider using more constrained includes or more excludes."
+            );
+        }
 
         let relative_path = entry
             .path()
@@ -377,6 +387,7 @@ pub fn build_wheel(
             ));
         }
     }
+    debug!("Visited {files_visited} files for wheel build");
 
     // Add the license files
     if let Some(license_files) = &pyproject_toml.license_files() {
@@ -712,8 +723,7 @@ pub fn build_source_dist(
 
     let exclude_matcher = build_exclude_matcher(&settings.exclude)?;
 
-    // TODO(konsti): Add files linked by pyproject.toml
-
+    let mut files_visited = 0;
     for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
         // TODO(konsti): This should be prettier.
         let relative = entry
@@ -733,6 +743,14 @@ pub fn build_source_dist(
             root: source_tree.to_path_buf(),
             err,
         })?;
+
+        files_visited += 1;
+        if files_visited > 10000 {
+            warn_user_once!(
+                "Visited more than 10,000 files for source distribution build. \
+                Consider using more constrained includes or more excludes."
+            );
+        }
         // TODO(konsti): This should be prettier.
         let relative = entry
             .path()
@@ -746,6 +764,7 @@ pub fn build_source_dist(
 
         add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, relative)?;
     }
+    debug!("Visited {files_visited} files for source dist build");
 
     tar.finish()
         .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
