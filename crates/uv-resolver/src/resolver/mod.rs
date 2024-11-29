@@ -1753,6 +1753,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     let mut marker = constraint.marker.clone();
                                     marker.and(requirement.marker.clone());
 
+                                    if marker.is_false() {
+                                        trace!(
+                                            "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                            constraint.marker.try_to_string().unwrap(),
+                                            requirement.marker.try_to_string().unwrap(),
+                                        );
+                                        return None;
+                                    }
+
                                     Cow::Owned(Requirement {
                                         name: constraint.name.clone(),
                                         extras: constraint.extras.clone(),
@@ -1768,17 +1777,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 let mut marker = constraint.marker.clone();
                                 marker.and(requirement.marker.clone());
 
+                                if marker.is_false() {
+                                    trace!(
+                                        "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                        constraint.marker.try_to_string().unwrap(),
+                                        requirement.marker.try_to_string().unwrap(),
+                                    );
+                                    return None;
+                                }
+
                                 // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
                                 // and the constraint is `requests ; python_version == '3.6'`, the
                                 // constraint should only apply when _both_ markers are true.
-                                if marker.is_false() {
-                                    trace!("skipping {constraint} because of Requires-Python: {requires_python}");
-                                    return None;
-                                }
                                 if python_marker.is_disjoint(&marker) {
                                     trace!(
-                                        "skipping constraint {requirement} because of Requires-Python: {requires_python}",
-                                        requires_python = python_requirement.target(),
+                                        "skipping constraint {requirement} because of Requires-Python: {requires_python}"
                                     );
                                     return None;
                                 }
