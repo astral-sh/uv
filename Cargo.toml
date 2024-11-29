@@ -158,7 +158,7 @@ syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
 tar = { version = "0.4.43" }
 target-lexicon = { version = "0.12.16" }
-tempfile = { version = "3.12.0" }
+tempfile = { version = "3.14.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.0" }
 tl = { git = "https://github.com/astral-sh/tl.git", rev = "6e25b2ee2513d75385101a8ff9f591ef51f314ec" }
