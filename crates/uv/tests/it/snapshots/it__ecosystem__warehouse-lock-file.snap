@@ -1,5 +1,5 @@
 ---
-source: crates/uv/tests/ecosystem.rs
+source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
 version = 1
@@ -475,7 +475,7 @@ wheels = [
 sqs = [
     { name = "boto3" },
     { name = "kombu", extra = ["sqs"] },
-    { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32'" },
+    { name = "pycurl", marker = "sys_platform != 'win32' and platform_python_implementation == 'CPython'" },
     { name = "urllib3" },
 ]
 
@@ -1496,7 +1496,7 @@ wheels = [
 [package.optional-dependencies]
 sqs = [
     { name = "boto3" },
-    { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32'" },
+    { name = "pycurl", marker = "sys_platform != 'win32' and platform_python_implementation == 'CPython'" },
     { name = "urllib3" },
 ]
 

@@ -167,7 +167,7 @@ RequirementsTxt {
                             "dev",
                         ),
                     ],
-                    marker: python_full_version >= '3.9' and os_name == 'posix',
+                    marker: os_name == 'posix' and python_full_version >= '3.9',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",
@@ -224,7 +224,7 @@ RequirementsTxt {
                             "dev",
                         ),
                     ],
-                    marker: python_full_version >= '3.9' and os_name == 'posix',
+                    marker: os_name == 'posix' and python_full_version >= '3.9',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",
@@ -274,7 +274,7 @@ RequirementsTxt {
                         },
                     },
                     extras: [],
-                    marker: python_full_version >= '3.9' and os_name == 'posix',
+                    marker: os_name == 'posix' and python_full_version >= '3.9',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/editable.txt",
