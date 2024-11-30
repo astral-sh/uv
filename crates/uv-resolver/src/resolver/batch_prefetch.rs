@@ -15,6 +15,7 @@ use crate::{
 use uv_distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities, IndexUrl};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 
 enum BatchPrefetchStrategy {
     /// Go through the next versions assuming the existing selection and its constraints
@@ -64,7 +65,7 @@ impl BatchPrefetcher {
             name,
             extra: None,
             dev: None,
-            marker: None,
+            marker: MarkerTree::TRUE,
         } = &**next
         else {
             return Ok(());
@@ -232,7 +233,7 @@ impl BatchPrefetcher {
             name,
             extra: None,
             dev: None,
-            marker: None,
+            marker: MarkerTree::TRUE,
         } = &**package
         else {
             return;
@@ -248,7 +249,7 @@ impl BatchPrefetcher {
             name,
             extra: None,
             dev: None,
-            marker: None,
+            marker: MarkerTree::TRUE,
         } = &**next
         else {
             return (0, false);

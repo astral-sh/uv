@@ -822,7 +822,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 name,
                 extra: None,
                 dev: None,
-                marker: None,
+                marker: MarkerTree::TRUE,
             } = &**package
             else {
                 continue;
@@ -1490,14 +1490,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // Add a dependency on both the marker and base package.
             PubGrubPackageInner::Marker { name, marker } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, Some(marker)]
+                    [MarkerTree::TRUE, marker.clone()]
                         .into_iter()
                         .map(move |marker| PubGrubDependency {
                             package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                 name: name.clone(),
                                 extra: None,
                                 dev: None,
-                                marker: marker.and_then(MarkerTree::contents),
+                                marker,
                             }),
                             version: Range::singleton(version.clone()),
                             url: None,
@@ -1513,7 +1513,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 marker,
             } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, marker.as_ref()]
+                    [&MarkerTree::TRUE, marker]
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
@@ -1524,7 +1524,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         extra: extra.cloned(),
                                         dev: None,
-                                        marker: marker.cloned(),
+                                        marker: marker.clone(),
                                     }),
                                     version: Range::singleton(version.clone()),
                                     url: None,
@@ -1538,7 +1538,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // without the marker.
             PubGrubPackageInner::Dev { name, dev, marker } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, marker.as_ref()]
+                    [&MarkerTree::TRUE, marker]
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
@@ -1549,7 +1549,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         extra: None,
                                         dev: dev.cloned(),
-                                        marker: marker.cloned(),
+                                        marker: marker.clone(),
                                     }),
                                     version: Range::singleton(version.clone()),
                                     url: None,
@@ -2555,7 +2555,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
-                            marker: MarkerTree::from(dependency_marker.clone()),
+                            marker: dependency_marker.clone(),
                         };
                         edges.insert(edge);
                     }
@@ -2586,7 +2586,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
-                            marker: MarkerTree::from(dependency_marker.clone()),
+                            marker: dependency_marker.clone(),
                         };
                         edges.insert(edge);
                     }
@@ -2603,7 +2603,7 @@ impl ForkState {
                     name,
                     extra,
                     dev,
-                    marker: None,
+                    marker: MarkerTree::TRUE,
                 } = &*self.pubgrub.package_store[package]
                 {
                     Some((
