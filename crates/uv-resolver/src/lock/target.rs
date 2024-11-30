@@ -257,7 +257,7 @@ impl<'env> InstallTarget<'env> {
                     //
                     // FIXME: Make the above true. We aren't actually checking
                     // the conflict marker yet.
-                    Edge::Dev(group.clone(), dep.complexified_marker.pep508().clone()),
+                    Edge::Dev(group.clone(), dep.complexified_marker.pep508()),
                 );
 
                 // Push its dependencies on the queue.
@@ -329,11 +329,7 @@ impl<'env> InstallTarget<'env> {
             };
 
             // Add the edge.
-            petgraph.add_edge(
-                root,
-                index,
-                Edge::Dev(group.clone(), dependency.marker.clone()),
-            );
+            petgraph.add_edge(root, index, Edge::Dev(group.clone(), dependency.marker));
 
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
@@ -392,9 +388,9 @@ impl<'env> InstallTarget<'env> {
                     index,
                     dep_index,
                     if let Some(extra) = extra {
-                        Edge::Optional(extra.clone(), dep.complexified_marker.pep508().clone())
+                        Edge::Optional(extra.clone(), dep.complexified_marker.pep508())
                     } else {
-                        Edge::Prod(dep.complexified_marker.pep508().clone())
+                        Edge::Prod(dep.complexified_marker.pep508())
                     },
                 );
 

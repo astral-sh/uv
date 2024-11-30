@@ -168,7 +168,7 @@ impl ResolverEnvironment {
 
     /// Returns `false` only when this environment is a fork and it is disjoint
     /// with the given marker.
-    pub(crate) fn included_by_marker(&self, marker: &MarkerTree) -> bool {
+    pub(crate) fn included_by_marker(&self, marker: MarkerTree) -> bool {
         match self.kind {
             Kind::Specific { .. } => true,
             Kind::Universal { ref markers, .. } => !markers.is_disjoint(marker),
@@ -188,7 +188,7 @@ impl ResolverEnvironment {
     /// resolver environment's marker, if it's constrained.
     pub(crate) fn requires_python(&self) -> Option<RequiresPythonRange> {
         let Kind::Universal {
-            markers: ref pep508_marker,
+            markers: pep508_marker,
             ..
         } = self.kind
         else {
@@ -219,7 +219,7 @@ impl ResolverEnvironment {
                 ref include,
                 ref exclude,
             } => {
-                let mut markers = lhs.clone();
+                let mut markers = *lhs;
                 markers.and(rhs);
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
@@ -285,7 +285,7 @@ impl ResolverEnvironment {
                 }
                 let kind = Kind::Universal {
                     initial_forks: Arc::clone(initial_forks),
-                    markers: markers.clone(),
+                    markers: *markers,
                     include: Arc::new(include),
                     exclude: Arc::new(exclude),
                 };
@@ -320,7 +320,7 @@ impl ResolverEnvironment {
             .rev()
             .map(|initial_fork| {
                 init.clone()
-                    .with_env(self.narrow_environment(initial_fork.clone()))
+                    .with_env(self.narrow_environment(*initial_fork))
             })
             .collect()
     }
@@ -398,7 +398,7 @@ impl ResolverEnvironment {
                         conflict_marker.and(exclude_extra_marker);
                     }
                 }
-                Some(UniversalMarker::new(markers.clone(), conflict_marker))
+                Some(UniversalMarker::new(*markers, conflict_marker))
             }
         }
     }
@@ -445,7 +445,7 @@ impl<'d> ForkingPossibility<'d> {
         env: &ResolverEnvironment,
         dep: &'d PubGrubDependency,
     ) -> ForkingPossibility<'d> {
-        let marker = dep.package.marker().unwrap_or(&MarkerTree::TRUE);
+        let marker = dep.package.marker().unwrap_or(MarkerTree::TRUE);
         if !env.included_by_marker(marker) {
             ForkingPossibility::DependencyAlwaysExcluded
         } else if marker.is_true() {
@@ -453,7 +453,7 @@ impl<'d> ForkingPossibility<'d> {
         } else {
             let forker = Forker {
                 package: &dep.package,
-                marker: marker.clone(),
+                marker,
             };
             ForkingPossibility::Possible(forker)
         }
@@ -479,7 +479,7 @@ impl<'d> Forker<'d> {
         &self,
         env: &ResolverEnvironment,
     ) -> Option<(Forker<'d>, Vec<ResolverEnvironment>)> {
-        if !env.included_by_marker(&self.marker) {
+        if !env.included_by_marker(self.marker) {
             return None;
         }
 
@@ -494,7 +494,7 @@ impl<'d> Forker<'d> {
         let mut envs = vec![];
         {
             let not_marker = self.marker.negate();
-            if !env_marker.is_disjoint(&not_marker) {
+            if !env_marker.is_disjoint(not_marker) {
                 envs.push(env.narrow_environment(not_marker));
             }
         }
@@ -502,9 +502,9 @@ impl<'d> Forker<'d> {
         // Changing the order of forks can change the output in some
         // ways. While it's probably fine, we try to avoid changing the
         // output.
-        envs.push(env.narrow_environment(self.marker.clone()));
+        envs.push(env.narrow_environment(self.marker));
 
-        let mut remaining_marker = self.marker.clone();
+        let mut remaining_marker = self.marker;
         remaining_marker.and(env_marker.negate());
         let remaining_forker = Forker {
             package: self.package,
@@ -516,7 +516,7 @@ impl<'d> Forker<'d> {
     /// Returns true if the dependency represented by this forker may be
     /// included in the given resolver environment.
     pub(crate) fn included(&self, env: &ResolverEnvironment) -> bool {
-        let marker = self.package.marker().unwrap_or(&MarkerTree::TRUE);
+        let marker = self.package.marker().unwrap_or(MarkerTree::TRUE);
         env.included_by_marker(marker)
     }
 }

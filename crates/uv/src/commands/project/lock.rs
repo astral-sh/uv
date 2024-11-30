@@ -361,9 +361,9 @@ async fn do_lock(
                 .iter()
                 .zip(environments.as_markers().iter().skip(1))
             {
-                if !lhs.is_disjoint(rhs) {
+                if !lhs.is_disjoint(*rhs) {
                     let mut hint = lhs.negate();
-                    hint.and(rhs.clone());
+                    hint.and(*rhs);
 
                     let lhs = lhs
                         .contents()
@@ -413,6 +413,7 @@ async fn do_lock(
         .map(SupportedEnvironments::as_markers)
         .into_iter()
         .flatten()
+        .copied()
     {
         if requires_python.to_marker_tree().is_disjoint(environment) {
             return if let Some(contents) = environment.contents() {
@@ -604,8 +605,8 @@ async fn do_lock(
                         // `ResolverEnvironment`.
                         lock.fork_markers()
                             .iter()
+                            .copied()
                             .map(UniversalMarker::pep508)
-                            .cloned()
                             .collect()
                     })
                     .unwrap_or_else(|| {
@@ -814,7 +815,7 @@ impl ValidatedLock {
             .map(SupportedEnvironments::as_markers)
             .unwrap_or_default()
             .iter()
-            .cloned()
+            .copied()
             .map(|marker| lock.simplify_environment(marker))
             .collect::<Vec<_>>();
         if expected != actual {

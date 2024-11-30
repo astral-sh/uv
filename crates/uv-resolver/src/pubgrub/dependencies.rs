@@ -156,7 +156,7 @@ impl PubGrubRequirement {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),
                 extra,
-                requirement.marker.clone(),
+                requirement.marker,
             ),
             version: Ranges::full(),
             url: Some(VerbatimParsedUrl {
@@ -175,7 +175,7 @@ impl PubGrubRequirement {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),
                 extra,
-                requirement.marker.clone(),
+                requirement.marker,
             ),
             url: None,
             version: Ranges::from(specifier.clone()),

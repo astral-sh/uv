@@ -114,7 +114,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     root,
                     dep_index,
                     UniversalMarker::new(
-                        dep.simplified_marker.as_simplified_marker_tree().clone(),
+                        dep.simplified_marker.as_simplified_marker_tree(),
                         // OK because we've verified above that we do not have any
                         // conflicting extras/groups.
                         //
@@ -172,7 +172,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     index,
                     dep_index,
                     UniversalMarker::new(
-                        dep.simplified_marker.as_simplified_marker_tree().clone(),
+                        dep.simplified_marker.as_simplified_marker_tree(),
                         // See note above for other `UniversalMarker::new` for
                         // why this is OK.
                         MarkerTree::TRUE,
@@ -211,11 +211,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 package,
                 // As above, we've verified that there are no conflicting extras/groups
                 // specified, so it's safe to completely ignore the conflict marker.
-                marker: reachability
-                    .remove(&index)
-                    .unwrap_or_default()
-                    .pep508()
-                    .clone(),
+                marker: reachability.remove(&index).unwrap_or_default().pep508(),
             })
             .collect::<Vec<_>>();
 
