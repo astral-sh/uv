@@ -7,7 +7,7 @@ use std::fmt::{Display, Formatter, Write};
 use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{iter, thread};
+use std::{iter, slice, thread};
 
 use dashmap::DashMap;
 use either::Either;
@@ -1262,11 +1262,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let no_dev_deps = BTreeMap::default();
-                let no_provides_extras = [];
                 let requirements = self.flatten_requirements(
                     &self.requirements,
                     &no_dev_deps,
-                    &no_provides_extras,
                     None,
                     None,
                     None,
@@ -1454,7 +1452,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dependency_groups,
-                    &metadata.provides_extras,
                     extra.as_ref(),
                     dev.as_ref(),
                     Some(name),
@@ -1579,7 +1576,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &'a self,
         dependencies: &'a [Requirement],
         dev_dependencies: &'a BTreeMap<GroupName, Vec<Requirement>>,
-        extras: &'a [ExtraName],
         extra: Option<&'a ExtraName>,
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
@@ -1622,7 +1618,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 req.extras
                     .iter()
                     .cloned()
-                    .map(|extra| (extra, req.marker.clone().simplify_extras(extras)))
+                    .map(|extra| (extra, req.marker.clone()))
             })
             .collect();
         while let Some((extra, marker)) = queue.pop_front() {
@@ -1632,37 +1628,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             for requirement in
                 self.requirements_for_extra(dependencies, Some(&extra), env, python_requirement)
             {
-                let requirement = if marker.is_true() {
-                    requirement
-                } else {
-                    match requirement {
-                        Cow::Owned(mut requirement) => {
-                            requirement.marker.and(marker.clone());
-                            Cow::Owned(requirement)
-                        }
-                        Cow::Borrowed(requirement) => {
-                            let mut marker = marker.clone();
-                            marker.and(requirement.marker.clone());
-                            Cow::Owned(Requirement {
-                                name: requirement.name.clone(),
-                                extras: requirement.extras.clone(),
-                                source: requirement.source.clone(),
-                                origin: requirement.origin.clone(),
-                                marker,
-                            })
+                let requirement = match requirement {
+                    Cow::Owned(mut requirement) => {
+                        requirement.marker.and(marker.clone());
+                        requirement
+                    }
+                    Cow::Borrowed(requirement) => {
+                        let mut marker = marker.clone();
+                        marker.and(requirement.marker.clone());
+                        Requirement {
+                            name: requirement.name.clone(),
+                            extras: requirement.extras.clone(),
+                            source: requirement.source.clone(),
+                            origin: requirement.origin.clone(),
+                            marker: marker.simplify_extras(slice::from_ref(&extra)),
                         }
                     }
                 };
                 if name == Some(&requirement.name) {
                     // Add each transitively included extra.
                     queue.extend(
-                        requirement.extras.iter().cloned().map(|extra| {
-                            (extra, requirement.marker.clone().simplify_extras(extras))
-                        }),
+                        requirement
+                            .extras
+                            .iter()
+                            .cloned()
+                            .map(|extra| (extra, requirement.marker.clone())),
                     );
                 } else {
                     // Add the requirements for that extra.
-                    requirements.push(requirement);
+                    requirements.push(Cow::Owned(requirement));
                 }
             }
         }
