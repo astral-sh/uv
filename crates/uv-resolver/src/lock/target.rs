@@ -3,7 +3,7 @@ use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
-
+use std::slice;
 use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
@@ -359,7 +359,10 @@ impl<'env> InstallTarget<'env> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
-                if !dep.complexified_marker.evaluate(marker_env, &[]) {
+                if !dep
+                    .complexified_marker
+                    .evaluate(marker_env, extra.map(slice::from_ref).unwrap_or_default())
+                {
                     continue;
                 }
 
