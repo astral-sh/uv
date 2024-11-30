@@ -359,7 +359,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })
                 else {
                     if tracing::enabled!(Level::DEBUG) {
-                        prefetcher.log_tried_versions(&state.pubgrub);
+                        prefetcher.log_tried_versions();
                     }
                     debug!(
                         "{} resolution took {:.3}s",
@@ -424,7 +424,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // (idempotent due to caching).
                 self.request_package(next_package, url, index, &request_sink)?;
 
-                prefetcher.version_tried(next_id, next_package);
+                prefetcher.version_tried(next_package);
 
                 let term_intersection = state
                     .pubgrub
@@ -490,7 +490,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Only consider registry packages for prefetch.
                 if url.is_none() {
                     prefetcher.prefetch_batches(
-                        next_id,
                         next_package,
                         index,
                         &version,
