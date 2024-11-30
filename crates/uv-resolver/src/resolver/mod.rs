@@ -563,7 +563,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let PubGrubDependency {
                                 package,
                                 version: _,
-                                specifier: _,
                                 url: _,
                             } = dependency;
                             let url = package.name().and_then(|name| state.fork_urls.get(name));
@@ -731,7 +730,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let PubGrubDependency {
                         package,
                         version: _,
-                        specifier: _,
                         url: _,
                     } = dependency;
                     let url = package
@@ -1484,7 +1482,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 marker: marker.clone(),
                             }),
                             version: Range::singleton(version.clone()),
-                            specifier: None,
                             url: None,
                         });
                     }
@@ -1507,7 +1504,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 marker: marker.and_then(MarkerTree::contents),
                             }),
                             version: Range::singleton(version.clone()),
-                            specifier: None,
                             url: None,
                         })
                         .collect(),
@@ -1535,7 +1531,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         marker: marker.cloned(),
                                     }),
                                     version: Range::singleton(version.clone()),
-                                    specifier: None,
                                     url: None,
                                 })
                         })
@@ -1561,7 +1556,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         marker: marker.cloned(),
                                     }),
                                     version: Range::singleton(version.clone()),
-                                    specifier: None,
                                     url: None,
                                 })
                         })
@@ -2319,7 +2313,6 @@ impl ForkState {
                 package,
                 version,
                 url,
-                ..
             } = dependency;
 
             let mut has_url = false;
@@ -2376,7 +2369,6 @@ impl ForkState {
                 let PubGrubDependency {
                     package,
                     version,
-                    specifier: _,
                     url: _,
                 } = dependency;
                 (package, version)

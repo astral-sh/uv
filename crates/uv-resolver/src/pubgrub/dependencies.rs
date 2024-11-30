@@ -17,9 +17,6 @@ pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Ranges<Version>,
 
-    /// The original version specifiers from the requirement.
-    pub(crate) specifier: Option<VersionSpecifiers>,
-
     /// This field is set if the [`Requirement`] had a URL. We still use a URL from [`Urls`]
     /// even if this field is None where there is an override with a URL or there is a different
     /// requirement or constraint for the same package that has a URL.
@@ -40,7 +37,6 @@ impl PubGrubDependency {
                 let PubGrubRequirement {
                     package,
                     version,
-                    specifier,
                     url,
                 } = requirement;
                 match &*package {
@@ -56,14 +52,12 @@ impl PubGrubDependency {
                         Some(PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
-                            specifier,
                             url,
                         })
                     }
                     PubGrubPackageInner::Marker { .. } => Some(PubGrubDependency {
                         package: package.clone(),
                         version: version.clone(),
-                        specifier,
                         url,
                     }),
                     PubGrubPackageInner::Extra { name, .. } => {
@@ -77,7 +71,6 @@ impl PubGrubDependency {
                         Some(PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
-                            specifier,
                             url,
                         })
                     }
@@ -92,7 +85,6 @@ impl PubGrubDependency {
 pub(crate) struct PubGrubRequirement {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Ranges<Version>,
-    pub(crate) specifier: Option<VersionSpecifiers>,
     pub(crate) url: Option<VerbatimParsedUrl>,
 }
 
@@ -167,7 +159,6 @@ impl PubGrubRequirement {
                 requirement.marker.clone(),
             ),
             version: Ranges::full(),
-            specifier: None,
             url: Some(VerbatimParsedUrl {
                 parsed_url,
                 verbatim: verbatim_url.clone(),
@@ -186,7 +177,6 @@ impl PubGrubRequirement {
                 extra,
                 requirement.marker.clone(),
             ),
-            specifier: Some(specifier.clone()),
             url: None,
             version: Ranges::from(specifier.clone()),
         }
