@@ -20,10 +20,6 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, instrument, trace, warn, Level};
 
-use environment::ForkingPossibility;
-pub use environment::ResolverEnvironment;
-pub(crate) use fork_map::{ForkMap, ForkSet};
-pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
@@ -63,6 +59,10 @@ pub(crate) use crate::resolver::availability::{
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
+use crate::resolver::environment::ForkingPossibility;
+pub use crate::resolver::environment::ResolverEnvironment;
+pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
+pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::UniversalMarker;
 
 use crate::resolver::groups::Groups;
@@ -1446,6 +1446,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Err(err);
                     }
                 }
+
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dependency_groups,
@@ -1466,6 +1467,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // If a package has metadata for an enabled dependency group,
                 // add a dependency from it to the same package with the group
                 // enabled.
+                //
+                // TODO(charlie): Instead, we should add a `dev` key to our requirement type. Then
+                // we can model this like extras! Such that we add it before we see the metadata,
+                // rather than after.
                 if extra.is_none() && dev.is_none() {
                     for group in self.groups.get(name).into_iter().flatten() {
                         if !metadata.dependency_groups.contains_key(group) {
@@ -1513,7 +1518,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 marker,
             } => {
                 return Ok(Dependencies::Unforkable(
-                    [&MarkerTree::TRUE, marker]
+                    [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
@@ -1524,7 +1529,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         extra: extra.cloned(),
                                         dev: None,
-                                        marker: *marker,
+                                        marker,
                                     }),
                                     version: Range::singleton(version.clone()),
                                     url: None,
@@ -1538,7 +1543,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // without the marker.
             PubGrubPackageInner::Dev { name, dev, marker } => {
                 return Ok(Dependencies::Unforkable(
-                    [&MarkerTree::TRUE, marker]
+                    [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
@@ -1549,7 +1554,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         extra: None,
                                         dev: dev.cloned(),
-                                        marker: *marker,
+                                        marker,
                                     }),
                                     version: Range::singleton(version.clone()),
                                     url: None,
@@ -2337,11 +2342,12 @@ impl ForkState {
                     resolution_strategy,
                     ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
                 );
-                if !has_url && missing_lower_bound && strategy_lowest && !package.is_proxy() {
+                if !has_url && missing_lower_bound && strategy_lowest {
                     warn_user_once!(
-                        "The direct dependency `{package}` is unpinned. \
+                        "The direct dependency `{name}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
-                        to avoid using outdated versions."
+                        to avoid using outdated versions.",
+                        name = package.name_no_root().unwrap(),
                     );
                 }
             }
@@ -2450,7 +2456,7 @@ impl ForkState {
                         name: self_name,
                         extra: self_extra,
                         dev: self_dev,
-                        ..
+                        marker: _,
                     } => (Some(self_name), self_extra.as_ref(), self_dev.as_ref()),
 
                     PubGrubPackageInner::Root(_) => (None, None, None),
@@ -2467,13 +2473,9 @@ impl ForkState {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
                         dev: ref dependency_dev,
+                        marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_dev.is_none()
-                            && self_name.is_some_and(|self_name| self_name == dependency_name)
-                        {
-                            continue;
-                        }
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2489,7 +2491,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
-                            marker: MarkerTree::TRUE,
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2499,11 +2501,6 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_dev.is_none()
-                            && self_name.is_some_and(|self_name| self_name == dependency_name)
-                        {
-                            continue;
-                        }
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2530,11 +2527,7 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_dev.is_none()
-                            && self_name.is_some_and(|self_name| self_name == dependency_name)
-                        {
-                            continue;
-                        }
+                        // Insert an edge from the dependent package to the extra package.
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2553,6 +2546,26 @@ impl ForkState {
                             marker: *dependency_marker,
                         };
                         edges.insert(edge);
+
+                        // Insert an edge from the dependent package to the base package.
+                        let to_url = self.fork_urls.get(dependency_name);
+                        let to_index = self.fork_indexes.get(dependency_name);
+                        let edge = ResolutionDependencyEdge {
+                            from: self_name.cloned(),
+                            from_version: self_version.clone(),
+                            from_url: self_url.cloned(),
+                            from_index: self_index.cloned(),
+                            from_extra: self_extra.cloned(),
+                            from_dev: self_dev.cloned(),
+                            to: dependency_name.clone(),
+                            to_version: dependency_version.clone(),
+                            to_url: to_url.cloned(),
+                            to_index: to_index.cloned(),
+                            to_extra: None,
+                            to_dev: None,
+                            marker: *dependency_marker,
+                        };
+                        edges.insert(edge);
                     }
 
                     PubGrubPackageInner::Dev {
@@ -2566,6 +2579,9 @@ impl ForkState {
                         {
                             continue;
                         }
+
+                        // Add an edge from the dependent package to the dev package, but _not_ the
+                        // base package.
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
