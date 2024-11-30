@@ -21,7 +21,7 @@ pub(crate) struct RequirementsTxtDist<'dist> {
     pub(crate) dist: &'dist ResolvedDist,
     pub(crate) version: &'dist Version,
     pub(crate) hashes: &'dist [HashDigest],
-    pub(crate) markers: &'dist MarkerTree,
+    pub(crate) markers: MarkerTree,
     pub(crate) extras: Vec<ExtraName>,
 }
 
@@ -94,7 +94,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
                 };
                 if let Some(given) = given {
                     return if let Some(markers) =
-                        SimplifiedMarkerTree::new(requires_python, self.markers.clone())
+                        SimplifiedMarkerTree::new(requires_python, self.markers)
                             .try_to_string()
                             .filter(|_| include_markers)
                     {
@@ -107,7 +107,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
         }
 
         if self.extras.is_empty() {
-            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers.clone())
+            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers)
                 .try_to_string()
                 .filter(|_| include_markers)
             {
@@ -119,7 +119,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
             let mut extras = self.extras.clone();
             extras.sort_unstable();
             extras.dedup();
-            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers.clone())
+            if let Some(markers) = SimplifiedMarkerTree::new(requires_python, self.markers)
                 .try_to_string()
                 .filter(|_| include_markers)
             {

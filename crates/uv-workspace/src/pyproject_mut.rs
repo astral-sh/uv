@@ -1105,7 +1105,7 @@ fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool
 
     // Update the marker expression.
     if new.marker.contents().is_some() {
-        old.marker = new.marker.clone();
+        old.marker = new.marker;
     }
 }
 

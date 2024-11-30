@@ -119,11 +119,11 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                 req.extras
                     .iter()
                     .cloned()
-                    .map(|extra| (extra, req.marker.clone().simplify_extras(&extras)))
+                    .map(|extra| (extra, req.marker.simplify_extras(&extras)))
             })
             .collect();
         while let Some((extra, marker)) = queue.pop_front() {
-            if !seen.insert((extra.clone(), marker.clone())) {
+            if !seen.insert((extra.clone(), marker)) {
                 continue;
             }
 
@@ -131,8 +131,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             for requirement in &dependencies {
                 if requirement.marker.top_level_extra_name().as_ref() == Some(&extra) {
                     let requirement = {
-                        let mut marker = marker.clone();
-                        marker.and(requirement.marker.clone());
+                        let mut marker = marker;
+                        marker.and(requirement.marker);
                         Requirement {
                             name: requirement.name.clone(),
                             extras: requirement.extras.clone(),
@@ -148,7 +148,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                                 .extras
                                 .iter()
                                 .cloned()
-                                .map(|extra| (extra, requirement.marker.clone())),
+                                .map(|extra| (extra, requirement.marker)),
                         );
                     } else {
                         // Add the requirements for that extra.

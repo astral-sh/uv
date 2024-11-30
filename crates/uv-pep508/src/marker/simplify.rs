@@ -17,7 +17,7 @@ use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerT
 /// which can be used to create a CNF expression.
 ///
 /// We choose DNF as it is easier to simplify for user-facing output.
-pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
+pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let mut dnf = Vec::new();
     collect_dnf(tree, &mut dnf, &mut Vec::new());
     simplify(&mut dnf);
@@ -31,7 +31,7 @@ pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
 ///
 /// `path` is the list of marker expressions traversed on the current path.
 fn collect_dnf(
-    tree: &MarkerTree,
+    tree: MarkerTree,
     dnf: &mut Vec<Vec<MarkerExpression>>,
     path: &mut Vec<MarkerExpression>,
 ) {
@@ -56,7 +56,7 @@ fn collect_dnf(
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                     continue;
                 }
@@ -68,7 +68,7 @@ fn collect_dnf(
                         specifier,
                     });
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.pop();
                     continue;
                 }
@@ -82,7 +82,7 @@ fn collect_dnf(
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
             }
@@ -100,7 +100,7 @@ fn collect_dnf(
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                     continue;
                 }
@@ -115,7 +115,7 @@ fn collect_dnf(
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
             }
@@ -135,7 +135,7 @@ fn collect_dnf(
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -154,7 +154,7 @@ fn collect_dnf(
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -172,7 +172,7 @@ fn collect_dnf(
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }

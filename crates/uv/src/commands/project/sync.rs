@@ -325,7 +325,7 @@ pub(super) async fn do_sync(
                 target
                     .lock()
                     .simplified_supported_environments()
-                    .iter()
+                    .into_iter()
                     .filter_map(MarkerTree::contents)
                     .map(|env| format!("`{env}`"))
                     .join(", "),
