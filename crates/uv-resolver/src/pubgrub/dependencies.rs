@@ -1,5 +1,6 @@
 use std::iter;
 
+use either::Either;
 use pubgrub::Ranges;
 use tracing::warn;
 
@@ -29,10 +30,14 @@ impl PubGrubDependency {
         dev: Option<&'a GroupName>,
         source_name: Option<&'a PackageName>,
     ) -> impl Iterator<Item = Self> + 'a {
+        let iter = if requirement.extras.is_empty() {
+            Either::Left(iter::once(None))
+        } else {
+            Either::Right(requirement.extras.clone().into_iter().map(Some))
+        };
+
         // Add the package, plus any extra variants.
-        iter::once(None)
-            .chain(requirement.extras.clone().into_iter().map(Some))
-            .map(|extra| PubGrubRequirement::from_requirement(requirement, extra))
+        iter.map(|extra| PubGrubRequirement::from_requirement(requirement, extra))
             .filter_map(move |requirement| {
                 let PubGrubRequirement {
                     package,
@@ -55,11 +60,20 @@ impl PubGrubDependency {
                             url,
                         })
                     }
-                    PubGrubPackageInner::Marker { .. } => Some(PubGrubDependency {
-                        package: package.clone(),
-                        version: version.clone(),
-                        url,
-                    }),
+                    PubGrubPackageInner::Marker { name, .. } => {
+                        // Detect self-dependencies.
+                        if dev.is_none() {
+                            if source_name.is_some_and(|source_name| source_name == name) {
+                                return None;
+                            }
+                        }
+
+                        Some(PubGrubDependency {
+                            package: package.clone(),
+                            version: version.clone(),
+                            url,
+                        })
+                    }
                     PubGrubPackageInner::Extra { name, .. } => {
                         // Detect self-dependencies.
                         if dev.is_none() {
@@ -74,7 +88,11 @@ impl PubGrubDependency {
                             url,
                         })
                     }
-                    _ => None,
+                    PubGrubPackageInner::Root(_) => unreachable!("root package in dependencies"),
+                    PubGrubPackageInner::Python(_) => {
+                        unreachable!("python package in dependencies")
+                    }
+                    PubGrubPackageInner::Dev { .. } => unreachable!("dev package in dependencies"),
                 }
             })
     }
