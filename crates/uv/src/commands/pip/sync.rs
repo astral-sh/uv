@@ -11,7 +11,7 @@ use uv_configuration::{
     IndexStrategy, LowerBound, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, Origin, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
@@ -33,7 +33,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus, SharedState};
+use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
@@ -317,10 +317,7 @@ pub(crate) async fn pip_sync(
         &index_locations,
         &flat_index,
         &dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_settings,
         build_isolation,
@@ -364,7 +361,7 @@ pub(crate) async fn pip_sync(
         Conflicts::empty(),
         &client,
         &flat_index,
-        &state.index,
+        state.index(),
         &build_dispatch,
         concurrency,
         options,
@@ -395,7 +392,7 @@ pub(crate) async fn pip_sync(
         &hasher,
         &tags,
         &client,
-        &state.in_flight,
+        state.in_flight(),
         concurrency,
         &build_dispatch,
         &cache,

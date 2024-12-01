@@ -44,11 +44,8 @@ pub struct BuildDispatch<'a> {
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
     flat_index: &'a FlatIndex,
-    index: &'a InMemoryIndex,
-    git: &'a GitResolver,
-    capabilities: &'a IndexCapabilities,
+    shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
-    in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
     link_mode: uv_install_wheel::linker::LinkMode,
     build_options: &'a BuildOptions,
@@ -71,10 +68,7 @@ impl<'a> BuildDispatch<'a> {
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
         dependency_metadata: &'a DependencyMetadata,
-        index: &'a InMemoryIndex,
-        git: &'a GitResolver,
-        capabilities: &'a IndexCapabilities,
-        in_flight: &'a InFlight,
+        shared_state: SharedState,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
@@ -93,11 +87,8 @@ impl<'a> BuildDispatch<'a> {
             interpreter,
             index_locations,
             flat_index,
-            index,
-            git,
-            capabilities,
+            shared_state,
             dependency_metadata,
-            in_flight,
             index_strategy,
             config_settings,
             build_isolation,
@@ -141,11 +132,11 @@ impl<'a> BuildContext for BuildDispatch<'a> {
     }
 
     fn git(&self) -> &GitResolver {
-        self.git
+        &self.shared_state.git
     }
 
     fn capabilities(&self) -> &IndexCapabilities {
-        self.capabilities
+        &self.shared_state.capabilities
     }
 
     fn dependency_metadata(&self) -> &DependencyMetadata {
@@ -191,7 +182,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             Conflicts::empty(),
             Some(tags),
             self.flat_index,
-            self.index,
+            &self.shared_state.index,
             self.hasher,
             self,
             EmptyInstalledPackages,
@@ -279,7 +270,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             );
 
             preparer
-                .prepare(remote, self.in_flight)
+                .prepare(remote, &self.shared_state.in_flight)
                 .await
                 .map_err(|err| match err {
                     uv_installer::PrepareError::DownloadAndBuild(dist, chain, err) => {
@@ -402,5 +393,52 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         .boxed_local()
         .await?;
         Ok(builder)
+    }
+}
+
+/// Shared state used during resolution and installation.
+///
+/// All elements are `Arc`s, so we can clone freely.
+#[derive(Default, Clone)]
+pub struct SharedState {
+    /// The resolved Git references.
+    git: GitResolver,
+    /// The fetched package versions and metadata.
+    index: InMemoryIndex,
+    /// The downloaded distributions.
+    in_flight: InFlight,
+    /// The discovered capabilities for each registry index.
+    capabilities: IndexCapabilities,
+}
+
+impl SharedState {
+    pub fn new(
+        git: GitResolver,
+        index: InMemoryIndex,
+        in_flight: InFlight,
+        capabilities: IndexCapabilities,
+    ) -> Self {
+        Self {
+            git,
+            index,
+            in_flight,
+            capabilities,
+        }
+    }
+
+    pub fn git(&self) -> &GitResolver {
+        &self.git
+    }
+
+    pub fn index(&self) -> &InMemoryIndex {
+        &self.index
+    }
+
+    pub fn in_flight(&self) -> &InFlight {
+        &self.in_flight
+    }
+
+    pub fn capabilities(&self) -> &IndexCapabilities {
+        &self.capabilities
     }
 }

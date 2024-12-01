@@ -12,6 +12,7 @@ use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
     InstallOptions, LowerBound, TrustedHost,
 };
+use uv_dispatch::SharedState;
 use uv_normalize::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::{InstallTarget, RequirementsTxtExport};
@@ -23,7 +24,7 @@ use crate::commands::project::{
     default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
     ProjectInterpreter,
 };
-use crate::commands::{diagnostics, ExitStatus, OutputWriter, SharedState};
+use crate::commands::{diagnostics, ExitStatus, OutputWriter};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
