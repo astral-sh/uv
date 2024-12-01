@@ -186,14 +186,14 @@ impl DirectoryWriter for ZipDirectoryWriter {
     }
 }
 
-struct FilesystemWrite {
+struct FilesystemWriter {
     /// The virtualenv or metadata directory that add file paths are relative to.
     root: PathBuf,
     /// The entries in the `RECORD` file.
     record: Vec<RecordEntry>,
 }
 
-impl FilesystemWrite {
+impl FilesystemWriter {
     fn new(root: &Path) -> Self {
         Self {
             root: root.to_owned(),
@@ -203,7 +203,7 @@ impl FilesystemWrite {
 }
 
 /// File system writer.
-impl DirectoryWriter for FilesystemWrite {
+impl DirectoryWriter for FilesystemWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
         let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
@@ -885,7 +885,7 @@ pub fn metadata(
         "Writing metadata files to {}",
         metadata_directory.user_display()
     );
-    let mut wheel_writer = FilesystemWrite::new(metadata_directory);
+    let mut wheel_writer = FilesystemWriter::new(metadata_directory);
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
