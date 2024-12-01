@@ -145,11 +145,11 @@ mod tests {
         );
         assert_snapshot!(
             parse_err("licenses/LICEN[!C]E.txt"),
-            @"Invalid character `!` at position 15 in glob: `licenses/LICEN[!C]E.txt`"
+            @"Invalid character `!` in range at position 15 in glob: `licenses/LICEN[!C]E.txt`"
         );
         assert_snapshot!(
             parse_err("licenses/LICEN[C?]E.txt"),
-            @"Invalid character `?` at position 16 in glob: `licenses/LICEN[C?]E.txt`"
+            @"Invalid character `?` in range at position 16 in glob: `licenses/LICEN[C?]E.txt`"
         );
         assert_snapshot!(
             parse_err("******"),
