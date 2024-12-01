@@ -13,7 +13,7 @@ source-include = ["data/build-script.py"]
 # A temporary or generated file we want to ignore
 source-exclude = ["/src/built_by_uv/not-packaged.txt", "__pycache__", "*.pyc", "*.pyo"]
 # Headers are build-only
-wheel-exclude = ["build-*.h", "__pycache__", "*.pyc", "*.pyo"]
+wheel-exclude = ["build-*.h"]
 
 [tool.uv.build-backend.data]
 scripts = "scripts"
