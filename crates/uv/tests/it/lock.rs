@@ -3791,7 +3791,7 @@ fn lock_requires_python_upper() -> Result<()> {
 /// Lock a requirement from PyPI with an exact Python bound.
 #[test]
 fn lock_requires_python_exact() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12.0");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -3816,8 +3816,7 @@ fn lock_requires_python_exact() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X]
-    warning: The workspace `requires-python` value (`==3.12`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.12.[X]`). Did you mean `==3.12.*`?
+    warning: The workspace `requires-python` value (`==3.12`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.12.0`). Did you mean `==3.12.*`?
     Resolved 2 packages in [TIME]
     "###);
 
@@ -3864,8 +3863,7 @@ fn lock_requires_python_exact() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X]
-    warning: The workspace `requires-python` value (`==3.12`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.12.[X]`). Did you mean `==3.12.*`?
+    warning: The workspace `requires-python` value (`==3.12`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.12.0`). Did you mean `==3.12.*`?
     Resolved 2 packages in [TIME]
     "###);
 
