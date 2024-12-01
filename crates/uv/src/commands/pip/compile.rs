@@ -16,8 +16,8 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
-    Origin, UnresolvedRequirementSpecification, Verbatim,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin,
+    UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
