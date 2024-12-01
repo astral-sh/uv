@@ -646,6 +646,62 @@ pub fn build_source_dist(
     )
     .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
 
+    let (include_matcher, exclude_matcher) = source_dist_matcher(&pyproject_toml, settings)?;
+
+    let mut files_visited = 0;
+    for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
+        // TODO(konsti): This should be prettier.
+        let relative = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+
+        // Fast path: Don't descend into a directory that can't be included. This is the most
+        // important performance optimization, it avoids descending into directories such as
+        // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
+        // directories that often exist on the top level of a project. This is especially noticeable
+        // on network file systems with high latencies per operation (while contiguous reading may
+        // still be fast).
+        include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
+    }) {
+        let entry = entry.map_err(|err| Error::WalkDir {
+            root: source_tree.to_path_buf(),
+            err,
+        })?;
+
+        files_visited += 1;
+        if files_visited > 10000 {
+            warn_user_once!(
+                "Visited more than 10,000 files for source distribution build. \
+                Consider using more constrained includes or more excludes."
+            );
+        }
+        // TODO(konsti): This should be prettier.
+        let relative = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+
+        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
+            trace!("Excluding: `{}`", relative.user_display());
+            continue;
+        };
+
+        add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, relative)?;
+    }
+    debug!("Visited {files_visited} files for source dist build");
+
+    tar.finish()
+        .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+
+    Ok(filename)
+}
+
+/// Build includes and excludes for source tree walking for source dists.
+fn source_dist_matcher(
+    pyproject_toml: &PyProjectToml,
+    settings: BuildBackendSettings,
+) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
     let mut includes: Vec<String> = settings.source_include;
@@ -724,54 +780,7 @@ pub fn build_source_dist(
     if exclude_matcher.is_match("pyproject.toml") {
         return Err(Error::PyprojectTomlExcluded);
     }
-
-    let mut files_visited = 0;
-    for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-
-        // Fast path: Don't descend into a directory that can't be included. This is the most
-        // important performance optimization, it avoids descending into directories such as
-        // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
-        // directories that often exist on the top level of a project. This is especially noticeable
-        // on network file systems with high latencies per operation (while contiguous reading may
-        // still be fast).
-        include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
-    }) {
-        let entry = entry.map_err(|err| Error::WalkDir {
-            root: source_tree.to_path_buf(),
-            err,
-        })?;
-
-        files_visited += 1;
-        if files_visited > 10000 {
-            warn_user_once!(
-                "Visited more than 10,000 files for source distribution build. \
-                Consider using more constrained includes or more excludes."
-            );
-        }
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-
-        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
-            trace!("Excluding: `{}`", relative.user_display());
-            continue;
-        };
-
-        add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, relative)?;
-    }
-    debug!("Visited {files_visited} files for source dist build");
-
-    tar.finish()
-        .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
-
-    Ok(filename)
+    Ok((include_matcher, exclude_matcher))
 }
 
 /// Build a globset matcher for excludes.
