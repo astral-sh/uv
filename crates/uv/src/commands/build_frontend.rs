@@ -527,33 +527,7 @@ async fn build_package(
     prepare_output_directory(&output_dir).await?;
 
     // Determine the build plan.
-    let plan = match &source.source {
-        Source::File(_) => {
-            // We're building from a file, which must be a source distribution.
-            match (sdist, wheel) {
-                (false, true) => BuildPlan::WheelFromSdist,
-                (false, false) => {
-                    return Err(anyhow::anyhow!(
-                        "Pass `--wheel` explicitly to build a wheel from a source distribution"
-                    ));
-                }
-                (true, _) => {
-                    return Err(anyhow::anyhow!(
-                        "Building an `--sdist` from a source distribution is not supported"
-                    ));
-                }
-            }
-        }
-        Source::Directory(_) => {
-            // We're building from a directory.
-            match (sdist, wheel) {
-                (false, false) => BuildPlan::SdistToWheel,
-                (false, true) => BuildPlan::Wheel,
-                (true, false) => BuildPlan::Sdist,
-                (true, true) => BuildPlan::SdistAndWheel,
-            }
-        }
-    };
+    let plan = BuildPlan::determine(&source, sdist, wheel)?;
 
     // Prepare some common arguments for the build.
     let dist = None;
@@ -881,4 +855,36 @@ enum BuildPlan {
 
     /// Build a wheel from a source distribution.
     WheelFromSdist,
+}
+
+impl BuildPlan {
+    fn determine(source: &AnnotatedSource, sdist: bool, wheel: bool) -> Result<Self> {
+        Ok(match &source.source {
+            Source::File(_) => {
+                // We're building from a file, which must be a source distribution.
+                match (sdist, wheel) {
+                    (false, true) => Self::WheelFromSdist,
+                    (false, false) => {
+                        return Err(anyhow::anyhow!(
+                            "Pass `--wheel` explicitly to build a wheel from a source distribution"
+                        ));
+                    }
+                    (true, _) => {
+                        return Err(anyhow::anyhow!(
+                            "Building an `--sdist` from a source distribution is not supported"
+                        ));
+                    }
+                }
+            }
+            Source::Directory(_) => {
+                // We're building from a directory.
+                match (sdist, wheel) {
+                    (false, false) => Self::SdistToWheel,
+                    (false, true) => Self::Wheel,
+                    (true, false) => Self::Sdist,
+                    (true, true) => Self::SdistAndWheel,
+                }
+            }
+        })
+    }
 }
