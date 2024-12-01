@@ -20,7 +20,7 @@ use uv_distribution_filename::{SourceDistExtension, SourceDistFilename, WheelFil
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter, PortableGlobError};
 use uv_warnings::warn_user_once;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
 
 #[derive(Debug, Error)]
@@ -77,18 +77,16 @@ pub enum Error {
     TarWrite(PathBuf, #[source] io::Error),
 }
 
-/// Allow dispatching between writing to a directory, writing to zip and writing to a `.tar.gz`.
+/// Dispatcher between writing to a directory, writing to a zip, writing to a `.tar.gz` and
+/// listing files.
 ///
-/// All paths are string types instead of path types since wheel are portable between platforms.
+/// All paths are string types instead of path types since wheels are portable between platforms.
 ///
 /// Contract: You must call close before dropping to obtain a valid output (dropping is fine in the
 /// error case).
 trait DirectoryWriter {
     /// Add a file with the given content.
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
-
-    /// Add a file with the given name and return a writer for it.
-    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error>;
 
     /// Add a local file.
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error>;
@@ -129,6 +127,16 @@ impl ZipDirectoryWriter {
             record: Vec::new(),
         }
     }
+
+    /// Add a file with the given name and return a writer for it.
+    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
+        // TODO(konsti): We need to preserve permissions, at least the executable bit.
+        self.writer.start_file(
+            path,
+            zip::write::FileOptions::default().compression_method(self.compression),
+        )?;
+        Ok(Box::new(&mut self.writer))
+    }
 }
 
 impl DirectoryWriter for ZipDirectoryWriter {
@@ -146,15 +154,6 @@ impl DirectoryWriter for ZipDirectoryWriter {
         });
 
         Ok(())
-    }
-
-    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        // TODO(konsti): We need to preserve permissions, at least the executable bit.
-        self.writer.start_file(
-            path,
-            zip::write::FileOptions::default().compression_method(self.compression),
-        )?;
-        Ok(Box::new(&mut self.writer))
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
@@ -200,6 +199,12 @@ impl FilesystemWriter {
             record: Vec::new(),
         }
     }
+
+    /// Add a file with the given name and return a writer for it.
+    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
+        trace!("Adding {}", path);
+        Ok(Box::new(File::create(self.root.join(path))?))
+    }
 }
 
 /// File system writer.
@@ -215,12 +220,6 @@ impl DirectoryWriter for FilesystemWriter {
 
         Ok(fs_err::write(self.root.join(path), bytes)?)
     }
-
-    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        trace!("Adding {}", path);
-        Ok(Box::new(File::create(self.root.join(path))?))
-    }
-
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         trace!("Adding {} from {}", path, file.user_display());
         let mut reader = BufReader::new(File::open(file)?);
@@ -245,6 +244,82 @@ impl DirectoryWriter for FilesystemWriter {
             record,
         )?;
 
+        Ok(())
+    }
+}
+
+struct TarGzWriter {
+    path: PathBuf,
+    tar: tar::Builder<GzEncoder<File>>,
+}
+
+impl TarGzWriter {
+    fn new(path: impl Into<PathBuf>) -> Result<Self, Error> {
+        let path = path.into();
+        let file = File::create(&path)?;
+        let enc = GzEncoder::new(file, Compression::default());
+        let tar = tar::Builder::new(enc);
+        Ok(Self { path, tar })
+    }
+}
+
+impl DirectoryWriter for TarGzWriter {
+    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        let mut header = Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
+        // unpacking.
+        header.set_mode(0o644);
+        header.set_cksum();
+        self.tar
+            .append_data(&mut header, path, Cursor::new(bytes))
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        let metadata = fs_err::metadata(file)?;
+        let mut header = Header::new_gnu();
+        #[cfg(unix)]
+        {
+            // Preserve for example an executable bit.
+            header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
+        }
+        #[cfg(not(unix))]
+        {
+            // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
+            // unpacking.
+            header.set_mode(0o644);
+        }
+        header.set_size(metadata.len());
+        header.set_cksum();
+        let reader = BufReader::new(File::open(file)?);
+        self.tar
+            .append_data(&mut header, path, reader)
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        let mut header = Header::new_gnu();
+        // Directories are always executable, which means they can be listed.
+        header.set_mode(0o755);
+        header.set_entry_type(EntryType::Directory);
+        header
+            .set_path(directory)
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        header.set_size(0);
+        header.set_cksum();
+        self.tar
+            .append(&header, io::empty())
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn close(mut self, _dist_info_dir: &str) -> Result<(), Error> {
+        self.tar
+            .finish()
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 }
@@ -628,23 +703,18 @@ pub fn build_source_dist(
     );
 
     let source_dist_path = source_dist_directory.join(filename.to_string());
-    let tar_gz = File::create(&source_dist_path)?;
-    let enc = GzEncoder::new(tar_gz, Compression::default());
-    let mut tar = tar::Builder::new(enc);
+    let mut writer = TarGzWriter::new(&source_dist_path)?;
 
     let metadata = pyproject_toml.to_metadata(source_tree)?;
     let metadata_email = metadata.core_metadata_format();
 
-    let mut header = Header::new_gnu();
-    header.set_size(metadata_email.bytes().len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    tar.append_data(
-        &mut header,
-        Path::new(&top_level).join("PKG-INFO"),
-        Cursor::new(metadata_email),
-    )
-    .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+    writer.write_bytes(
+        &Path::new(&top_level)
+            .join("PKG-INFO")
+            .portable_display()
+            .to_string(),
+        metadata_email.as_bytes(),
+    )?;
 
     let (include_matcher, exclude_matcher) = source_dist_matcher(&pyproject_toml, settings)?;
 
@@ -687,12 +757,32 @@ pub fn build_source_dist(
             continue;
         };
 
-        add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, relative)?;
+        debug!("Including {}", relative.user_display());
+        if entry.file_type().is_dir() {
+            writer.write_directory(
+                &Path::new(&top_level)
+                    .join(relative)
+                    .portable_display()
+                    .to_string(),
+            )?;
+        } else if entry.file_type().is_file() {
+            writer.write_file(
+                &Path::new(&top_level)
+                    .join(relative)
+                    .portable_display()
+                    .to_string(),
+                entry.path(),
+            )?;
+        } else {
+            return Err(Error::UnsupportedFileType(
+                relative.to_path_buf(),
+                entry.file_type(),
+            ));
+        }
     }
     debug!("Visited {files_visited} files for source dist build");
 
-    tar.finish()
-        .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+    writer.close(&top_level)?;
 
     Ok(filename)
 }
@@ -809,55 +899,6 @@ fn build_exclude_matcher(
             source: err,
         })?;
     Ok(exclude_matcher)
-}
-
-/// Add a file or a directory to a source distribution.
-fn add_source_dist_entry(
-    tar: &mut tar::Builder<GzEncoder<File>>,
-    entry: &DirEntry,
-    top_level: &str,
-    source_dist_path: &Path,
-    relative: &Path,
-) -> Result<(), Error> {
-    debug!("Including {}", relative.user_display());
-
-    let metadata = fs_err::metadata(entry.path())?;
-    let mut header = Header::new_gnu();
-    #[cfg(unix)]
-    {
-        header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
-    }
-    #[cfg(not(unix))]
-    {
-        header.set_mode(0o644);
-    }
-
-    if entry.file_type().is_dir() {
-        header.set_entry_type(EntryType::Directory);
-        header
-            .set_path(Path::new(&top_level).join(relative))
-            .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
-        header.set_size(0);
-        header.set_cksum();
-        tar.append(&header, io::empty())
-            .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
-        Ok(())
-    } else if entry.file_type().is_file() {
-        header.set_size(metadata.len());
-        header.set_cksum();
-        tar.append_data(
-            &mut header,
-            Path::new(&top_level).join(relative),
-            BufReader::new(File::open(entry.path())?),
-        )
-        .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
-        Ok(())
-    } else {
-        Err(Error::UnsupportedFileType(
-            relative.to_path_buf(),
-            entry.file_type(),
-        ))
-    }
 }
 
 /// Write the dist-info directory to the output directory without building the wheel.
