@@ -738,9 +738,12 @@ async fn build_sdist(
         writeln!(
             printer.stderr(),
             "{}",
-            source
-                .annotate(&format!("{message} (uv build backend)..."))
-                .bold()
+            format!(
+                "{}{} (uv build backend)...",
+                source.message_prefix(),
+                message
+            )
+            .bold()
         )?;
         let source_tree = source_tree.to_path_buf();
         let output_dir = output_dir.to_path_buf();
@@ -753,7 +756,7 @@ async fn build_sdist(
         writeln!(
             printer.stderr(),
             "{}",
-            source.annotate(&format!("{message}...")).bold()
+            format!("{}{}...", source.message_prefix(), message).bold()
         )?;
         let builder = build_dispatch
             .setup_build(
@@ -792,9 +795,12 @@ async fn build_wheel(
         writeln!(
             printer.stderr(),
             "{}",
-            source
-                .annotate(&format!("{message} (uv build backend)..."))
-                .bold()
+            format!(
+                "{}{} (uv build backend)...",
+                source.message_prefix(),
+                message
+            )
+            .bold()
         )?;
         let source_tree = source_tree.to_path_buf();
         let output_dir = output_dir.to_path_buf();
@@ -807,7 +813,7 @@ async fn build_wheel(
         writeln!(
             printer.stderr(),
             "{}",
-            source.annotate(&format!("{message}...")).bold()
+            format!("{}{}...", source.message_prefix(), message).bold()
         )?;
         let builder = build_dispatch
             .setup_build(
@@ -861,11 +867,11 @@ impl AnnotatedSource<'_> {
         self.source.directory()
     }
 
-    fn annotate<'a>(&self, s: &'a str) -> Cow<'a, str> {
+    fn message_prefix(&self) -> Cow<'_, str> {
         if let Some(package) = &self.package {
-            Cow::Owned(format!("[{}] {s}", package.cyan()))
+            Cow::Owned(format!("[{}] ", package.cyan()))
         } else {
-            Cow::Borrowed(s)
+            Cow::Borrowed("")
         }
     }
 }
