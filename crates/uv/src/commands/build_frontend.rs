@@ -524,19 +524,7 @@ async fn build_package(
         concurrency,
     );
 
-    // Create the output directory.
-    fs_err::tokio::create_dir_all(&output_dir).await?;
-
-    // Add a .gitignore.
-    match fs_err::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output_dir.join(".gitignore"))
-    {
-        Ok(mut file) => file.write_all(b"*")?,
-        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-        Err(err) => return Err(err.into()),
-    }
+    prepare_output_directory(&output_dir).await?;
 
     // Determine the build plan.
     let plan = match &source.source {
@@ -778,6 +766,24 @@ async fn build_package(
     };
 
     Ok(assets)
+}
+
+/// Create the output directory and add a `.gitignore`.
+async fn prepare_output_directory(output_dir: &Path) -> Result<()> {
+    // Create the output directory.
+    fs_err::tokio::create_dir_all(&output_dir).await?;
+
+    // Add a .gitignore.
+    match fs_err::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output_dir.join(".gitignore"))
+    {
+        Ok(mut file) => file.write_all(b"*")?,
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+        Err(err) => return Err(err.into()),
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
