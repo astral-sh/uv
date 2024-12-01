@@ -8,6 +8,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, TrustedHost};
+use uv_dispatch::SharedState;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pypi_types::Requirement;
@@ -27,7 +28,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{conjunction, tool::common::install_executables, ExitStatus, SharedState};
+use crate::commands::{conjunction, tool::common::install_executables, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 

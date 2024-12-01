@@ -18,7 +18,7 @@ use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
     HashCheckingMode, IndexStrategy, KeyringProviderType, LowerBound, SourceStrategy, TrustedHost,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::{
@@ -35,7 +35,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 use crate::commands::pip::operations;
 use crate::commands::project::find_requires_python;
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, SharedState};
+use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::{ResolverSettings, ResolverSettingsRef};
 
@@ -511,10 +511,7 @@ async fn build_package(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,

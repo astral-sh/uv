@@ -8,6 +8,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, Reinstall, TrustedHost, Upgrade};
+use uv_dispatch::SharedState;
 use uv_distribution_types::UnresolvedRequirementSpecification;
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -29,10 +30,10 @@ use crate::commands::project::{
 };
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::tool::Target;
+use crate::commands::ExitStatus;
 use crate::commands::{
     diagnostics, reporters::PythonDownloadReporter, tool::common::install_executables,
 };
-use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 

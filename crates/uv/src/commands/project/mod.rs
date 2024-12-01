@@ -11,7 +11,7 @@ use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
     GroupsSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     Index, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
@@ -45,7 +45,7 @@ use uv_workspace::{ProjectWorkspace, Workspace};
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{capitalize, conjunction, pip, SharedState};
+use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
 
@@ -980,10 +980,7 @@ pub(crate) async fn resolve_names(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         *index_strategy,
         config_setting,
         build_isolation,
@@ -1000,7 +997,7 @@ pub(crate) async fn resolve_names(
     requirements.extend(
         NamedRequirementsResolver::new(
             &hasher,
-            &state.index,
+            state.index(),
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
         .with_reporter(ResolverReporter::from(printer))
@@ -1144,7 +1141,7 @@ pub(crate) async fn resolve_environment<'a>(
     // Populate the Git resolver.
     for ResolvedRepositoryReference { reference, sha } in git {
         debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-        state.git.insert(reference, sha);
+        state.git().insert(reference, sha);
     }
 
     // Resolve the flat indexes from `--find-links`.
@@ -1165,10 +1162,7 @@ pub(crate) async fn resolve_environment<'a>(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1202,7 +1196,7 @@ pub(crate) async fn resolve_environment<'a>(
         Conflicts::empty(),
         &client,
         &flat_index,
-        &state.index,
+        state.index(),
         &resolve_dispatch,
         concurrency,
         options,
@@ -1301,10 +1295,7 @@ pub(crate) async fn sync_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1331,7 +1322,7 @@ pub(crate) async fn sync_environment(
         &hasher,
         tags,
         &client,
-        &state.in_flight,
+        state.in_flight(),
         concurrency,
         &build_dispatch,
         cache,
@@ -1508,10 +1499,7 @@ pub(crate) async fn update_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         *index_strategy,
         config_setting,
         build_isolation,
@@ -1545,7 +1533,7 @@ pub(crate) async fn update_environment(
         Conflicts::empty(),
         &client,
         &flat_index,
-        &state.index,
+        state.index(),
         &build_dispatch,
         concurrency,
         options,
@@ -1572,7 +1560,7 @@ pub(crate) async fn update_environment(
         &hasher,
         tags,
         &client,
-        &state.in_flight,
+        state.in_flight(),
         concurrency,
         &build_dispatch,
         cache,
