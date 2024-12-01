@@ -140,6 +140,7 @@ pub(crate) async fn install(
             Requirement {
                 name: PackageName::from_str(name)?,
                 extras: vec![],
+                groups: vec![],
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
@@ -160,6 +161,7 @@ pub(crate) async fn install(
             Requirement {
                 name: PackageName::from_str(name)?,
                 extras: vec![],
+                groups: vec![],
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::empty(),

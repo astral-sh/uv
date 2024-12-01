@@ -9,7 +9,7 @@ use uv_distribution_filename::DistExtension;
 
 use uv_fs::{relative_to, PortablePathBuf, CWD};
 use uv_git::{GitReference, GitSha, GitUrl};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
@@ -36,11 +36,17 @@ pub enum RequirementError {
 ///
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
 /// [`VersionOrUrl`], which collapses all URL sources into a single stringly type.
+///
+/// Additionally, this requirement type makes room for dependency groups, which lack a standardized
+/// representation in PEP 508. In the context of this type, extras and groups are assumed to be
+/// mutually exclusive, in that if `extras` is non-empty, `groups` must be empty and vice versa.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Requirement {
     pub name: PackageName,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub extras: Vec<ExtraName>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub groups: Vec<GroupName>,
     #[serde(
         skip_serializing_if = "marker::ser::is_empty",
         serialize_with = "marker::ser::serialize",
@@ -100,12 +106,14 @@ impl std::hash::Hash for Requirement {
         let Self {
             name,
             extras,
+            groups,
             marker,
             source,
             origin: _,
         } = self;
         name.hash(state);
         extras.hash(state);
+        groups.hash(state);
         marker.hash(state);
         source.hash(state);
     }
@@ -116,6 +124,7 @@ impl PartialEq for Requirement {
         let Self {
             name,
             extras,
+            groups,
             marker,
             source,
             origin: _,
@@ -123,12 +132,14 @@ impl PartialEq for Requirement {
         let Self {
             name: other_name,
             extras: other_extras,
+            groups: other_groups,
             marker: other_marker,
             source: other_source,
             origin: _,
         } = other;
         name == other_name
             && extras == other_extras
+            && groups == other_groups
             && marker == other_marker
             && source == other_source
     }
@@ -141,6 +152,7 @@ impl Ord for Requirement {
         let Self {
             name,
             extras,
+            groups,
             marker,
             source,
             origin: _,
@@ -148,12 +160,14 @@ impl Ord for Requirement {
         let Self {
             name: other_name,
             extras: other_extras,
+            groups: other_groups,
             marker: other_marker,
             source: other_source,
             origin: _,
         } = other;
         name.cmp(other_name)
             .then_with(|| extras.cmp(other_extras))
+            .then_with(|| groups.cmp(other_groups))
             .then_with(|| marker.cmp(other_marker))
             .then_with(|| source.cmp(other_source))
     }
@@ -283,6 +297,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
         };
         Requirement {
             name: requirement.name,
+            groups: vec![],
             extras: requirement.extras,
             marker: requirement.marker,
             source,
@@ -907,6 +922,7 @@ mod tests {
         let requirement = Requirement {
             name: "foo".parse().unwrap(),
             extras: vec![],
+            groups: vec![],
             marker: MarkerTree::TRUE,
             source: RequirementSource::Registry {
                 specifier: ">1,<2".parse().unwrap(),
@@ -928,6 +944,7 @@ mod tests {
         let requirement = Requirement {
             name: "foo".parse().unwrap(),
             extras: vec![],
+            groups: vec![],
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
                 install_path: PathBuf::from(path),

@@ -287,6 +287,63 @@ impl Workspace {
             Some(Requirement {
                 name: member.pyproject_toml.project.as_ref()?.name.clone(),
                 extras: vec![],
+                groups: vec![],
+                marker: MarkerTree::TRUE,
+                source: if member.pyproject_toml.is_package() {
+                    RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        editable: true,
+                        r#virtual: false,
+                        url,
+                    }
+                } else {
+                    RequirementSource::Directory {
+                        install_path: member.root.clone(),
+                        editable: false,
+                        r#virtual: true,
+                        url,
+                    }
+                },
+                origin: None,
+            })
+        })
+    }
+
+    /// Returns the set of requirements that include all packages in the workspace.
+    pub fn group_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        self.packages.values().filter_map(|member| {
+            let url = VerbatimUrl::from_absolute_path(&member.root)
+                .expect("path is valid URL")
+                .with_given(member.root.to_string_lossy());
+
+            let groups = {
+                let mut groups = member
+                    .pyproject_toml
+                    .dependency_groups
+                    .as_ref()
+                    .map(|groups| groups.keys().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default();
+                if member
+                    .pyproject_toml
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.dev_dependencies.as_ref())
+                    .is_some()
+                {
+                    groups.push(DEV_DEPENDENCIES.clone());
+                    groups.sort_unstable();
+                }
+                groups
+            };
+            if groups.is_empty() {
+                return None;
+            }
+
+            Some(Requirement {
+                name: member.pyproject_toml.project.as_ref()?.name.clone(),
+                extras: vec![],
+                groups,
                 marker: MarkerTree::TRUE,
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {

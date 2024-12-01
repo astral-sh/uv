@@ -31,9 +31,7 @@ impl PubGrubDependency {
         dev: Option<&'a GroupName>,
         source_name: Option<&'a PackageName>,
     ) -> impl Iterator<Item = Self> + 'a {
-        let iter = if requirement.extras.is_empty() {
-            Either::Left(iter::once(None))
-        } else {
+        let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
             // requirement are part of a declared conflict, then we
             // specifically need (at time of writing) to include the
@@ -55,15 +53,44 @@ impl PubGrubDependency {
                 .iter()
                 .any(|extra| conflicts.contains(&requirement.name, extra))
             {
-                Either::Left(iter::once(None))
+                Either::Left(iter::once((None, None)))
             } else {
                 Either::Right(iter::empty())
             };
-            Either::Right(base.chain(requirement.extras.clone().into_iter().map(Some)))
+            Either::Left(Either::Left(
+                base.chain(
+                    requirement
+                        .extras
+                        .clone()
+                        .into_iter()
+                        .map(|extra| (Some(extra), None)),
+                ),
+            ))
+        } else if !requirement.groups.is_empty() {
+            let base = if requirement
+                .groups
+                .iter()
+                .any(|group| conflicts.contains(&requirement.name, group))
+            {
+                Either::Left(iter::once((None, None)))
+            } else {
+                Either::Right(iter::empty())
+            };
+            Either::Left(Either::Right(
+                base.chain(
+                    requirement
+                        .groups
+                        .clone()
+                        .into_iter()
+                        .map(|group| (None, Some(group))),
+                ),
+            ))
+        } else {
+            Either::Right(iter::once((None, None)))
         };
 
         // Add the package, plus any extra variants.
-        iter.map(|extra| PubGrubRequirement::from_requirement(requirement, extra))
+        iter.map(|(extra, group)| PubGrubRequirement::from_requirement(requirement, extra, group))
             .filter_map(move |requirement| {
                 let PubGrubRequirement {
                     package,
@@ -114,11 +141,24 @@ impl PubGrubDependency {
                             url,
                         })
                     }
+                    PubGrubPackageInner::Dev { name, .. } => {
+                        // Detect self-dependencies.
+                        if dev.is_none() {
+                            debug_assert!(
+                                !source_name.is_some_and(|source_name| source_name == name),
+                                "group not flattened for {name}"
+                            );
+                        }
+                        Some(PubGrubDependency {
+                            package: package.clone(),
+                            version: version.clone(),
+                            url,
+                        })
+                    }
                     PubGrubPackageInner::Root(_) => unreachable!("root package in dependencies"),
                     PubGrubPackageInner::Python(_) => {
                         unreachable!("python package in dependencies")
                     }
-                    PubGrubPackageInner::Dev { .. } => unreachable!("dev package in dependencies"),
                 }
             })
     }
@@ -135,10 +175,14 @@ pub(crate) struct PubGrubRequirement {
 impl PubGrubRequirement {
     /// Convert a [`Requirement`] to a PubGrub-compatible package and range, while returning the URL
     /// on the [`Requirement`], if any.
-    pub(crate) fn from_requirement(requirement: &Requirement, extra: Option<ExtraName>) -> Self {
+    pub(crate) fn from_requirement(
+        requirement: &Requirement,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+    ) -> Self {
         let (verbatim_url, parsed_url) = match &requirement.source {
             RequirementSource::Registry { specifier, .. } => {
-                return Self::from_registry_requirement(specifier, extra, requirement);
+                return Self::from_registry_requirement(specifier, extra, group, requirement);
             }
             RequirementSource::Url {
                 subdirectory,
@@ -200,6 +244,7 @@ impl PubGrubRequirement {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),
                 extra,
+                group,
                 requirement.marker,
             ),
             version: Ranges::full(),
@@ -213,12 +258,14 @@ impl PubGrubRequirement {
     fn from_registry_requirement(
         specifier: &VersionSpecifiers,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
         requirement: &Requirement,
     ) -> PubGrubRequirement {
         Self {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),
                 extra,
+                group,
                 requirement.marker,
             ),
             url: None,

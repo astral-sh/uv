@@ -1120,7 +1120,6 @@ pub(crate) async fn resolve_environment<'a>(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let dev = Vec::default();
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
     let build_constraints = Constraints::default();
@@ -1180,7 +1179,6 @@ pub(crate) async fn resolve_environment<'a>(
         requirements,
         constraints,
         overrides,
-        dev,
         source_trees,
         project,
         None,
@@ -1471,7 +1469,6 @@ pub(crate) async fn update_environment(
     // optional on the downstream APIs.
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
-    let dev = Vec::default();
     let dry_run = false;
     let extras = ExtrasSpecification::default();
     let hasher = HashStrategy::default();
@@ -1517,7 +1514,6 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
-        dev,
         source_trees,
         project,
         None,

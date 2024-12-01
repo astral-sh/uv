@@ -98,6 +98,7 @@ impl PubGrubPackage {
     pub(crate) fn from_package(
         name: PackageName,
         extra: Option<ExtraName>,
+        group: Option<GroupName>,
         marker: MarkerTree,
     ) -> Self {
         // Remove all extra expressions from the marker, since we track extras
@@ -112,15 +113,17 @@ impl PubGrubPackage {
                 extra,
                 marker,
             }))
-        } else if marker.is_true() {
+        } else if let Some(dev) = group {
+            Self(Arc::new(PubGrubPackageInner::Dev { name, dev, marker }))
+        } else if !marker.is_true() {
+            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
+        } else {
             Self(Arc::new(PubGrubPackageInner::Package {
                 name,
                 extra,
                 dev: None,
                 marker,
             }))
-        } else {
-            Self(Arc::new(PubGrubPackageInner::Marker { name, marker }))
         }
     }
 

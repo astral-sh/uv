@@ -325,7 +325,6 @@ async fn do_lock(
     let requirements = workspace.non_project_requirements()?;
     let overrides = workspace.overrides();
     let constraints = workspace.constraints();
-    let dev = workspace.groups().into_iter().cloned().collect::<Vec<_>>();
     let source_trees = vec![];
 
     // If necessary, lower the overrides and constraints.
@@ -620,6 +619,7 @@ async fn do_lock(
                     .await
                     .map_err(|err| ProjectError::Operation(err.into()))?
                     .into_iter()
+                    .chain(workspace.group_requirements())
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
@@ -633,7 +633,6 @@ async fn do_lock(
                     .cloned()
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
-                dev,
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
                 None,
