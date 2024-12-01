@@ -2014,6 +2014,7 @@ pub(crate) struct BuildSettings {
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
     pub(crate) build_logs: bool,
+    pub(crate) no_fast_path: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
@@ -2032,6 +2033,7 @@ impl BuildSettings {
             all_packages,
             sdist,
             wheel,
+            no_fast_path,
             build_constraints,
             require_hashes,
             no_require_hashes,
@@ -2062,6 +2064,7 @@ impl BuildSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            no_fast_path,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes),
                 flag(verify_hashes, no_verify_hashes),

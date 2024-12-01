@@ -52,6 +52,7 @@ pub(crate) async fn build_frontend(
     sdist: bool,
     wheel: bool,
     build_logs: bool,
+    no_fast_path: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
@@ -76,6 +77,7 @@ pub(crate) async fn build_frontend(
         sdist,
         wheel,
         build_logs,
+        no_fast_path,
         &build_constraints,
         hash_checking,
         python.as_deref(),
@@ -118,6 +120,7 @@ async fn build_impl(
     sdist: bool,
     wheel: bool,
     build_logs: bool,
+    no_fast_path: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
@@ -268,6 +271,7 @@ async fn build_impl(
             &client_builder,
             hash_checking,
             build_logs,
+            no_fast_path,
             build_constraints,
             no_build_isolation,
             no_build_isolation_package,
@@ -364,6 +368,7 @@ async fn build_package(
     client_builder: &BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
+    no_fast_path: bool,
     build_constraints: &[RequirementsSource],
     no_build_isolation: bool,
     no_build_isolation_package: &[PackageName],
@@ -533,7 +538,7 @@ async fn build_package(
 
     // Check if the build backend is matching uv version that allows calling in the uv build backend
     // directly.
-    let fast_path = check_fast_path(source.path());
+    let fast_path = !no_fast_path && check_fast_path(source.path());
 
     // Prepare some common arguments for the build.
     let dist = None;
