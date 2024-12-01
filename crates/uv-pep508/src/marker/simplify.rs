@@ -21,6 +21,7 @@ pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let mut dnf = Vec::new();
     collect_dnf(tree, &mut dnf, &mut Vec::new());
     simplify(&mut dnf);
+    sort(&mut dnf);
     dnf
 }
 
@@ -276,6 +277,22 @@ fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
     for i in redundant_clauses.into_iter().rev() {
         dnf.remove(i);
     }
+}
+
+/// Sort the clauses in a DNF expression, for backwards compatibility. The goal is to avoid
+/// unnecessary churn in the display output of the marker expressions, e.g., when modifying the
+/// internal representations used in the marker algebra.
+fn sort(dnf: &mut [Vec<MarkerExpression>]) {
+    // Sort each clause.
+    for clause in dnf.iter_mut() {
+        clause.sort_by_key(MarkerExpression::kind);
+    }
+    // Sort the clauses.
+    dnf.sort_by(|a, b| {
+        a.iter()
+            .map(MarkerExpression::kind)
+            .cmp(b.iter().map(MarkerExpression::kind))
+    });
 }
 
 /// Merge any edges that lead to identical subtrees into a single range.

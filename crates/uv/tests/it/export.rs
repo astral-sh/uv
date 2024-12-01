@@ -442,7 +442,7 @@ fn dependency_multiple_markers() -> Result<()> {
     attrs==23.2.0 ; python_full_version >= '3.12' or sys_platform == 'win32' \
         --hash=sha256:935dc3b529c262f6cf76e50877d35a4bd3c1de194fd41f47a2b7ae8f19971f30 \
         --hash=sha256:99b87a485a5820b23b879f04c2305b44b951b502fd64be915879d77a7e8fc6f1
-    cffi==1.16.0 ; (os_name == 'nt' and implementation_name != 'pypy' and python_full_version >= '3.12') or (os_name == 'nt' and sys_platform == 'win32' and implementation_name != 'pypy') \
+    cffi==1.16.0 ; (python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') \
         --hash=sha256:2c56b361916f390cd758a57f2e16233eb4f64bcbeee88a4881ea90fca14dc6ab \
         --hash=sha256:68678abf380b42ce21a5f2abde8efee05c114c2fdb2e9eef2efdb0257fba1235 \
         --hash=sha256:9f90389693731ff1f659e55c7d1640e2ec43ff725cc61b04b2f9c6d8d017df6a \
@@ -450,7 +450,7 @@ fn dependency_multiple_markers() -> Result<()> {
         --hash=sha256:bcb3ef43e58665bbda2fb198698fcae6776483e0c4a631aa5647806c25e02cc0 \
         --hash=sha256:db8e577c19c0fda0beb7e0d4e09e0ba74b1e4c092e0e40bfa12fe05b6f6d75ba \
         --hash=sha256:e6024675e67af929088fda399b2094574609396b1decb609c55fa58b028a32a1
-    exceptiongroup==1.2.0 ; sys_platform == 'win32' and python_full_version < '3.11' \
+    exceptiongroup==1.2.0 ; python_full_version < '3.11' and sys_platform == 'win32' \
         --hash=sha256:4bfd3996ac73b41e9b9628b04e079f193850720ea5945fc96a08633c66912f14 \
         --hash=sha256:91f5c769735f051a4290d52edd0858999b57e5876e9f85937691bd4c9fa3ed68
     idna==3.6 ; python_full_version >= '3.12' or sys_platform == 'win32' \
@@ -459,7 +459,7 @@ fn dependency_multiple_markers() -> Result<()> {
     outcome==1.3.0.post0 ; python_full_version >= '3.12' or sys_platform == 'win32' \
         --hash=sha256:9dcf02e65f2971b80047b377468e72a268e15c0af3cf1238e6ff14f7f91143b8 \
         --hash=sha256:e771c5ce06d1415e356078d3bdd68523f284b4ce5419828922b6871e65eda82b
-    pycparser==2.21 ; (os_name == 'nt' and implementation_name != 'pypy' and python_full_version >= '3.12') or (os_name == 'nt' and sys_platform == 'win32' and implementation_name != 'pypy') \
+    pycparser==2.21 ; (python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') \
         --hash=sha256:8ee45429555515e1f6b185e78100aea234072576aa43ab53aefcae078162fca9 \
         --hash=sha256:e644fdec12f7872f86c58ff790da456218b10f863970249516d60a5eaca77206
     sniffio==1.3.1 ; python_full_version >= '3.12' or sys_platform == 'win32' \

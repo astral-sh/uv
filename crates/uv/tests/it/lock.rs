@@ -1014,7 +1014,7 @@ fn lock_wheel_url() -> Result<()> {
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
             { name = "trustme", marker = "extra == 'test'" },
             { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
-            { name = "uvloop", marker = "platform_system != 'Windows' and platform_python_implementation == 'CPython' and extra == 'test'", specifier = ">=0.17" },
+            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
         ]
 
         [[package]]
@@ -1159,7 +1159,7 @@ fn lock_sdist_url() -> Result<()> {
             { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
             { name = "trustme", marker = "extra == 'test'" },
             { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
-            { name = "uvloop", marker = "platform_system != 'Windows' and platform_python_implementation == 'CPython' and extra == 'test'", specifier = ">=0.17" },
+            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and platform_system != 'Windows' and extra == 'test'", specifier = ">=0.17" },
         ]
 
         [[package]]
@@ -12367,7 +12367,7 @@ fn lock_overlapping_environment() -> Result<()> {
     ----- stderr -----
     error: Supported environments must be disjoint, but the following markers overlap: `platform_system != 'Windows'` and `python_full_version >= '3.11'`.
 
-    hint: replace `python_full_version >= '3.11'` with `platform_system == 'Windows' and python_full_version >= '3.11'`.
+    hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and platform_system == 'Windows'`.
     "###);
 
     Ok(())
@@ -16536,9 +16536,9 @@ fn lock_multiple_sources_conflict() -> Result<()> {
       |
     9 |         iniconfig = [
       |                     ^
-    Source markers must be disjoint, but the following markers overlap: `sys_platform == 'win32' and python_full_version == '3.12.*'` and `sys_platform == 'win32'`.
+    Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
 
-    hint: replace `sys_platform == 'win32'` with `sys_platform == 'win32' and python_full_version != '3.12.*'`.
+    hint: replace `sys_platform == 'win32'` with `python_full_version != '3.12.*' and sys_platform == 'win32'`.
     "###);
 
     Ok(())
@@ -17167,11 +17167,11 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "iniconfig", marker = "sys_platform != 'darwin' and platform_system == 'Windows'" },
+            { name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform != 'darwin'" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", marker = "sys_platform != 'darwin' and platform_system == 'Windows'" }]
+        requires-dist = [{ name = "iniconfig", marker = "platform_system == 'Windows' and sys_platform != 'darwin'" }]
         "###
         );
     });
@@ -17776,7 +17776,7 @@ fn lock_group_include() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "attrs" },
-            { name = "cffi", marker = "os_name == 'nt' and implementation_name != 'pypy'" },
+            { name = "cffi", marker = "implementation_name != 'pypy' and os_name == 'nt'" },
             { name = "idna" },
             { name = "outcome" },
             { name = "sniffio" },
@@ -18958,7 +18958,7 @@ fn lock_recursive_extra() -> Result<()> {
             { name = "iniconfig" },
         ]
         qux = [
-            { name = "iniconfig", marker = "sys_platform == 'darwin' and python_full_version < '3.13'" },
+            { name = "iniconfig", marker = "python_full_version < '3.13' and sys_platform == 'darwin'" },
         ]
 
         [package.metadata]

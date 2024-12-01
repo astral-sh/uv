@@ -436,6 +436,11 @@ impl InternerGuard<'_> {
     /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e., their conjunction is always `false`.
     fn disjointness(&mut self, xi: NodeId, yi: NodeId) -> bool {
+        // NOTE(charlie): This is equivalent to `is_disjoint`, with the exception that it doesn't
+        // perform the mutually-incompatible marker check. If it did, we'd create an infinite loop,
+        // since `is_disjoint` calls `and` (when relevant variables are present) which then calls
+        // `disjointness`.
+
         // `false` is disjoint with any marker.
         if xi.is_false() || yi.is_false() {
             return true;
@@ -744,7 +749,6 @@ impl InternerGuard<'_> {
             .negate(i)
     }
 
-
     /// The disjunction of known incompatible conditions.
     ///
     /// For example, while the marker specification and grammar do not _forbid_ it, we know that
@@ -983,7 +987,6 @@ impl InternerGuard<'_> {
         self.state.exclusions = Some(tree);
         tree
     }
-
 }
 
 /// A unique variable for a decision node.

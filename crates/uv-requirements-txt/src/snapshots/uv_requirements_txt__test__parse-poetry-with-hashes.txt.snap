@@ -85,7 +85,7 @@ RequirementsTxt {
                             ),
                         ),
                     ),
-                    marker: platform_system == 'Windows' and python_full_version >= '3.8' and python_full_version < '4.0',
+                    marker: python_full_version >= '3.8' and python_full_version < '4.0' and platform_system == 'Windows',
                     origin: Some(
                         File(
                             "<REQUIREMENTS_DIR>/poetry-with-hashes.txt",

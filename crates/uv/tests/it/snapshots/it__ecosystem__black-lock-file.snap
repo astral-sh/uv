@@ -5,8 +5,8 @@ expression: lock
 version = 1
 requires-python = ">=3.8"
 resolution-markers = [
-    "sys_platform == 'win32' and implementation_name == 'pypy'",
-    "sys_platform != 'win32' or implementation_name != 'pypy'",
+    "implementation_name == 'pypy' and sys_platform == 'win32'",
+    "implementation_name != 'pypy' or sys_platform != 'win32'",
 ]
 
 [options]
@@ -204,8 +204,8 @@ uvloop = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", marker = "sys_platform == 'win32' and implementation_name == 'pypy' and extra == 'd'", specifier = ">=3.7.4,!=3.9.0" },
-    { name = "aiohttp", marker = "(sys_platform != 'win32' and extra == 'd') or (implementation_name != 'pypy' and extra == 'd')", specifier = ">=3.7.4" },
+    { name = "aiohttp", marker = "implementation_name == 'pypy' and sys_platform == 'win32' and extra == 'd'", specifier = ">=3.7.4,!=3.9.0" },
+    { name = "aiohttp", marker = "(implementation_name != 'pypy' and extra == 'd') or (sys_platform != 'win32' and extra == 'd')", specifier = ">=3.7.4" },
     { name = "click", specifier = ">=8.0.0" },
     { name = "colorama", marker = "extra == 'colorama'", specifier = ">=0.4.3" },
     { name = "ipython", marker = "extra == 'jupyter'", specifier = ">=7.8.0" },
@@ -524,7 +524,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "sys_platform != 'win32' or implementation_name != 'pypy'" },
+    { name = "ptyprocess", marker = "implementation_name != 'pypy' or sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450 }
 wheels = [

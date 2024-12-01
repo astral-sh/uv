@@ -1243,9 +1243,9 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
-            "sys_platform == 'darwin' and implementation_name != 'cpython' and implementation_name != 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
@@ -1255,13 +1255,13 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
-            "sys_platform == 'darwin' and implementation_name != 'cpython' and implementation_name != 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin' and implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin' and implementation_name == 'cpython'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_a-1.0.0.tar.gz", hash = "sha256:c7232306e8597d46c3fe53a3b1472f99b8ff36b3169f335ba0a5b625e193f7d4" }
         wheels = [
@@ -1285,10 +1285,10 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-c", marker = "sys_platform == 'darwin' and implementation_name == 'pypy'" },
+            { name = "package-c", marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-1.0.0.tar.gz", hash = "sha256:d6bd196a0a152c1b32e09f08e554d22ae6a6b3b916e39ad4552572afae5f5492" }
         wheels = [
@@ -1300,7 +1300,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_allowed_b-2.0.0.tar.gz", hash = "sha256:4533845ba671575a25ceb32f10f0bc6836949bef37b7da6e7dd37d9be389871c" }
         wheels = [
@@ -1423,9 +1423,9 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
-            "sys_platform == 'darwin' and implementation_name != 'cpython' and implementation_name != 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
@@ -1435,13 +1435,13 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
-            "sys_platform == 'darwin' and implementation_name != 'cpython' and implementation_name != 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin' and implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin' and implementation_name == 'cpython'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_a-1.0.0.tar.gz", hash = "sha256:92081d91570582f3a94ed156f203de53baca5b3fdc350aa1c831c7c42723e798" }
         wheels = [
@@ -1465,7 +1465,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_b-1.0.0.tar.gz", hash = "sha256:d44b87bd8d39240bca55eaae84a245e74197ed0b7897c27af9f168c713cc63bd" }
         wheels = [
@@ -1477,7 +1477,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_disallowed_b-2.0.0.tar.gz", hash = "sha256:75a48bf2d44a0a0be6ca33820f5076665765be7b43dabf5f94f7fd5247071097" }
         wheels = [
@@ -1592,9 +1592,9 @@ fn fork_marker_inherit_combined() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
-            "sys_platform == 'darwin' and implementation_name != 'cpython' and implementation_name != 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
             "sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
@@ -1604,13 +1604,13 @@ fn fork_marker_inherit_combined() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
-            "sys_platform == 'darwin' and implementation_name != 'cpython' and implementation_name != 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin' and implementation_name == 'pypy'" },
-            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "sys_platform == 'darwin' and implementation_name == 'cpython'" },
+            { name = "package-b", version = "1.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "package-b", version = "2.0.0", source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_a-1.0.0.tar.gz", hash = "sha256:2ec4c9dbb7078227d996c344b9e0c1b365ed0000de9527b2ba5b616233636f07" }
         wheels = [
@@ -1634,7 +1634,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         version = "1.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'pypy'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_b-1.0.0.tar.gz", hash = "sha256:6992d194cb5a0f0eed9ed6617d3212af4e3ff09274bf7622c8a1008b072128da" }
         wheels = [
@@ -1646,7 +1646,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
         version = "2.0.0"
         source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
         resolution-markers = [
-            "sys_platform == 'darwin' and implementation_name == 'cpython'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/fork_marker_inherit_combined_b-2.0.0.tar.gz", hash = "sha256:e340061505d621a340d10ec1dbaf02dfce0c66358ee8190f61f78018f9999989" }
         wheels = [
