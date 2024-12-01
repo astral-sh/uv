@@ -1760,6 +1760,7 @@ impl PipInstallSettings {
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
+    pub(crate) dry_run: bool,
     pub(crate) settings: PipSettings,
 }
 
@@ -1777,12 +1778,14 @@ impl PipUninstallSettings {
             no_break_system_packages,
             target,
             prefix,
+            dry_run,
             compat_args: _,
         } = args;
 
         Self {
             package,
             requirements,
+            dry_run,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),

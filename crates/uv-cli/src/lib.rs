@@ -1839,6 +1839,11 @@ pub struct PipUninstallArgs {
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
+    /// Perform a dry run, i.e., don't actually uninstall anything but resolve the dependencies and
+    /// print the resulting plan.
+    #[arg(long)]
+    pub dry_run: bool,
+
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
 }
