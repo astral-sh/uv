@@ -462,6 +462,8 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) with_editable: Vec<String>,
+    pub(crate) constraints: Vec<PathBuf>,
+    pub(crate) overrides: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -482,6 +484,8 @@ impl ToolInstallSettings {
             with,
             with_editable,
             with_requirements,
+            constraints,
+            overrides,
             installer,
             force,
             build,
@@ -516,6 +520,14 @@ impl ToolInstallSettings {
                 .flat_map(CommaSeparatedRequirements::into_iter)
                 .collect(),
             with_requirements: with_requirements
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            overrides: overrides
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
