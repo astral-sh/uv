@@ -304,7 +304,7 @@ pub fn build_wheel(
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system("1.0.0+test");
+    pyproject_toml.check_build_system(uv_version);
     let settings = pyproject_toml
         .settings()
         .cloned()
@@ -465,7 +465,7 @@ pub fn build_editable(
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system("1.0.0+test");
+    pyproject_toml.check_build_system(uv_version);
     let settings = pyproject_toml
         .settings()
         .cloned()
