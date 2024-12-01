@@ -1646,9 +1646,7 @@ pub struct OptionsWire {
 
     // Build backend
     #[allow(dead_code)]
-    source_dist: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
-    wheel: Option<serde::de::IgnoredAny>,
+    build_backend: Option<serde::de::IgnoredAny>,
 }
 
 impl From<OptionsWire> for Options {
@@ -1707,8 +1705,7 @@ impl From<OptionsWire> for Options {
             managed,
             package,
             // Used by the build backend
-            source_dist: _,
-            wheel: _,
+            build_backend: _,
         } = value;
 
         Self {
