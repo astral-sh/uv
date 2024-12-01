@@ -682,6 +682,25 @@ pub fn build_source_dist(
 ) -> Result<SourceDistFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let filename = SourceDistFilename {
+        name: pyproject_toml.name().clone(),
+        version: pyproject_toml.version().clone(),
+        extension: SourceDistExtension::TarGz,
+    };
+    let source_dist_path = source_dist_directory.join(filename.to_string());
+    let writer = TarGzWriter::new(&source_dist_path)?;
+    write_source_dist(source_tree, writer, uv_version)?;
+    Ok(filename)
+}
+
+/// Shared implementation for building and listing a source distribution.
+fn write_source_dist(
+    source_tree: &Path,
+    mut writer: impl DirectoryWriter,
+    uv_version: &str,
+) -> Result<SourceDistFilename, Error> {
+    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
+    let pyproject_toml = PyProjectToml::parse(&contents)?;
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
@@ -701,9 +720,6 @@ pub fn build_source_dist(
         pyproject_toml.name().as_dist_info_name(),
         pyproject_toml.version()
     );
-
-    let source_dist_path = source_dist_directory.join(filename.to_string());
-    let mut writer = TarGzWriter::new(&source_dist_path)?;
 
     let metadata = pyproject_toml.to_metadata(source_tree)?;
     let metadata_email = metadata.core_metadata_format();
