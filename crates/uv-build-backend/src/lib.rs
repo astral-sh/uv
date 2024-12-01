@@ -304,7 +304,9 @@ pub fn build_wheel(
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system(uv_version);
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
     let settings = pyproject_toml
         .settings()
         .cloned()
@@ -465,7 +467,9 @@ pub fn build_editable(
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system(uv_version);
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
     let settings = pyproject_toml
         .settings()
         .cloned()
@@ -601,7 +605,9 @@ pub fn build_source_dist(
 ) -> Result<SourceDistFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system(uv_version);
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
     let settings = pyproject_toml
         .settings()
         .cloned()
@@ -851,7 +857,9 @@ pub fn metadata(
 ) -> Result<String, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system(uv_version);
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
 
     let filename = WheelFilename {
         name: pyproject_toml.name().clone(),
