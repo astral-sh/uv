@@ -1922,7 +1922,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&Path>,
     ) -> Result<Option<ResolutionMetadata>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
-        match read_pyproject_toml(source_root, subdirectory).await {
+        match read_pyproject_toml(source_root, subdirectory, source.version()).await {
             Ok(metadata) => {
                 debug!("Found static `pyproject.toml` for: {source}");
 
@@ -2345,6 +2345,7 @@ async fn read_pkg_info(
 async fn read_pyproject_toml(
     source_tree: &Path,
     subdirectory: Option<&Path>,
+    sdist_version: Option<&Version>,
 ) -> Result<ResolutionMetadata, Error> {
     // Read the `pyproject.toml` file.
     let pyproject_toml = match subdirectory {
@@ -2360,8 +2361,8 @@ async fn read_pyproject_toml(
     };
 
     // Parse the metadata.
-    let metadata =
-        ResolutionMetadata::parse_pyproject_toml(&content).map_err(Error::PyprojectToml)?;
+    let metadata = ResolutionMetadata::parse_pyproject_toml(&content, sdist_version)
+        .map_err(Error::PyprojectToml)?;
 
     Ok(metadata)
 }
