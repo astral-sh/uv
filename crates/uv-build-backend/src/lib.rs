@@ -1,6 +1,8 @@
 mod metadata;
 
-use crate::metadata::{BuildBackendSettings, PyProjectToml, ValidationError, DEFAULT_EXCLUDES};
+pub use metadata::PyProjectToml;
+
+use crate::metadata::{BuildBackendSettings, ValidationError, DEFAULT_EXCLUDES};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;

@@ -57,7 +57,7 @@ pub enum ValidationError {
     expecting = "The project table needs to follow \
     https://packaging.python.org/en/latest/guides/writing-pyproject-toml"
 )]
-pub(crate) struct PyProjectToml {
+pub struct PyProjectToml {
     /// Project metadata
     project: Project,
     /// uv-specific configuration
@@ -100,7 +100,7 @@ impl PyProjectToml {
     /// requires = ["uv>=0.4.15,<5"]
     /// build-backend = "uv"
     /// ```
-    pub(crate) fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+    pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
         let mut warnings = Vec::new();
         if self.build_system.build_backend.as_deref() != Some("uv") {
             warnings.push(format!(
