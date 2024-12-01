@@ -17,7 +17,7 @@ use version_ranges::Ranges;
 use walkdir::WalkDir;
 
 /// By default, we ignore generated python files.
-const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
+pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -708,6 +708,8 @@ pub(crate) struct ToolUv {
 /// To select which files to include in the source distribution, we first add the includes, then
 /// remove the excludes from that.
 ///
+/// ## Include and exclude configuration
+///
 /// When building the source distribution, the following files and directories are included:
 /// * `pyproject.toml`
 /// * The module under `tool.uv.build-backend.module-root`, by default
@@ -732,6 +734,21 @@ pub(crate) struct ToolUv {
 /// There are no specific wheel includes. There must only be one top level module, and all data
 /// files must either be under the module root or in a data directory. Most packages store small
 /// data in the module root alongside the source code.
+///
+/// ## Include and exclude syntax
+///
+/// Includes are anchored, which means that `pyproject.toml` includes only
+/// `<project root>/pyproject.toml`. Use for example `assets/**/sample.csv` to include for all
+/// `sample.csv` files in `<project root>/assets` or any child directory. To recursively include
+/// all files under a directory, use a `/**` suffix, e.g. `src/**`. For performance and
+/// reproducibility, avoid unanchored matches such as `**/sample.csv`.
+///
+/// Excludes are not anchored, which means that `__pycache__` excludes all directories named
+/// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
+/// `/dist` will exclude only `<project root>/dist`.
+///
+/// The glob syntax is the reduced portable glob from
+/// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
 #[derive(Deserialize, Debug, Clone)]
 #[serde(default, rename_all = "kebab-case")]
 pub(crate) struct BuildBackendSettings {
@@ -744,38 +761,19 @@ pub(crate) struct BuildBackendSettings {
     ///
     /// `pyproject.toml` and the contents of the module directory are always included.
     ///
-    /// Includes are anchored, which means that `pyproject.toml` includes only
-    /// `<project root>/pyproject.toml`. Use for example `assets/**/sample.csv` to include for all
-    /// `sample.csv` files in `<project root>/assets` or any child directory. To recursively include
-    /// all files under a directory, use a `/**` suffix, e.g. `src/**`. For performance and
-    /// reproducibility, avoid unanchored matches such as `**/sample.csv`.
-    ///
     /// The glob syntax is the reduced portable glob from
     /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
     pub(crate) source_include: Vec<String>,
 
+    /// If set to `false`, the default excludes aren't applied.
+    ///
+    /// Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
+    pub(crate) default_excludes: bool,
+
     /// Glob expressions which files and directories to exclude from the source distribution.
-    ///
-    /// Default: `__pycache__`, `*.pyc`, and `*.pyo`.
-    ///
-    /// Excludes are not anchored, which means that `__pycache__` excludes all directories named
-    /// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
-    /// `/dist` will exclude only `<project root>/dist`.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
     pub(crate) source_exclude: Vec<String>,
 
     /// Glob expressions which files and directories to exclude from the wheel.
-    ///
-    /// Default: `__pycache__`, `*.pyc`, and `*.pyo`.
-    ///
-    /// Excludes are not anchored, which means that `__pycache__` excludes all directories named
-    /// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
-    /// `/dist` will exclude only `<project root>/dist`.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
     pub(crate) wheel_exclude: Vec<String>,
 
     /// Data includes for wheels.
@@ -790,8 +788,9 @@ impl Default for BuildBackendSettings {
         Self {
             module_root: PathBuf::from("src"),
             source_include: Vec::new(),
-            source_exclude: DEFAULT_EXCLUDES.iter().map(ToString::to_string).collect(),
-            wheel_exclude: DEFAULT_EXCLUDES.iter().map(ToString::to_string).collect(),
+            default_excludes: true,
+            source_exclude: Vec::new(),
+            wheel_exclude: Vec::new(),
             data: WheelDataIncludes::default(),
         }
     }

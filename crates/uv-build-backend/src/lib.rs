@@ -1,6 +1,6 @@
 mod metadata;
 
-use crate::metadata::{BuildBackendSettings, PyProjectToml, ValidationError};
+use crate::metadata::{BuildBackendSettings, PyProjectToml, ValidationError, DEFAULT_EXCLUDES};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
@@ -304,7 +304,7 @@ pub fn build_wheel(
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system("1.0.0+test");
+    pyproject_toml.check_build_system(uv_version);
     let settings = pyproject_toml
         .settings()
         .cloned()
@@ -326,7 +326,16 @@ pub fn build_wheel(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     // Wheel excludes
-    let mut excludes: Vec<String> = settings.wheel_exclude;
+    let mut excludes: Vec<String> = Vec::new();
+    if settings.default_excludes {
+        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
+    }
+    for exclude in settings.wheel_exclude {
+        // Avoid duplicate entries.
+        if !excludes.contains(&exclude) {
+            excludes.push(exclude);
+        }
+    }
     // The wheel must not include any files excluded by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
     for exclude in settings.source_exclude {
@@ -456,7 +465,7 @@ pub fn build_editable(
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system("1.0.0+test");
+    pyproject_toml.check_build_system(uv_version);
     let settings = pyproject_toml
         .settings()
         .cloned()
@@ -693,7 +702,15 @@ pub fn build_source_dist(
         })?;
 
     let mut excludes: Vec<String> = Vec::new();
-    excludes.extend(settings.source_exclude);
+    if settings.default_excludes {
+        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
+    }
+    for exclude in settings.source_exclude {
+        // Avoid duplicate entries.
+        if !excludes.contains(&exclude) {
+            excludes.push(exclude);
+        }
+    }
     debug!("Source dist excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
     if exclude_matcher.is_match("pyproject.toml") {
