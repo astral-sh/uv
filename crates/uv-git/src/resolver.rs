@@ -120,9 +120,7 @@ impl GitResolver {
         } else {
             GitSource::new(url.as_ref().clone(), client, cache)
         };
-        let fetch = tokio::task::spawn_blocking(move || source.fetch())
-            .await?
-            .map_err(GitResolverError::Git)?;
+        let fetch = source.fetch().await.map_err(GitResolverError::Git)?;
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
         // resolve to the same precise commit.
