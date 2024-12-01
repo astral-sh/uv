@@ -1,7 +1,8 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context as _, Result};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
@@ -27,7 +28,7 @@ use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
     EnvironmentSpecification, ProjectError,
 };
-use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::{remove_entrypoints, warn_out_of_path};
 use crate::commands::tool::Target;
 use crate::commands::{
     diagnostics, reporters::PythonDownloadReporter, tool::common::install_executables,
@@ -42,6 +43,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
+    with_executables_from: BTreeSet<PackageName>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
@@ -461,14 +463,53 @@ pub(crate) async fn install(
         }
     };
 
+    let force_install = force || invalid_tool_receipt;
+
+    // Find a suitable path to install into.
+    let executable_directory = uv_tool::tool_executable_dir()?;
+    fs_err::create_dir_all(&executable_directory)
+        .context("Failed to create executable directory")?;
+
+    // Install additional executables, if any was explicitly requested.
+    let mut installed_executables = vec![];
+    for pkg in with_executables_from {
+        debug!(
+            "Installing executables for `{}` as part of tool `{}`",
+            pkg, from.name
+        );
+        let mut entrypoints = install_executables(
+            &environment,
+            &from.name,
+            &pkg,
+            &installed_tools,
+            &installed_executables,
+            &executable_directory,
+            options.clone(),
+            force_install,
+            python.clone(),
+            requirements.clone(),
+            printer,
+        )?;
+        installed_executables.append(&mut entrypoints);
+    }
+
+    // Install entrypoints from the target package.
+    debug!("Installing executables for tool `{}`", from.name);
     install_executables(
         &environment,
         &from.name,
+        &from.name,
         &installed_tools,
+        &installed_executables,
+        &executable_directory,
         options,
-        force || invalid_tool_receipt,
+        force_install,
         python,
         requirements,
         printer,
-    )
+    )?;
+
+    warn_out_of_path(&executable_directory);
+
+    Ok(ExitStatus::Success)
 }

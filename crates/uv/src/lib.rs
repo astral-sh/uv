@@ -937,7 +937,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            let requirements = args
+            // Synthesize extra dependencies by merging all additionally
+            // specified requirements.
+            let extra_deps = args
                 .with
                 .into_iter()
                 .map(RequirementsSource::from_with_package)
@@ -946,6 +948,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                         .into_iter()
                         .map(RequirementsSource::Editable),
                 )
+                .chain(
+                    args.with_executables_from
+                        .iter()
+                        .map(RequirementsSource::from_package_name),
+                );
+
+            let requirements = extra_deps
+                .into_iter()
                 .chain(
                     args.with_requirements
                         .into_iter()
@@ -958,6 +968,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 args.from,
                 &requirements,
+                args.with_executables_from,
                 args.python,
                 args.install_mirrors,
                 args.force,

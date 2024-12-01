@@ -3475,6 +3475,10 @@ uv tool install [OPTIONS] <PACKAGE>
 
 </dd><dt><code>--with-editable</code> <i>with-editable</i></dt><dd><p>Include the given packages as editables</p>
 
+</dd><dt><code>--with-executables-from</code> <i>with-executables-from</i></dt><dd><p>Install executables from an additional package.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--with-requirements</code> <i>with-requirements</i></dt><dd><p>Run all requirements listed in the given <code>requirements.txt</code> files</p>
 
 </dd></dl>

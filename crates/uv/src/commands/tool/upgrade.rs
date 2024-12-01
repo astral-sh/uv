@@ -1,8 +1,10 @@
-use anyhow::Result;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
+use std::str::FromStr as _;
+
+use anyhow::{Context as _, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::BTreeMap;
-use std::fmt::Write;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -27,6 +29,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::warn_out_of_path;
 use crate::commands::{conjunction, tool::common::install_executables, ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -345,6 +348,7 @@ async fn upgrade_tool(
         (environment, outcome)
     };
 
+    // If we modified the target tool, reinstall the entrypoints.
     if matches!(
         outcome,
         UpgradeOutcome::UpgradeEnvironment | UpgradeOutcome::UpgradeTool
@@ -353,17 +357,59 @@ async fn upgrade_tool(
         // existing executables.
         remove_entrypoints(&existing_tool_receipt);
 
-        // If we modified the target tool, reinstall the entrypoints.
+        // Find a suitable path to install into.
+        let executable_directory = uv_tool::tool_executable_dir()?;
+        fs_err::create_dir_all(&executable_directory)
+            .context("Failed to create executable directory")?;
+
+        // Install additional entrypoints from dependencies,
+        let mut extra_entrypoints_packages = BTreeSet::new();
+        for entry in existing_tool_receipt.entrypoints() {
+            if let Some(Ok(from)) = entry.from.as_ref().map(|v| PackageName::from_str(v)) {
+                if from != *name {
+                    extra_entrypoints_packages.insert(from);
+                }
+            }
+        }
+        let mut deps_entrypoints = vec![];
+        for pkg in extra_entrypoints_packages {
+            debug!(
+                "Installing entrypoints for {} as part of tool {}",
+                pkg, name
+            );
+            let mut entrypoints = install_executables(
+                &environment,
+                name,
+                &pkg,
+                installed_tools,
+                &deps_entrypoints,
+                &executable_directory,
+                ToolOptions::from(options.clone()),
+                true,
+                existing_tool_receipt.python().to_owned(),
+                requirements.to_vec(),
+                printer,
+            )?;
+            deps_entrypoints.append(&mut entrypoints);
+        }
+
+        // Install entrypoints from the target package.
+        debug!("Installing entrypoints for tool {name}");
         install_executables(
             &environment,
             name,
+            name,
             installed_tools,
+            &deps_entrypoints,
+            &executable_directory,
             ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
             requirements.to_vec(),
             printer,
         )?;
+
+        warn_out_of_path(&executable_directory);
     }
 
     Ok(outcome)

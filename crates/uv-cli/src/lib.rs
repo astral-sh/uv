@@ -3762,6 +3762,12 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
+    /// Install executables from an additional package.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub with_executables_from: Vec<PackageName>,
+
     /// Run all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,

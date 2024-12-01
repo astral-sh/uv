@@ -83,6 +83,8 @@ impl TryFrom<ToolWire> for Tool {
 pub struct ToolEntrypoint {
     pub name: String,
     pub install_path: PathBuf,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
 }
 
 /// Format an array so that each element is on its own line and has a trailing comma.
@@ -117,10 +119,10 @@ impl Tool {
     pub fn new(
         requirements: Vec<Requirement>,
         python: Option<String>,
-        entrypoints: impl Iterator<Item = ToolEntrypoint>,
+        entrypoints: Vec<ToolEntrypoint>,
         options: ToolOptions,
     ) -> Self {
-        let mut entrypoints: Vec<_> = entrypoints.collect();
+        let mut entrypoints = entrypoints;
         entrypoints.sort();
         Self {
             requirements,
@@ -207,8 +209,12 @@ impl Tool {
 
 impl ToolEntrypoint {
     /// Create a new [`ToolEntrypoint`].
-    pub fn new(name: String, install_path: PathBuf) -> Self {
-        Self { name, install_path }
+    pub fn new(name: String, install_path: PathBuf, from: String) -> Self {
+        Self {
+            name,
+            install_path,
+            from: Some(from),
+        }
     }
 
     /// Returns the TOML table for this entrypoint.
@@ -220,6 +226,9 @@ impl ToolEntrypoint {
             // Use cross-platform slashes so the toml string type does not change
             value(PortablePath::from(&self.install_path).to_string()),
         );
+        if let Some(from) = &self.from {
+            table.insert("from", value(from));
+        };
         table
     }
 }
