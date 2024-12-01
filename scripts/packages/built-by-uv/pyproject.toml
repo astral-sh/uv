@@ -11,7 +11,7 @@ license-files = ["LICENSE*", "third-party-licenses/*"]
 # A file we need for the source dist -> wheel step, but not in the wheel itself (currently unused)
 source-include = ["data/build-script.py"]
 # A temporary or generated file we want to ignore
-source-exclude = ["/src/built_by_uv/not-packaged.txt", "__pycache__", "*.pyc", "*.pyo"]
+source-exclude = ["/src/built_by_uv/not-packaged.txt"]
 # Headers are build-only
 wheel-exclude = ["build-*.h"]
 
@@ -21,5 +21,5 @@ data = "assets"
 headers = "header"
 
 [build-system]
-requires = ["uv>=0.4.15,<5"]
+requires = ["uv>=0.5,<0.6"]
 build-backend = "uv"
