@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use owo_colors::OwoColorize;
-use tracing::{debug, trace};
+use tracing::{debug, instrument, trace};
 use uv_distribution_filename::SourceDistExtension;
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
 use uv_install_wheel::linker::LinkMode;
@@ -724,6 +724,7 @@ async fn build_package(
 }
 
 /// Build a source distribution, either through PEP 517 or through the fast path.
+#[instrument(skip_all)]
 async fn build_sdist(
     source_tree: &Path,
     output_dir: &Path,
@@ -781,6 +782,7 @@ async fn build_sdist(
 }
 
 /// Build a wheel, either through PEP 517 or through the fast path.
+#[instrument(skip_all)]
 async fn build_wheel(
     source_tree: &Path,
     output_dir: &Path,
