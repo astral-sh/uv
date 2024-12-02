@@ -507,7 +507,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
-    The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default.
+    The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default
     "###);
 
     // Install a specific version
@@ -594,14 +594,23 @@ fn python_install_default() {
 
     // Install multiple versions, with the `--default` flag
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("3.13").arg("--default"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The `--default` flag cannot be used with multiple targets
+    "###);
+
+    // Install 3.12 as a new default
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12").arg("--default"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed 2 versions in [TIME]
+    Installed Python 3.12.7 in [TIME]
      + cpython-3.12.7-[PLATFORM] (python, python3, python3.12)
-     + cpython-3.13.0-[PLATFORM] (python3.13)
     "###);
 
     let bin_python_minor_12 = context
@@ -610,7 +619,6 @@ fn python_install_default() {
         .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
 
     // All the executables should exist
-    bin_python_minor_13.assert(predicate::path::exists());
     bin_python_minor_12.assert(predicate::path::exists());
     bin_python_major.assert(predicate::path::exists());
     bin_python_default.assert(predicate::path::exists());
@@ -622,14 +630,6 @@ fn python_install_default() {
         }, {
             insta::assert_snapshot!(
                 read_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.7-[PLATFORM]/bin/python3.12"
-            );
-        });
-
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.0-[PLATFORM]/bin/python3.13"
             );
         });
 
@@ -661,14 +661,6 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link_path(&bin_python_minor_13), @"[TEMP_DIR]/managed/cpython-3.13.0-[PLATFORM]/python"
-            );
-        });
-
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            insta::assert_snapshot!(
                 read_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.7-[PLATFORM]/python"
             );
         });
@@ -690,7 +682,7 @@ fn python_install_default() {
 
     ----- stderr -----
     Installed Python 3.13.0 in [TIME]
-     + cpython-3.13.0-[PLATFORM] (python, python3)
+     + cpython-3.13.0-[PLATFORM] (python, python3, python3.13)
     "###);
 
     // All the executables should exist

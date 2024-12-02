@@ -138,8 +138,12 @@ pub(crate) async fn install(
     let start = std::time::Instant::now();
 
     if default && !preview.is_enabled() {
-        writeln!(printer.stderr(), "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default.")?;
+        writeln!(printer.stderr(), "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default")?;
         return Ok(ExitStatus::Failure);
+    }
+
+    if default && targets.len() > 1 {
+        anyhow::bail!("The `--default` flag cannot be used with multiple targets");
     }
 
     // Resolve the requests
