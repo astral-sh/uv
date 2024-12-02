@@ -1272,7 +1272,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, None, None)
+                        PubGrubDependency::from_requirement(
+                            &self.conflicts,
+                            requirement,
+                            None,
+                            None,
+                        )
                     })
                     .collect()
             }
@@ -1460,7 +1465,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let mut dependencies: Vec<_> = requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, dev.as_ref(), Some(name))
+                        PubGrubDependency::from_requirement(
+                            &self.conflicts,
+                            requirement,
+                            dev.as_ref(),
+                            Some(name),
+                        )
                     })
                     .collect();
 

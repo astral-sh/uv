@@ -7,8 +7,8 @@ use tracing::warn;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{
-    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
-    RequirementSource, VerbatimParsedUrl,
+    Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
+    Requirement, RequirementSource, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -26,6 +26,7 @@ pub(crate) struct PubGrubDependency {
 
 impl PubGrubDependency {
     pub(crate) fn from_requirement<'a>(
+        conflicts: &Conflicts,
         requirement: &'a Requirement,
         dev: Option<&'a GroupName>,
         source_name: Option<&'a PackageName>,
@@ -33,7 +34,32 @@ impl PubGrubDependency {
         let iter = if requirement.extras.is_empty() {
             Either::Left(iter::once(None))
         } else {
-            Either::Right(requirement.extras.clone().into_iter().map(Some))
+            // This is crazy subtle, but if any of the extras in the
+            // requirement are part of a declared conflict, then we
+            // specifically need (at time of writing) to include the
+            // base package as a dependency. This results in both
+            // the base package and the extra package being sibling
+            // dependencies at the point in which forks are created
+            // base on conflicting extras. If the base package isn't
+            // present at that point, then it's impossible for the
+            // fork that excludes all conflicting extras to reach
+            // the non-extra dependency, which may be necessary for
+            // correctness.
+            //
+            // But why do we not include the base package in the first
+            // place? Well, that's part of an optimization[1].
+            //
+            // [1]: https://github.com/astral-sh/uv/pull/9540
+            let base = if requirement
+                .extras
+                .iter()
+                .any(|extra| conflicts.contains(&requirement.name, extra))
+            {
+                Either::Left(iter::once(None))
+            } else {
+                Either::Right(iter::empty())
+            };
+            Either::Right(base.chain(requirement.extras.clone().into_iter().map(Some)))
         };
 
         // Add the package, plus any extra variants.
