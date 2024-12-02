@@ -2178,6 +2178,14 @@ pub struct BuildArgs {
     #[arg(long, overrides_with("build_logs"), hide = true)]
     pub no_build_logs: bool,
 
+    /// Always build through PEP 517, don't use the fast path for the uv build backend.
+    ///
+    /// By default, uv won't create a PEP 517 build environment for packages using the uv build
+    /// backend, but use a fast path that calls into the build backend directly. This option forces
+    /// always using PEP 517.
+    #[arg(long)]
+    pub no_fast_path: bool,
+
     /// Constrain build dependencies using the given requirements files when building
     /// distributions.
     ///

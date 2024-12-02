@@ -7,11 +7,13 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use owo_colors::OwoColorize;
+use tracing::{debug, trace};
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
 use uv_install_wheel::linker::LinkMode;
 
 use uv_auth::store_credentials;
+use uv_build_backend::PyProjectToml;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -50,6 +52,7 @@ pub(crate) async fn build_frontend(
     sdist: bool,
     wheel: bool,
     build_logs: bool,
+    no_fast_path: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
@@ -74,6 +77,7 @@ pub(crate) async fn build_frontend(
         sdist,
         wheel,
         build_logs,
+        no_fast_path,
         &build_constraints,
         hash_checking,
         python.as_deref(),
@@ -116,6 +120,7 @@ async fn build_impl(
     sdist: bool,
     wheel: bool,
     build_logs: bool,
+    no_fast_path: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
@@ -266,6 +271,7 @@ async fn build_impl(
             &client_builder,
             hash_checking,
             build_logs,
+            no_fast_path,
             build_constraints,
             no_build_isolation,
             no_build_isolation_package,
@@ -362,6 +368,7 @@ async fn build_package(
     client_builder: &BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
+    no_fast_path: bool,
     build_constraints: &[RequirementsSource],
     no_build_isolation: bool,
     no_build_isolation_package: &[PackageName],
@@ -524,48 +531,14 @@ async fn build_package(
         concurrency,
     );
 
-    // Create the output directory.
-    fs_err::tokio::create_dir_all(&output_dir).await?;
-
-    // Add a .gitignore.
-    match fs_err::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output_dir.join(".gitignore"))
-    {
-        Ok(mut file) => file.write_all(b"*")?,
-        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-        Err(err) => return Err(err.into()),
-    }
+    prepare_output_directory(&output_dir).await?;
 
     // Determine the build plan.
-    let plan = match &source.source {
-        Source::File(_) => {
-            // We're building from a file, which must be a source distribution.
-            match (sdist, wheel) {
-                (false, true) => BuildPlan::WheelFromSdist,
-                (false, false) => {
-                    return Err(anyhow::anyhow!(
-                        "Pass `--wheel` explicitly to build a wheel from a source distribution"
-                    ));
-                }
-                (true, _) => {
-                    return Err(anyhow::anyhow!(
-                        "Building an `--sdist` from a source distribution is not supported"
-                    ));
-                }
-            }
-        }
-        Source::Directory(_) => {
-            // We're building from a directory.
-            match (sdist, wheel) {
-                (false, false) => BuildPlan::SdistToWheel,
-                (false, true) => BuildPlan::Wheel,
-                (true, false) => BuildPlan::Sdist,
-                (true, true) => BuildPlan::SdistAndWheel,
-            }
-        }
-    };
+    let plan = BuildPlan::determine(&source, sdist, wheel)?;
+
+    // Check if the build backend is matching uv version that allows calling in the uv build backend
+    // directly.
+    let fast_path = !no_fast_path && check_fast_path(source.path());
 
     // Prepare some common arguments for the build.
     let dist = None;
@@ -585,26 +558,21 @@ async fn build_package(
 
     let assets = match plan {
         BuildPlan::SdistToWheel => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                source.annotate("Building source distribution...").bold()
-            )?;
-
-            // Build the sdist.
-            let builder = build_dispatch
-                .setup_build(
-                    source.path(),
-                    subdirectory,
-                    source.path(),
-                    version_id.map(ToString::to_string),
-                    dist,
-                    sources,
-                    BuildKind::Sdist,
-                    build_output,
-                )
-                .await?;
-            let sdist = builder.build(&output_dir).await?;
+            let sdist = build_sdist(
+                source.path(),
+                &output_dir,
+                fast_path,
+                &source,
+                printer,
+                "Building source distribution",
+                &build_dispatch,
+                sources,
+                dist,
+                subdirectory,
+                version_id,
+                build_output,
+            )
+            .await?;
 
             // Extract the source distribution into a temporary directory.
             let path = output_dir.join(&sdist);
@@ -622,131 +590,105 @@ async fn build_package(
                 Err(err) => return Err(err.into()),
             };
 
-            writeln!(
-                printer.stderr(),
-                "{}",
-                source
-                    .annotate("Building wheel from source distribution...")
-                    .bold()
-            )?;
-
-            // Build a wheel from the source distribution.
-            let builder = build_dispatch
-                .setup_build(
-                    &extracted,
-                    subdirectory,
-                    source.path(),
-                    version_id.map(ToString::to_string),
-                    dist,
-                    sources,
-                    BuildKind::Wheel,
-                    build_output,
-                )
-                .await?;
-            let wheel = builder.build(&output_dir).await?;
+            let wheel = build_wheel(
+                &extracted,
+                &output_dir,
+                fast_path,
+                &source,
+                printer,
+                "Building wheel from source distribution",
+                &build_dispatch,
+                sources,
+                dist,
+                subdirectory,
+                version_id,
+                build_output,
+            )
+            .await?;
 
             BuiltDistributions::Both(output_dir.join(sdist), output_dir.join(wheel))
         }
         BuildPlan::Sdist => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                source.annotate("Building source distribution...").bold()
-            )?;
-
-            let builder = build_dispatch
-                .setup_build(
-                    source.path(),
-                    subdirectory,
-                    source.path(),
-                    version_id.map(ToString::to_string),
-                    dist,
-                    sources,
-                    BuildKind::Sdist,
-                    build_output,
-                )
-                .await?;
-            let sdist = builder.build(&output_dir).await?;
+            let sdist = build_sdist(
+                source.path(),
+                &output_dir,
+                fast_path,
+                &source,
+                printer,
+                "Building source distribution",
+                &build_dispatch,
+                sources,
+                dist,
+                subdirectory,
+                version_id,
+                build_output,
+            )
+            .await?;
 
             BuiltDistributions::Sdist(output_dir.join(sdist))
         }
         BuildPlan::Wheel => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                source.annotate("Building wheel...").bold()
-            )?;
-
-            let builder = build_dispatch
-                .setup_build(
-                    source.path(),
-                    subdirectory,
-                    source.path(),
-                    version_id.map(ToString::to_string),
-                    dist,
-                    sources,
-                    BuildKind::Wheel,
-                    build_output,
-                )
-                .await?;
-            let wheel = builder.build(&output_dir).await?;
+            let wheel = build_wheel(
+                source.path(),
+                &output_dir,
+                fast_path,
+                &source,
+                printer,
+                "Building wheel",
+                &build_dispatch,
+                sources,
+                dist,
+                subdirectory,
+                version_id,
+                build_output,
+            )
+            .await?;
 
             BuiltDistributions::Wheel(output_dir.join(wheel))
         }
         BuildPlan::SdistAndWheel => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                source.annotate("Building source distribution...").bold()
-            )?;
-            let builder = build_dispatch
-                .setup_build(
-                    source.path(),
-                    subdirectory,
-                    source.path(),
-                    version_id.map(ToString::to_string),
-                    dist,
-                    sources,
-                    BuildKind::Sdist,
-                    build_output,
-                )
-                .await?;
-            let sdist = builder.build(&output_dir).await?;
+            let sdist = build_sdist(
+                source.path(),
+                &output_dir,
+                fast_path,
+                &source,
+                printer,
+                "Building source distribution",
+                &build_dispatch,
+                sources,
+                dist,
+                subdirectory,
+                version_id,
+                build_output,
+            )
+            .await?;
 
-            writeln!(
-                printer.stderr(),
-                "{}",
-                source.annotate("Building wheel...").bold()
-            )?;
-            let builder = build_dispatch
-                .setup_build(
-                    source.path(),
-                    subdirectory,
-                    source.path(),
-                    version_id.map(ToString::to_string),
-                    dist,
-                    sources,
-                    BuildKind::Wheel,
-                    build_output,
-                )
-                .await?;
-            let wheel = builder.build(&output_dir).await?;
+            let wheel = build_wheel(
+                source.path(),
+                &output_dir,
+                fast_path,
+                &source,
+                printer,
+                "Building wheel",
+                &build_dispatch,
+                sources,
+                dist,
+                subdirectory,
+                version_id,
+                build_output,
+            )
+            .await?;
 
             BuiltDistributions::Both(output_dir.join(&sdist), output_dir.join(&wheel))
         }
         BuildPlan::WheelFromSdist => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                source
-                    .annotate("Building wheel from source distribution...")
-                    .bold()
-            )?;
-
             // Extract the source distribution into a temporary directory.
             let reader = fs_err::tokio::File::open(source.path()).await?;
             let ext = SourceDistExtension::from_path(source.path()).map_err(|err| {
-                anyhow::anyhow!("`{}` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: {err}.", source.path().user_display())
+                anyhow::anyhow!(
+                    "`{}` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: {err}.",
+                    source.path().user_display()
+                )
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
@@ -758,26 +700,159 @@ async fn build_package(
                 Err(err) => return Err(err.into()),
             };
 
-            // Build a wheel from the source distribution.
-            let builder = build_dispatch
-                .setup_build(
-                    &extracted,
-                    subdirectory,
-                    source.path(),
-                    version_id.map(ToString::to_string),
-                    dist,
-                    sources,
-                    BuildKind::Wheel,
-                    build_output,
-                )
-                .await?;
-            let wheel = builder.build(&output_dir).await?;
+            let wheel = build_wheel(
+                &extracted,
+                &output_dir,
+                fast_path,
+                &source,
+                printer,
+                "Building wheel from source distribution",
+                &build_dispatch,
+                sources,
+                dist,
+                subdirectory,
+                version_id,
+                build_output,
+            )
+            .await?;
 
             BuiltDistributions::Wheel(output_dir.join(wheel))
         }
     };
 
     Ok(assets)
+}
+
+/// Build a source distribution, either through PEP 517 or through the fast path.
+async fn build_sdist(
+    source_tree: &Path,
+    output_dir: &Path,
+    fast_path: bool,
+    source: &AnnotatedSource<'_>,
+    printer: Printer,
+    message: &str,
+    // Below is only used with PEP 517 builds
+    build_dispatch: &BuildDispatch<'_>,
+    sources: SourceStrategy,
+    dist: Option<&SourceDist>,
+    subdirectory: Option<&Path>,
+    version_id: Option<&str>,
+    build_output: BuildOutput,
+) -> Result<String> {
+    let sdist = if fast_path {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "{}{} (uv build backend)...",
+                source.message_prefix(),
+                message
+            )
+            .bold()
+        )?;
+        let source_tree = source_tree.to_path_buf();
+        let output_dir = output_dir.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            uv_build_backend::build_source_dist(&source_tree, &output_dir, uv_version::version())
+        })
+        .await??
+        .to_string()
+    } else {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!("{}{}...", source.message_prefix(), message).bold()
+        )?;
+        let builder = build_dispatch
+            .setup_build(
+                source_tree,
+                subdirectory,
+                source.path(),
+                version_id.map(ToString::to_string),
+                dist,
+                sources,
+                BuildKind::Sdist,
+                build_output,
+            )
+            .await?;
+        builder.build(output_dir).await?
+    };
+    Ok(sdist)
+}
+
+/// Build a wheel, either through PEP 517 or through the fast path.
+async fn build_wheel(
+    source_tree: &Path,
+    output_dir: &Path,
+    fast_path: bool,
+    source: &AnnotatedSource<'_>,
+    printer: Printer,
+    message: &str,
+    // Below is only used with PEP 517 builds
+    build_dispatch: &BuildDispatch<'_>,
+    sources: SourceStrategy,
+    dist: Option<&SourceDist>,
+    subdirectory: Option<&Path>,
+    version_id: Option<&str>,
+    build_output: BuildOutput,
+) -> Result<String> {
+    let wheel = if fast_path {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "{}{} (uv build backend)...",
+                source.message_prefix(),
+                message
+            )
+            .bold()
+        )?;
+        let source_tree = source_tree.to_path_buf();
+        let output_dir = output_dir.to_path_buf();
+        tokio::task::spawn_blocking(move || {
+            uv_build_backend::build_wheel(&source_tree, &output_dir, None, uv_version::version())
+        })
+        .await??
+        .to_string()
+    } else {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!("{}{}...", source.message_prefix(), message).bold()
+        )?;
+        let builder = build_dispatch
+            .setup_build(
+                source_tree,
+                subdirectory,
+                source.path(),
+                version_id.map(ToString::to_string),
+                dist,
+                sources,
+                BuildKind::Wheel,
+                build_output,
+            )
+            .await?;
+        builder.build(output_dir).await?
+    };
+    Ok(wheel)
+}
+
+/// Create the output directory and add a `.gitignore`.
+async fn prepare_output_directory(output_dir: &Path) -> Result<()> {
+    // Create the output directory.
+    fs_err::tokio::create_dir_all(&output_dir).await?;
+
+    // Add a .gitignore.
+    match fs_err::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output_dir.join(".gitignore"))
+    {
+        Ok(mut file) => file.write_all(b"*")?,
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+        Err(err) => return Err(err.into()),
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -797,11 +872,11 @@ impl AnnotatedSource<'_> {
         self.source.directory()
     }
 
-    fn annotate<'a>(&self, s: &'a str) -> Cow<'a, str> {
+    fn message_prefix(&self) -> Cow<'_, str> {
         if let Some(package) = &self.package {
-            Cow::Owned(format!("[{}] {s}", package.cyan()))
+            Cow::Owned(format!("[{}] ", package.cyan()))
         } else {
-            Cow::Borrowed(s)
+            Cow::Borrowed("")
         }
     }
 }
@@ -875,4 +950,66 @@ enum BuildPlan {
 
     /// Build a wheel from a source distribution.
     WheelFromSdist,
+}
+
+impl BuildPlan {
+    fn determine(source: &AnnotatedSource, sdist: bool, wheel: bool) -> Result<Self> {
+        Ok(match &source.source {
+            Source::File(_) => {
+                // We're building from a file, which must be a source distribution.
+                match (sdist, wheel) {
+                    (false, true) => Self::WheelFromSdist,
+                    (false, false) => {
+                        return Err(anyhow::anyhow!(
+                            "Pass `--wheel` explicitly to build a wheel from a source distribution"
+                        ));
+                    }
+                    (true, _) => {
+                        return Err(anyhow::anyhow!(
+                            "Building an `--sdist` from a source distribution is not supported"
+                        ));
+                    }
+                }
+            }
+            Source::Directory(_) => {
+                // We're building from a directory.
+                match (sdist, wheel) {
+                    (false, false) => Self::SdistToWheel,
+                    (false, true) => Self::Wheel,
+                    (true, false) => Self::Sdist,
+                    (true, true) => Self::SdistAndWheel,
+                }
+            }
+        })
+    }
+}
+
+/// Check if the build backend is matching the currently running uv version.
+fn check_fast_path(source_tree: &Path) -> bool {
+    let pyproject_toml: PyProjectToml =
+        match fs_err::read_to_string(source_tree.join("pyproject.toml"))
+            .map_err(anyhow::Error::from)
+            .and_then(|pyproject_toml| Ok(toml::from_str(&pyproject_toml)?))
+        {
+            Ok(pyproject_toml) => pyproject_toml,
+            Err(err) => {
+                debug!("Not using uv build backend fast path, no pyproject.toml: {err}");
+                return false;
+            }
+        };
+    match pyproject_toml
+        .check_build_system(uv_version::version())
+        .as_slice()
+    {
+        // No warnings -> match
+        [] => true,
+        // Any warning -> no match
+        [first, others @ ..] => {
+            debug!("Not using uv build backend fast path, pyproject.toml does not match: {first}");
+            for other in others {
+                trace!("Further uv build backend fast path mismatch: {other}");
+            }
+            false
+        }
+    }
 }
