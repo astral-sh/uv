@@ -1974,7 +1974,7 @@ fn tool_install_requirements_txt_arguments() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed 2 executables: black, blackd
+    `black` is already installed
     "###);
 
     let requirements_txt = context.temp_dir.child("requirements.txt");

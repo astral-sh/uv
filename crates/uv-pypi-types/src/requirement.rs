@@ -36,9 +36,7 @@ pub enum RequirementError {
 ///
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
 /// [`VersionOrUrl`], which collapses all URL sources into a single stringly type.
-#[derive(
-    Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
 pub struct Requirement {
     pub name: PackageName,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -96,6 +94,47 @@ impl Requirement {
         }
     }
 }
+
+impl std::hash::Hash for Requirement {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            name,
+            extras,
+            marker,
+            source,
+            origin: _,
+        } = self;
+        name.hash(state);
+        extras.hash(state);
+        marker.hash(state);
+        source.hash(state);
+    }
+}
+
+impl PartialEq for Requirement {
+    fn eq(&self, other: &Self) -> bool {
+        let Self {
+            name,
+            extras,
+            marker,
+            source,
+            origin: _,
+        } = self;
+        let Self {
+            name: other_name,
+            extras: other_extras,
+            marker: other_marker,
+            source: other_source,
+            origin: _,
+        } = other;
+        name == other_name
+            && extras == other_extras
+            && marker == other_marker
+            && source == other_source
+    }
+}
+
+impl Eq for Requirement {}
 
 impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
     /// Convert a [`Requirement`] to a [`uv_pep508::Requirement`].
