@@ -168,6 +168,17 @@ export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
 uv publish
 ```
 
+## GitLab
+
+If you want to add a dependency from a private GitLab package index, you need to force uv to pass credentials by adding the token name directly to the index's URL:
+
+```toml
+[[tool.uv.index]]
+url = "https://GITLAB_TOKEN@$gitlab.com/api/v4/{PROJECT-OR-GROUP}/-/packages/pypi/simple"
+```
+
+Since the token name is hardcoded in the pyproject.toml file, all users must set up a personal access token with the same name (GITLAB_TOKEN in the example) before installing dependencies.
+
 ## Other indexes
 
 uv is also known to work with JFrog's Artifactory.
