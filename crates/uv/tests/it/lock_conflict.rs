@@ -1,16 +1,8 @@
 use anyhow::Result;
-use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-use std::io::BufReader;
-use url::Url;
 
-use crate::common::{
-    self, build_vendor_links_url, decode_token, download_to_disk, packse_index_url, uv_snapshot,
-    venv_bin_path, TestContext,
-};
-use uv_fs::Simplified;
+use crate::common::{uv_snapshot, TestContext};
 use uv_static::EnvVars;
 
 // All of the tests in this file should use `tool.uv.conflicts` in some way.
@@ -777,7 +769,7 @@ fn extra_multiple_independent() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+      ╰─▶ Because project[extra1] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
@@ -1330,7 +1322,7 @@ fn extra_nested_across_workspace() -> Result<()> {
       ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
 
           Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
-          And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
+          And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that proxy1[extra1]==0.1.0 and dummy[extra2] are incompatible.
           And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
           And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
     "###);
@@ -1845,8 +1837,8 @@ fn mixed() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project[extra1] depends on sortedcontainers==2.4.0, we can conclude that project[extra1] and project:group1 are incompatible.
-          And because your project depends on project:group1 and your project requires project[extra1], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and your project depends on project:group1, we can conclude that your project depends on sortedcontainers==2.3.0.
+          And because project[extra1] depends on sortedcontainers==2.4.0 and your project requires project[extra1], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra/group configuration, we tell uv
