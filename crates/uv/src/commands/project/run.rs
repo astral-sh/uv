@@ -1017,6 +1017,15 @@ pub(crate) async fn run(
             .map(PythonEnvironment::scripts)
             .into_iter()
             .chain(std::iter::once(base_interpreter.scripts()))
+            .chain(
+                // On Windows, non-virtual Python distributions put `python.exe` in the top-level
+                // directory, rather than in the `Scripts` subdirectory.
+                cfg!(windows)
+                    .then(|| base_interpreter.sys_executable().parent())
+                    .flatten()
+                    .into_iter(),
+            )
+            .dedup()
             .map(PathBuf::from)
             .chain(
                 std::env::var_os(EnvVars::PATH)
