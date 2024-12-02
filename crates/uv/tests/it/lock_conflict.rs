@@ -769,7 +769,7 @@ fn extra_multiple_independent() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[extra1] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
           And because your project requires project[extra1] and project[extra2], we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
@@ -1321,8 +1321,8 @@ fn extra_nested_across_workspace() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because dummy[extra2] depends on proxy1[extra2] and only proxy1[extra2]==0.1.0 is available, we can conclude that dummy[extra2] depends on proxy1[extra2]==0.1.0. (1)
 
-          Because proxy1[extra1]==0.1.0 depends on anyio==4.1.0 and proxy1[extra2]==0.1.0 depends on anyio==4.2.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
-          And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that proxy1[extra1]==0.1.0 and dummy[extra2] are incompatible.
+          Because proxy1[extra2]==0.1.0 depends on anyio==4.2.0 and proxy1[extra1]==0.1.0 depends on anyio==4.1.0, we can conclude that proxy1[extra1]==0.1.0 and proxy1[extra2]==0.1.0 are incompatible.
+          And because we know from (1) that dummy[extra2] depends on proxy1[extra2]==0.1.0, we can conclude that dummy[extra2] and proxy1[extra1]==0.1.0 are incompatible.
           And because only proxy1[extra1]==0.1.0 is available and dummysub[extra1] depends on proxy1[extra1], we can conclude that dummysub[extra1] and dummy[extra2] are incompatible.
           And because your workspace requires dummy[extra2] and dummysub[extra1], we can conclude that your workspace's requirements are unsatisfiable.
     "###);
@@ -2643,6 +2643,101 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Tests that forks excluding both conflicting extras are handled correctly.
+///
+/// This previously failed where running `uv sync` wouldn't install anything,
+/// despite `sniffio` being an unconditional dependency.
+#[test]
+fn non_optional_dependency_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+          "sniffio>=1",
+        ]
+
+        [project.optional-dependencies]
+        x1 = ["idna==3.5"]
+        x2 = ["idna==3.6"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            {package = "project", extra = "x1"},
+            {package = "project", extra = "x2"},
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
+/// Like `non_optional_dependency_extra`, but for groups.
+///
+/// This test never regressed, but we added it here to ensure it doesn't.
+#[test]
+fn non_optional_dependency_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+          "sniffio>=1",
+        ]
+
+        [dependency-groups]
+        g1 = ["idna==3.5"]
+        g2 = ["idna==3.6"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            {package = "project", group = "g1"},
+            {package = "project", group = "g2"},
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
     "###);
 
     Ok(())
