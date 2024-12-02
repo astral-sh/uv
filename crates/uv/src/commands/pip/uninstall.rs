@@ -23,6 +23,7 @@ use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Uninstall packages from the current environment.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
     python: Option<String>,

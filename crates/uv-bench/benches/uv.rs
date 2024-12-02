@@ -89,10 +89,9 @@ mod resolver {
         BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, LowerBound,
         SourceStrategy,
     };
-    use uv_dispatch::BuildDispatch;
+    use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
-    use uv_distribution_types::{DependencyMetadata, IndexCapabilities, IndexLocations};
-    use uv_git::GitResolver;
+    use uv_distribution_types::{DependencyMetadata, IndexLocations};
     use uv_install_wheel::linker::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
@@ -103,7 +102,7 @@ mod resolver {
         FlatIndex, InMemoryIndex, Manifest, OptionsBuilder, PythonRequirement, RequiresPython,
         Resolver, ResolverEnvironment, ResolverOutput,
     };
-    use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+    use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 
     static MARKERS: LazyLock<MarkerEnvironment> = LazyLock::new(|| {
         MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -152,11 +151,9 @@ mod resolver {
                 .into(),
         );
         let build_constraints = Constraints::default();
-        let capabilities = IndexCapabilities::default();
         let flat_index = FlatIndex::default();
-        let git = GitResolver::default();
         let hashes = HashStrategy::default();
-        let in_flight = InFlight::default();
+        let state = SharedState::default();
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
@@ -182,10 +179,7 @@ mod resolver {
             &index_locations,
             &flat_index,
             &dependency_metadata,
-            &index,
-            &git,
-            &capabilities,
-            &in_flight,
+            state,
             IndexStrategy::default(),
             &config_settings,
             build_isolation,

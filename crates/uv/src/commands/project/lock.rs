@@ -14,7 +14,7 @@ use uv_configuration::{
     Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, SourceStrategy,
     TrustedHost, Upgrade,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
@@ -39,9 +39,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::{
-    find_requires_python, ProjectError, ProjectInterpreter, SharedState,
-};
+use crate::commands::project::{find_requires_python, ProjectError, ProjectInterpreter};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
@@ -494,10 +492,7 @@ async fn do_lock(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -529,7 +524,7 @@ async fn do_lock(
             upgrade,
             &options,
             &hasher,
-            &state.index,
+            state.index(),
             &database,
             printer,
         )
@@ -579,7 +574,7 @@ async fn do_lock(
             // Populate the Git resolver.
             for ResolvedRepositoryReference { reference, sha } in git {
                 debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-                state.git.insert(reference, sha);
+                state.git().insert(reference, sha);
             }
 
             // Determine whether we can reuse the existing package forks.
@@ -619,7 +614,7 @@ async fn do_lock(
 
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
-                ExtrasResolver::new(&hasher, &state.index, database)
+                ExtrasResolver::new(&hasher, state.index(), database)
                     .with_reporter(ResolverReporter::from(printer))
                     .resolve(workspace.members_requirements())
                     .await
@@ -655,7 +650,7 @@ async fn do_lock(
                 workspace.conflicts(),
                 &client,
                 &flat_index,
-                &state.index,
+                state.index(),
                 &build_dispatch,
                 concurrency,
                 options,

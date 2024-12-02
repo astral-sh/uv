@@ -10,6 +10,7 @@ use uv_client::{Connectivity, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, LowerBound, TargetTriple, TrustedHost,
 };
+use uv_dispatch::SharedState;
 use uv_distribution_types::IndexCapabilities;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
@@ -25,7 +26,7 @@ use crate::commands::project::{
     default_dependency_groups, DependencyGroupsTarget, ProjectError, ProjectInterpreter,
 };
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::{diagnostics, ExitStatus, SharedState};
+use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 

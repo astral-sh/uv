@@ -15,7 +15,7 @@ use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
     LowerBound, NoBinary, NoBuild, SourceStrategy, TrustedHost,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
@@ -34,7 +34,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{report_interpreter, Changelog};
 use crate::commands::project::{validate_requires_python, WorkspacePython};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, SharedState};
+use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Create a virtual environment.
@@ -322,10 +322,7 @@ async fn venv_impl(
             index_locations,
             &flat_index,
             &dependency_metadata,
-            &state.index,
-            &state.git,
-            &state.capabilities,
-            &state.in_flight,
+            state.clone(),
             index_strategy,
             &config_settings,
             BuildIsolation::Isolated,

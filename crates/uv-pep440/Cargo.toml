@@ -29,7 +29,7 @@ unscanny = { workspace = true }
 version-ranges = { workspace = true, optional = true }
 
 [dev-dependencies]
-indoc = { version = "2.0.5" }
+indoc = { workspace = true }
 tracing = { workspace = true }
 
 [features]
