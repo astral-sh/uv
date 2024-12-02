@@ -568,6 +568,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 args.settings.keyring_provider,
                 &globals.allow_insecure_host,
+                args.dry_run,
                 printer,
             )
             .await
