@@ -34,6 +34,9 @@ mod init;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod lock;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod lock_conflict;
+
 mod lock_scenarios;
 
 mod pip_check;
