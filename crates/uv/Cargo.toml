@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 uv-auth = { workspace = true }
 uv-build-backend = { workspace = true }
+uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }

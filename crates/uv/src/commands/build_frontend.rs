@@ -1,13 +1,20 @@
 use std::borrow::Cow;
 use std::fmt::Write as _;
-use std::io;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::{fmt, io};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+use thiserror::Error;
 use tracing::{debug, instrument, trace};
 
+use crate::commands::pip::operations;
+use crate::commands::project::find_requires_python;
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::ExitStatus;
+use crate::printer::Printer;
+use crate::settings::{ResolverSettings, ResolverSettingsRef};
 use uv_auth::store_credentials;
 use uv_build_backend::PyProjectToml;
 use uv_cache::{Cache, CacheBucket};
@@ -34,12 +41,42 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
-use crate::commands::pip::operations;
-use crate::commands::project::find_requires_python;
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
-use crate::settings::{ResolverSettings, ResolverSettingsRef};
+#[derive(Debug, Error)]
+enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error(transparent)]
+    FindOrDownloadPython(#[from] uv_python::Error),
+    #[error(transparent)]
+    HashStrategy(#[from] uv_types::HashStrategyError),
+    #[error(transparent)]
+    FlatIndex(#[from] uv_client::FlatIndexError),
+    #[error(transparent)]
+    BuildPlan(anyhow::Error),
+    #[error(transparent)]
+    Extract(#[from] uv_extract::Error),
+    #[error(transparent)]
+    Operations(#[from] operations::Error),
+    #[error(transparent)]
+    Join(#[from] tokio::task::JoinError),
+    #[error(transparent)]
+    BuildBackend(#[from] uv_build_backend::Error),
+    #[error(transparent)]
+    BuildDispatch(anyhow::Error),
+    #[error(transparent)]
+    BuildFrontend(#[from] uv_build_frontend::Error),
+    #[error("Failed to write message")]
+    Fmt(#[from] fmt::Error),
+    #[error("Can't use `--force-pep517` with `--list`")]
+    ListForcePep517,
+    #[error("Can only use `--list` with the uv backend")]
+    ListNonUv,
+    #[error(
+        "`{0}` is not a valid build source. Expected to receive a source directory, or a source \
+         distribution ending in one of: {1}."
+    )]
+    InvalidSourceDistExt(String, uv_distribution_filename::ExtensionError),
+}
 
 /// Build source distributions and wheels.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -334,7 +371,7 @@ async fn build_impl(
 
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
-                    cause: err,
+                    cause: err.into(),
                 });
                 anstream::eprint!("{report:?}");
 
@@ -386,7 +423,7 @@ async fn build_package(
     link_mode: LinkMode,
     config_setting: &ConfigSettings,
     preview: PreviewMode,
-) -> Result<Vec<BuildMessage>> {
+) -> Result<Vec<BuildMessage>, Error> {
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
     } else {
@@ -534,18 +571,18 @@ async fn build_package(
     prepare_output_directory(&output_dir).await?;
 
     // Determine the build plan.
-    let plan = BuildPlan::determine(&source, sdist, wheel)?;
+    let plan = BuildPlan::determine(&source, sdist, wheel).map_err(Error::BuildPlan)?;
 
     // Check if the build backend is matching uv version that allows calling in the uv build backend
     // directly.
     let build_action = if list {
         if force_pep517 {
-            bail!("Can't use `--force-pep517` with `--list`");
+            return Err(Error::ListForcePep517);
         }
 
         if !check_fast_path(source.path()) {
             // TODO(konsti): Provide more context on what mismatched
-            bail!("Can only use `--list` with the uv backend");
+            return Err(Error::ListNonUv);
         }
 
         BuildAction::List
@@ -614,9 +651,8 @@ async fn build_package(
             // Extract the source distribution into a temporary directory.
             let path = output_dir.join(sdist_build.filename());
             let reader = fs_err::tokio::File::open(&path).await?;
-            let ext = SourceDistExtension::from_path(path.as_path()).map_err(|err| {
-                anyhow::anyhow!("`{}` is not a valid source distribution, as it ends with an unsupported extension. Expected one of: {err}.", path.user_display())
-            })?;
+            let ext = SourceDistExtension::from_path(path.as_path())
+                .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
 
@@ -719,10 +755,7 @@ async fn build_package(
             // Extract the source distribution into a temporary directory.
             let reader = fs_err::tokio::File::open(source.path()).await?;
             let ext = SourceDistExtension::from_path(source.path()).map_err(|err| {
-                anyhow::anyhow!(
-                    "`{}` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: {err}.",
-                    source.path().user_display()
-                )
+                Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
@@ -794,7 +827,7 @@ async fn build_sdist(
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
     build_output: BuildOutput,
-) -> Result<BuildMessage> {
+) -> Result<BuildMessage, Error> {
     let build_result = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
@@ -859,7 +892,8 @@ async fn build_sdist(
                     BuildKind::Sdist,
                     build_output,
                 )
-                .await?;
+                .await
+                .map_err(Error::BuildDispatch)?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 filename,
@@ -886,7 +920,7 @@ async fn build_wheel(
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
     build_output: BuildOutput,
-) -> Result<BuildMessage> {
+) -> Result<BuildMessage, Error> {
     let build_message = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
@@ -951,7 +985,8 @@ async fn build_wheel(
                     BuildKind::Wheel,
                     build_output,
                 )
-                .await?;
+                .await
+                .map_err(Error::BuildDispatch)?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 filename,
@@ -963,7 +998,7 @@ async fn build_wheel(
 }
 
 /// Create the output directory and add a `.gitignore`.
-async fn prepare_output_directory(output_dir: &Path) -> Result<()> {
+async fn prepare_output_directory(output_dir: &Path) -> Result<(), Error> {
     // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
