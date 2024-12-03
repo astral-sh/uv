@@ -50,7 +50,14 @@ impl FilesystemOptions {
                 Ok(Some(Self(options)))
             }
             Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::NotADirectory => Ok(None),
+            Err(_) if !dir.is_dir() => {
+                // Ex) `XDG_CONFIG_HOME=/dev/null`
+                tracing::debug!(
+                    "User configuration directory `{}` does not exist or is not a directory",
+                    dir.display()
+                );
+                Ok(None)
+            }
             Err(err) => Err(err),
         }
     }

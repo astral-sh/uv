@@ -910,7 +910,7 @@ enum Source<'a> {
     Directory(Cow<'a, Path>),
 }
 
-impl Source<'_> {
+impl<'a> Source<'a> {
     fn path(&self) -> &Path {
         match self {
             Self::File(path) => path.as_ref(),
