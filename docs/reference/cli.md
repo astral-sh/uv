@@ -7812,6 +7812,10 @@ uv build [OPTIONS] [SRC]
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
+</dd><dt><code>--force-pep517</code></dt><dd><p>Always build through PEP 517, don&#8217;t use the fast path for the uv build backend.</p>
+
+<p>By default, uv won&#8217;t create a PEP 517 build environment for packages using the uv build backend, but use a fast path that calls into the build backend directly. This option forces always using PEP 517.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -7910,10 +7914,6 @@ uv build [OPTIONS] [SRC]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt><code>--no-fast-path</code></dt><dd><p>Always build through PEP 517, don&#8217;t use the fast path for the uv build backend.</p>
-
-<p>By default, uv won&#8217;t create a PEP 517 build environment for packages using the uv build backend, but use a fast path that calls into the build backend directly. This option forces always using PEP 517.</p>
-
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>

@@ -732,7 +732,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.sdist,
                 args.wheel,
                 args.build_logs,
-                args.no_fast_path,
+                args.force_pep517,
                 build_constraints,
                 args.hash_checking,
                 args.python,
