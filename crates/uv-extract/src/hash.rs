@@ -80,7 +80,7 @@ where
     }
 }
 
-impl<R> tokio::io::AsyncRead for HashReader<'_, R>
+impl<'a, R> tokio::io::AsyncRead for HashReader<'a, R>
 where
     R: tokio::io::AsyncRead + Unpin,
 {

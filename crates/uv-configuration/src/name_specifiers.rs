@@ -31,7 +31,7 @@ impl<'de> serde::Deserialize<'de> for PackageNameSpecifier {
     {
         struct Visitor;
 
-        impl serde::de::Visitor<'_> for Visitor {
+        impl<'de> serde::de::Visitor<'de> for Visitor {
             type Value = PackageNameSpecifier;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

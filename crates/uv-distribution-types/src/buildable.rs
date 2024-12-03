@@ -92,7 +92,7 @@ pub enum SourceUrl<'a> {
     Directory(DirectorySourceUrl<'a>),
 }
 
-impl SourceUrl<'_> {
+impl<'a> SourceUrl<'a> {
     /// Return the [`Url`] of the source.
     pub fn url(&self) -> &Url {
         match self {
