@@ -27,11 +27,6 @@ pub fn build_wheel(
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
-    let settings = pyproject_toml
-        .settings()
-        .cloned()
-        .unwrap_or_else(BuildBackendSettings::default);
-
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
     let filename = WheelFilename {
@@ -45,7 +40,32 @@ pub fn build_wheel(
 
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
-    let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
+    let wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
+
+    write_wheel(
+        source_tree,
+        uv_version,
+        &pyproject_toml,
+        &filename,
+        &wheel_path,
+        wheel_writer,
+    )?;
+
+    Ok(filename)
+}
+
+fn write_wheel(
+    source_tree: &Path,
+    uv_version: &str,
+    pyproject_toml: &PyProjectToml,
+    filename: &WheelFilename,
+    wheel_path: &Path,
+    mut wheel_writer: impl DirectoryWriter,
+) -> Result<(), Error> {
+    let settings = pyproject_toml
+        .settings()
+        .cloned()
+        .unwrap_or_else(BuildBackendSettings::default);
 
     // Wheel excludes
     let mut excludes: Vec<String> = Vec::new();
@@ -168,14 +188,14 @@ pub fn build_wheel(
     debug!("Adding metadata files to: `{}`", wheel_path.user_display());
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
-        &pyproject_toml,
-        &filename,
+        pyproject_toml,
+        filename,
         source_tree,
         uv_version,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
-    Ok(filename)
+    Ok(())
 }
 
 /// Build a wheel from the source tree and place it in the output directory.
@@ -384,7 +404,7 @@ fn wheel_subdir_from_globs(
     src: &Path,
     target: &str,
     globs: &[String],
-    wheel_writer: &mut ZipDirectoryWriter,
+    wheel_writer: &mut impl DirectoryWriter,
     // For error messages
     globs_field: &str,
 ) -> Result<(), Error> {
