@@ -5110,6 +5110,215 @@ fn sync_derivation_chain_group() -> Result<()> {
     Ok(())
 }
 
+/// See: <https://github.com/astral-sh/uv/issues/8887>
+#[test]
+fn sync_git_repeated_member_static_metadata() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["uv-git-workspace-in-root", "workspace-member-in-subdir"]
+
+        [tool.uv.sources]
+        uv-git-workspace-in-root = { git = "https://github.com/astral-sh/workspace-in-root-test.git" }
+        workspace-member-in-subdir = { git = "https://github.com/astral-sh/workspace-in-root-test.git", subdirectory = "workspace-member-in-subdir" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "foo"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "uv-git-workspace-in-root" },
+                { name = "workspace-member-in-subdir" },
+            ]
+
+            [package.metadata]
+            requires-dist = [
+                { name = "uv-git-workspace-in-root", git = "https://github.com/astral-sh/workspace-in-root-test.git" },
+                { name = "workspace-member-in-subdir", git = "https://github.com/astral-sh/workspace-in-root-test.git?subdirectory=workspace-member-in-subdir" },
+            ]
+
+            [[package]]
+            name = "uv-git-workspace-in-root"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/workspace-in-root-test.git#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+
+            [[package]]
+            name = "workspace-member-in-subdir"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/workspace-in-root-test.git?subdirectory=workspace-member-in-subdir#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+            dependencies = [
+                { name = "uv-git-workspace-in-root" },
+            ]
+            "###
+            );
+        }
+    );
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + uv-git-workspace-in-root==0.1.0 (from git+https://github.com/astral-sh/workspace-in-root-test.git@d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68)
+     + workspace-member-in-subdir==0.1.0 (from git+https://github.com/astral-sh/workspace-in-root-test.git@d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#subdirectory=workspace-member-in-subdir)
+    "###);
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/8887>
+#[test]
+fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["package", "dependency"]
+
+        [tool.uv.sources]
+        package = { git = "https://git@github.com/astral-sh/uv-dynamic-metadata-test.git" }
+        dependency = { git = "https://git@github.com/astral-sh/uv-dynamic-metadata-test.git", subdirectory = "dependency" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Missing version constraint (e.g., a lower bound) for `typing-extensions`
+    Resolved 5 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "dependency"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/uv-dynamic-metadata-test.git?subdirectory=dependency#6c5aa0a65db737c9e7e2e60dc865bd8087012e64" }
+            dependencies = [
+                { name = "iniconfig" },
+            ]
+
+            [[package]]
+            name = "foo"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "dependency" },
+                { name = "package" },
+            ]
+
+            [package.metadata]
+            requires-dist = [
+                { name = "dependency", git = "https://github.com/astral-sh/uv-dynamic-metadata-test.git?subdirectory=dependency" },
+                { name = "package", git = "https://github.com/astral-sh/uv-dynamic-metadata-test.git" },
+            ]
+
+            [[package]]
+            name = "iniconfig"
+            version = "2.0.0"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            ]
+
+            [[package]]
+            name = "package"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/uv-dynamic-metadata-test.git#6c5aa0a65db737c9e7e2e60dc865bd8087012e64" }
+            dependencies = [
+                { name = "dependency" },
+                { name = "typing-extensions" },
+            ]
+
+            [[package]]
+            name = "typing-extensions"
+            version = "4.10.0"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+            ]
+            "###
+            );
+        }
+    );
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + dependency==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-metadata-test.git@6c5aa0a65db737c9e7e2e60dc865bd8087012e64#subdirectory=dependency)
+     + iniconfig==2.0.0
+     + package==0.1.0 (from git+https://github.com/astral-sh/uv-dynamic-metadata-test.git@6c5aa0a65db737c9e7e2e60dc865bd8087012e64)
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
 /// The project itself is marked as an editable dependency, but under the wrong name. The project
 /// is a package.
 #[test]
