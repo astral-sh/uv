@@ -1,5 +1,4 @@
 use crate::Error;
-use globset::Glob;
 use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::{BTreeMap, Bound};
@@ -13,9 +12,11 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
-use uv_warnings::warn_user_once;
 use version_ranges::Ranges;
 use walkdir::WalkDir;
+
+/// By default, we ignore generated python files.
+pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -56,7 +57,7 @@ pub enum ValidationError {
     expecting = "The project table needs to follow \
     https://packaging.python.org/en/latest/guides/writing-pyproject-toml"
 )]
-pub(crate) struct PyProjectToml {
+pub struct PyProjectToml {
     /// Project metadata
     project: Project,
     /// uv-specific configuration
@@ -86,11 +87,11 @@ impl PyProjectToml {
         self.project.license_files.as_deref()
     }
 
-    pub(crate) fn wheel_settings(&self) -> Option<&WheelSettings> {
-        self.tool.as_ref()?.uv.as_ref()?.wheel.as_ref()
+    pub(crate) fn settings(&self) -> Option<&BuildBackendSettings> {
+        self.tool.as_ref()?.uv.as_ref()?.build_backend.as_ref()
     }
 
-    /// Warn if the `[build-system]` table looks suspicious.
+    /// Returns user-facing warnings if the `[build-system]` table looks suspicious.
     ///
     /// Example of a valid table:
     ///
@@ -99,16 +100,13 @@ impl PyProjectToml {
     /// requires = ["uv>=0.4.15,<5"]
     /// build-backend = "uv"
     /// ```
-    ///
-    /// Returns whether all checks passed.
-    pub(crate) fn check_build_system(&self, uv_version: &str) -> bool {
-        let mut passed = true;
+    pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+        let mut warnings = Vec::new();
         if self.build_system.build_backend.as_deref() != Some("uv") {
-            warn_user_once!(
+            warnings.push(format!(
                 r#"The value for `build_system.build-backend` should be `"uv"`, not `"{}"`"#,
                 self.build_system.build_backend.clone().unwrap_or_default()
-            );
-            passed = false;
+            ));
         }
 
         let uv_version =
@@ -124,12 +122,12 @@ impl PyProjectToml {
         };
 
         let [uv_requirement] = &self.build_system.requires.as_slice() else {
-            warn_user_once!("{}", expected());
-            return false;
+            warnings.push(expected());
+            return warnings;
         };
         if uv_requirement.name.as_str() != "uv" {
-            warn_user_once!("{}", expected());
-            return false;
+            warnings.push(expected());
+            return warnings;
         }
         let bounded = match &uv_requirement.version_or_url {
             None => false,
@@ -145,11 +143,10 @@ impl PyProjectToml {
                 // the existing immutable source distributions on pypi.
                 if !specifier.contains(&uv_version) {
                     // This is allowed to happen when testing prereleases, but we should still warn.
-                    warn_user_once!(
+                    warnings.push(format!(
                         r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
                         current uv version {uv_version}"#,
-                    );
-                    passed = false;
+                    ));
                 }
                 Ranges::from(specifier.clone())
                     .bounding_range()
@@ -159,16 +156,15 @@ impl PyProjectToml {
         };
 
         if !bounded {
-            warn_user_once!(
-                r#"`build_system.requires = ["{uv_requirement}"]` is missing an
-                upper bound on the uv version such as `<{next_breaking}`.
-                Without bounding the uv version, the source distribution will break
-                when a future, breaking version of uv is released."#,
-            );
-            passed = false;
+            warnings.push(format!(
+                "`build_system.requires = [\"{uv_requirement}\"]` is missing an \
+                upper bound on the uv version such as `<{next_breaking}`. \
+                Without bounding the uv version, the source distribution will break \
+                when a future, breaking version of uv is released.",
+            ));
         }
 
-        passed
+        warnings
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -335,23 +331,12 @@ impl PyProjectToml {
                             field: license_glob.to_string(),
                             source: err,
                         })?;
-                    let absolute_glob = PathBuf::from(globset::escape(
-                        root.simplified().to_string_lossy().as_ref(),
-                    ))
-                    .join(pep639_glob.to_string())
-                    .to_string_lossy()
-                    .to_string();
-                    license_globs_parsed.push(Glob::new(&absolute_glob).map_err(|err| {
-                        Error::GlobSet {
-                            field: "project.license-files".to_string(),
-                            err,
-                        }
-                    })?);
+                    license_globs_parsed.push(pep639_glob);
                 }
                 let license_globs =
                     GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
                         Error::GlobSetTooLarge {
-                            field: "tool.uv.source-dist.include".to_string(),
+                            field: "tool.uv.build-backend.source-include".to_string(),
                             source: err,
                         }
                     })?;
@@ -365,7 +350,7 @@ impl PyProjectToml {
                     )
                 }) {
                     let entry = entry.map_err(|err| Error::WalkDir {
-                        root: PathBuf::from("."),
+                        root: root.to_path_buf(),
                         err,
                     })?;
                     let relative = entry
@@ -376,13 +361,16 @@ impl PyProjectToml {
                         trace!("Not a license files match: `{}`", relative.user_display());
                         continue;
                     }
+                    if !entry.file_type().is_file() {
+                        trace!(
+                            "Not a file in license files match: `{}`",
+                            relative.user_display()
+                        );
+                        continue;
+                    }
 
                     debug!("License files match: `{}`", relative.user_display());
-                    let license_file = relative.to_string_lossy().to_string();
-
-                    if !license_files.contains(&license_file) {
-                        license_files.push(license_file);
-                    }
+                    license_files.push(relative.portable_display().to_string());
                 }
 
                 // The glob order may be unstable
@@ -707,33 +695,99 @@ pub(crate) struct Tool {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct ToolUv {
-    /// Configuration for building source dists with the uv build backend
-    #[allow(dead_code)]
-    source_dist: Option<serde::de::IgnoredAny>,
-    /// Configuration for building wheels with the uv build backend
-    wheel: Option<WheelSettings>,
+    /// Configuration for building source distributions and wheels with the uv build backend
+    build_backend: Option<BuildBackendSettings>,
 }
 
-/// The `tool.uv.wheel` section with wheel build configuration.
+/// To select which files to include in the source distribution, we first add the includes, then
+/// remove the excludes from that.
+///
+/// ## Include and exclude configuration
+///
+/// When building the source distribution, the following files and directories are included:
+/// * `pyproject.toml`
+/// * The module under `tool.uv.build-backend.module-root`, by default
+///   `src/<project_name_with_underscores>/**`.
+/// * `project.license-files` and `project.readme`.
+/// * All directories under `tool.uv.build-backend.data`.
+/// * All patterns from `tool.uv.build-backend.source-include`.
+///
+/// From these, we remove the `tool.uv.build-backend.source-exclude` matches.
+///
+/// When building the wheel, the following files and directories are included:
+/// * The module under `tool.uv.build-backend.module-root`, by default
+///   `src/<project_name_with_underscores>/**`.
+/// * `project.license-files` and `project.readme`, as part of the project metadata.
+/// * Each directory under `tool.uv.build-backend.data`, as data directories.
+///
+/// From these, we remove the `tool.uv.build-backend.source-exclude` and
+/// `tool.uv.build-backend.wheel-exclude` matches. The source dist excludes are applied to avoid
+/// source tree -> wheel source including more files than
+/// source tree -> source distribution -> wheel.
+///
+/// There are no specific wheel includes. There must only be one top level module, and all data
+/// files must either be under the module root or in a data directory. Most packages store small
+/// data in the module root alongside the source code.
+///
+/// ## Include and exclude syntax
+///
+/// Includes are anchored, which means that `pyproject.toml` includes only
+/// `<project root>/pyproject.toml`. Use for example `assets/**/sample.csv` to include for all
+/// `sample.csv` files in `<project root>/assets` or any child directory. To recursively include
+/// all files under a directory, use a `/**` suffix, e.g. `src/**`. For performance and
+/// reproducibility, avoid unanchored matches such as `**/sample.csv`.
+///
+/// Excludes are not anchored, which means that `__pycache__` excludes all directories named
+/// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
+/// `/dist` will exclude only `<project root>/dist`.
+///
+/// The glob syntax is the reduced portable glob from
+/// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
 #[derive(Deserialize, Debug, Clone)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) struct WheelSettings {
+#[serde(default, rename_all = "kebab-case")]
+pub(crate) struct BuildBackendSettings {
     /// The directory that contains the module directory, usually `src`, or an empty path when
     /// using the flat layout over the src layout.
-    pub(crate) module_root: Option<PathBuf>,
+    pub(crate) module_root: PathBuf,
 
-    /// Glob expressions which files and directories to exclude from the previous source
-    /// distribution includes.
+    /// Glob expressions which files and directories to additionally include in the source
+    /// distribution.
     ///
-    /// Excludes are not anchored, which means that `__pycache__` excludes all directories named
-    /// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
-    /// `/dist` will exclude only `<project root>/dist`.
+    /// `pyproject.toml` and the contents of the module directory are always included.
     ///
     /// The glob syntax is the reduced portable glob from
     /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-    pub(crate) exclude: Option<Vec<String>>,
+    pub(crate) source_include: Vec<String>,
+
+    /// If set to `false`, the default excludes aren't applied.
+    ///
+    /// Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
+    pub(crate) default_excludes: bool,
+
+    /// Glob expressions which files and directories to exclude from the source distribution.
+    pub(crate) source_exclude: Vec<String>,
+
+    /// Glob expressions which files and directories to exclude from the wheel.
+    pub(crate) wheel_exclude: Vec<String>,
+
     /// Data includes for wheels.
-    pub(crate) data: Option<WheelDataIncludes>,
+    ///
+    /// The directories included here are also included in the source distribution. They are copied
+    /// to the right wheel subdirectory on build.
+    pub(crate) data: WheelDataIncludes,
+}
+
+impl Default for BuildBackendSettings {
+    fn default() -> Self {
+        Self {
+            module_root: PathBuf::from("src"),
+            source_include: Vec::new(),
+            default_excludes: true,
+            source_exclude: Vec::new(),
+            wheel_exclude: Vec::new(),
+            data: WheelDataIncludes::default(),
+        }
+    }
 }
 
 /// Data includes for wheels.
@@ -754,7 +808,7 @@ pub(crate) struct WheelSettings {
 ///   uses these two options.
 #[derive(Default, Deserialize, Debug, Clone)]
 // `deny_unknown_fields` to catch typos such as `header` vs `headers`.
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub(crate) struct WheelDataIncludes {
     purelib: Option<String>,
     platlib: Option<String>,
@@ -935,7 +989,10 @@ mod tests {
     fn build_system_valid() {
         let contents = extend_project("");
         let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
-        assert!(pyproject_toml.check_build_system("1.0.0+test"));
+        assert_snapshot!(
+            pyproject_toml.check_build_system("1.0.0+test").join("\n"),
+            @""
+        );
     }
 
     #[test]
@@ -950,7 +1007,10 @@ mod tests {
             build-backend = "uv"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-        assert!(!pyproject_toml.check_build_system("1.0.0+test"));
+        assert_snapshot!(
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @r###"`build_system.requires = ["uv"]` is missing an upper bound on the uv version such as `<0.5`. Without bounding the uv version, the source distribution will break when a future, breaking version of uv is released."###
+        );
     }
 
     #[test]
@@ -965,7 +1025,10 @@ mod tests {
             build-backend = "uv"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-        assert!(!pyproject_toml.check_build_system("1.0.0+test"));
+        assert_snapshot!(
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @"Expected a single uv requirement in `build-system.requires`, found ``"
+        );
     }
 
     #[test]
@@ -980,7 +1043,10 @@ mod tests {
             build-backend = "uv"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-        assert!(!pyproject_toml.check_build_system("1.0.0+test"));
+        assert_snapshot!(
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @"Expected a single uv requirement in `build-system.requires`, found ``"
+        );
     }
 
     #[test]
@@ -995,7 +1061,10 @@ mod tests {
             build-backend = "setuptools"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
-        assert!(!pyproject_toml.check_build_system("1.0.0+test"));
+        assert_snapshot!(
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @r###"The value for `build_system.build-backend` should be `"uv"`, not `"setuptools"`"###
+        );
     }
 
     #[test]

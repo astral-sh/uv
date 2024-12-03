@@ -37,7 +37,7 @@ impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
     pub(crate) fn from_requirement<'data>(
         requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
-        project_name: &'data PackageName,
+        project_name: Option<&'data PackageName>,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
         project_indexes: &'data [Index],
@@ -49,7 +49,7 @@ impl LoweredRequirement {
         git_member: Option<&'data GitWorkspaceMember<'data>>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + 'data {
         // Identify the source from the `tool.uv.sources` table.
-        let (source, origin) = if let Some(source) = project_sources.get(&requirement.name) {
+        let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), RequirementOrigin::Project)
         } else if let Some(source) = workspace.sources().get(&requirement.name) {
             (Some(source), RequirementOrigin::Workspace)
@@ -58,8 +58,8 @@ impl LoweredRequirement {
         };
 
         // If the source only applies to a given extra or dependency group, filter it out.
-        let source = source.map(|source| {
-            source
+        let sources = sources.map(|sources| {
+            sources
                 .iter()
                 .filter(|source| {
                     if let Some(target) = source.extra() {
@@ -80,29 +80,68 @@ impl LoweredRequirement {
                 .collect::<Sources>()
         });
 
-        let workspace_package_declared =
-            // We require that when you use a package that's part of the workspace, ...
-            !workspace.packages().contains_key(&requirement.name)
-                // ... it must be declared as a workspace dependency (`workspace = true`), ...
-                || source.as_ref().filter(|sources| !sources.is_empty()).is_some_and(|source| source.iter().all(|source| {
-                    matches!(source, Source::Workspace { workspace: true, .. })
-                }))
-                // ... except for recursive self-inclusion (extras that activate other extras), e.g.
-                // `framework[machine_learning]` depends on `framework[cuda]`.
-                || &requirement.name == project_name;
-        if !workspace_package_declared {
-            return Either::Left(std::iter::once(Err(
-                LoweringError::UndeclaredWorkspacePackage,
-            )));
+        // If you use a package that's part of the workspace...
+        if workspace.packages().contains_key(&requirement.name) {
+            // And it's not a recursive self-inclusion (extras that activate other extras), e.g.
+            // `framework[machine_learning]` depends on `framework[cuda]`.
+            if project_name.is_none_or(|project_name| *project_name != requirement.name) {
+                // It must be declared as a workspace source.
+                let Some(sources) = sources.as_ref() else {
+                    // No sources were declared for the workspace package.
+                    return Either::Left(std::iter::once(Err(
+                        LoweringError::MissingWorkspaceSource(requirement.name.clone()),
+                    )));
+                };
+
+                for source in sources.iter() {
+                    match source {
+                        Source::Git { .. } => {
+                            return Either::Left(std::iter::once(Err(
+                                LoweringError::NonWorkspaceSource(
+                                    requirement.name.clone(),
+                                    SourceKind::Git,
+                                ),
+                            )));
+                        }
+                        Source::Url { .. } => {
+                            return Either::Left(std::iter::once(Err(
+                                LoweringError::NonWorkspaceSource(
+                                    requirement.name.clone(),
+                                    SourceKind::Url,
+                                ),
+                            )));
+                        }
+                        Source::Path { .. } => {
+                            return Either::Left(std::iter::once(Err(
+                                LoweringError::NonWorkspaceSource(
+                                    requirement.name.clone(),
+                                    SourceKind::Path,
+                                ),
+                            )));
+                        }
+                        Source::Registry { .. } => {
+                            return Either::Left(std::iter::once(Err(
+                                LoweringError::NonWorkspaceSource(
+                                    requirement.name.clone(),
+                                    SourceKind::Registry,
+                                ),
+                            )));
+                        }
+                        Source::Workspace { .. } => {
+                            // OK
+                        }
+                    }
+                }
+            }
         }
 
-        let Some(source) = source else {
+        let Some(sources) = sources else {
             let has_sources = !project_sources.is_empty() || !workspace.sources().is_empty();
             if matches!(lower_bound, LowerBound::Warn) {
                 // Support recursive editable inclusions.
                 if has_sources
                     && requirement.version_or_url.is_none()
-                    && &requirement.name != project_name
+                    && project_name.is_none_or(|project_name| *project_name != requirement.name)
                 {
                     warn_user_once!(
                         "Missing version constraint (e.g., a lower bound) for `{}`",
@@ -118,13 +157,13 @@ impl LoweredRequirement {
         let remaining = {
             // Determine the space covered by the sources.
             let mut total = MarkerTree::FALSE;
-            for source in source.iter() {
-                total.or(source.marker().clone());
+            for source in sources.iter() {
+                total.or(source.marker());
             }
 
             // Determine the space covered by the requirement.
             let mut remaining = total.negate();
-            remaining.and(requirement.marker.clone());
+            remaining.and(requirement.marker);
 
             LoweredRequirement(Requirement {
                 marker: remaining,
@@ -133,7 +172,7 @@ impl LoweredRequirement {
         };
 
         Either::Right(
-            source
+            sources
                 .into_iter()
                 .map(move |source| {
                     let (source, mut marker) = match source {
@@ -211,11 +250,15 @@ impl LoweredRequirement {
                                     index,
                                 ));
                             };
-                            let conflict = if let Some(extra) = extra {
-                                Some(ConflictItem::from((project_name.clone(), extra)))
-                            } else {
-                                group.map(|group| ConflictItem::from((project_name.clone(), group)))
-                            };
+                            let conflict = project_name.and_then(|project_name| {
+                                if let Some(extra) = extra {
+                                    Some(ConflictItem::from((project_name.clone(), extra)))
+                                } else {
+                                    group.map(|group| {
+                                        ConflictItem::from((project_name.clone(), group))
+                                    })
+                                }
+                            });
                             let source = registry_source(
                                 &requirement,
                                 index.into_url(),
@@ -238,7 +281,11 @@ impl LoweredRequirement {
                             let member = workspace
                                 .packages()
                                 .get(&requirement.name)
-                                .ok_or(LoweringError::UndeclaredWorkspacePackage)?
+                                .ok_or_else(|| {
+                                    LoweringError::UndeclaredWorkspacePackage(
+                                        requirement.name.clone(),
+                                    )
+                                })?
                                 .clone();
 
                             // Say we have:
@@ -302,7 +349,7 @@ impl LoweredRequirement {
                         }
                     };
 
-                    marker.and(requirement.marker.clone());
+                    marker.and(requirement.marker);
 
                     Ok(Self(Requirement {
                         name: requirement.name.clone(),
@@ -356,12 +403,12 @@ impl LoweredRequirement {
             // Determine the space covered by the sources.
             let mut total = MarkerTree::FALSE;
             for source in source.iter() {
-                total.or(source.marker().clone());
+                total.or(source.marker());
             }
 
             // Determine the space covered by the requirement.
             let mut remaining = total.negate();
-            remaining.and(requirement.marker.clone());
+            remaining.and(requirement.marker);
 
             LoweredRequirement(Requirement {
                 marker: remaining,
@@ -454,7 +501,7 @@ impl LoweredRequirement {
                         }
                     };
 
-                    marker.and(requirement.marker.clone());
+                    marker.and(requirement.marker);
 
                     Ok(Self(Requirement {
                         name: requirement.name.clone(),
@@ -482,8 +529,12 @@ impl LoweredRequirement {
 /// `project.{dependencies,optional-dependencies}`.
 #[derive(Debug, Error)]
 pub enum LoweringError {
-    #[error("Package is not included as workspace package in `tool.uv.workspace`")]
-    UndeclaredWorkspacePackage,
+    #[error("`{0}` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`)")]
+    MissingWorkspaceSource(PackageName),
+    #[error("`{0}` is included as a workspace member, but references a {1} in `tool.uv.sources`. Workspace members must be declared as workspace sources (e.g., `{0} = {{ workspace = true }}`).")]
+    NonWorkspaceSource(PackageName, SourceKind),
+    #[error("`{0}` references a workspace in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`), but is not a workspace member")]
+    UndeclaredWorkspacePackage(PackageName),
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
     #[error("Package `{0}` references an undeclared index: `{1}`")]
@@ -508,6 +559,25 @@ pub enum LoweringError {
     NonUtf8Path(PathBuf),
     #[error(transparent)] // Function attaches the context
     RelativeTo(io::Error),
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum SourceKind {
+    Path,
+    Url,
+    Git,
+    Registry,
+}
+
+impl std::fmt::Display for SourceKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SourceKind::Path => write!(f, "path"),
+            SourceKind::Url => write!(f, "URL"),
+            SourceKind::Git => write!(f, "Git"),
+            SourceKind::Registry => write!(f, "registry"),
+        }
+    }
 }
 
 /// Convert a Git source into a [`RequirementSource`].

@@ -1,7 +1,7 @@
 # Running commands in projects
 
-When working on a project, it is installed into virtual environment at `.venv`. This environment is
-isolated from the current shell by default, so invocations that require the project, e.g.,
+When working on a project, it is installed into the virtual environment at `.venv`. This environment
+is isolated from the current shell by default, so invocations that require the project, e.g.,
 `python -c "import example"`, will fail. Instead, use `uv run` to run commands in the project
 environment:
 

@@ -17,7 +17,7 @@ use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerT
 /// which can be used to create a CNF expression.
 ///
 /// We choose DNF as it is easier to simplify for user-facing output.
-pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
+pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let mut dnf = Vec::new();
     collect_dnf(tree, &mut dnf, &mut Vec::new());
     simplify(&mut dnf);
@@ -31,7 +31,7 @@ pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
 ///
 /// `path` is the list of marker expressions traversed on the current path.
 fn collect_dnf(
-    tree: &MarkerTree,
+    tree: MarkerTree,
     dnf: &mut Vec<Vec<MarkerExpression>>,
     path: &mut Vec<MarkerExpression>,
 ) {
@@ -51,12 +51,12 @@ fn collect_dnf(
                     let current = path.len();
                     for version in excluded {
                         path.push(MarkerExpression::Version {
-                            key: marker.key(),
+                            key: marker.key().into(),
                             specifier: VersionSpecifier::not_equals_version(version.clone()),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                     continue;
                 }
@@ -64,11 +64,11 @@ fn collect_dnf(
                 // Detect whether the range for this edge can be simplified as a star inequality.
                 if let Some(specifier) = star_range_inequality(&range) {
                     path.push(MarkerExpression::Version {
-                        key: marker.key(),
+                        key: marker.key().into(),
                         specifier,
                     });
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.pop();
                     continue;
                 }
@@ -77,12 +77,12 @@ fn collect_dnf(
                     let current = path.len();
                     for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
                         path.push(MarkerExpression::Version {
-                            key: marker.key(),
+                            key: marker.key().into(),
                             specifier,
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
             }
@@ -94,13 +94,13 @@ fn collect_dnf(
                     let current = path.len();
                     for value in excluded {
                         path.push(MarkerExpression::String {
-                            key: marker.key(),
+                            key: marker.key().into(),
                             operator: MarkerOperator::NotEqual,
                             value: value.clone(),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                     continue;
                 }
@@ -109,13 +109,13 @@ fn collect_dnf(
                     let current = path.len();
                     for (operator, value) in MarkerOperator::from_bounds(bounds) {
                         path.push(MarkerExpression::String {
-                            key: marker.key(),
+                            key: marker.key().into(),
                             operator,
                             value: value.clone(),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
             }
@@ -129,13 +129,13 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::String {
-                    key: marker.key(),
+                    key: marker.key().into(),
                     value: marker.value().to_owned(),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -148,13 +148,13 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::String {
-                    key: marker.key(),
+                    key: marker.key().into(),
                     value: marker.value().to_owned(),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -167,12 +167,12 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::Extra {
-                    name: marker.name().clone(),
+                    name: marker.name().clone().into(),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }

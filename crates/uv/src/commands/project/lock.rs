@@ -11,9 +11,10 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, SourceStrategy,
+    TrustedHost, Upgrade,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
@@ -22,7 +23,8 @@ use uv_distribution_types::{
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{Requirement, SupportedEnvironments};
+use uv_pep508::RequirementOrigin;
+use uv_pypi_types::{Requirement, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
@@ -37,9 +39,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::{
-    find_requires_python, ProjectError, ProjectInterpreter, SharedState,
-};
+use crate::commands::project::{find_requires_python, ProjectError, ProjectInterpreter};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
@@ -323,10 +323,15 @@ async fn do_lock(
 
     // Collect the requirements, etc.
     let requirements = workspace.non_project_requirements()?;
-    let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
+    let overrides = workspace.overrides();
     let constraints = workspace.constraints();
     let dev = workspace.groups().into_iter().cloned().collect::<Vec<_>>();
     let source_trees = vec![];
+
+    // If necessary, lower the overrides and constraints.
+    let requirements = lower(requirements, workspace, index_locations, sources)?;
+    let overrides = lower(overrides, workspace, index_locations, sources)?;
+    let constraints = lower(constraints, workspace, index_locations, sources)?;
 
     // Collect the list of members.
     let members = {
@@ -354,9 +359,9 @@ async fn do_lock(
                 .iter()
                 .zip(environments.as_markers().iter().skip(1))
             {
-                if !lhs.is_disjoint(rhs) {
+                if !lhs.is_disjoint(*rhs) {
                     let mut hint = lhs.negate();
-                    hint.and(rhs.clone());
+                    hint.and(*rhs);
 
                     let lhs = lhs
                         .contents()
@@ -406,6 +411,7 @@ async fn do_lock(
         .map(SupportedEnvironments::as_markers)
         .into_iter()
         .flatten()
+        .copied()
     {
         if requires_python.to_marker_tree().is_disjoint(environment) {
             return if let Some(contents) = environment.contents() {
@@ -486,10 +492,7 @@ async fn do_lock(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -521,7 +524,7 @@ async fn do_lock(
             upgrade,
             &options,
             &hasher,
-            &state.index,
+            state.index(),
             &database,
             printer,
         )
@@ -571,7 +574,7 @@ async fn do_lock(
             // Populate the Git resolver.
             for ResolvedRepositoryReference { reference, sha } in git {
                 debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-                state.git.insert(reference, sha);
+                state.git().insert(reference, sha);
             }
 
             // Determine whether we can reuse the existing package forks.
@@ -597,8 +600,8 @@ async fn do_lock(
                         // `ResolverEnvironment`.
                         lock.fork_markers()
                             .iter()
+                            .copied()
                             .map(UniversalMarker::pep508)
-                            .cloned()
                             .collect()
                     })
                     .unwrap_or_else(|| {
@@ -611,7 +614,7 @@ async fn do_lock(
 
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
-                ExtrasResolver::new(&hasher, &state.index, database)
+                ExtrasResolver::new(&hasher, state.index(), database)
                     .with_reporter(ResolverReporter::from(printer))
                     .resolve(workspace.members_requirements())
                     .await
@@ -647,7 +650,7 @@ async fn do_lock(
                 workspace.conflicts(),
                 &client,
                 &flat_index,
-                &state.index,
+                state.index(),
                 &build_dispatch,
                 concurrency,
                 options,
@@ -807,7 +810,7 @@ impl ValidatedLock {
             .map(SupportedEnvironments::as_markers)
             .unwrap_or_default()
             .iter()
-            .cloned()
+            .copied()
             .map(|marker| lock.simplify_environment(marker))
             .collect::<Vec<_>>();
         if expected != actual {
@@ -1115,4 +1118,37 @@ fn report_upgrades(
     }
 
     Ok(updated)
+}
+
+/// Lower a set of requirements, relative to the workspace root.
+fn lower(
+    requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    workspace: &Workspace,
+    locations: &IndexLocations,
+    sources: SourceStrategy,
+) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
+    let name = workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .map(|project| project.name.clone());
+
+    // We model these as `build-requires`, since, like build requirements, it doesn't define extras
+    // or dependency groups.
+    let metadata = uv_distribution::BuildRequires::from_workspace(
+        uv_pypi_types::BuildRequires {
+            name,
+            requires_dist: requirements,
+        },
+        workspace,
+        locations,
+        sources,
+        LowerBound::Warn,
+    )?;
+
+    Ok(metadata
+        .requires_dist
+        .into_iter()
+        .map(|requirement| requirement.with_origin(RequirementOrigin::Workspace))
+        .collect::<Vec<_>>())
 }

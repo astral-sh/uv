@@ -14,7 +14,7 @@ use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, Ins
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git::GitReference;
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
@@ -34,6 +34,7 @@ pub struct RequirementsTxtExport<'lock> {
 impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
         target: InstallTarget<'lock>,
+        prune: &[PackageName],
         extras: &ExtrasSpecification,
         dev: &DevGroupsManifest,
         editable: EditableMode,
@@ -54,6 +55,10 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
         // Add the workspace package to the queue.
         for root_name in target.packages() {
+            if prune.contains(root_name) {
+                continue;
+            }
+
             let dist = target
                 .lock()
                 .find_by_name(root_name)
@@ -72,18 +77,8 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
-                match extras {
-                    ExtrasSpecification::None => {}
-                    ExtrasSpecification::All => {
-                        for extra in dist.optional_dependencies.keys() {
-                            queue.push_back((dist, Some(extra)));
-                        }
-                    }
-                    ExtrasSpecification::Some(extras) => {
-                        for extra in extras {
-                            queue.push_back((dist, Some(extra)));
-                        }
-                    }
+                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                    queue.push_back((dist, Some(extra)));
                 }
             }
 
@@ -100,6 +95,10 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 })
                 .flatten()
             {
+                if prune.contains(&dep.package_id.name) {
+                    continue;
+                }
+
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
@@ -115,7 +114,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     root,
                     dep_index,
                     UniversalMarker::new(
-                        dep.simplified_marker.as_simplified_marker_tree().clone(),
+                        dep.simplified_marker.as_simplified_marker_tree(),
                         // OK because we've verified above that we do not have any
                         // conflicting extras/groups.
                         //
@@ -156,6 +155,10 @@ impl<'lock> RequirementsTxtExport<'lock> {
             };
 
             for dep in deps {
+                if prune.contains(&dep.package_id.name) {
+                    continue;
+                }
+
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
@@ -169,7 +172,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     index,
                     dep_index,
                     UniversalMarker::new(
-                        dep.simplified_marker.as_simplified_marker_tree().clone(),
+                        dep.simplified_marker.as_simplified_marker_tree(),
                         // See note above for other `UniversalMarker::new` for
                         // why this is OK.
                         MarkerTree::TRUE,
@@ -208,11 +211,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 package,
                 // As above, we've verified that there are no conflicting extras/groups
                 // specified, so it's safe to completely ignore the conflict marker.
-                marker: reachability
-                    .remove(&index)
-                    .unwrap_or_default()
-                    .pep508()
-                    .clone(),
+                marker: reachability.remove(&index).unwrap_or_default().pep508(),
             })
             .collect::<Vec<_>>();
 

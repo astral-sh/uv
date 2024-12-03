@@ -1,5 +1,7 @@
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, venv_bin_path, TestContext};
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, PathChild};
+use std::env;
 use uv_static::EnvVars;
 
 #[test]
@@ -194,6 +196,131 @@ fn dubious_filenames() {
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
     error: No files found to publish
+    "###
+    );
+}
+
+/// Check that we (don't) use the keyring and warn for missing keyring behaviors correctly.
+#[test]
+fn check_keyring_behaviours() {
+    let context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    context
+        .pip_install()
+        .arg(
+            context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    // Ok: The keyring may be used for the index page.
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--check-url")
+        .arg("https://test.pypi.org/simple/")
+        .arg("--publish-url")
+        .arg("https://test.pypi.org/legacy/?ok")
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv publish` is experimental and may change without warning
+    Publishing 1 file to https://test.pypi.org/legacy/?ok
+    error: Failed to query check URL
+      Caused by: Package `ok` was not found in the registry
+    "###
+    );
+
+    // Warn: The keyring is unused.
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--publish-url")
+        .arg("https://test.pypi.org/legacy/?ok")
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)),  @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv publish` is experimental and may change without warning
+    Publishing 1 file to https://test.pypi.org/legacy/?ok
+    warning: Using `--keyring-provider` with a password or token and no check url has no effect
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+      Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
+    "###
+    );
+
+    // Warn: There is no keyring entry for the user dummy.
+    // https://github.com/astral-sh/uv/issues/7963#issuecomment-2453558043
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--check-url")
+        .arg("https://test.pypi.org/simple/")
+        .arg("--publish-url")
+        .arg("https://test.pypi.org/legacy/?ok")
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv publish` is experimental and may change without warning
+    Publishing 1 file to https://test.pypi.org/legacy/?ok
+    Request for dummy@https://test.pypi.org/legacy/?ok
+    Request for dummy@test.pypi.org
+    warning: Keyring has no password for URL `https://test.pypi.org/legacy/?ok` and username `dummy`
+    error: Failed to query check URL
+      Caused by: Package `ok` was not found in the registry
+    "###
+    );
+
+    // Ok: There is a keyring entry for the user dummy.
+    // https://github.com/astral-sh/uv/issues/7963#issuecomment-2453558043
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("--publish-url")
+        .arg("https://test.pypi.org/legacy/?ok")
+        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://test.pypi.org/legacy/?ok": {"dummy": "dummy"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv publish` is experimental and may change without warning
+    Publishing 1 file to https://test.pypi.org/legacy/?ok
+    Request for dummy@https://test.pypi.org/legacy/?ok
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+      Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "###
     );
 }

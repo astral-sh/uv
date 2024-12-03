@@ -4,11 +4,13 @@ use std::str::FromStr;
 use anyhow::{bail, Result};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
+
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, Reinstall, TrustedHost, Upgrade};
-use uv_distribution_types::UnresolvedRequirementSpecification;
+use uv_dispatch::SharedState;
+use uv_distribution_types::{NameRequirementSpecification, UnresolvedRequirementSpecification};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -29,10 +31,10 @@ use crate::commands::project::{
 };
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::tool::Target;
+use crate::commands::ExitStatus;
 use crate::commands::{
     diagnostics, reporters::PythonDownloadReporter, tool::common::install_executables,
 };
-use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -42,6 +44,8 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
@@ -238,7 +242,9 @@ pub(crate) async fn install(
     };
 
     // Read the `--with` requirements.
-    let spec = RequirementsSpecification::from_simple_sources(with, &client_builder).await?;
+    let spec =
+        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
+            .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -261,6 +267,28 @@ pub(crate) async fn install(
         );
         requirements
     };
+
+    // Resolve the constraints.
+    let constraints = spec
+        .constraints
+        .into_iter()
+        .map(|constraint| constraint.requirement)
+        .collect::<Vec<_>>();
+
+    // Resolve the overrides.
+    let overrides = resolve_names(
+        spec.overrides,
+        &interpreter,
+        &settings,
+        &state,
+        connectivity,
+        concurrency,
+        native_tls,
+        allow_insecure_host,
+        &cache,
+        printer,
+    )
+    .await?;
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
@@ -329,8 +357,10 @@ pub(crate) async fn install(
         .is_some()
     {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
-            let receipt = tool_receipt.requirements().to_vec();
-            if requirements == receipt {
+            if requirements == tool_receipt.requirements()
+                && constraints == tool_receipt.constraints()
+                && overrides == tool_receipt.overrides()
+            {
                 if *tool_receipt.options() != options {
                     // ...but the options differ, we need to update the receipt.
                     installed_tools
@@ -352,6 +382,16 @@ pub(crate) async fn install(
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
     let spec = RequirementsSpecification {
         requirements: requirements
+            .iter()
+            .cloned()
+            .map(UnresolvedRequirementSpecification::from)
+            .collect(),
+        constraints: constraints
+            .iter()
+            .cloned()
+            .map(NameRequirementSpecification::from)
+            .collect(),
+        overrides: overrides
             .iter()
             .cloned()
             .map(UnresolvedRequirementSpecification::from)
@@ -469,6 +509,8 @@ pub(crate) async fn install(
         force || invalid_tool_receipt,
         python,
         requirements,
+        constraints,
+        overrides,
         printer,
     )
 }

@@ -1839,6 +1839,10 @@ pub struct PipUninstallArgs {
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
+    /// Perform a dry run, i.e., don't actually uninstall anything but print the resulting plan.
+    #[arg(long)]
+    pub dry_run: bool,
+
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
 }
@@ -2173,6 +2177,14 @@ pub struct BuildArgs {
     /// Hide logs from the build backend.
     #[arg(long, overrides_with("build_logs"), hide = true)]
     pub no_build_logs: bool,
+
+    /// Always build through PEP 517, don't use the fast path for the uv build backend.
+    ///
+    /// By default, uv won't create a PEP 517 build environment for packages using the uv build
+    /// backend, but use a fast path that calls into the build backend directly. This option forces
+    /// always using PEP 517.
+    #[arg(long)]
+    pub no_fast_path: bool,
 
     /// Constrain build dependencies using the given requirements files when building
     /// distributions.
@@ -2599,6 +2611,12 @@ pub struct RunArgs {
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
+    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_extra: Vec<ExtraName>,
+
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
@@ -2725,7 +2743,7 @@ pub struct RunArgs {
     ///
     /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
     /// be updated, since the environment will not be synced regardless).
-    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
@@ -2835,6 +2853,12 @@ pub struct SyncArgs {
     /// affects the selection of packages to install.
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
+
+    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_extra: Vec<ExtraName>,
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
@@ -3401,6 +3425,13 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with = "all_packages")]
     pub package: Option<PackageName>,
 
+    /// Prune the given package from the dependency tree.
+    ///
+    /// Pruned packages will be excluded from the exported requirements file, as will any
+    /// dependencies that are no longer required after the pruned package is removed.
+    #[arg(long, conflicts_with = "all_packages")]
+    pub prune: Vec<PackageName>,
+
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
@@ -3410,6 +3441,12 @@ pub struct ExportArgs {
     /// Include all optional dependencies.
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
+
+    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
+    ///
+    /// May be provided multiple times.
+    #[arg(long)]
+    pub no_extra: Vec<ExtraName>,
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
@@ -3741,6 +3778,28 @@ pub struct ToolInstallArgs {
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
+    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub constraints: Vec<Maybe<PathBuf>>,
+
+    /// Override versions using the given requirements files.
+    ///
+    /// Overrides files are `requirements.txt`-like files that force a specific version of a
+    /// requirement to be installed, regardless of the requirements declared by any constituent
+    /// package, and regardless of whether this would be considered an invalid resolution.
+    ///
+    /// While constraints are _additive_, in that they're combined with the requirements of the
+    /// constituent packages, overrides are _absolute_, in that they completely replace the
+    /// requirements of the constituent packages.
+    #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub overrides: Vec<Maybe<PathBuf>>,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -3824,9 +3883,9 @@ pub struct ToolUninstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ToolUpgradeArgs {
-    /// The name of the tool to upgrade.
+    /// The name of the tool to upgrade, along with an optional version specifier.
     #[arg(required = true)]
-    pub name: Vec<PackageName>,
+    pub name: Vec<String>,
 
     /// Upgrade all tools.
     #[arg(long, conflicts_with("name"))]
@@ -4189,6 +4248,21 @@ pub struct PythonInstallArgs {
     /// Implies `--reinstall`.
     #[arg(long, short)]
     pub force: bool,
+
+    /// Use as the default Python version.
+    ///
+    /// By default, only a `python{major}.{minor}` executable is installed, e.g., `python3.10`. When
+    /// the `--default` flag is used, `python{major}`, e.g., `python3`, and `python` executables are
+    /// also installed.
+    ///
+    /// Alternative Python variants will still include their tag. For example, installing
+    /// 3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
+    /// and `python`.
+    ///
+    /// If multiple Python versions are requested during the installation, the first request will be
+    /// the default.
+    #[arg(long)]
+    pub default: bool,
 }
 
 #[derive(Args)]

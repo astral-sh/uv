@@ -5,6 +5,7 @@ use std::fmt::Write;
 use std::io::stdout;
 use std::path::Path;
 use std::process::ExitCode;
+use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
 use anyhow::{bail, Result};
@@ -254,10 +255,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         )
     }))?;
 
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(globals.concurrency.installs)
-        .build_global()
-        .expect("failed to initialize global rayon pool");
+    // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
+    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::SeqCst);
 
     debug!("uv {}", uv_cli::version::version());
 
@@ -438,6 +437,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.target,
                 args.settings.prefix,
                 args.settings.sources,
+                globals.python_preference,
                 globals.concurrency,
                 globals.native_tls,
                 &globals.allow_insecure_host,
@@ -526,6 +526,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.break_system_packages,
                 args.settings.target,
                 args.settings.prefix,
+                globals.python_preference,
                 globals.concurrency,
                 globals.native_tls,
                 &globals.allow_insecure_host,
@@ -567,6 +568,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.native_tls,
                 args.settings.keyring_provider,
                 &globals.allow_insecure_host,
+                args.dry_run,
                 printer,
             )
             .await
@@ -730,6 +732,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.sdist,
                 args.wheel,
                 args.build_logs,
+                args.no_fast_path,
                 build_constraints,
                 args.hash_checking,
                 args.python,
@@ -951,12 +954,24 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
+            let constraints = args
+                .constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
+            let overrides = args
+                .overrides
+                .into_iter()
+                .map(RequirementsSource::from_overrides_txt)
+                .collect::<Vec<_>>();
 
             Box::pin(commands::tool_install(
                 args.package,
                 args.editable,
                 args.from,
                 &requirements,
+                &constraints,
+                &overrides,
                 args.python,
                 args.install_mirrors,
                 args.force,
@@ -1002,7 +1017,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(Refresh::All(Timestamp::now()));
 
             Box::pin(commands::tool_upgrade(
-                args.name,
+                args.names,
                 args.python,
                 args.install_mirrors,
                 globals.connectivity,
@@ -1078,6 +1093,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.force,
                 args.python_install_mirror,
                 args.pypy_install_mirror,
+                args.default,
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,
@@ -1570,6 +1586,7 @@ async fn run_project(
                 args.format,
                 args.all_packages,
                 args.package,
+                args.prune,
                 args.hashes,
                 args.install_options,
                 args.output_file,

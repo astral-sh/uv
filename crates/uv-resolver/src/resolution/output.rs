@@ -83,7 +83,7 @@ impl Display for ResolutionGraphNode {
     }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 struct PackageRef<'a> {
     package_name: &'a PackageName,
     version: &'a Version,
@@ -147,12 +147,12 @@ impl ResolverOutput {
             // Add every edge to the graph, propagating the marker for the current fork, if
             // necessary.
             for edge in &resolution.edges {
-                if !seen.insert((edge, marker.clone())) {
+                if !seen.insert((edge, marker)) {
                     // Insert each node only once.
                     continue;
                 }
 
-                Self::add_edge(&mut graph, &mut inverse, root_index, edge, marker.clone());
+                Self::add_edge(&mut graph, &mut inverse, root_index, edge, marker);
             }
         }
 
@@ -160,18 +160,19 @@ impl ResolverOutput {
         let requires_python = python.target().clone();
 
         let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
+            // In the case of a singleton marker, we only include it if it's not
+            // always true. Otherwise, we keep our `fork_markers` empty as there
+            // are no forks.
             resolution
                 .env
-                .try_markers()
-                .cloned()
+                .try_universal_markers()
                 .into_iter()
-                .map(|marker| UniversalMarker::new(marker, MarkerTree::TRUE))
+                .filter(|marker| !marker.is_true())
                 .collect()
         } else {
             resolutions
                 .iter()
-                .map(|resolution| resolution.env.try_markers().cloned().unwrap_or_default())
-                .map(|marker| UniversalMarker::new(marker, MarkerTree::TRUE))
+                .map(|resolution| resolution.env.try_universal_markers().unwrap_or_default())
                 .collect()
         };
 
@@ -586,7 +587,8 @@ impl ResolverOutput {
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
         use uv_pep508::{
-            MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
+            CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerExpression,
+            MarkerOperator, MarkerTree,
         };
 
         /// A subset of the possible marker values.
@@ -596,37 +598,37 @@ impl ResolverOutput {
         /// values based on the current marker environment.
         #[derive(Debug, Eq, Hash, PartialEq)]
         enum MarkerParam {
-            Version(MarkerValueVersion),
-            String(MarkerValueString),
+            Version(CanonicalMarkerValueVersion),
+            String(CanonicalMarkerValueString),
         }
 
         /// Add all marker parameters from the given tree to the given set.
-        fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut IndexSet<MarkerParam>) {
+        fn add_marker_params_from_tree(marker_tree: MarkerTree, set: &mut IndexSet<MarkerParam>) {
             match marker_tree.kind() {
                 MarkerTreeKind::True => {}
                 MarkerTreeKind::False => {}
                 MarkerTreeKind::Version(marker) => {
                     set.insert(MarkerParam::Version(marker.key()));
                     for (_, tree) in marker.edges() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
                 MarkerTreeKind::String(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
                 MarkerTreeKind::In(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
                 MarkerTreeKind::Contains(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
                 // We specifically don't care about these for the
@@ -636,7 +638,7 @@ impl ResolverOutput {
                 // interested in which markers are used.
                 MarkerTreeKind::Extra(marker) => {
                     for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
             }
@@ -667,7 +669,7 @@ impl ResolverOutput {
                 .constraints
                 .apply(self.overrides.apply(archive.metadata.requires_dist.iter()))
             {
-                add_marker_params_from_tree(&req.marker, &mut seen_marker_values);
+                add_marker_params_from_tree(req.marker, &mut seen_marker_values);
             }
         }
 
@@ -676,7 +678,7 @@ impl ResolverOutput {
             .constraints
             .apply(self.overrides.apply(self.requirements.iter()))
         {
-            add_marker_params_from_tree(&direct_req.marker, &mut seen_marker_values);
+            add_marker_params_from_tree(direct_req.marker, &mut seen_marker_values);
         }
 
         // Generate the final marker expression as a conjunction of
@@ -687,14 +689,14 @@ impl ResolverOutput {
                 MarkerParam::Version(value_version) => {
                     let from_env = marker_env.get_version(value_version);
                     MarkerExpression::Version {
-                        key: value_version,
+                        key: value_version.into(),
                         specifier: VersionSpecifier::equals_version(from_env.clone()),
                     }
                 }
                 MarkerParam::String(value_string) => {
                     let from_env = marker_env.get_string(value_string);
                     MarkerExpression::String {
-                        key: value_string,
+                        key: value_string.into(),
                         operator: MarkerOperator::Equal,
                         value: from_env.to_string(),
                     }
@@ -738,8 +740,8 @@ impl ResolverOutput {
                             name: name.clone(),
                             version1: (*version1).clone(),
                             version2: (*version2).clone(),
-                            marker1: (*marker1).clone(),
-                            marker2: (*marker2).clone(),
+                            marker1: *(*marker1),
+                            marker2: *(*marker2),
                         });
                     }
                 }
@@ -839,7 +841,7 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
             // above that we aren't in universal mode. If we aren't in
             // universal mode, then there can be no conflicts since
             // conflicts imply forks and forks imply universal mode.
-            let marker = graph[edge].pep508().clone();
+            let marker = graph[edge].pep508();
 
             match (&graph[source], &graph[target]) {
                 (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {

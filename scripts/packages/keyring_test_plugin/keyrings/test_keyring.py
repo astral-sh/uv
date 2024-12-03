@@ -10,7 +10,7 @@ class KeyringTest(backend.KeyringBackend):
 
     def get_password(self, service, username):
         print(f"Request for {username}@{service}", file=sys.stderr)
-        credentials = json.loads(os.environ.get("KEYRING_TEST_CREDENTIALS") or {})
+        credentials = json.loads(os.environ.get("KEYRING_TEST_CREDENTIALS", "{}"))
         return credentials.get(service, {}).get(username)
 
     def set_password(self, service, username, password):

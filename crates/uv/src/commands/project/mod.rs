@@ -11,7 +11,7 @@ use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
     GroupsSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     Index, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
@@ -45,7 +45,7 @@ use uv_workspace::{ProjectWorkspace, Workspace};
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{capitalize, conjunction, pip, SharedState};
+use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, ResolverInstallerSettings, ResolverSettingsRef};
 
@@ -87,7 +87,7 @@ pub(crate) enum ProjectError {
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
     RequestedPythonProjectIncompatibility(Version, RequiresPython),
 
-    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the project's Python requirement: `{2}`")]
+    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the project's Python requirement: `{2}`. Use `uv python pin` to update the `.python-version` file to a compatible version.")]
     DotPythonVersionProjectIncompatibility(String, Version, RequiresPython),
 
     #[error("The resolved Python interpreter (Python {0}) is incompatible with the project's Python requirement: `{1}`")]
@@ -195,6 +195,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Requirements(#[from] uv_requirements::Error),
+
+    #[error(transparent)]
+    Metadata(#[from] uv_distribution::MetadataError),
 
     #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
@@ -689,6 +692,8 @@ impl ProjectInterpreter {
                             ));
                         }
                     }
+                    // If the environment is an empty directory, it's fine to use
+                    InvalidEnvironmentKind::Empty => {}
                 };
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
@@ -807,10 +812,15 @@ pub(crate) async fn get_or_init_environment(
                 (Ok(false), Ok(false)) => false,
                 // If it's not a virtual environment, bail
                 (Ok(true), Ok(false)) => {
-                    return Err(ProjectError::InvalidProjectEnvironmentDir(
-                        venv,
-                        "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
-                    ));
+                    // Unless it's empty, in which case we just ignore it
+                    if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+                        false
+                    } else {
+                        return Err(ProjectError::InvalidProjectEnvironmentDir(
+                            venv,
+                            "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                        ));
+                    }
                 }
                 // Similarly, if we can't _tell_ if it exists we should bail
                 (_, Err(err)) | (Err(err), _) => {
@@ -970,10 +980,7 @@ pub(crate) async fn resolve_names(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         *index_strategy,
         config_setting,
         build_isolation,
@@ -990,7 +997,7 @@ pub(crate) async fn resolve_names(
     requirements.extend(
         NamedRequirementsResolver::new(
             &hasher,
-            &state.index,
+            state.index(),
             DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
         )
         .with_reporter(ResolverReporter::from(printer))
@@ -1134,7 +1141,7 @@ pub(crate) async fn resolve_environment<'a>(
     // Populate the Git resolver.
     for ResolvedRepositoryReference { reference, sha } in git {
         debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-        state.git.insert(reference, sha);
+        state.git().insert(reference, sha);
     }
 
     // Resolve the flat indexes from `--find-links`.
@@ -1155,10 +1162,7 @@ pub(crate) async fn resolve_environment<'a>(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1192,7 +1196,7 @@ pub(crate) async fn resolve_environment<'a>(
         Conflicts::empty(),
         &client,
         &flat_index,
-        &state.index,
+        state.index(),
         &resolve_dispatch,
         concurrency,
         options,
@@ -1291,10 +1295,7 @@ pub(crate) async fn sync_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -1321,7 +1322,7 @@ pub(crate) async fn sync_environment(
         &hasher,
         tags,
         &client,
-        &state.in_flight,
+        state.in_flight(),
         concurrency,
         &build_dispatch,
         cache,
@@ -1498,10 +1499,7 @@ pub(crate) async fn update_environment(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         *index_strategy,
         config_setting,
         build_isolation,
@@ -1535,7 +1533,7 @@ pub(crate) async fn update_environment(
         Conflicts::empty(),
         &client,
         &flat_index,
-        &state.index,
+        state.index(),
         &build_dispatch,
         concurrency,
         options,
@@ -1562,7 +1560,7 @@ pub(crate) async fn update_environment(
         &hasher,
         tags,
         &client,
-        &state.in_flight,
+        state.in_flight(),
         concurrency,
         &build_dispatch,
         cache,

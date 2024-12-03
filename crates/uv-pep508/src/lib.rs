@@ -16,7 +16,6 @@
 
 #![warn(missing_docs)]
 
-use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
@@ -28,6 +27,7 @@ use url::Url;
 
 use cursor::Cursor;
 pub use marker::{
+    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
@@ -40,7 +40,7 @@ pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 /// Version and version specifiers used in requirements (reexport).
 // https://github.com/konstin/pep508_rs/issues/19
 pub use uv_pep440;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 pub use verbatim_url::{
     expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,
 };
@@ -200,36 +200,10 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
-type MarkerWarning = (MarkerWarningKind, String);
-
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         self.marker.evaluate(env, extras)
-    }
-
-    /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
-    /// if there is potentially an environment that could activate this requirement.
-    ///
-    /// Note that unlike [`Self::evaluate_markers`] this does not perform any checks for bogus
-    /// expressions but will simply return true. As caller you should separately perform a check
-    /// with an environment and forward all warnings.
-    pub fn evaluate_extras_and_python_version(
-        &self,
-        extras: &HashSet<ExtraName>,
-        python_versions: &[Version],
-    ) -> bool {
-        self.marker
-            .evaluate_extras_and_python_version(extras, python_versions)
-    }
-
-    /// Returns whether the markers apply for the given environment.
-    pub fn evaluate_markers_and_report(
-        &self,
-        env: &MarkerEnvironment,
-        extras: &[ExtraName],
-    ) -> (bool, Vec<MarkerWarning>) {
-        self.marker.evaluate_collect_warnings(env, extras)
     }
 
     /// Return the requirement with an additional marker added, to require the given extra.

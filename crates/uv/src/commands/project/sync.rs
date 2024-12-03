@@ -12,7 +12,7 @@ use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
     ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, TrustedHost,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
 };
@@ -35,7 +35,7 @@ use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::{do_safe_lock, LockMode};
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError, SharedState,
+    default_dependency_groups, detect_conflicts, DependencyGroupsTarget, ProjectError,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -325,7 +325,7 @@ pub(super) async fn do_sync(
                 target
                     .lock()
                     .simplified_supported_environments()
-                    .iter()
+                    .into_iter()
                     .filter_map(MarkerTree::contents)
                     .map(|env| format!("`{env}`"))
                     .join(", "),
@@ -411,10 +411,7 @@ pub(super) async fn do_sync(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -443,7 +440,7 @@ pub(super) async fn do_sync(
         &hasher,
         tags,
         &client,
-        &state.in_flight,
+        state.in_flight(),
         concurrency,
         &build_dispatch,
         cache,

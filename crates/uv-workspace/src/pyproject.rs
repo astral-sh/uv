@@ -819,7 +819,7 @@ impl TryFrom<SourcesWire> for Sources {
                         };
 
                         let mut hint = lhs.negate();
-                        hint.and(rhs.clone());
+                        hint.and(rhs);
                         let hint = hint
                             .contents()
                             .map(|contents| contents.to_string())
@@ -1415,13 +1415,13 @@ impl Source {
     }
 
     /// Return the [`MarkerTree`] for the source.
-    pub fn marker(&self) -> &MarkerTree {
+    pub fn marker(&self) -> MarkerTree {
         match self {
-            Source::Git { marker, .. } => marker,
-            Source::Url { marker, .. } => marker,
-            Source::Path { marker, .. } => marker,
-            Source::Registry { marker, .. } => marker,
-            Source::Workspace { marker, .. } => marker,
+            Source::Git { marker, .. } => *marker,
+            Source::Url { marker, .. } => *marker,
+            Source::Path { marker, .. } => *marker,
+            Source::Registry { marker, .. } => *marker,
+            Source::Workspace { marker, .. } => *marker,
         }
     }
 

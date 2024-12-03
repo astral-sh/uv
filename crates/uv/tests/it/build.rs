@@ -5,6 +5,7 @@ use fs_err::File;
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use std::env::current_dir;
 use zip::ZipArchive;
 
 #[test]
@@ -234,8 +235,8 @@ fn build() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
-
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
     "###);
 
     // Build to a specified path.
@@ -738,7 +739,8 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Pass `--wheel` explicitly to build a wheel from a source distribution
+      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
+      ╰─▶ Pass `--wheel` explicitly to build a wheel from a source distribution
     "###);
 
     // Error if `--sdist` is specified.
@@ -748,7 +750,8 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Building an `--sdist` from a source distribution is not supported
+      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
+      ╰─▶ Building an `--sdist` from a source distribution is not supported
     "###);
 
     // Build the wheel from the sdist.
@@ -815,8 +818,8 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building wheel from source distribution...
-    error: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
+      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
+      ╰─▶ `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
     "###);
 
     Ok(())
@@ -888,7 +891,8 @@ fn fail() -> Result<()> {
       File "<string>", line 2
         from setuptools import setup
     IndentationError: unexpected indent
-    error: Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
+      × Failed to build `[TEMP_DIR]/project`
+      ╰─▶ Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
     "###);
 
     Ok(())
@@ -1328,7 +1332,8 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
     Successfully built dist/member_a-0.1.0.tar.gz and dist/member_a-0.1.0-py3-none-any.whl
-    [PKG] error: Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
+      × Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
+      ╰─▶ Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
     Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
@@ -1397,9 +1402,10 @@ fn build_constraints() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `setuptools>=42`
-      Caused by: Because you require setuptools>=42 and setuptools==0.1.0, we can conclude that your requirements are unsatisfiable.
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `setuptools>=42`
+      ╰─▶ Because you require setuptools>=42 and setuptools==0.1.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
     project
@@ -1458,15 +1464,16 @@ fn sha() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to install requirements from `build-system.requires`
-      Caused by: Failed to download `setuptools==68.2.2`
-      Caused by: Hash mismatch for `setuptools==68.2.2`
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `setuptools==68.2.2`
+      ╰─▶ Hash mismatch for `setuptools==68.2.2`
 
-    Expected:
-      sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+          Expected:
+            sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
 
-    Computed:
-      sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
+          Computed:
+            sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
     "###);
 
     project
@@ -1488,15 +1495,16 @@ fn sha() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to install requirements from `build-system.requires`
-      Caused by: Failed to download `setuptools==68.2.2`
-      Caused by: Hash mismatch for `setuptools==68.2.2`
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `setuptools==68.2.2`
+      ╰─▶ Hash mismatch for `setuptools==68.2.2`
 
-    Expected:
-      sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+          Expected:
+            sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
 
-    Computed:
-      sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
+          Computed:
+            sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
     "###);
 
     project
@@ -1521,9 +1529,10 @@ fn sha() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `setuptools>=42`
-      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `setuptools`
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `setuptools>=42`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `setuptools`
     "###);
 
     project
@@ -2023,6 +2032,108 @@ fn build_non_package() -> Result<()> {
         .child("dist")
         .child("member-0.1.0-py3-none-any.whl")
         .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Test the uv fast path. Tests all four possible build plans:
+/// * Defaults
+/// * `--sdist`
+/// * `--wheel`
+/// * `--sdist --wheel`
+#[test]
+fn build_fast_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output1")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built output1/built_by_uv-0.1.0.tar.gz and output1/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output1")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    context
+        .temp_dir
+        .child("output1")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output2"))
+        .arg("--sdist"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Successfully built output2/built_by_uv-0.1.0.tar.gz
+    "###);
+    context
+        .temp_dir
+        .child("output2")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output3"))
+        .arg("--wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+    Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output3")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output4"))
+        .arg("--sdist")
+        .arg("--wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel (uv build backend)...
+    Successfully built output4/built_by_uv-0.1.0.tar.gz and output4/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output4")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    context
+        .temp_dir
+        .child("output4")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
 
     Ok(())
 }

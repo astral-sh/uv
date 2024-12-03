@@ -3,7 +3,7 @@ use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
-
+use std::slice;
 use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
@@ -193,18 +193,8 @@ impl<'env> InstallTarget<'env> {
             if dev.prod() {
                 // Push its dependencies on the queue.
                 queue.push_back((dist, None));
-                match extras {
-                    ExtrasSpecification::None => {}
-                    ExtrasSpecification::All => {
-                        for extra in dist.optional_dependencies.keys() {
-                            queue.push_back((dist, Some(extra)));
-                        }
-                    }
-                    ExtrasSpecification::Some(extras) => {
-                        for extra in extras {
-                            queue.push_back((dist, Some(extra)));
-                        }
-                    }
+                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                    queue.push_back((dist, Some(extra)));
                 }
             }
 
@@ -240,7 +230,19 @@ impl<'env> InstallTarget<'env> {
                         index
                     }
                     Entry::Occupied(entry) => {
+                        // Critically, if the package is already in the graph, then it's a workspace
+                        // member. If it was omitted due to, e.g., `--only-dev`, but is itself
+                        // referenced as a development dependency, then we need to re-enable it.
                         let index = *entry.get();
+                        let node = &mut petgraph[index];
+                        if !dev.prod() {
+                            *node = self.package_to_node(
+                                dep_dist,
+                                tags,
+                                build_options,
+                                install_options,
+                            )?;
+                        }
                         index
                     }
                 };
@@ -255,7 +257,7 @@ impl<'env> InstallTarget<'env> {
                     //
                     // FIXME: Make the above true. We aren't actually checking
                     // the conflict marker yet.
-                    Edge::Dev(group.clone(), dep.complexified_marker.pep508().clone()),
+                    Edge::Dev(group.clone(), dep.complexified_marker.pep508()),
                 );
 
                 // Push its dependencies on the queue.
@@ -314,17 +316,20 @@ impl<'env> InstallTarget<'env> {
                     index
                 }
                 Entry::Occupied(entry) => {
+                    // Critically, if the package is already in the graph, then it's a workspace
+                    // member. If it was omitted due to, e.g., `--only-dev`, but is itself
+                    // referenced as a development dependency, then we need to re-enable it.
                     let index = *entry.get();
+                    let node = &mut petgraph[index];
+                    if !dev.prod() {
+                        *node = self.package_to_node(dist, tags, build_options, install_options)?;
+                    }
                     index
                 }
             };
 
             // Add the edge.
-            petgraph.add_edge(
-                root,
-                index,
-                Edge::Dev(group.clone(), dependency.marker.clone()),
-            );
+            petgraph.add_edge(root, index, Edge::Dev(group.clone(), dependency.marker));
 
             // Push its dependencies on the queue.
             if seen.insert((&dist.id, None)) {
@@ -350,7 +355,10 @@ impl<'env> InstallTarget<'env> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
-                if !dep.complexified_marker.evaluate(marker_env, &[]) {
+                if !dep
+                    .complexified_marker
+                    .evaluate(marker_env, extra.map(slice::from_ref).unwrap_or_default())
+                {
                     continue;
                 }
 
@@ -380,9 +388,9 @@ impl<'env> InstallTarget<'env> {
                     index,
                     dep_index,
                     if let Some(extra) = extra {
-                        Edge::Optional(extra.clone(), dep.complexified_marker.pep508().clone())
+                        Edge::Optional(extra.clone(), dep.complexified_marker.pep508())
                     } else {
-                        Edge::Prod(dep.complexified_marker.pep508().clone())
+                        Edge::Prod(dep.complexified_marker.pep508())
                     },
                 );
 

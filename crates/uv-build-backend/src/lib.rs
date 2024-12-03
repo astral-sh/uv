@@ -1,6 +1,8 @@
 mod metadata;
 
-use crate::metadata::{PyProjectToml, ValidationError};
+pub use metadata::PyProjectToml;
+
+use crate::metadata::{BuildBackendSettings, ValidationError, DEFAULT_EXCLUDES};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
@@ -17,7 +19,8 @@ use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename, WheelFilename};
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter, PortableGlobError};
-use walkdir::{DirEntry, WalkDir};
+use uv_warnings::warn_user_once;
+use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
 
 #[derive(Debug, Error)]
@@ -48,6 +51,8 @@ pub enum Error {
         #[source]
         err: globset::Error,
     },
+    #[error("`pyproject.toml` must not be excluded from source distribution build")]
+    PyprojectTomlExcluded,
     #[error("Failed to walk source tree: `{}`", root.user_display())]
     WalkDir {
         root: PathBuf,
@@ -72,18 +77,16 @@ pub enum Error {
     TarWrite(PathBuf, #[source] io::Error),
 }
 
-/// Allow dispatching between writing to a directory, writing to zip and writing to a `.tar.gz`.
+/// Dispatcher between writing to a directory, writing to a zip, writing to a `.tar.gz` and
+/// listing files.
 ///
-/// All paths are string types instead of path types since wheel are portable between platforms.
+/// All paths are string types instead of path types since wheels are portable between platforms.
 ///
 /// Contract: You must call close before dropping to obtain a valid output (dropping is fine in the
 /// error case).
 trait DirectoryWriter {
     /// Add a file with the given content.
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
-
-    /// Add a file with the given name and return a writer for it.
-    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error>;
 
     /// Add a local file.
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error>;
@@ -124,6 +127,16 @@ impl ZipDirectoryWriter {
             record: Vec::new(),
         }
     }
+
+    /// Add a file with the given name and return a writer for it.
+    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
+        // TODO(konsti): We need to preserve permissions, at least the executable bit.
+        self.writer.start_file(
+            path,
+            zip::write::FileOptions::default().compression_method(self.compression),
+        )?;
+        Ok(Box::new(&mut self.writer))
+    }
 }
 
 impl DirectoryWriter for ZipDirectoryWriter {
@@ -141,15 +154,6 @@ impl DirectoryWriter for ZipDirectoryWriter {
         });
 
         Ok(())
-    }
-
-    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        // TODO(konsti): We need to preserve permissions, at least the executable bit.
-        self.writer.start_file(
-            path,
-            zip::write::FileOptions::default().compression_method(self.compression),
-        )?;
-        Ok(Box::new(&mut self.writer))
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
@@ -181,24 +185,30 @@ impl DirectoryWriter for ZipDirectoryWriter {
     }
 }
 
-struct FilesystemWrite {
+struct FilesystemWriter {
     /// The virtualenv or metadata directory that add file paths are relative to.
     root: PathBuf,
     /// The entries in the `RECORD` file.
     record: Vec<RecordEntry>,
 }
 
-impl FilesystemWrite {
+impl FilesystemWriter {
     fn new(root: &Path) -> Self {
         Self {
             root: root.to_owned(),
             record: Vec::new(),
         }
     }
+
+    /// Add a file with the given name and return a writer for it.
+    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
+        trace!("Adding {}", path);
+        Ok(Box::new(File::create(self.root.join(path))?))
+    }
 }
 
 /// File system writer.
-impl DirectoryWriter for FilesystemWrite {
+impl DirectoryWriter for FilesystemWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
         let hash = format!("{:x}", Sha256::new().chain_update(bytes).finalize());
@@ -210,12 +220,6 @@ impl DirectoryWriter for FilesystemWrite {
 
         Ok(fs_err::write(self.root.join(path), bytes)?)
     }
-
-    fn new_writer<'slf>(&'slf mut self, path: &str) -> Result<Box<dyn Write + 'slf>, Error> {
-        trace!("Adding {}", path);
-        Ok(Box::new(File::create(self.root.join(path))?))
-    }
-
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         trace!("Adding {} from {}", path, file.user_display());
         let mut reader = BufReader::new(File::open(file)?);
@@ -240,6 +244,82 @@ impl DirectoryWriter for FilesystemWrite {
             record,
         )?;
 
+        Ok(())
+    }
+}
+
+struct TarGzWriter {
+    path: PathBuf,
+    tar: tar::Builder<GzEncoder<File>>,
+}
+
+impl TarGzWriter {
+    fn new(path: impl Into<PathBuf>) -> Result<Self, Error> {
+        let path = path.into();
+        let file = File::create(&path)?;
+        let enc = GzEncoder::new(file, Compression::default());
+        let tar = tar::Builder::new(enc);
+        Ok(Self { path, tar })
+    }
+}
+
+impl DirectoryWriter for TarGzWriter {
+    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
+        let mut header = Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
+        // unpacking.
+        header.set_mode(0o644);
+        header.set_cksum();
+        self.tar
+            .append_data(&mut header, path, Cursor::new(bytes))
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        let metadata = fs_err::metadata(file)?;
+        let mut header = Header::new_gnu();
+        #[cfg(unix)]
+        {
+            // Preserve for example an executable bit.
+            header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
+        }
+        #[cfg(not(unix))]
+        {
+            // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
+            // unpacking.
+            header.set_mode(0o644);
+        }
+        header.set_size(metadata.len());
+        header.set_cksum();
+        let reader = BufReader::new(File::open(file)?);
+        self.tar
+            .append_data(&mut header, path, reader)
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
+        let mut header = Header::new_gnu();
+        // Directories are always executable, which means they can be listed.
+        header.set_mode(0o755);
+        header.set_entry_type(EntryType::Directory);
+        header
+            .set_path(directory)
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        header.set_size(0);
+        header.set_cksum();
+        self.tar
+            .append(&header, io::empty())
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        Ok(())
+    }
+
+    fn close(mut self, _dist_info_dir: &str) -> Result<(), Error> {
+        self.tar
+            .finish()
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 }
@@ -301,7 +381,13 @@ pub fn build_wheel(
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system("1.0.0+test");
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
+    let settings = pyproject_toml
+        .settings()
+        .cloned()
+        .unwrap_or_else(BuildBackendSettings::default);
 
     check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
@@ -319,32 +405,37 @@ pub fn build_wheel(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     // Wheel excludes
-    // TODO(konstin): The must be stronger than the source dist excludes, otherwise we can get more
-    // files in source tree -> wheel than for source tree -> source dist -> wheel.
-    let default_excludes: &[String] = &[
-        "__pycache__".to_string(),
-        "*.pyc".to_string(),
-        "*.pyo".to_string(),
-    ];
-    let excludes = pyproject_toml
-        .wheel_settings()
-        .and_then(|settings| settings.exclude.as_deref())
-        .unwrap_or(default_excludes);
+    let mut excludes: Vec<String> = Vec::new();
+    if settings.default_excludes {
+        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
+    }
+    for exclude in settings.wheel_exclude {
+        // Avoid duplicate entries.
+        if !excludes.contains(&exclude) {
+            excludes.push(exclude);
+        }
+    }
+    // The wheel must not include any files excluded by the source distribution (at least until we
+    // have files generated in the source dist -> wheel build step).
+    for exclude in settings.source_exclude {
+        // Avoid duplicate entries.
+        if !excludes.contains(&exclude) {
+            excludes.push(exclude);
+        }
+    }
+    debug!("Wheel excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
 
     debug!("Adding content files to {}", wheel_path.user_display());
-    let module_root = pyproject_toml
-        .wheel_settings()
-        .and_then(|wheel_settings| wheel_settings.module_root.as_deref())
-        .unwrap_or_else(|| Path::new("src"));
-    if module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(module_root.to_path_buf()));
+    if settings.module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
-    let strip_root = source_tree.join(module_root);
+    let strip_root = source_tree.join(settings.module_root);
     let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
     }
+    let mut files_visited = 0;
     for entry in WalkDir::new(module_root)
         .into_iter()
         .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
@@ -354,21 +445,36 @@ pub fn build_wheel(
             err,
         })?;
 
-        let relative_path = entry
+        files_visited += 1;
+        if files_visited > 10000 {
+            warn_user_once!(
+                "Visited more than 10,000 files for wheel build. \
+                Consider using more constrained includes or more excludes."
+            );
+        }
+
+        // We only want to take the module root, but since excludes start at the source tree root,
+        // we strip higher than we iterate.
+        let match_path = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+        let wheel_path = entry
             .path()
             .strip_prefix(&strip_root)
             .expect("walkdir starts with root");
-        if exclude_matcher.is_match(relative_path) {
-            trace!("Excluding from module: `{}`", relative_path.user_display());
+        if exclude_matcher.is_match(match_path) {
+            trace!("Excluding from module: `{}`", match_path.user_display());
+            continue;
         }
-        let relative_path = relative_path.user_display().to_string();
+        let wheel_path = wheel_path.portable_display().to_string();
 
-        debug!("Adding to wheel: `{relative_path}`");
+        debug!("Adding to wheel: `{wheel_path}`");
 
         if entry.file_type().is_dir() {
-            wheel_writer.write_directory(&relative_path)?;
+            wheel_writer.write_directory(&wheel_path)?;
         } else if entry.file_type().is_file() {
-            wheel_writer.write_file(&relative_path, entry.path())?;
+            wheel_writer.write_file(&wheel_path, entry.path())?;
         } else {
             // TODO(konsti): We may want to support symlinks, there is support for installing them.
             return Err(Error::UnsupportedFileType(
@@ -377,6 +483,7 @@ pub fn build_wheel(
             ));
         }
     }
+    debug!("Visited {files_visited} files for wheel build");
 
     // Add the license files
     if let Some(license_files) = &pyproject_toml.license_files() {
@@ -397,12 +504,7 @@ pub fn build_wheel(
     }
 
     // Add the data files
-    for (name, directory) in pyproject_toml
-        .wheel_settings()
-        .and_then(|wheel_settings| wheel_settings.data.clone())
-        .unwrap_or_default()
-        .iter()
-    {
+    for (name, directory) in settings.data.iter() {
         debug!("Adding {name} data files from: `{directory}`");
         let data_dir = format!(
             "{}-{}.data/{}/",
@@ -416,7 +518,7 @@ pub fn build_wheel(
             &data_dir,
             &["**".to_string()],
             &mut wheel_writer,
-            &format!("tool.uv.wheel.data.{name}"),
+            &format!("tool.uv.build-backend.data.{name}"),
         )?;
     }
 
@@ -442,7 +544,13 @@ pub fn build_editable(
 ) -> Result<WheelFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system("1.0.0+test");
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
+    let settings = pyproject_toml
+        .settings()
+        .cloned()
+        .unwrap_or_else(BuildBackendSettings::default);
 
     check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
@@ -460,14 +568,10 @@ pub fn build_editable(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding pth file to {}", wheel_path.user_display());
-    let module_root = pyproject_toml
-        .wheel_settings()
-        .and_then(|wheel_settings| wheel_settings.module_root.as_deref())
-        .unwrap_or_else(|| Path::new("src"));
-    if module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(module_root.to_path_buf()));
+    if settings.module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
-    let src_root = source_tree.join(module_root);
+    let src_root = source_tree.join(settings.module_root);
     let module_root = src_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
@@ -570,57 +674,40 @@ fn wheel_subdir_from_globs(
     Ok(())
 }
 
-/// TODO(konsti): Wire this up with actual settings and remove this struct.
-///
-/// To select which files to include in the source distribution, we first add the includes, then
-/// remove the excludes from that.
-pub struct SourceDistSettings {
-    /// Glob expressions which files and directories to include in the source distribution.
-    ///
-    /// Includes are anchored, which means that `pyproject.toml` includes only
-    /// `<project root>/pyproject.toml`. Use for example `assets/**/sample.csv` to include for all
-    /// `sample.csv` files in `<project root>/assets` or any child directory. To recursively include
-    /// all files under a directory, use a `/**` suffix, e.g. `src/**`. For performance and
-    /// reproducibility, avoid unanchored matches such as `**/sample.csv`.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-    include: Vec<String>,
-    /// Glob expressions which files and directories to exclude from the previous source
-    /// distribution includes.
-    ///
-    /// Excludes are not anchored, which means that `__pycache__` excludes all directories named
-    /// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
-    /// `/dist` will exclude only `<project root>/dist`.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-    exclude: Vec<String>,
-}
-
-impl Default for SourceDistSettings {
-    fn default() -> Self {
-        Self {
-            include: vec!["src/**".to_string(), "pyproject.toml".to_string()],
-            exclude: vec![
-                "__pycache__".to_string(),
-                "*.pyc".to_string(),
-                "*.pyo".to_string(),
-            ],
-        }
-    }
-}
-
 /// Build a source distribution from the source tree and place it in the output directory.
 pub fn build_source_dist(
     source_tree: &Path,
     source_dist_directory: &Path,
-    settings: SourceDistSettings,
     uv_version: &str,
 ) -> Result<SourceDistFilename, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system(uv_version);
+    let filename = SourceDistFilename {
+        name: pyproject_toml.name().clone(),
+        version: pyproject_toml.version().clone(),
+        extension: SourceDistExtension::TarGz,
+    };
+    let source_dist_path = source_dist_directory.join(filename.to_string());
+    let writer = TarGzWriter::new(&source_dist_path)?;
+    write_source_dist(source_tree, writer, uv_version)?;
+    Ok(filename)
+}
+
+/// Shared implementation for building and listing a source distribution.
+fn write_source_dist(
+    source_tree: &Path,
+    mut writer: impl DirectoryWriter,
+    uv_version: &str,
+) -> Result<SourceDistFilename, Error> {
+    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
+    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
+    let settings = pyproject_toml
+        .settings()
+        .cloned()
+        .unwrap_or_else(BuildBackendSettings::default);
 
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
@@ -634,30 +721,109 @@ pub fn build_source_dist(
         pyproject_toml.version()
     );
 
-    let source_dist_path = source_dist_directory.join(filename.to_string());
-    let tar_gz = File::create(&source_dist_path)?;
-    let enc = GzEncoder::new(tar_gz, Compression::default());
-    let mut tar = tar::Builder::new(enc);
-
     let metadata = pyproject_toml.to_metadata(source_tree)?;
     let metadata_email = metadata.core_metadata_format();
 
-    let mut header = Header::new_gnu();
-    header.set_size(metadata_email.bytes().len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    tar.append_data(
-        &mut header,
-        Path::new(&top_level).join("PKG-INFO"),
-        Cursor::new(metadata_email),
-    )
-    .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
+    writer.write_bytes(
+        &Path::new(&top_level)
+            .join("PKG-INFO")
+            .portable_display()
+            .to_string(),
+        metadata_email.as_bytes(),
+    )?;
 
-    // The user (or default) includes
+    let (include_matcher, exclude_matcher) = source_dist_matcher(&pyproject_toml, settings)?;
+
+    let mut files_visited = 0;
+    for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
+        // TODO(konsti): This should be prettier.
+        let relative = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+
+        // Fast path: Don't descend into a directory that can't be included. This is the most
+        // important performance optimization, it avoids descending into directories such as
+        // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
+        // directories that often exist on the top level of a project. This is especially noticeable
+        // on network file systems with high latencies per operation (while contiguous reading may
+        // still be fast).
+        include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
+    }) {
+        let entry = entry.map_err(|err| Error::WalkDir {
+            root: source_tree.to_path_buf(),
+            err,
+        })?;
+
+        files_visited += 1;
+        if files_visited > 10000 {
+            warn_user_once!(
+                "Visited more than 10,000 files for source distribution build. \
+                Consider using more constrained includes or more excludes."
+            );
+        }
+        // TODO(konsti): This should be prettier.
+        let relative = entry
+            .path()
+            .strip_prefix(source_tree)
+            .expect("walkdir starts with root");
+
+        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
+            trace!("Excluding: `{}`", relative.user_display());
+            continue;
+        };
+
+        debug!("Including {}", relative.user_display());
+        if entry.file_type().is_dir() {
+            writer.write_directory(
+                &Path::new(&top_level)
+                    .join(relative)
+                    .portable_display()
+                    .to_string(),
+            )?;
+        } else if entry.file_type().is_file() {
+            writer.write_file(
+                &Path::new(&top_level)
+                    .join(relative)
+                    .portable_display()
+                    .to_string(),
+                entry.path(),
+            )?;
+        } else {
+            return Err(Error::UnsupportedFileType(
+                relative.to_path_buf(),
+                entry.file_type(),
+            ));
+        }
+    }
+    debug!("Visited {files_visited} files for source dist build");
+
+    writer.close(&top_level)?;
+
+    Ok(filename)
+}
+
+/// Build includes and excludes for source tree walking for source dists.
+fn source_dist_matcher(
+    pyproject_toml: &PyProjectToml,
+    settings: BuildBackendSettings,
+) -> Result<(GlobDirFilter, GlobSet), Error> {
+    // File and directories to include in the source directory
     let mut include_globs = Vec::new();
-    for include in settings.include {
+    let mut includes: Vec<String> = settings.source_include;
+    // pyproject.toml is always included.
+    includes.push(globset::escape("pyproject.toml"));
+    // The wheel must not include any files included by the source distribution (at least until we
+    // have files generated in the source dist -> wheel build step).
+    let import_path = &settings
+        .module_root
+        .join(pyproject_toml.name().as_dist_info_name().as_ref())
+        .portable_display()
+        .to_string();
+    includes.push(format!("{}/**", globset::escape(import_path)));
+    for include in includes {
         let glob = parse_portable_glob(&include).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.source-dist.include".to_string(),
+            field: "tool.uv.build-backend.source-include".to_string(),
             source: err,
         })?;
         include_globs.push(glob.clone());
@@ -687,16 +853,11 @@ pub fn build_source_dist(
     }
 
     // Include the data files
-    for (name, directory) in pyproject_toml
-        .wheel_settings()
-        .and_then(|wheel_settings| wheel_settings.data.clone())
-        .unwrap_or_default()
-        .iter()
-    {
+    for (name, directory) in settings.data.iter() {
         let glob =
             parse_portable_glob(&format!("{}/**", globset::escape(directory))).map_err(|err| {
                 Error::PortableGlob {
-                    field: format!("tool.uv.wheel.data.{name}"),
+                    field: format!("tool.uv.build-backend.data.{name}"),
                     source: err,
                 }
             })?;
@@ -706,57 +867,35 @@ pub fn build_source_dist(
 
     let include_matcher =
         GlobDirFilter::from_globs(&include_globs).map_err(|err| Error::GlobSetTooLarge {
-            field: "tool.uv.source-dist.include".to_string(),
+            field: "tool.uv.build-backend.source-include".to_string(),
             source: err,
         })?;
 
-    let exclude_matcher = build_exclude_matcher(&settings.exclude)?;
-
-    // TODO(konsti): Add files linked by pyproject.toml
-
-    for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-
-        // Fast path: Don't descend into a directory that can't be included. This is the most
-        // important performance optimization, it avoids descending into directories such as
-        // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
-        // directories that often exist on the top level of a project. This is especially noticeable
-        // on network file systems with high latencies per operation (while contiguous reading may
-        // still be fast).
-        include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
-    }) {
-        let entry = entry.map_err(|err| Error::WalkDir {
-            root: source_tree.to_path_buf(),
-            err,
-        })?;
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
-
-        if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
-            trace!("Excluding: `{}`", relative.user_display());
-            continue;
-        };
-
-        add_source_dist_entry(&mut tar, &entry, &top_level, &source_dist_path, relative)?;
+    let mut excludes: Vec<String> = Vec::new();
+    if settings.default_excludes {
+        excludes.extend(DEFAULT_EXCLUDES.iter().map(ToString::to_string));
     }
-
-    tar.finish()
-        .map_err(|err| Error::TarWrite(source_dist_path.clone(), err))?;
-
-    Ok(filename)
+    for exclude in settings.source_exclude {
+        // Avoid duplicate entries.
+        if !excludes.contains(&exclude) {
+            excludes.push(exclude);
+        }
+    }
+    debug!("Source dist excludes: {:?}", excludes);
+    let exclude_matcher = build_exclude_matcher(excludes)?;
+    if exclude_matcher.is_match("pyproject.toml") {
+        return Err(Error::PyprojectTomlExcluded);
+    }
+    Ok((include_matcher, exclude_matcher))
 }
 
 /// Build a globset matcher for excludes.
-fn build_exclude_matcher(excludes: &[String]) -> Result<GlobSet, Error> {
+fn build_exclude_matcher(
+    excludes: impl IntoIterator<Item = impl AsRef<str>>,
+) -> Result<GlobSet, Error> {
     let mut exclude_builder = GlobSetBuilder::new();
     for exclude in excludes {
+        let exclude = exclude.as_ref();
         // Excludes are unanchored
         let exclude = if let Some(exclude) = exclude.strip_prefix("/") {
             exclude.to_string()
@@ -764,7 +903,7 @@ fn build_exclude_matcher(excludes: &[String]) -> Result<GlobSet, Error> {
             format!("**/{exclude}").to_string()
         };
         let glob = parse_portable_glob(&exclude).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.source-dist.exclude".to_string(),
+            field: "tool.uv.build-backend.*-exclude".to_string(),
             source: err,
         })?;
         exclude_builder.add(glob);
@@ -772,59 +911,10 @@ fn build_exclude_matcher(excludes: &[String]) -> Result<GlobSet, Error> {
     let exclude_matcher = exclude_builder
         .build()
         .map_err(|err| Error::GlobSetTooLarge {
-            field: "tool.uv.source-dist.exclude".to_string(),
+            field: "tool.uv.build-backend.*-exclude".to_string(),
             source: err,
         })?;
     Ok(exclude_matcher)
-}
-
-/// Add a file or a directory to a source distribution.
-fn add_source_dist_entry(
-    tar: &mut tar::Builder<GzEncoder<File>>,
-    entry: &DirEntry,
-    top_level: &str,
-    source_dist_path: &Path,
-    relative: &Path,
-) -> Result<(), Error> {
-    debug!("Including {}", relative.user_display());
-
-    let metadata = fs_err::metadata(entry.path())?;
-    let mut header = Header::new_gnu();
-    #[cfg(unix)]
-    {
-        header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
-    }
-    #[cfg(not(unix))]
-    {
-        header.set_mode(0o644);
-    }
-
-    if entry.file_type().is_dir() {
-        header.set_entry_type(EntryType::Directory);
-        header
-            .set_path(Path::new(&top_level).join(relative))
-            .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
-        header.set_size(0);
-        header.set_cksum();
-        tar.append(&header, io::empty())
-            .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
-        Ok(())
-    } else if entry.file_type().is_file() {
-        header.set_size(metadata.len());
-        header.set_cksum();
-        tar.append_data(
-            &mut header,
-            Path::new(&top_level).join(relative),
-            BufReader::new(File::open(entry.path())?),
-        )
-        .map_err(|err| Error::TarWrite(source_dist_path.to_path_buf(), err))?;
-        Ok(())
-    } else {
-        Err(Error::UnsupportedFileType(
-            relative.to_path_buf(),
-            entry.file_type(),
-        ))
-    }
 }
 
 /// Write the dist-info directory to the output directory without building the wheel.
@@ -835,7 +925,9 @@ pub fn metadata(
 ) -> Result<String, Error> {
     let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
     let pyproject_toml = PyProjectToml::parse(&contents)?;
-    pyproject_toml.check_build_system(uv_version);
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
 
     let filename = WheelFilename {
         name: pyproject_toml.name().clone(),
@@ -850,7 +942,7 @@ pub fn metadata(
         "Writing metadata files to {}",
         metadata_directory.user_display()
     );
-    let mut wheel_writer = FilesystemWrite::new(metadata_directory);
+    let mut wheel_writer = FilesystemWriter::new(metadata_directory);
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         &pyproject_toml,
@@ -1077,27 +1169,30 @@ mod tests {
             .path()
             .join("built_by_uv-0.1.0.dist-info/METADATA");
         assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @r###"
-    Metadata-Version: 2.4
-    Name: built-by-uv
-    Version: 0.1.0
-    Summary: A package to be built with the uv build backend that uses all features exposed by the build backend
-    Requires-Dist: anyio>=4,<5
-    Requires-Python: >=3.12
-    Description-Content-Type: text/markdown
+        Metadata-Version: 2.4
+        Name: built-by-uv
+        Version: 0.1.0
+        Summary: A package to be built with the uv build backend that uses all features exposed by the build backend
+        License-File: LICENSE-APACHE
+        License-File: LICENSE-MIT
+        License-File: third-party-licenses/PEP-401.txt
+        Requires-Dist: anyio>=4,<5
+        Requires-Python: >=3.12
+        Description-Content-Type: text/markdown
 
-    # built_by_uv
+        # built_by_uv
 
-    A package to be built with the uv build backend that uses all features exposed by the build backend.
-    "###);
+        A package to be built with the uv build backend that uses all features exposed by the build backend.
+        "###);
 
         let record_file = metadata_dir
             .path()
             .join("built_by_uv-0.1.0.dist-info/RECORD");
         assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-    built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
-    built_by_uv-0.1.0.dist-info/METADATA,sha256=acb91f5a18cb53fa57b45eb4590ea13195a774c856a9dd8cf27cc5435d6451b6,372
-    built_by_uv-0.1.0.dist-info/RECORD,,
-    "###);
+        built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
+        built_by_uv-0.1.0.dist-info/METADATA,sha256=9ba12456f2ab1a6ab1e376ff551e392c70f7ec86713d80b4348e90c7dfd45cb1,474
+        built_by_uv-0.1.0.dist-info/RECORD,,
+        "###);
 
         let wheel_file = metadata_dir
             .path()
@@ -1161,13 +1256,7 @@ mod tests {
 
         // Build a source dist from the source tree
         let source_dist_dir = TempDir::new().unwrap();
-        build_source_dist(
-            src.path(),
-            source_dist_dir.path(),
-            SourceDistSettings::default(),
-            "1.0.0+test",
-        )
-        .unwrap();
+        build_source_dist(src.path(), source_dist_dir.path(), "1.0.0+test").unwrap();
 
         // Build a wheel from the source dist
         let sdist_tree = TempDir::new().unwrap();
@@ -1194,26 +1283,6 @@ mod tests {
             "1.0.0+test",
         )
         .unwrap();
-
-        // Check the contained files and directories
-        assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
-            built_by_uv-0.1.0/LICENSE-APACHE
-            built_by_uv-0.1.0/LICENSE-MIT
-            built_by_uv-0.1.0/PKG-INFO
-            built_by_uv-0.1.0/README.md
-            built_by_uv-0.1.0/assets/data.csv
-            built_by_uv-0.1.0/header/built_by_uv.h
-            built_by_uv-0.1.0/pyproject.toml
-            built_by_uv-0.1.0/scripts/whoami.sh
-            built_by_uv-0.1.0/src/built_by_uv
-            built_by_uv-0.1.0/src/built_by_uv/__init__.py
-            built_by_uv-0.1.0/src/built_by_uv/arithmetic
-            built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
-            built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
-            built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
-            built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
-        ");
-
         let wheel = zip::ZipArchive::new(
             File::open(
                 indirect_output_dir
@@ -1227,28 +1296,55 @@ mod tests {
         indirect_wheel_contents.sort_unstable();
         assert_eq!(indirect_wheel_contents, direct_wheel_contents);
 
-        assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r"
-            built_by_uv-0.1.0.data/data/
-            built_by_uv-0.1.0.data/data/data.csv
-            built_by_uv-0.1.0.data/headers/
-            built_by_uv-0.1.0.data/headers/built_by_uv.h
-            built_by_uv-0.1.0.data/scripts/
-            built_by_uv-0.1.0.data/scripts/whoami.sh
-            built_by_uv-0.1.0.dist-info/
-            built_by_uv-0.1.0.dist-info/METADATA
-            built_by_uv-0.1.0.dist-info/RECORD
-            built_by_uv-0.1.0.dist-info/WHEEL
-            built_by_uv-0.1.0.dist-info/licenses/
-            built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
-            built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
-            built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
-            built_by_uv/
-            built_by_uv/__init__.py
-            built_by_uv/arithmetic/
-            built_by_uv/arithmetic/__init__.py
-            built_by_uv/arithmetic/circle.py
-            built_by_uv/arithmetic/pi.txt
-        ");
+        // Check the contained files and directories
+        assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
+        built_by_uv-0.1.0/
+        built_by_uv-0.1.0/LICENSE-APACHE
+        built_by_uv-0.1.0/LICENSE-MIT
+        built_by_uv-0.1.0/PKG-INFO
+        built_by_uv-0.1.0/README.md
+        built_by_uv-0.1.0/assets
+        built_by_uv-0.1.0/assets/data.csv
+        built_by_uv-0.1.0/header
+        built_by_uv-0.1.0/header/built_by_uv.h
+        built_by_uv-0.1.0/pyproject.toml
+        built_by_uv-0.1.0/scripts
+        built_by_uv-0.1.0/scripts/whoami.sh
+        built_by_uv-0.1.0/src
+        built_by_uv-0.1.0/src/built_by_uv
+        built_by_uv-0.1.0/src/built_by_uv/__init__.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
+        built_by_uv-0.1.0/src/built_by_uv/build-only.h
+        built_by_uv-0.1.0/third-party-licenses
+        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
+        "###);
+
+        assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
+        built_by_uv-0.1.0.data/data/
+        built_by_uv-0.1.0.data/data/data.csv
+        built_by_uv-0.1.0.data/headers/
+        built_by_uv-0.1.0.data/headers/built_by_uv.h
+        built_by_uv-0.1.0.data/scripts/
+        built_by_uv-0.1.0.data/scripts/whoami.sh
+        built_by_uv-0.1.0.dist-info/
+        built_by_uv-0.1.0.dist-info/METADATA
+        built_by_uv-0.1.0.dist-info/RECORD
+        built_by_uv-0.1.0.dist-info/WHEEL
+        built_by_uv-0.1.0.dist-info/licenses/
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
+        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/
+        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt
+        built_by_uv/
+        built_by_uv/__init__.py
+        built_by_uv/arithmetic/
+        built_by_uv/arithmetic/__init__.py
+        built_by_uv/arithmetic/circle.py
+        built_by_uv/arithmetic/pi.txt
+        "###);
 
         // Check that we write deterministic wheels.
         let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";

@@ -308,6 +308,10 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt><code>--no-env-file</code></dt><dd><p>Avoid reading environment variables from a <code>.env</code> file</p>
 
 <p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p>
+</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
 
 <p>May be provided multiple times.</p>
@@ -1612,6 +1616,10 @@ uv sync [OPTIONS]
 
 </dd><dt><code>--no-editable</code></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
 
 <p>May be provided multiple times.</p>
@@ -2286,6 +2294,10 @@ uv export [OPTIONS]
 
 <p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
 
+</dd><dt><code>--no-extra</code> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt><code>--no-group</code> <i>no-group</i></dt><dd><p>Exclude dependencies from the specified dependency group.</p>
 
 <p>May be provided multiple times.</p>
@@ -2354,6 +2366,10 @@ uv export [OPTIONS]
 <p>See <code>--directory</code> to change the working directory entirely.</p>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
+</dd><dt><code>--prune</code> <i>prune</i></dt><dd><p>Prune the given package from the dependency tree.</p>
+
+<p>Pruned packages will be excluded from the exported requirements file, as will any dependencies that are no longer required after the pruned package is removed.</p>
 
 </dd><dt><code>--python</code>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
@@ -3225,6 +3241,13 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--constraints</code>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
+
+<p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that&#8217;s installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
+
+<p>This is equivalent to pip&#8217;s <code>--constraint</code> option.</p>
+
+<p>May also be set with the <code>UV_CONSTRAINT</code> environment variable.</p>
 </dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -3372,6 +3395,13 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--overrides</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
+
+<p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
+
+<p>While constraints are <em>additive</em>, in that they&#8217;re combined with the requirements of the constituent packages, overrides are <em>absolute</em>, in that they completely replace the requirements of the constituent packages.</p>
+
+<p>May also be set with the <code>UV_OVERRIDE</code> environment variable.</p>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -3479,7 +3509,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <h3 class="cli-reference">Arguments</h3>
 
-<dl class="cli-reference"><dt><code>NAME</code></dt><dd><p>The name of the tool to upgrade</p>
+<dl class="cli-reference"><dt><code>NAME</code></dt><dd><p>The name of the tool to upgrade, along with an optional version specifier</p>
 
 </dd></dl>
 
@@ -4497,6 +4527,14 @@ uv python install [OPTIONS] [TARGETS]...
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--default</code></dt><dd><p>Use as the default Python version.</p>
+
+<p>By default, only a <code>python{major}.{minor}</code> executable is installed, e.g., <code>python3.10</code>. When the <code>--default</code> flag is used, <code>python{major}</code>, e.g., <code>python3</code>, and <code>python</code> executables are also installed.</p>
+
+<p>Alternative Python variants will still include their tag. For example, installing 3.13+freethreaded with <code>--default</code> will include in <code>python3t</code> and <code>pythont</code>, not <code>python3</code> and <code>python</code>.</p>
+
+<p>If multiple Python versions are requested during the installation, the first request will be the default.</p>
+
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -6538,6 +6576,8 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--dry-run</code></dt><dd><p>Perform a dry run, i.e., don&#8217;t actually uninstall anything but print the resulting plan</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
@@ -7870,6 +7910,10 @@ uv build [OPTIONS] [SRC]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt><code>--no-fast-path</code></dt><dd><p>Always build through PEP 517, don&#8217;t use the fast path for the uv build backend.</p>
+
+<p>By default, uv won&#8217;t create a PEP 517 build environment for packages using the uv build backend, but use a fast path that calls into the build backend directly. This option forces always using PEP 517.</p>
+
 </dd><dt><code>--no-index</code></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
 
 </dd><dt><code>--no-progress</code></dt><dd><p>Hide all progress outputs.</p>

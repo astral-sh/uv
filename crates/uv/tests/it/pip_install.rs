@@ -50,7 +50,7 @@ fn empty_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Audited in [TIME]
     "###
     );
@@ -178,7 +178,13 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         unknown = "field"
     "#})?;
 
-    uv_snapshot!(context.pip_install()
+    let mut filters = context.filters();
+    filters.push((
+        "expected one of `native-tls`, `offline`, .*",
+        "expected one of `native-tls`, `offline`, [...]",
+    ));
+
+    uv_snapshot!(filters, context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @r###"
     success: true
@@ -191,7 +197,7 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `source-dist`, `wheel`
+      unknown field `unknown`, expected one of `native-tls`, `offline`, [...]
 
     Resolved in [TIME]
     Audited in [TIME]
@@ -1266,7 +1272,7 @@ fn install_editable_bare_cli() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1293,7 +1299,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2145,7 +2151,7 @@ fn install_only_binary_all_and_no_binary_all() {
            cannot be used.
           And because you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: Pre-releases are available for anyio in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###
     );
 
@@ -3445,7 +3451,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3465,7 +3471,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3491,7 +3497,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -3539,7 +3545,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3559,7 +3565,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3576,7 +3582,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3597,7 +3603,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3628,7 +3634,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3661,7 +3667,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3682,7 +3688,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3738,7 +3744,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3758,7 +3764,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3781,7 +3787,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4881,7 +4887,7 @@ fn deptry_gitignore() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]

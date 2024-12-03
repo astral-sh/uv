@@ -1,13 +1,14 @@
 use std::iter;
 
+use either::Either;
 use pubgrub::Ranges;
 use tracing::warn;
 
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{
-    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, Requirement,
-    RequirementSource, VerbatimParsedUrl,
+    Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
+    Requirement, RequirementSource, VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -17,9 +18,6 @@ pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Ranges<Version>,
 
-    /// The original version specifiers from the requirement.
-    pub(crate) specifier: Option<VersionSpecifiers>,
-
     /// This field is set if the [`Requirement`] had a URL. We still use a URL from [`Urls`]
     /// even if this field is None where there is an override with a URL or there is a different
     /// requirement or constraint for the same package that has a URL.
@@ -28,54 +26,99 @@ pub(crate) struct PubGrubDependency {
 
 impl PubGrubDependency {
     pub(crate) fn from_requirement<'a>(
+        conflicts: &Conflicts,
         requirement: &'a Requirement,
+        dev: Option<&'a GroupName>,
         source_name: Option<&'a PackageName>,
     ) -> impl Iterator<Item = Self> + 'a {
+        let iter = if requirement.extras.is_empty() {
+            Either::Left(iter::once(None))
+        } else {
+            // This is crazy subtle, but if any of the extras in the
+            // requirement are part of a declared conflict, then we
+            // specifically need (at time of writing) to include the
+            // base package as a dependency. This results in both
+            // the base package and the extra package being sibling
+            // dependencies at the point in which forks are created
+            // base on conflicting extras. If the base package isn't
+            // present at that point, then it's impossible for the
+            // fork that excludes all conflicting extras to reach
+            // the non-extra dependency, which may be necessary for
+            // correctness.
+            //
+            // But why do we not include the base package in the first
+            // place? Well, that's part of an optimization[1].
+            //
+            // [1]: https://github.com/astral-sh/uv/pull/9540
+            let base = if requirement
+                .extras
+                .iter()
+                .any(|extra| conflicts.contains(&requirement.name, extra))
+            {
+                Either::Left(iter::once(None))
+            } else {
+                Either::Right(iter::empty())
+            };
+            Either::Right(base.chain(requirement.extras.clone().into_iter().map(Some)))
+        };
+
         // Add the package, plus any extra variants.
-        iter::once(None)
-            .chain(requirement.extras.clone().into_iter().map(Some))
-            .map(|extra| PubGrubRequirement::from_requirement(requirement, extra))
+        iter.map(|extra| PubGrubRequirement::from_requirement(requirement, extra))
             .filter_map(move |requirement| {
                 let PubGrubRequirement {
                     package,
                     version,
-                    specifier,
                     url,
                 } = requirement;
                 match &*package {
                     PubGrubPackageInner::Package { name, .. } => {
                         // Detect self-dependencies.
-                        if source_name.is_some_and(|source_name| source_name == name) {
-                            warn!("{name} has a dependency on itself");
-                            return None;
+                        if dev.is_none() {
+                            if source_name.is_some_and(|source_name| source_name == name) {
+                                warn!("{name} has a dependency on itself");
+                                return None;
+                            }
                         }
 
                         Some(PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
-                            specifier,
                             url,
                         })
                     }
-                    PubGrubPackageInner::Marker { .. } => Some(PubGrubDependency {
-                        package: package.clone(),
-                        version: version.clone(),
-                        specifier,
-                        url,
-                    }),
-                    PubGrubPackageInner::Extra { name, .. } => {
-                        debug_assert!(
-                            !source_name.is_some_and(|source_name| source_name == name),
-                            "extras not flattened for {name}"
-                        );
+                    PubGrubPackageInner::Marker { name, .. } => {
+                        // Detect self-dependencies.
+                        if dev.is_none() {
+                            if source_name.is_some_and(|source_name| source_name == name) {
+                                return None;
+                            }
+                        }
+
                         Some(PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
-                            specifier,
                             url,
                         })
                     }
-                    _ => None,
+                    PubGrubPackageInner::Extra { name, .. } => {
+                        // Detect self-dependencies.
+                        if dev.is_none() {
+                            debug_assert!(
+                                source_name.is_none_or(|source_name| source_name != name),
+                                "extras not flattened for {name}"
+                            );
+                        }
+                        Some(PubGrubDependency {
+                            package: package.clone(),
+                            version: version.clone(),
+                            url,
+                        })
+                    }
+                    PubGrubPackageInner::Root(_) => unreachable!("root package in dependencies"),
+                    PubGrubPackageInner::Python(_) => {
+                        unreachable!("python package in dependencies")
+                    }
+                    PubGrubPackageInner::Dev { .. } => unreachable!("dev package in dependencies"),
                 }
             })
     }
@@ -86,7 +129,6 @@ impl PubGrubDependency {
 pub(crate) struct PubGrubRequirement {
     pub(crate) package: PubGrubPackage,
     pub(crate) version: Ranges<Version>,
-    pub(crate) specifier: Option<VersionSpecifiers>,
     pub(crate) url: Option<VerbatimParsedUrl>,
 }
 
@@ -158,10 +200,9 @@ impl PubGrubRequirement {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),
                 extra,
-                requirement.marker.clone(),
+                requirement.marker,
             ),
             version: Ranges::full(),
-            specifier: None,
             url: Some(VerbatimParsedUrl {
                 parsed_url,
                 verbatim: verbatim_url.clone(),
@@ -178,9 +219,8 @@ impl PubGrubRequirement {
             package: PubGrubPackage::from_package(
                 requirement.name.clone(),
                 extra,
-                requirement.marker.clone(),
+                requirement.marker,
             ),
-            specifier: Some(specifier.clone()),
             url: None,
             version: Ranges::from(specifier.clone()),
         }

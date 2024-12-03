@@ -89,7 +89,7 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_else(|| &PythonRequest::Default);
+        let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
         match Self::find(request, environments, preference, cache) {
@@ -327,12 +327,31 @@ impl PythonInstallationKey {
         &self.libc
     }
 
-    /// Return a canonical name for a versioned executable.
-    pub fn versioned_executable_name(&self) -> String {
+    /// Return a canonical name for a minor versioned executable.
+    pub fn executable_name_minor(&self) -> String {
         format!(
             "python{maj}.{min}{var}{exe}",
             maj = self.major,
             min = self.minor,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
+
+    /// Return a canonical name for a major versioned executable.
+    pub fn executable_name_major(&self) -> String {
+        format!(
+            "python{maj}{var}{exe}",
+            maj = self.major,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
+
+    /// Return a canonical name for an un-versioned executable.
+    pub fn executable_name(&self) -> String {
+        format!(
+            "python{var}{exe}",
             var = self.variant.suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )

@@ -74,8 +74,10 @@ impl GlobDirFilter {
     }
 
     /// Whether the path (file or directory) matches any of the globs.
+    ///
+    /// We include a directory if we are potentially including files it contains.
     pub fn match_path(&self, path: &Path) -> bool {
-        self.glob_set.is_match(path)
+        self.match_directory(path) || self.glob_set.is_match(path)
     }
 
     /// Check whether a directory or any of its children can be matched by any of the globs.
@@ -261,9 +263,16 @@ mod tests {
         assert_eq!(
             matches,
             [
+                "",
+                "path1",
                 "path1/dir1",
+                "path2",
                 "path2/dir2",
+                "path3",
+                "path3/dir3",
+                "path3/dir3/subdir",
                 "path3/dir3/subdir/a.txt",
+                "path4",
                 "path4/dir4",
                 "path4/dir4/subdir",
                 "path4/dir4/subdir/a.txt",

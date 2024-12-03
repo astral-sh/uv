@@ -13,7 +13,7 @@ use uv_pep508::{MarkerEnvironment, MarkerTree};
 ///
 /// A universal marker evaluates to true only when *both* its PEP 508 marker
 /// and its conflict marker evaluate to true.
-#[derive(Debug, Default, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct UniversalMarker {
     pep508_marker: MarkerTree,
     conflict_marker: MarkerTree,
@@ -70,16 +70,16 @@ impl UniversalMarker {
     ///
     /// Two universal markers are disjoint when it is impossible for them both
     /// to evaluate to `true` simultaneously.
-    pub(crate) fn is_disjoint(&self, other: &UniversalMarker) -> bool {
-        self.pep508_marker.is_disjoint(&other.pep508_marker)
-            || self.conflict_marker.is_disjoint(&other.conflict_marker)
+    pub(crate) fn is_disjoint(self, other: &UniversalMarker) -> bool {
+        self.pep508_marker.is_disjoint(other.pep508_marker)
+            || self.conflict_marker.is_disjoint(other.conflict_marker)
     }
 
     /// Returns true if this universal marker is satisfied by the given
     /// marker environment and list of activated extras.
     ///
     /// FIXME: This also needs to accept a list of groups.
-    pub(crate) fn evaluate(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
+    pub(crate) fn evaluate(self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         self.pep508_marker.evaluate(env, extras) && self.conflict_marker.evaluate(env, extras)
     }
 
@@ -91,8 +91,8 @@ impl UniversalMarker {
     /// producing different versions of the same package), then one should
     /// always use a universal marker since it accounts for all possible ways
     /// for a package to be installed.
-    pub fn pep508(&self) -> &MarkerTree {
-        &self.pep508_marker
+    pub fn pep508(self) -> MarkerTree {
+        self.pep508_marker
     }
 
     /// Returns the non-PEP 508 marker expression that represents conflicting
@@ -106,8 +106,8 @@ impl UniversalMarker {
     /// of non-trivial conflict markers and fails if any are found. (Because
     /// conflict markers cannot be represented in the `requirements.txt`
     /// format.)
-    pub fn conflict(&self) -> &MarkerTree {
-        &self.conflict_marker
+    pub fn conflict(self) -> MarkerTree {
+        self.conflict_marker
     }
 }
 
@@ -122,9 +122,9 @@ impl std::fmt::Display for UniversalMarker {
         ) {
             (None, None) => write!(f, "`true`"),
             (Some(pep508), None) => write!(f, "`{pep508}`"),
-            (None, Some(conflict)) => write!(f, "`true` (conflict marker: `{conflict}`"),
+            (None, Some(conflict)) => write!(f, "`true` (conflict marker: `{conflict}`)"),
             (Some(pep508), Some(conflict)) => {
-                write!(f, "`{pep508}` (conflict marker: `{conflict}`")
+                write!(f, "`{pep508}` (conflict marker: `{conflict}`)")
             }
         }
     }

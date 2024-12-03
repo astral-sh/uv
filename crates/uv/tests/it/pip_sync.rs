@@ -360,7 +360,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     No requirements found (hint: use `--allow-empty-requirements` to clear the environment)
     "###
     );
@@ -373,7 +373,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved in [TIME]
     Audited in [TIME]
     "###
@@ -397,7 +397,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved in [TIME]
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
@@ -1263,7 +1263,7 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of foo was invalid:
+          hint: The structure of `foo` was invalid:
             The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "###
     );
@@ -2616,7 +2616,7 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of foo was invalid:
+          hint: The structure of `foo` was invalid:
             Failed to read from zip file
     "###
     );
@@ -3375,37 +3375,6 @@ requires-python = ">=3.13"
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
-    );
-
-    Ok(())
-}
-
-/// Install packages from an index that "doesn't support" zip file streaming (by way of using
-/// data descriptors).
-#[test]
-fn no_stream() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    // Write to a requirements file.
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360")?;
-
-    uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("requirements.txt")
-        .arg("--index-url")
-        .arg("https://buf.build/gen/python"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + hashb-foxglove-protocolbuffers-python==25.3.0.1.20240226043130+465630478360
     "###
     );
 
@@ -5206,13 +5175,16 @@ fn require_hashes_url_unnamed() -> Result<()> {
 /// Sync to a `--target` directory with a built distribution.
 #[test]
 fn target_built_distribution() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5221,6 +5193,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5247,7 +5220,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==1.1.1")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5256,6 +5229,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5268,7 +5242,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5277,6 +5251,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5298,13 +5273,16 @@ fn target_built_distribution() -> Result<()> {
 /// Sync to a `--target` directory with a package that requires building from source.
 #[test]
 fn target_source_distribution() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--no-binary")
         .arg("iniconfig")
@@ -5315,6 +5293,7 @@ fn target_source_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5347,13 +5326,16 @@ fn target_source_distribution() -> Result<()> {
 /// `--no-build-isolation`.
 #[test]
 fn target_no_build_isolation() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `hatchling` into the current environment.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flit_core")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -5370,7 +5352,7 @@ fn target_no_build_isolation() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("wheel")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--no-build-isolation")
         .arg("--no-binary")
@@ -5382,6 +5364,7 @@ fn target_no_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5428,6 +5411,7 @@ fn target_system() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5443,7 +5427,10 @@ fn target_system() -> Result<()> {
 /// Sync to a `--prefix` directory.
 #[test]
 fn prefix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5451,7 +5438,7 @@ fn prefix() -> Result<()> {
 
     let prefix = context.temp_dir.child("prefix");
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
         .arg(prefix.path()), @r###"
@@ -5460,6 +5447,7 @@ fn prefix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5486,7 +5474,7 @@ fn prefix() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==1.1.1")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
         .arg(prefix.path()), @r###"
@@ -5495,6 +5483,7 @@ fn prefix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]

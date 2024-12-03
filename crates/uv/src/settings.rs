@@ -282,6 +282,7 @@ impl RunSettings {
         let RunArgs {
             extra,
             all_extras,
+            no_extra,
             no_all_extras,
             dev,
             no_dev,
@@ -323,6 +324,7 @@ impl RunSettings {
             frozen,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
+                no_extra,
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
@@ -460,6 +462,8 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) with_editable: Vec<String>,
+    pub(crate) constraints: Vec<PathBuf>,
+    pub(crate) overrides: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -480,6 +484,8 @@ impl ToolInstallSettings {
             with,
             with_editable,
             with_requirements,
+            constraints,
+            overrides,
             installer,
             force,
             build,
@@ -517,6 +523,14 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            constraints: constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             python: python.and_then(Maybe::into_option),
             force,
             editable,
@@ -532,7 +546,7 @@ impl ToolInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct ToolUpgradeSettings {
-    pub(crate) name: Vec<PackageName>,
+    pub(crate) names: Vec<String>,
     pub(crate) python: Option<String>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) args: ResolverInstallerOptions,
@@ -572,6 +586,9 @@ impl ToolUpgradeSettings {
         if upgrade {
             warn_user_once!("`--upgrade` is enabled by default on `uv tool upgrade`");
         }
+        if !upgrade_package.is_empty() {
+            warn_user_once!("`--upgrade-package` is enabled by default on `uv tool upgrade`");
+        }
 
         // Enable `--upgrade` by default.
         let installer = ResolverInstallerArgs {
@@ -609,7 +626,7 @@ impl ToolUpgradeSettings {
             .unwrap_or_default();
 
         Self {
-            name: if all { vec![] } else { name },
+            names: if all { vec![] } else { name },
             python: python.and_then(Maybe::into_option),
             args,
             filesystem: top_level,
@@ -746,6 +763,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) force: bool,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) default: bool,
 }
 
 impl PythonInstallSettings {
@@ -769,6 +787,7 @@ impl PythonInstallSettings {
             force,
             mirror: _,
             pypy_mirror: _,
+            default,
         } = args;
 
         Self {
@@ -777,6 +796,7 @@ impl PythonInstallSettings {
             force,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
+            default,
         }
     }
 }
@@ -884,6 +904,7 @@ impl SyncSettings {
         let SyncArgs {
             extra,
             all_extras,
+            no_extra,
             no_all_extras,
             dev,
             no_dev,
@@ -922,6 +943,7 @@ impl SyncSettings {
             frozen,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
+                no_extra,
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
@@ -1279,6 +1301,7 @@ pub(crate) struct ExportSettings {
     pub(crate) format: ExportFormat,
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
+    pub(crate) prune: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) dev: DevGroupsSpecification,
     pub(crate) editable: EditableMode,
@@ -1302,8 +1325,10 @@ impl ExportSettings {
             format,
             all_packages,
             package,
+            prune,
             extra,
             all_extras,
+            no_extra,
             no_all_extras,
             dev,
             no_dev,
@@ -1337,8 +1362,10 @@ impl ExportSettings {
             format,
             all_packages,
             package,
+            prune,
             extras: ExtrasSpecification::from_args(
                 flag(all_extras, no_all_extras).unwrap_or_default(),
+                no_extra,
                 extra.unwrap_or_default(),
             ),
             dev: DevGroupsSpecification::from_args(
@@ -1748,6 +1775,7 @@ impl PipInstallSettings {
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
+    pub(crate) dry_run: bool,
     pub(crate) settings: PipSettings,
 }
 
@@ -1765,12 +1793,14 @@ impl PipUninstallSettings {
             no_break_system_packages,
             target,
             prefix,
+            dry_run,
             compat_args: _,
         } = args;
 
         Self {
             package,
             requirements,
+            dry_run,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -1999,6 +2029,7 @@ pub(crate) struct BuildSettings {
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
     pub(crate) build_logs: bool,
+    pub(crate) no_fast_path: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
@@ -2017,6 +2048,7 @@ impl BuildSettings {
             all_packages,
             sdist,
             wheel,
+            no_fast_path,
             build_constraints,
             require_hashes,
             no_require_hashes,
@@ -2047,6 +2079,7 @@ impl BuildSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            no_fast_path,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes),
                 flag(verify_hashes, no_verify_hashes),
@@ -2487,6 +2520,7 @@ impl PipSettings {
             strict,
             extra,
             all_extras,
+            no_extra,
             no_deps,
             allow_empty_requirements,
             resolution,
@@ -2598,6 +2632,7 @@ impl PipSettings {
             ),
             extras: ExtrasSpecification::from_args(
                 args.all_extras.combine(all_extras).unwrap_or_default(),
+                args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
             ),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
@@ -2809,6 +2844,7 @@ impl PublishSettings {
         let PublishOptions {
             publish_url,
             trusted_publishing,
+            check_url,
         } = publish;
         let ResolverInstallerOptions {
             keyring_provider, ..
@@ -2836,7 +2872,7 @@ impl PublishSettings {
                 .keyring_provider
                 .combine(keyring_provider)
                 .unwrap_or_default(),
-            check_url: args.check_url,
+            check_url: args.check_url.combine(check_url),
         }
     }
 }

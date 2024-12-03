@@ -6,7 +6,9 @@ use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, PackageNameSpecifier, TargetTriple,
     TrustedHost, TrustedPublishing,
 };
-use uv_distribution_types::{Index, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata};
+use uv_distribution_types::{
+    Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+};
 use uv_install_wheel::linker::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName};
@@ -1009,6 +1011,16 @@ pub struct PipOptions {
         "#
     )]
     pub all_extras: Option<bool>,
+    /// Exclude the specified optional dependencies if `all-extras` is supplied.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            all-extras = true
+            no-extra = ["dev", "docs"]
+        "#
+    )]
+    pub no_extra: Option<Vec<ExtraName>>,
     /// Ignore package dependencies, instead only add those packages explicitly listed
     /// on the command line to the resulting the requirements file.
     #[option(
@@ -1612,6 +1624,7 @@ pub struct OptionsWire {
     // publish: PublishOptions
     publish_url: Option<Url>,
     trusted_publishing: Option<TrustedPublishing>,
+    check_url: Option<IndexUrl>,
 
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
@@ -1636,9 +1649,7 @@ pub struct OptionsWire {
 
     // Build backend
     #[allow(dead_code)]
-    source_dist: Option<serde::de::IgnoredAny>,
-    #[allow(dead_code)]
-    wheel: Option<serde::de::IgnoredAny>,
+    build_backend: Option<serde::de::IgnoredAny>,
 }
 
 impl From<OptionsWire> for Options {
@@ -1690,6 +1701,7 @@ impl From<OptionsWire> for Options {
             conflicts,
             publish_url,
             trusted_publishing,
+            check_url,
             workspace,
             sources,
             default_groups,
@@ -1697,8 +1709,7 @@ impl From<OptionsWire> for Options {
             managed,
             package,
             // Used by the build backend
-            source_dist: _,
-            wheel: _,
+            build_backend: _,
         } = value;
 
         Self {
@@ -1756,6 +1767,7 @@ impl From<OptionsWire> for Options {
             publish: PublishOptions {
                 publish_url,
                 trusted_publishing,
+                check_url,
             },
             workspace,
             sources,
@@ -1797,4 +1809,26 @@ pub struct PublishOptions {
         "#
     )]
     pub trusted_publishing: Option<TrustedPublishing>,
+
+    /// Check an index URL for existing files to skip duplicate uploads.
+    ///
+    /// This option allows retrying publishing that failed after only some, but not all files have
+    /// been uploaded, and handles error due to parallel uploads of the same file.
+    ///
+    /// Before uploading, the index is checked. If the exact same file already exists in the index,
+    /// the file will not be uploaded. If an error occurred during the upload, the index is checked
+    /// again, to handle cases where the identical file was uploaded twice in parallel.
+    ///
+    /// The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
+    /// file succeeds even without `--check-url`, while most other indexes error.
+    ///
+    /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            check-url = "https://test.pypi.org/simple"
+        "#
+    )]
+    pub check_url: Option<IndexUrl>,
 }

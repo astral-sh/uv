@@ -7,23 +7,19 @@ use std::fmt::{Display, Formatter, Write};
 use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{iter, thread};
+use std::{iter, slice, thread};
 
 use dashmap::DashMap;
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
-use pubgrub::{Incompatibility, Range, State};
+use pubgrub::{Id, Incompatibility, Range, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, instrument, trace, warn, Level};
 
-use environment::ForkingPossibility;
-pub use environment::ResolverEnvironment;
-pub(crate) use fork_map::{ForkMap, ForkSet};
-pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
@@ -63,6 +59,10 @@ pub(crate) use crate::resolver::availability::{
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
+use crate::resolver::environment::ForkingPossibility;
+pub use crate::resolver::environment::ResolverEnvironment;
+pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
+pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::UniversalMarker;
 
 use crate::resolver::groups::Groups;
@@ -308,13 +308,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut visited = FxHashSet::default();
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
+        let pubgrub = State::init(root.clone(), MIN_VERSION.clone());
         let mut prefetcher = BatchPrefetcher::default();
-        let state = ForkState::new(
-            State::init(root.clone(), MIN_VERSION.clone()),
-            root,
-            self.env.clone(),
-            self.python_requirement.clone(),
-        );
+        let state = ForkState::new(pubgrub, self.env.clone(), self.python_requirement.clone());
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state);
         let mut resolutions = vec![];
@@ -327,7 +323,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let start = Instant::now();
             loop {
                 // Run unit propagation.
-                if let Err(err) = state.pubgrub.unit_propagation(state.next.clone()) {
+                if let Err(err) = state.pubgrub.unit_propagation(state.next) {
                     return Err(self.convert_no_solution_err(
                         err,
                         state.fork_urls,
@@ -342,7 +338,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
                 if self.dependency_mode.is_transitive() {
                     Self::pre_visit(
-                        state.pubgrub.partial_solution.prioritized_packages(),
+                        state
+                            .pubgrub
+                            .partial_solution
+                            .prioritized_packages()
+                            .map(|(id, range)| (&state.pubgrub.package_store[id], range)),
                         &self.urls,
                         &self.indexes,
                         &state.python_requirement,
@@ -354,7 +354,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let Some(highest_priority_pkg) = state
                     .pubgrub
                     .partial_solution
-                    .pick_highest_priority_pkg(|package, _range| state.priorities.get(package))
+                    .pick_highest_priority_pkg(|id, _range| {
+                        state.priorities.get(&state.pubgrub.package_store[id])
+                    })
                 else {
                     if tracing::enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
@@ -398,9 +400,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 state.next = highest_priority_pkg;
 
-                let url = state.next.name().and_then(|name| state.fork_urls.get(name));
-                let index = state
-                    .next
+                // TODO(charlie): Remove as many usages of `next_package` as we can.
+                let next_id = state.next;
+                let next_package = &state.pubgrub.package_store[state.next];
+
+                let url = next_package
+                    .name()
+                    .and_then(|name| state.fork_urls.get(name));
+                let index = next_package
                     .name()
                     .and_then(|name| state.fork_indexes.get(name));
 
@@ -415,17 +422,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // since we weren't sure whether it might also be a URL requirement when
                 // transforming the requirements. For that case, we do another request here
                 // (idempotent due to caching).
-                self.request_package(&state.next, url, index, &request_sink)?;
+                self.request_package(next_package, url, index, &request_sink)?;
 
-                prefetcher.version_tried(state.next.clone());
+                prefetcher.version_tried(next_package);
 
                 let term_intersection = state
                     .pubgrub
                     .partial_solution
-                    .term_intersection_for_package(&state.next)
+                    .term_intersection_for_package(next_id)
                     .expect("a package was chosen but we don't have a term");
                 let decision = self.choose_version(
-                    &state.next,
+                    next_package,
                     index,
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
@@ -440,21 +447,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Pick the next compatible version.
                 let version = match decision {
                     None => {
-                        debug!("No compatible version found for: {next}", next = state.next);
+                        debug!("No compatible version found for: {next_package}");
 
                         let term_intersection = state
                             .pubgrub
                             .partial_solution
-                            .term_intersection_for_package(&state.next)
+                            .term_intersection_for_package(next_id)
                             .expect("a package was chosen but we don't have a term");
 
-                        if let PubGrubPackageInner::Package { ref name, .. } = &*state.next {
+                        if let PubGrubPackageInner::Package { ref name, .. } = &**next_package {
                             // Check if the decision was due to the package being unavailable
                             if let Some(entry) = self.unavailable_packages.get(name) {
                                 state
                                     .pubgrub
                                     .add_incompatibility(Incompatibility::custom_term(
-                                        state.next.clone(),
+                                        next_id,
                                         term_intersection.clone(),
                                         UnavailableReason::Package(entry.clone()),
                                     ));
@@ -465,7 +472,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state
                             .pubgrub
                             .add_incompatibility(Incompatibility::no_versions(
-                                state.next.clone(),
+                                next_id,
                                 term_intersection.clone(),
                             ));
                         continue;
@@ -483,14 +490,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Only consider registry packages for prefetch.
                 if url.is_none() {
                     prefetcher.prefetch_batches(
-                        &state.next,
+                        next_package,
                         index,
                         &version,
                         term_intersection.unwrap_positive(),
                         state
                             .pubgrub
                             .partial_solution
-                            .unchanging_term_for_package(&state.next),
+                            .unchanging_term_for_package(next_id),
                         &state.python_requirement,
                         &request_sink,
                         &self.index,
@@ -500,11 +507,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )?;
                 }
 
-                self.on_progress(&state.next, &version);
+                self.on_progress(next_package, &version);
 
                 if !state
                     .added_dependencies
-                    .entry(state.next.clone())
+                    .entry(next_id)
                     .or_default()
                     .insert(version.clone())
                 {
@@ -513,13 +520,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     state
                         .pubgrub
                         .partial_solution
-                        .add_decision(state.next.clone(), version);
+                        .add_decision(next_id, version);
                     continue;
                 }
 
                 // Retrieve that package dependencies.
                 let forked_deps = self.get_dependencies_forking(
-                    &state.next,
+                    next_id,
+                    next_package,
                     &version,
                     &state.fork_urls,
                     &state.env,
@@ -533,13 +541,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state
                             .pubgrub
                             .add_incompatibility(Incompatibility::custom_version(
-                                state.next.clone(),
+                                next_id,
                                 version.clone(),
                                 UnavailableReason::Version(reason),
                             ));
                     }
                     ForkedDependencies::Unforked(dependencies) => {
                         state.add_package_version_dependencies(
+                            next_id,
                             &version,
                             &self.urls,
                             &self.indexes,
@@ -553,7 +562,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let PubGrubDependency {
                                 package,
                                 version: _,
-                                specifier: _,
                                 url: _,
                             } = dependency;
                             let url = package.name().and_then(|name| state.fork_urls.get(name));
@@ -675,7 +683,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> impl Iterator<Item = Result<ForkState, ResolveError>> + 'a {
         debug!(
             "Splitting resolution on {}=={} over {} into {} resolution{} with separate markers",
-            current_state.next,
+            current_state.pubgrub.package_store[current_state.next],
             version,
             diverging_packages
                 .iter()
@@ -690,6 +698,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // as it needs to be. We basically move the state
         // into `forked_states`, and then only clone it if
         // there is at least one more fork to visit.
+        let package = current_state.next;
         let mut cur_state = Some(current_state);
         let forks_len = forks.len();
         forks
@@ -707,6 +716,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             })
             .map(move |(fork, mut forked_state)| {
                 forked_state.add_package_version_dependencies(
+                    package,
                     version,
                     &self.urls,
                     &self.indexes,
@@ -719,7 +729,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let PubGrubDependency {
                         package,
                         version: _,
-                        specifier: _,
                         url: _,
                     } = dependency;
                     let url = package
@@ -813,7 +822,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 name,
                 extra: None,
                 dev: None,
-                marker: None,
+                marker: MarkerTree::TRUE,
             } = &**package
             else {
                 continue;
@@ -1205,6 +1214,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     #[instrument(skip_all, fields(%package, %version))]
     fn get_dependencies_forking(
         &self,
+        id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
         fork_urls: &ForkUrls,
@@ -1213,6 +1223,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<ForkedDependencies, ResolveError> {
         let result = self.get_dependencies(
+            id,
             package,
             version,
             fork_urls,
@@ -1236,6 +1247,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     #[instrument(skip_all, fields(%package, %version))]
     fn get_dependencies(
         &self,
+        id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
         fork_urls: &ForkUrls,
@@ -1259,7 +1271,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 requirements
                     .iter()
-                    .flat_map(|requirement| PubGrubDependency::from_requirement(requirement, None))
+                    .flat_map(|requirement| {
+                        PubGrubDependency::from_requirement(
+                            &self.conflicts,
+                            requirement,
+                            None,
+                            None,
+                        )
+                    })
                     .collect()
             }
             PubGrubPackageInner::Package {
@@ -1379,7 +1398,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ));
                     }
                     MetadataResponse::Error(dist, err) => {
-                        let chain = DerivationChainBuilder::from_state(package, version, pubgrub)
+                        let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
                             .unwrap_or_default();
                         return Err(match &**dist {
                             Dist::Built(built_dist @ BuiltDist::Path(_)) => ResolveError::Read(
@@ -1432,6 +1451,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Err(err);
                     }
                 }
+
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dependency_groups,
@@ -1445,13 +1465,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let mut dependencies: Vec<_> = requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, Some(name))
+                        PubGrubDependency::from_requirement(
+                            &self.conflicts,
+                            requirement,
+                            dev.as_ref(),
+                            Some(name),
+                        )
                     })
                     .collect();
 
                 // If a package has metadata for an enabled dependency group,
                 // add a dependency from it to the same package with the group
                 // enabled.
+                //
+                // TODO(charlie): Instead, we should add a `dev` key to our requirement type. Then
+                // we can model this like extras! Such that we add it before we see the metadata,
+                // rather than after.
                 if extra.is_none() && dev.is_none() {
                     for group in self.groups.get(name).into_iter().flatten() {
                         if !metadata.dependency_groups.contains_key(group) {
@@ -1461,10 +1490,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             package: PubGrubPackage::from(PubGrubPackageInner::Dev {
                                 name: name.clone(),
                                 dev: group.clone(),
-                                marker: marker.clone(),
+                                marker: *marker,
                             }),
                             version: Range::singleton(version.clone()),
-                            specifier: None,
                             url: None,
                         });
                     }
@@ -1477,17 +1505,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // Add a dependency on both the marker and base package.
             PubGrubPackageInner::Marker { name, marker } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, Some(marker)]
+                    [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .map(move |marker| PubGrubDependency {
                             package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                 name: name.clone(),
                                 extra: None,
                                 dev: None,
-                                marker: marker.and_then(MarkerTree::contents),
+                                marker,
                             }),
                             version: Range::singleton(version.clone()),
-                            specifier: None,
                             url: None,
                         })
                         .collect(),
@@ -1501,7 +1528,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 marker,
             } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, marker.as_ref()]
+                    [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
@@ -1512,10 +1539,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         extra: extra.cloned(),
                                         dev: None,
-                                        marker: marker.cloned(),
+                                        marker,
                                     }),
                                     version: Range::singleton(version.clone()),
-                                    specifier: None,
                                     url: None,
                                 })
                         })
@@ -1527,7 +1553,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // without the marker.
             PubGrubPackageInner::Dev { name, dev, marker } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, marker.as_ref()]
+                    [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
@@ -1538,10 +1564,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         extra: None,
                                         dev: dev.cloned(),
-                                        marker: marker.cloned(),
+                                        marker,
                                     }),
                                     version: Range::singleton(version.clone()),
-                                    specifier: None,
                                     url: None,
                                 })
                         })
@@ -1577,6 +1602,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             .requirements_for_extra(regular_and_dev_dependencies, extra, env, python_requirement)
             .collect::<Vec<_>>();
 
+        // Dependency groups can include the project itself, so no need to flatten recursive
+        // dependencies.
+        if dev.is_some() {
+            return requirements;
+        }
+
         // Check if there are recursive self inclusions and we need to go into the expensive branch.
         if !requirements
             .iter()
@@ -1587,25 +1618,48 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // Transitively process all extras that are recursively included, starting with the current
         // extra.
-        let mut seen = FxHashSet::default();
+        let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
         let mut queue: VecDeque<_> = requirements
             .iter()
             .filter(|req| name == Some(&req.name))
-            .flat_map(|req| req.extras.iter().cloned())
+            .flat_map(|req| req.extras.iter().cloned().map(|extra| (extra, req.marker)))
             .collect();
-        while let Some(extra) = queue.pop_front() {
-            if !seen.insert(extra.clone()) {
+        while let Some((extra, marker)) = queue.pop_front() {
+            if !seen.insert((extra.clone(), marker)) {
                 continue;
             }
             for requirement in
                 self.requirements_for_extra(dependencies, Some(&extra), env, python_requirement)
             {
+                let requirement = match requirement {
+                    Cow::Owned(mut requirement) => {
+                        requirement.marker.and(marker);
+                        requirement
+                    }
+                    Cow::Borrowed(requirement) => {
+                        let mut marker = marker;
+                        marker.and(requirement.marker);
+                        Requirement {
+                            name: requirement.name.clone(),
+                            extras: requirement.extras.clone(),
+                            source: requirement.source.clone(),
+                            origin: requirement.origin.clone(),
+                            marker: marker.simplify_extras(slice::from_ref(&extra)),
+                        }
+                    }
+                };
                 if name == Some(&requirement.name) {
                     // Add each transitively included extra.
-                    queue.extend(requirement.extras.iter().cloned());
+                    queue.extend(
+                        requirement
+                            .extras
+                            .iter()
+                            .cloned()
+                            .map(|extra| (extra, requirement.marker)),
+                    );
                 } else {
                     // Add the requirements for that extra.
-                    requirements.push(requirement);
+                    requirements.push(Cow::Owned(requirement));
                 }
             }
         }
@@ -1634,7 +1688,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let python_marker = python_requirement.to_marker_tree();
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
-                if python_marker.is_disjoint(&requirement.marker) {
+                if python_marker.is_disjoint(requirement.marker) {
                     trace!(
                         "skipping {requirement} because of Requires-Python: {requires_python}",
                         requires_python = python_requirement.target(),
@@ -1644,7 +1698,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
-                if !env.included_by_marker(&requirement.marker) {
+                if !env.included_by_marker(requirement.marker) {
                     trace!("skipping {requirement} because of {env}");
                     return None;
                 }
@@ -1693,8 +1747,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 if requirement.marker.is_true() {
                                     Cow::Borrowed(constraint)
                                 } else {
-                                    let mut marker = constraint.marker.clone();
-                                    marker.and(requirement.marker.clone());
+                                    let mut marker = constraint.marker;
+                                    marker.and(requirement.marker);
+
+                                    if marker.is_false() {
+                                        trace!(
+                                            "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                            constraint.marker.try_to_string().unwrap(),
+                                            requirement.marker.try_to_string().unwrap(),
+                                        );
+                                        return None;
+                                    }
 
                                     Cow::Owned(Requirement {
                                         name: constraint.name.clone(),
@@ -1708,20 +1771,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 let requires_python = python_requirement.target();
                                 let python_marker = python_requirement.to_marker_tree();
 
-                                let mut marker = constraint.marker.clone();
-                                marker.and(requirement.marker.clone());
+                                let mut marker = constraint.marker;
+                                marker.and(requirement.marker);
+
+                                if marker.is_false() {
+                                    trace!(
+                                        "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                        constraint.marker.try_to_string().unwrap(),
+                                        requirement.marker.try_to_string().unwrap(),
+                                    );
+                                    return None;
+                                }
 
                                 // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
                                 // and the constraint is `requests ; python_version == '3.6'`, the
                                 // constraint should only apply when _both_ markers are true.
-                                if marker.is_false() {
-                                    trace!("skipping {constraint} because of Requires-Python: {requires_python}");
-                                    return None;
-                                }
-                                if python_marker.is_disjoint(&marker) {
+                                if python_marker.is_disjoint(marker) {
                                     trace!(
-                                        "skipping constraint {requirement} because of Requires-Python: {requires_python}",
-                                        requires_python = python_requirement.target(),
+                                        "skipping constraint {requirement} because of Requires-Python: {requires_python}"
                                     );
                                     return None;
                                 }
@@ -1741,7 +1808,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                             // If we're in a fork in universal mode, ignore any dependency that isn't part of
                             // this fork (but will be part of another fork).
-                            if !env.included_by_marker(&constraint.marker) {
+                            if !env.included_by_marker(constraint.marker) {
                                 trace!("skipping {constraint} because of {env}");
                                 return None;
                             }
@@ -2152,7 +2219,7 @@ pub(crate) struct ForkState {
     /// assignments (to packages) from this state's "partial solution."
     pubgrub: State<UvDependencyProvider>,
     /// The next package on which to run unit propagation.
-    next: PubGrubPackage,
+    next: Id<PubGrubPackage>,
     /// The set of pinned versions we accrue throughout resolution.
     ///
     /// The key of this map is a package name, and each package name maps to
@@ -2182,7 +2249,7 @@ pub(crate) struct ForkState {
     priorities: PubGrubPriorities,
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
-    added_dependencies: FxHashMap<PubGrubPackage, FxHashSet<Version>>,
+    added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -2216,13 +2283,12 @@ pub(crate) struct ForkState {
 impl ForkState {
     fn new(
         pubgrub: State<UvDependencyProvider>,
-        root: PubGrubPackage,
         env: ResolverEnvironment,
         python_requirement: PythonRequirement,
     ) -> Self {
         Self {
+            next: pubgrub.root_package,
             pubgrub,
-            next: root,
             pins: FilePins::default(),
             fork_urls: ForkUrls::default(),
             fork_indexes: ForkIndexes::default(),
@@ -2237,6 +2303,7 @@ impl ForkState {
     /// self-dependencies and handling URLs.
     fn add_package_version_dependencies(
         &mut self,
+        for_package: Id<PubGrubPackage>,
         for_version: &Version,
         urls: &Urls,
         indexes: &Indexes,
@@ -2249,7 +2316,6 @@ impl ForkState {
                 package,
                 version,
                 url,
-                ..
             } = dependency;
 
             let mut has_url = false;
@@ -2269,7 +2335,7 @@ impl ForkState {
                 }
             }
 
-            if let Some(name) = self.next.name_no_root() {
+            if let Some(name) = self.pubgrub.package_store[for_package].name_no_root() {
                 debug!(
                     "Adding transitive dependency for {name}=={for_version}: {package}{version}"
                 );
@@ -2288,9 +2354,10 @@ impl ForkState {
                 );
                 if !has_url && missing_lower_bound && strategy_lowest {
                     warn_user_once!(
-                        "The direct dependency `{package}` is unpinned. \
+                        "The direct dependency `{name}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
-                        to avoid using outdated versions."
+                        to avoid using outdated versions.",
+                        name = package.name_no_root().unwrap(),
                     );
                 }
             }
@@ -2300,13 +2367,12 @@ impl ForkState {
         }
 
         self.pubgrub.add_package_version_dependencies(
-            self.next.clone(),
+            self.next,
             for_version.clone(),
             dependencies.into_iter().map(|dependency| {
                 let PubGrubDependency {
                     package,
                     version,
-                    specifier: _,
                     url: _,
                 } = dependency;
                 (package, version)
@@ -2325,26 +2391,26 @@ impl ForkState {
         ) = reason
         {
             let package = &self.next;
+            let python = self.pubgrub.package_store.alloc(PubGrubPackage::from(
+                PubGrubPackageInner::Python(match kind {
+                    PythonRequirementKind::Installed => PubGrubPython::Installed,
+                    PythonRequirementKind::Target => PubGrubPython::Target,
+                }),
+            ));
             self.pubgrub
                 .add_incompatibility(Incompatibility::from_dependency(
-                    package.clone(),
+                    *package,
                     Range::singleton(version.clone()),
-                    (
-                        PubGrubPackage::from(PubGrubPackageInner::Python(match kind {
-                            PythonRequirementKind::Installed => PubGrubPython::Installed,
-                            PythonRequirementKind::Target => PubGrubPython::Target,
-                        })),
-                        release_specifiers_to_ranges(requires_python),
-                    ),
+                    (python, release_specifiers_to_ranges(requires_python)),
                 ));
             self.pubgrub
                 .partial_solution
-                .add_decision(self.next.clone(), version);
+                .add_decision(self.next, version);
             return;
         };
         self.pubgrub
             .add_incompatibility(Incompatibility::custom_version(
-                self.next.clone(),
+                self.next,
                 version.clone(),
                 UnavailableReason::Version(reason),
             ));
@@ -2366,38 +2432,41 @@ impl ForkState {
     }
 
     fn into_resolution(self) -> Resolution {
-        let solution = self.pubgrub.partial_solution.extract_solution();
+        let solution: FxHashMap<_, _> = self.pubgrub.partial_solution.extract_solution().collect();
         let mut edges: FxHashSet<ResolutionDependencyEdge> = FxHashSet::default();
         for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
                 let pubgrub::Kind::FromDependencyOf(
-                    ref self_package,
+                    self_package,
                     ref self_range,
-                    ref dependency_package,
+                    dependency_package,
                     ref dependency_range,
                 ) = self.pubgrub.incompatibility_store[*id].kind
                 else {
                     continue;
                 };
-                if package != self_package {
+                if *package != self_package {
                     continue;
                 }
                 if !self_range.contains(self_version) {
                     continue;
                 }
-                let Some(dependency_version) = solution.get(dependency_package) else {
+                let Some(dependency_version) = solution.get(&dependency_package) else {
                     continue;
                 };
                 if !dependency_range.contains(dependency_version) {
                     continue;
                 }
 
+                let self_package = &self.pubgrub.package_store[self_package];
+                let dependency_package = &self.pubgrub.package_store[dependency_package];
+
                 let (self_name, self_extra, self_dev) = match &**self_package {
                     PubGrubPackageInner::Package {
                         name: self_name,
                         extra: self_extra,
                         dev: self_dev,
-                        ..
+                        marker: _,
                     } => (Some(self_name), self_extra.as_ref(), self_dev.as_ref()),
 
                     PubGrubPackageInner::Root(_) => (None, None, None),
@@ -2414,11 +2483,9 @@ impl ForkState {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
                         dev: ref dependency_dev,
+                        marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
-                            continue;
-                        }
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2434,7 +2501,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
-                            marker: MarkerTree::TRUE,
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2444,9 +2511,6 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
-                            continue;
-                        }
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2462,7 +2526,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: None,
                             to_dev: None,
-                            marker: dependency_marker.clone(),
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2473,9 +2537,7 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
-                            continue;
-                        }
+                        // Insert an edge from the dependent package to the extra package.
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2491,7 +2553,27 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
-                            marker: MarkerTree::from(dependency_marker.clone()),
+                            marker: *dependency_marker,
+                        };
+                        edges.insert(edge);
+
+                        // Insert an edge from the dependent package to the base package.
+                        let to_url = self.fork_urls.get(dependency_name);
+                        let to_index = self.fork_indexes.get(dependency_name);
+                        let edge = ResolutionDependencyEdge {
+                            from: self_name.cloned(),
+                            from_version: self_version.clone(),
+                            from_url: self_url.cloned(),
+                            from_index: self_index.cloned(),
+                            from_extra: self_extra.cloned(),
+                            from_dev: self_dev.cloned(),
+                            to: dependency_name.clone(),
+                            to_version: dependency_version.clone(),
+                            to_url: to_url.cloned(),
+                            to_index: to_index.cloned(),
+                            to_extra: None,
+                            to_dev: None,
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2502,9 +2584,14 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_name.is_some_and(|self_name| self_name == dependency_name) {
+                        if self_dev.is_none()
+                            && self_name.is_some_and(|self_name| self_name == dependency_name)
+                        {
                             continue;
                         }
+
+                        // Add an edge from the dependent package to the dev package, but _not_ the
+                        // base package.
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2520,7 +2607,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
-                            marker: MarkerTree::from(dependency_marker.clone()),
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2537,8 +2624,8 @@ impl ForkState {
                     name,
                     extra,
                     dev,
-                    marker: None,
-                } = &*package
+                    marker: MarkerTree::TRUE,
+                } = &*self.pubgrub.package_store[package]
                 {
                     Some((
                         ResolutionPackage {
@@ -2615,7 +2702,7 @@ pub(crate) struct ResolutionDependencyEdge {
 impl ResolutionDependencyEdge {
     pub(crate) fn universal_marker(&self) -> UniversalMarker {
         // FIXME: Account for extras and groups here.
-        UniversalMarker::new(self.marker.clone(), MarkerTree::TRUE)
+        UniversalMarker::new(self.marker, MarkerTree::TRUE)
     }
 }
 
@@ -2853,9 +2940,9 @@ impl Forks {
                     .is_some_and(|bound| python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
-                    let markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
+                    let markers = dep.package.marker().unwrap_or(MarkerTree::TRUE);
                     for fork in &mut forks {
-                        if fork.env.included_by_marker(&markers) {
+                        if fork.env.included_by_marker(markers) {
                             fork.add_dependency(dep.clone());
                         }
                     }
@@ -2902,7 +2989,7 @@ impl Forks {
                         }
                         // Filter out any forks we created that are disjoint with our
                         // Python requirement.
-                        if new_fork.env.included_by_marker(&python_marker) {
+                        if new_fork.env.included_by_marker(python_marker) {
                             new.push(new_fork);
                         }
                     }
@@ -2941,11 +3028,9 @@ impl Forks {
                 }
 
                 // Create a fork that excludes ALL extras.
-                let mut fork_none = fork.clone();
-                for group in set.iter() {
-                    fork_none = fork_none.exclude([group.clone()]);
+                if let Some(fork_none) = fork.clone().filter(set.iter().cloned().map(Err)) {
+                    new.push(fork_none);
                 }
-                new.push(fork_none);
 
                 // Now create a fork for each conflicting group, where
                 // that fork excludes every *other* conflicting group.
@@ -2955,13 +3040,18 @@ impl Forks {
                 // {foo, bar}, one that excludes {foo, baz} and one
                 // that excludes {bar, baz}.
                 for (i, _) in set.iter().enumerate() {
-                    let fork_allows_group = fork.clone().exclude(
-                        set.iter()
-                            .enumerate()
-                            .filter(|&(j, _)| i != j)
-                            .map(|(_, group)| group.clone()),
-                    );
-                    new.push(fork_allows_group);
+                    let fork_allows_group =
+                        fork.clone()
+                            .filter(set.iter().cloned().enumerate().map(|(j, group)| {
+                                if i == j {
+                                    Ok(group)
+                                } else {
+                                    Err(group)
+                                }
+                            }));
+                    if let Some(fork_allows_group) = fork_allows_group {
+                        new.push(fork_allows_group);
+                    }
                 }
             }
             forks = new;
@@ -3058,11 +3148,17 @@ impl Fork {
         self.conflicts.contains(&item)
     }
 
-    /// Exclude the given groups from this fork.
+    /// Include or Exclude the given groups from this fork.
     ///
     /// This removes all dependencies matching the given conflicting groups.
-    fn exclude(mut self, groups: impl IntoIterator<Item = ConflictItem>) -> Fork {
-        self.env = self.env.exclude_by_group(groups);
+    ///
+    /// If the exclusion rules would result in a fork with an unsatisfiable
+    /// resolver environment, then this returns `None`.
+    fn filter(
+        mut self,
+        rules: impl IntoIterator<Item = Result<ConflictItem, ConflictItem>>,
+    ) -> Option<Fork> {
+        self.env = self.env.filter_by_group(rules)?;
         self.dependencies.retain(|dep| {
             let Some(conflicting_item) = dep.package.conflicting_item() else {
                 return true;
@@ -3075,7 +3171,7 @@ impl Fork {
             }
             false
         });
-        self
+        Some(self)
     }
 }
 

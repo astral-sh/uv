@@ -162,7 +162,35 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .expect("missing value for registered task");
 
             match result.as_ref() {
-                Ok(cached) => Ok(cached.clone()),
+                Ok(cached) => {
+                    // Validate that the wheel is compatible with the distribution.
+                    //
+                    // `get_or_build_wheel` is guaranteed to return a wheel that matches the
+                    // distribution. But there could be multiple requested distributions that share
+                    // a cache entry in `in_flight`, so we need to double-check here.
+                    //
+                    // For example, if two requirements are based on the same local path, but use
+                    // different names, then they'll share an `in_flight` entry, but one of the two
+                    // should be rejected (since at least one of the names will not match the
+                    // package name).
+                    if *dist.name() != cached.filename().name {
+                        let err = uv_distribution::Error::WheelMetadataNameMismatch {
+                            given: dist.name().clone(),
+                            metadata: cached.filename().name.clone(),
+                        };
+                        return Err(Error::from_dist(dist, err));
+                    }
+                    if let Some(version) = dist.version() {
+                        if *version != cached.filename().version {
+                            let err = uv_distribution::Error::WheelMetadataVersionMismatch {
+                                given: version.clone(),
+                                metadata: cached.filename().version.clone(),
+                            };
+                            return Err(Error::from_dist(dist, err));
+                        }
+                    }
+                    Ok(cached.clone())
+                }
                 Err(err) => Err(Error::Thread(err.to_string())),
             }
         }

@@ -277,10 +277,10 @@ impl PyProjectTomlMut {
 
         // If necessary, update the name.
         if let Some(index) = index.name.as_deref() {
-            if !table
+            if table
                 .get("name")
                 .and_then(|name| name.as_str())
-                .is_some_and(|name| name == index)
+                .is_none_or(|name| name != index)
             {
                 let mut formatted = Formatted::new(index.to_string());
                 if let Some(value) = table.get("name").and_then(Item::as_value) {
@@ -296,11 +296,11 @@ impl PyProjectTomlMut {
         }
 
         // If necessary, update the URL.
-        if !table
+        if table
             .get("url")
             .and_then(|item| item.as_str())
             .and_then(|url| Url::parse(url).ok())
-            .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
+            .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
         {
             let mut formatted = Formatted::new(index.url.to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
@@ -1105,7 +1105,7 @@ fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool
 
     // Update the marker expression.
     if new.marker.contents().is_some() {
-        old.marker = new.marker.clone();
+        old.marker = new.marker;
     }
 }
 

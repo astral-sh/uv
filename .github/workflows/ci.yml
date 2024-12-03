@@ -60,7 +60,7 @@ jobs:
         run: rustup component add rustfmt
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -99,7 +99,7 @@ jobs:
   cargo-clippy:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     name: "cargo clippy | ubuntu"
     steps:
@@ -115,7 +115,7 @@ jobs:
   cargo-clippy-windows:
     timeout-minutes: 15
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: "windows-latest-xlarge"
     name: "cargo clippy | windows"
@@ -138,12 +138,13 @@ jobs:
         run: rustup component add clippy
 
       - name: "Clippy"
+        working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-dev-generate-all:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     name: "cargo dev generate-all"
     steps:
@@ -171,7 +172,7 @@ jobs:
   cargo-test-linux:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: "depot-ubuntu-22.04-16"
     name: "cargo test | ubuntu"
@@ -185,7 +186,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v4
       - name: "Install required Python versions"
         run: uv python install
 
@@ -217,7 +218,7 @@ jobs:
   cargo-test-macos:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: "depot-macos-latest"
     name: "cargo test | macos"
@@ -231,7 +232,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v4
       - name: "Install required Python versions"
         run: uv python install
 
@@ -256,7 +257,7 @@ jobs:
   cargo-test-windows:
     timeout-minutes: 15
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: "windows-latest-xlarge"
     name: "cargo test | windows"
@@ -332,7 +333,7 @@ jobs:
   windows-trampoline-check:
     timeout-minutes: 15
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: windows-latest-xlarge
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
@@ -386,7 +387,7 @@ jobs:
   windows-trampoline-test:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
     name: "test windows trampoline | ${{ matrix.target-arch }}"
     strategy:
@@ -436,7 +437,7 @@ jobs:
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v4
       - uses: actions/setup-python@v5
       - name: "Add SSH key"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
@@ -454,7 +455,7 @@ jobs:
   build-binary-linux:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: ubuntu-latest-large
     name: "build binary | linux"
@@ -482,7 +483,7 @@ jobs:
   build-binary-macos-aarch64:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: macos-14
     name: "build binary | macos aarch64"
@@ -505,7 +506,7 @@ jobs:
   build-binary-macos-x86_64:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: macos-latest-large # Intel runner on GitHub
     name: "build binary | macos x86_64"
@@ -528,7 +529,7 @@ jobs:
   build-binary-windows:
     needs: determine_changes
     timeout-minutes: 10
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: windows-latest-large
     name: "build binary | windows"
@@ -561,7 +562,7 @@ jobs:
   cargo-build-msrv:
     name: "cargo build (msrv)"
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: ubuntu-latest-large
     timeout-minutes: 10
@@ -583,7 +584,7 @@ jobs:
   build-binary-freebsd:
     needs: determine_changes
     timeout-minutes: 10
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: ubuntu-latest
     name: "build binary | freebsd"
@@ -1113,7 +1114,7 @@ jobs:
       # Flag that is raised when any code is changed
       code: ${{ steps.changed.outputs.code_any_changed }}
     # Only the main repository is a trusted publisher
-    if: github.repository == 'astral-sh/uv'
+    if: github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1134,7 +1135,7 @@ jobs:
     needs: integration-test-publish-changed
     name: "integration test | uv publish"
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && github.event.pull_request.head.repo.fork != true && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     environment: uv-test-publish
     env:
       # No dbus in GitHub Actions
@@ -1163,7 +1164,7 @@ jobs:
       - name: "Add password to keyring"
         run: |
           # `keyrings.alt` contains the plaintext keyring
-          ./uv tool install --with keyrings.alt "keyring<25.4.0" # TODO(konsti): Remove upper bound once fix is released
+          ./uv tool install --with keyrings.alt keyring
           echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
         env:
           UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
@@ -1822,7 +1823,7 @@ jobs:
   benchmarks:
     runs-on: ubuntu-latest
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     timeout-minutes: 20
     steps:
       - name: "Checkout Branch"
