@@ -3,6 +3,7 @@ use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tracing::{debug, trace};
@@ -48,6 +49,41 @@ pub enum ValidationError {
     ReservedGuiScripts,
     #[error("`project.license` is not a valid SPDX expression: `{0}`")]
     InvalidSpdx(String, #[source] spdx::error::ParseError),
+}
+
+/// Check if the build backend is matching the currently running uv version.
+pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
+    let pyproject_toml: PyProjectToml =
+        match fs_err::read_to_string(source_tree.join("pyproject.toml"))
+            .map_err(|err| err.to_string())
+            .and_then(|pyproject_toml| {
+                toml::from_str(&pyproject_toml).map_err(|err| err.to_string())
+            }) {
+            Ok(pyproject_toml) => pyproject_toml,
+            Err(err) => {
+                debug!(
+                    "Not using uv build backend direct build of {name}, no pyproject.toml: {err}"
+                );
+                return false;
+            }
+        };
+    match pyproject_toml
+        .check_build_system(uv_version::version())
+        .as_slice()
+    {
+        // No warnings -> match
+        [] => true,
+        // Any warning -> no match
+        [first, others @ ..] => {
+            debug!(
+                "Not using uv build backend direct build of {name}, pyproject.toml does not match: {first}"
+            );
+            for other in others {
+                trace!("Further uv build backend direct build of {name} mismatch: {other}");
+            }
+            false
+        }
+    }
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
