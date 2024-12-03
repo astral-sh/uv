@@ -9,8 +9,8 @@ use anyhow::{anyhow, Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use tracing::{debug, instrument};
-
+use tracing::{debug, instrument, trace};
+use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
@@ -396,6 +396,67 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         .boxed_local()
         .await?;
         Ok(builder)
+    }
+
+    async fn direct_build<'data>(
+        &'data self,
+        source: &'data Path,
+        subdirectory: Option<&'data Path>,
+        output_dir: &'data Path,
+        build_kind: BuildKind,
+        version_id: Option<String>,
+    ) -> Result<Option<String>> {
+        // Direct builds are a preview feature with the uv build backend.
+        if self.preview.is_disabled() {
+            trace!("Preview is disabled, not checking for direct build");
+            return Ok(None);
+        }
+
+        let source_tree = if let Some(subdir) = subdirectory {
+            source.join(subdir)
+        } else {
+            source.to_path_buf()
+        };
+
+        // Only perform the direct build if the backend is uv in a compatible version.
+        let identifier = version_id.unwrap_or_else(|| source_tree.display().to_string());
+        if !check_direct_build(&source_tree, &identifier) {
+            trace!("Requirements for direct build not matched: {identifier}");
+            return Ok(None);
+        }
+
+        debug!("Performing direct build for {identifier}");
+
+        let output_dir = output_dir.to_path_buf();
+        let filename = tokio::task::spawn_blocking(move || -> Result<String> {
+            let filename = match build_kind {
+                BuildKind::Wheel => uv_build_backend::build_wheel(
+                    &source_tree,
+                    &output_dir,
+                    None,
+                    uv_version::version(),
+                )?
+                .to_string(),
+                BuildKind::Sdist => uv_build_backend::build_source_dist(
+                    &source_tree,
+                    &output_dir,
+                    uv_version::version(),
+                )?
+                .to_string(),
+                BuildKind::Editable => uv_build_backend::build_editable(
+                    &source_tree,
+                    &output_dir,
+                    None,
+                    uv_version::version(),
+                )?
+                .to_string(),
+            };
+            Ok(filename)
+        })
+        .await??
+        .to_string();
+
+        Ok(Some(filename))
     }
 }
 

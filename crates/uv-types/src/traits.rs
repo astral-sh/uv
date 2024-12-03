@@ -121,6 +121,21 @@ pub trait BuildContext {
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
+
+    /// Build by calling directly into the uv build backend without PEP 517, if possible.
+    ///
+    /// Checks if the source tree uses uv as build backend. If not, it returns `Ok(None)`, otherwise
+    /// it builds and returns the name of the built file.
+    ///
+    /// `version_id` is for error reporting only.
+    fn direct_build<'a>(
+        &'a self,
+        source: &'a Path,
+        subdirectory: Option<&'a Path>,
+        output_dir: &'a Path,
+        build_kind: BuildKind,
+        version_id: Option<String>,
+    ) -> impl Future<Output = Result<Option<String>>> + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.

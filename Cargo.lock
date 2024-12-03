@@ -4583,6 +4583,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
+ "uv-version",
  "uv-warnings",
  "version-ranges",
  "walkdir",
@@ -4841,7 +4842,9 @@ dependencies = [
  "futures",
  "itertools 0.13.0",
  "rustc-hash",
+ "tokio",
  "tracing",
+ "uv-build-backend",
  "uv-build-frontend",
  "uv-cache",
  "uv-client",
@@ -4855,6 +4858,7 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-types",
+ "uv-version",
 ]
 
 [[package]]

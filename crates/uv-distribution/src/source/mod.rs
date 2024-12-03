@@ -1803,27 +1803,46 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs::create_dir_all(&cache_shard)
             .await
             .map_err(Error::CacheWrite)?;
-        let disk_filename = self
+        // Try a direct build if that isn't disabled and the uv build backend is used.
+        let disk_filename = if let Some(name) = self
             .build_context
-            .setup_build(
+            .direct_build(
                 source_root,
                 subdirectory,
-                source_root,
-                Some(source.to_string()),
-                source.as_dist(),
-                source_strategy,
+                temp_dir.path(),
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
                     BuildKind::Wheel
                 },
-                BuildOutput::Debug,
+                Some(source.to_string()),
             )
             .await
             .map_err(Error::Build)?
-            .wheel(temp_dir.path())
-            .await
-            .map_err(Error::Build)?;
+        {
+            name
+        } else {
+            self.build_context
+                .setup_build(
+                    source_root,
+                    subdirectory,
+                    source_root,
+                    Some(source.to_string()),
+                    source.as_dist(),
+                    source_strategy,
+                    if source.is_editable() {
+                        BuildKind::Editable
+                    } else {
+                        BuildKind::Wheel
+                    },
+                    BuildOutput::Debug,
+                )
+                .await
+                .map_err(Error::Build)?
+                .wheel(temp_dir.path())
+                .await
+                .map_err(Error::Build)?
+        };
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
