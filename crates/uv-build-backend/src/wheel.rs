@@ -1,5 +1,5 @@
 use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
-use crate::{DirectoryWriter, Error, PyProjectToml};
+use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
@@ -44,22 +44,48 @@ pub fn build_wheel(
 
     write_wheel(
         source_tree,
-        uv_version,
         &pyproject_toml,
         &filename,
-        &wheel_path,
+        uv_version,
         wheel_writer,
     )?;
 
     Ok(filename)
 }
 
-fn write_wheel(
+/// List the files that would be included in a source distribution and their origin.
+pub fn list_wheel(
     source_tree: &Path,
     uv_version: &str,
+) -> Result<(WheelFilename, FileList), Error> {
+    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
+    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    for warning in pyproject_toml.check_build_system(uv_version) {
+        warn_user_once!("{warning}");
+    }
+
+    let filename = WheelFilename {
+        name: pyproject_toml.name().clone(),
+        version: pyproject_toml.version().clone(),
+        build_tag: None,
+        python_tag: vec!["py3".to_string()],
+        abi_tag: vec!["none".to_string()],
+        platform_tag: vec!["any".to_string()],
+    };
+
+    let mut files = FileList::new();
+    let writer = ListWriter::new(&mut files);
+    write_wheel(source_tree, &pyproject_toml, &filename, uv_version, writer)?;
+    // Ensure a deterministic order even when file walking changes
+    files.sort_unstable();
+    Ok((filename, files))
+}
+
+fn write_wheel(
+    source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     filename: &WheelFilename,
-    wheel_path: &Path,
+    uv_version: &str,
     mut wheel_writer: impl DirectoryWriter,
 ) -> Result<(), Error> {
     let settings = pyproject_toml
@@ -89,7 +115,7 @@ fn write_wheel(
     debug!("Wheel excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
 
-    debug!("Adding content files to {}", wheel_path.user_display());
+    debug!("Adding content files to wheel");
     if settings.module_root.is_absolute() {
         return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
@@ -185,7 +211,7 @@ fn write_wheel(
         )?;
     }
 
-    debug!("Adding metadata files to: `{}`", wheel_path.user_display());
+    debug!("Adding metadata files to wheel");
     let dist_info_dir = write_dist_info(
         &mut wheel_writer,
         pyproject_toml,

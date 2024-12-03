@@ -4,7 +4,7 @@ mod wheel;
 
 pub use metadata::PyProjectToml;
 pub use source_dist::{build_source_dist, list_source_dist};
-pub use wheel::{build_editable, build_wheel, metadata};
+pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
 use crate::metadata::ValidationError;
 use std::fs::FileType;
@@ -219,6 +219,7 @@ mod tests {
 
         // Build a wheel from the source tree
         let direct_output_dir = TempDir::new().unwrap();
+        let (_name, wheel_list_files) = list_wheel(src.path(), "1.0.0+test").unwrap();
         build_wheel(src.path(), direct_output_dir.path(), None, "1.0.0+test").unwrap();
 
         let wheel = zip::ZipArchive::new(
@@ -276,6 +277,24 @@ mod tests {
         indirect_wheel_contents.sort_unstable();
         assert_eq!(indirect_wheel_contents, direct_wheel_contents);
 
+        let format_file_list = |file_list: FileList| {
+            file_list
+                .into_iter()
+                .map(|(path, source)| {
+                    let path = path.replace('\\', "/");
+                    if let Some(source) = source {
+                        let source = relative_to(source, src.path())
+                            .unwrap()
+                            .portable_display()
+                            .to_string();
+                        format!("{path} ({source})")
+                    } else {
+                        format!("{path} (generated)")
+                    }
+                })
+                .join("\n")
+        };
+
         // Check the contained files and directories
         assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
         built_by_uv-0.1.0/
@@ -301,23 +320,7 @@ mod tests {
         built_by_uv-0.1.0/third-party-licenses
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
         "###);
-        // Separate snapshot since it's missing directories
-        let file_listing = source_dist_list_files
-            .into_iter()
-            .map(|(path, source)| {
-                let path = path.replace('\\', "/");
-                if let Some(source) = source {
-                    let source = relative_to(source, src.path())
-                        .unwrap()
-                        .portable_display()
-                        .to_string();
-                    format!("{path} ({source})")
-                } else {
-                    format!("{path} (generated)")
-                }
-            })
-            .join("\n");
-        assert_snapshot!(file_listing, @r###"
+        assert_snapshot!(format_file_list(source_dist_list_files), @r###"
         built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
         built_by_uv-0.1.0/PKG-INFO (generated)
@@ -356,6 +359,21 @@ mod tests {
         built_by_uv/arithmetic/__init__.py
         built_by_uv/arithmetic/circle.py
         built_by_uv/arithmetic/pi.txt
+        "###);
+
+        assert_snapshot!(format_file_list(wheel_list_files), @r###"
+        built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+        built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+        built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+        built_by_uv-0.1.0.dist-info/METADATA (generated)
+        built_by_uv-0.1.0.dist-info/WHEEL (generated)
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+        built_by_uv/__init__.py (src/built_by_uv/__init__.py)
+        built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
+        built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
+        built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
         "###);
 
         // Check that we write deterministic wheels.
