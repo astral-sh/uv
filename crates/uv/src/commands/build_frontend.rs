@@ -180,7 +180,7 @@ async fn build_impl(
     preview: PreviewMode,
 ) -> Result<BuildResult> {
     if list && preview.is_disabled() {
-        // We need the fast path for list and that is preview only.
+        // We need the direct build for list and that is preview only.
         writeln!(
             printer.stderr(),
             "The `--list` option is only available in preview mode; add the `--preview` flag to use `--list`"
@@ -580,14 +580,14 @@ async fn build_package(
             return Err(Error::ListForcePep517);
         }
 
-        if !check_fast_path(source.path()) {
+        if !check_direct_build(source.path()) {
             // TODO(konsti): Provide more context on what mismatched
             return Err(Error::ListNonUv);
         }
 
         BuildAction::List
-    } else if preview.is_enabled() && !force_pep517 && check_fast_path(source.path()) {
-        BuildAction::FastPath
+    } else if preview.is_enabled() && !force_pep517 && check_direct_build(source.path()) {
+        BuildAction::DirectBuild
     } else {
         BuildAction::Pep517
     };
@@ -794,7 +794,7 @@ enum BuildAction {
     /// Only list the files that would be included, don't actually build.
     List,
     /// Build by calling directly into the build backend.
-    FastPath,
+    DirectBuild,
     /// Build through the PEP 517 hooks.
     Pep517,
 }
@@ -804,14 +804,14 @@ impl BuildAction {
     fn force_build(self) -> Self {
         match self {
             // List is only available for the uv build backend
-            Self::List => Self::FastPath,
-            Self::FastPath => Self::FastPath,
+            Self::List => Self::DirectBuild,
+            Self::DirectBuild => Self::DirectBuild,
             Self::Pep517 => Self::Pep517,
         }
     }
 }
 
-/// Build a source distribution, either through PEP 517 or through the fast path.
+/// Build a source distribution, either through PEP 517 or through a direct build.
 #[instrument(skip_all)]
 async fn build_sdist(
     source_tree: &Path,
@@ -842,7 +842,7 @@ async fn build_sdist(
                 file_list,
             }
         }
-        BuildAction::FastPath => {
+        BuildAction::DirectBuild => {
             writeln!(
                 printer.stderr(),
                 "{}",
@@ -904,7 +904,7 @@ async fn build_sdist(
     Ok(build_result)
 }
 
-/// Build a wheel, either through PEP 517 or through the fast path.
+/// Build a wheel, either through PEP 517 or through a direct build.
 #[instrument(skip_all)]
 async fn build_wheel(
     source_tree: &Path,
@@ -934,7 +934,7 @@ async fn build_wheel(
                 file_list,
             }
         }
-        BuildAction::FastPath => {
+        BuildAction::DirectBuild => {
             writeln!(
                 printer.stderr(),
                 "{}",
@@ -1207,7 +1207,7 @@ impl BuildPlan {
 }
 
 /// Check if the build backend is matching the currently running uv version.
-fn check_fast_path(source_tree: &Path) -> bool {
+fn check_direct_build(source_tree: &Path) -> bool {
     let pyproject_toml: PyProjectToml =
         match fs_err::read_to_string(source_tree.join("pyproject.toml"))
             .map_err(anyhow::Error::from)
@@ -1215,7 +1215,7 @@ fn check_fast_path(source_tree: &Path) -> bool {
         {
             Ok(pyproject_toml) => pyproject_toml,
             Err(err) => {
-                debug!("Not using uv build backend fast path, no pyproject.toml: {err}");
+                debug!("Not using uv build backend direct build, no pyproject.toml: {err}");
                 return false;
             }
         };
@@ -1227,9 +1227,11 @@ fn check_fast_path(source_tree: &Path) -> bool {
         [] => true,
         // Any warning -> no match
         [first, others @ ..] => {
-            debug!("Not using uv build backend fast path, pyproject.toml does not match: {first}");
+            debug!(
+                "Not using uv build backend direct build, pyproject.toml does not match: {first}"
+            );
             for other in others {
-                trace!("Further uv build backend fast path mismatch: {other}");
+                trace!("Further uv build backend direct build mismatch: {other}");
             }
             false
         }
