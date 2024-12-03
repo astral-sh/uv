@@ -220,6 +220,7 @@ impl LoweredRequirement {
                             }
                             let source = path_source(
                                 PathBuf::from(path),
+                                git_member,
                                 origin,
                                 project_dir,
                                 workspace.install_path(),
@@ -465,6 +466,7 @@ impl LoweredRequirement {
                             }
                             let source = path_source(
                                 PathBuf::from(path),
+                                None,
                                 RequirementOrigin::Project,
                                 dir,
                                 dir,
@@ -553,6 +555,8 @@ pub enum LoweringError {
     WorkspaceFalse,
     #[error("Editable must refer to a local directory, not a file: `{0}`")]
     EditableFile(String),
+    #[error("Git repository references local file source, but only directories are supported as transitive Git dependencies: `{0}`")]
+    GitFile(String),
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
     #[error("Path must be UTF-8: `{0}`")]
@@ -678,6 +682,7 @@ fn registry_source(
 /// Convert a path string to a file or directory source.
 fn path_source(
     path: impl AsRef<Path>,
+    git_member: Option<&GitWorkspaceMember>,
     origin: RequirementOrigin,
     project_dir: &Path,
     workspace_root: &Path,
@@ -702,6 +707,24 @@ fn path_source(
         install_path.extension().is_none()
     };
     if is_dir {
+        if let Some(git_member) = git_member {
+            let subdirectory = uv_fs::normalize_path(
+                &uv_fs::relative_to(install_path, git_member.fetch_root)
+                    .expect("Workspace member must be relative"),
+            );
+            return Ok(RequirementSource::Git {
+                repository: git_member.git_source.git.repository().clone(),
+                reference: git_member.git_source.git.reference().clone(),
+                precise: git_member.git_source.git.precise(),
+                subdirectory: if subdirectory == PathBuf::new() {
+                    None
+                } else {
+                    Some(subdirectory)
+                },
+                url,
+            });
+        }
+
         if editable {
             Ok(RequirementSource::Directory {
                 install_path,
@@ -731,6 +754,10 @@ fn path_source(
             })
         }
     } else {
+        // TODO(charlie): If a Git repo contains a source that points to a file, what should we do?
+        if git_member.is_some() {
+            return Err(LoweringError::GitFile(url.to_string()));
+        }
         if editable {
             return Err(LoweringError::EditableFile(url.to_string()));
         }
