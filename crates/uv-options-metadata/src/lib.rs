@@ -198,7 +198,7 @@ struct SerializeVisitor<'a> {
     entries: &'a mut BTreeMap<String, OptionField>,
 }
 
-impl Visit for SerializeVisitor<'_> {
+impl<'a> Visit for SerializeVisitor<'a> {
     fn record_set(&mut self, name: &str, set: OptionSet) {
         // Collect the entries of the set.
         let mut entries = BTreeMap::new();

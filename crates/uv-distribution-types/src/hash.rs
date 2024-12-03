@@ -11,7 +11,7 @@ pub enum HashPolicy<'a> {
     Validate(&'a [HashDigest]),
 }
 
-impl HashPolicy<'_> {
+impl<'a> HashPolicy<'a> {
     /// Returns `true` if the hash policy is `None`.
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)

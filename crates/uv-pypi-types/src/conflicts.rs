@@ -243,7 +243,7 @@ impl<'a> From<(&'a PackageName, &'a GroupName)> for ConflictItemRef<'a> {
     }
 }
 
-impl hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'_> {
+impl<'a> hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'a> {
     fn equivalent(&self, key: &ConflictItem) -> bool {
         key.as_ref() == *self
     }
@@ -335,7 +335,7 @@ impl<'a> From<&'a GroupName> for ConflictPackageRef<'a> {
     }
 }
 
-impl PartialEq<ConflictPackage> for ConflictPackageRef<'_> {
+impl<'a> PartialEq<ConflictPackage> for ConflictPackageRef<'a> {
     fn eq(&self, other: &ConflictPackage) -> bool {
         other.as_ref() == *self
     }
@@ -347,7 +347,7 @@ impl<'a> PartialEq<ConflictPackageRef<'a>> for ConflictPackage {
     }
 }
 
-impl hashbrown::Equivalent<ConflictPackage> for ConflictPackageRef<'_> {
+impl<'a> hashbrown::Equivalent<ConflictPackage> for ConflictPackageRef<'a> {
     fn equivalent(&self, key: &ConflictPackage) -> bool {
         key.as_ref() == *self
     }
