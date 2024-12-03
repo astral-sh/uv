@@ -300,9 +300,11 @@ pub(crate) async fn install(
         None
     };
 
+    let installations: Vec<_> = downloaded.iter().chain(satisfied.iter().copied()).collect();
+
     // Ensure that the installations are _complete_ for both downloaded installations and existing
     // installations that match the request
-    for installation in downloaded.iter().chain(satisfied.iter().copied()) {
+    for installation in &installations {
         installation.ensure_externally_managed()?;
         installation.ensure_canonical_executables()?;
 
@@ -353,7 +355,13 @@ pub(crate) async fn install(
                     );
 
                     // Figure out what installation it references, if any
-                    let existing = find_matching_bin_link(&existing_installations, &target);
+                    let existing = find_matching_bin_link(
+                        installations
+                            .iter()
+                            .copied()
+                            .chain(existing_installations.iter()),
+                        &target,
+                    );
 
                     match existing {
                         None => {
@@ -373,7 +381,7 @@ pub(crate) async fn install(
                                 target.simplified_display()
                             );
                         }
-                        Some(existing) if existing == installation => {
+                        Some(existing) if existing == *installation => {
                             // The existing link points to the same installation, so we're done unless
                             // they requested we reinstall
                             if !(reinstall || force) {
@@ -429,6 +437,17 @@ pub(crate) async fn install(
 
                     // Replace the existing link
                     fs_err::remove_file(&to)?;
+
+                    if let Some(existing) = existing {
+                        // Ensure we do not report installation of this executable for an existing
+                        // key if we undo it
+                        changelog
+                            .installed_executables
+                            .entry(existing.key().clone())
+                            .or_default()
+                            .remove(&target);
+                    }
+
                     installation.create_bin_link(&target)?;
                     debug!(
                         "Updated executable at `{}` to {}",
@@ -562,6 +581,10 @@ pub(crate) fn format_executables(
         return String::new();
     };
 
+    if installed.is_empty() {
+        return String::new();
+    }
+
     let names = installed
         .iter()
         .filter_map(|path| path.file_name())
@@ -612,7 +635,7 @@ fn warn_if_not_on_path(bin: &Path) {
 /// Like [`ManagedPythonInstallation::is_bin_link`], but this method will only resolve the
 /// given path one time.
 fn find_matching_bin_link<'a>(
-    installations: &'a [ManagedPythonInstallation],
+    mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
     path: &Path,
 ) -> Option<&'a ManagedPythonInstallation> {
     let target = if cfg!(unix) {
@@ -630,7 +653,5 @@ fn find_matching_bin_link<'a>(
         unreachable!("Only Windows and Unix are supported")
     };
 
-    installations
-        .iter()
-        .find(|installation| installation.executable() == target)
+    installations.find(|installation| installation.executable() == target)
 }
