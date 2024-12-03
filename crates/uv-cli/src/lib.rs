@@ -2174,7 +2174,8 @@ pub struct BuildArgs {
     /// When using the uv build backend, list the files that would be included when building.
     ///
     /// Skips building the actual distribution, except when the source distribution is needed to
-    /// build the wheel.
+    /// build the wheel. The file list is collected directly without a PEP 517 environment. It only
+    /// works with the uv build backend, there is no PEP 517 file list build hook.
     ///
     /// This option can be combined with `--sdist` and `--wheel` for inspecting different build
     /// paths.
