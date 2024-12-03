@@ -227,6 +227,42 @@ fn python_install_preview() {
 
     // The executable should be removed
     bin_python.assert(predicate::path::missing());
+
+    // Install multiple patch versions
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.7").arg("3.12.6"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.12.6-[PLATFORM]
+     + cpython-3.12.7-[PLATFORM] (python3.12)
+    "###);
+
+    let bin_python = context
+        .temp_dir
+        .child("bin")
+        .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
+
+    // The link should be for the newer patch version
+    if cfg!(unix) {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.7-[PLATFORM]/bin/python3.12"
+            );
+        });
+    } else {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.7-[PLATFORM]/python"
+            );
+        });
+    }
 }
 
 #[test]
