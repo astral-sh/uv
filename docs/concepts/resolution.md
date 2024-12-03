@@ -417,6 +417,6 @@ update was backwards-compatible. However, this is not guaranteed, and uv may exi
 it encounters a lockfile with an outdated schema version.
 
 The schema version is considered part of the public API, and so is only bumped in minor releases, as
-a breaking change (see [Versioning](../reference/versioning.md)). As such, all uv patch versions
-within a given minor uv release are guaranteed to have full lockfile compatibility. In other words,
-lockfiles may only be rejected across minor releases.
+a breaking change (see [Versioning](../reference/policies/versioning.md)). As such, all uv patch
+versions within a given minor uv release are guaranteed to have full lockfile compatibility. In
+other words, lockfiles may only be rejected across minor releases.
