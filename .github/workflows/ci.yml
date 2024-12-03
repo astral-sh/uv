@@ -601,31 +601,32 @@ jobs:
 
           cross build --target x86_64-unknown-freebsd
 
-      - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@v0.2.0
-        with:
-          verbose: false
-          pre-run: |
-            # The exclude `*` prevents examination of directories so we need to
-            # include each parent directory of the binary
-            include_path="$(mktemp)"
-            cat <<EOF > $include_path
-            target
-            target/x86_64-unknown-freebsd
-            target/x86_64-unknown-freebsd/debug
-            target/x86_64-unknown-freebsd/debug/uv
-            EOF
+      # See https://github.com/acj/freebsd-firecracker/issues/1
+      # - name: Test in Firecracker VM
+      #   uses: acj/freebsd-firecracker-action@v0.2.0
+      #   with:
+      #     verbose: false
+      #     pre-run: |
+      #       # The exclude `*` prevents examination of directories so we need to
+      #       # include each parent directory of the binary
+      #       include_path="$(mktemp)"
+      #       cat <<EOF > $include_path
+      #       target
+      #       target/x86_64-unknown-freebsd
+      #       target/x86_64-unknown-freebsd/debug
+      #       target/x86_64-unknown-freebsd/debug/uv
+      #       EOF
 
-            rsync -r -e "ssh" \
-              --relative \
-              --copy-links \
-              --include-from "$include_path" \
-              --exclude "*" \
-              . firecracker:
-          run-in-vm: |
-            cp target/x86_64-unknown-freebsd/debug/uv uv
-            chmod +x uv
-            ./uv --version
+      #       rsync -r -e "ssh" \
+      #         --relative \
+      #         --copy-links \
+      #         --include-from "$include_path" \
+      #         --exclude "*" \
+      #         . firecracker:
+      #     run-in-vm: |
+      #       cp target/x86_64-unknown-freebsd/debug/uv uv
+      #       chmod +x uv
+      #       ./uv --version
 
   ecosystem-test:
     timeout-minutes: 10
