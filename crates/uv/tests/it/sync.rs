@@ -5200,3 +5200,92 @@ fn mismatched_name_cached_wheel() -> Result<()> {
 
     Ok(())
 }
+
+/// Sync a Git repository that depends on a package within the same repository via a `path` source.
+///
+/// See: <https://github.com/astral-sh/uv/issues/9516>
+#[test]
+fn sync_git_path_dependency() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["package2"]
+
+        [tool.uv.sources]
+        package2 = { git = "https://git@github.com/astral-sh/uv-path-dependency-test.git", subdirectory = "package2" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "foo"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "package2" },
+            ]
+
+            [package.metadata]
+            requires-dist = [{ name = "package2", git = "https://github.com/astral-sh/uv-path-dependency-test.git?subdirectory=package2" }]
+
+            [[package]]
+            name = "package1"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/uv-path-dependency-test.git?subdirectory=package1#28781b32cf1f260cdb2c8040628079eb265202bd" }
+
+            [[package]]
+            name = "package2"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/uv-path-dependency-test.git?subdirectory=package2#28781b32cf1f260cdb2c8040628079eb265202bd" }
+            dependencies = [
+                { name = "package1" },
+            ]
+            "###
+            );
+        }
+    );
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package1==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1)
+     + package2==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2)
+    "###);
+
+    Ok(())
+}
