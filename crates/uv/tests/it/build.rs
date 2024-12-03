@@ -2306,7 +2306,7 @@ fn list_files_errors() -> Result<()> {
 
     // Not a uv build backend package, we can't list it.
     let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
-    uv_snapshot!(context.build()
+    uv_snapshot!(context.filters(), context.build()
         .arg("--preview")
         .arg(&anyio_local)
         .arg("--out-dir")
@@ -2317,7 +2317,7 @@ fn list_files_errors() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `/home/konsti/projects/uv/crates/uv/../../scripts/packages/anyio_local`
+      × Failed to build `[WORKSPACE]/crates/uv/../../scripts/packages/anyio_local`
       ╰─▶ Can only use `--list` with the uv backend
     "###);
     Ok(())
