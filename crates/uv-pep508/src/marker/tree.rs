@@ -893,8 +893,6 @@ impl MarkerTree {
                         }
                     }
 
-                    // todo(ibraheem): avoid cloning here, `contains` should accept `&impl Borrow<V>`
-                    let l_string = &l_string.to_string();
                     if range.contains(l_string) {
                         return tree.evaluate_reporter_impl(env, extras, reporter);
                     }
