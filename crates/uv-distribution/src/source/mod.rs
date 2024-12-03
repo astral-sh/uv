@@ -1378,13 +1378,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Cow::Borrowed(fetch.path())
         };
 
+        let git_member = GitWorkspaceMember {
+            fetch_root: fetch.path(),
+            git_source: resource,
+        };
+
         if let Some(metadata) =
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
-            let git_member = GitWorkspaceMember {
-                fetch_root: fetch.path(),
-                git_source: resource,
-            };
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
@@ -1420,6 +1421,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     fetch_root: fetch.path(),
                     git_source: resource,
                 };
+
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
@@ -1453,11 +1455,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             write_atomic(metadata_entry.path(), rmp_serde::to_vec(&metadata)?)
                 .await
                 .map_err(Error::CacheWrite)?;
-
-            let git_member = GitWorkspaceMember {
-                fetch_root: fetch.path(),
-                git_source: resource,
-            };
 
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
@@ -1511,7 +1508,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 fetch.path(),
-                None,
+                Some(&git_member),
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.bounds(),
