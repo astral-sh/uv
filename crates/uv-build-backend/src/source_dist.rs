@@ -1,6 +1,6 @@
 use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
 use crate::wheel::build_exclude_matcher;
-use crate::{DirectoryWriter, Error, PyProjectToml};
+use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
@@ -33,6 +33,26 @@ pub fn build_source_dist(
     let writer = TarGzWriter::new(&source_dist_path)?;
     write_source_dist(source_tree, writer, uv_version)?;
     Ok(filename)
+}
+
+/// List the files that would be included in a source distribution and their origin.
+pub fn list_source_dist(
+    source_tree: &Path,
+    uv_version: &str,
+) -> Result<(SourceDistFilename, FileList), Error> {
+    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
+    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let filename = SourceDistFilename {
+        name: pyproject_toml.name().clone(),
+        version: pyproject_toml.version().clone(),
+        extension: SourceDistExtension::TarGz,
+    };
+    let mut files = FileList::new();
+    let writer = ListWriter::new(&mut files);
+    write_source_dist(source_tree, writer, uv_version)?;
+    // Ensure a deterministic order even when file walking changes
+    files.sort_unstable();
+    Ok((filename, files))
 }
 
 /// Build includes and excludes for source tree walking for source dists.

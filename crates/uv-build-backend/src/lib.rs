@@ -3,7 +3,7 @@ mod source_dist;
 mod wheel;
 
 pub use metadata::PyProjectToml;
-pub use source_dist::build_source_dist;
+pub use source_dist::{build_source_dist, list_source_dist};
 pub use wheel::{build_editable, build_wheel, metadata};
 
 use crate::metadata::ValidationError;
@@ -89,6 +89,42 @@ trait DirectoryWriter {
     fn close(self, dist_info_dir: &str) -> Result<(), Error>;
 }
 
+/// Name of the file in the archive and path outside, if it wasn't generated.
+pub(crate) type FileList = Vec<(String, Option<PathBuf>)>;
+
+/// A dummy writer to collect the file names that would be included in a build.
+pub(crate) struct ListWriter<'a> {
+    files: &'a mut FileList,
+}
+
+impl<'a> ListWriter<'a> {
+    /// Convert the writer to the collected file names.
+    pub(crate) fn new(files: &'a mut FileList) -> Self {
+        Self { files }
+    }
+}
+
+impl DirectoryWriter for ListWriter<'_> {
+    fn write_bytes(&mut self, path: &str, _bytes: &[u8]) -> Result<(), Error> {
+        self.files.push((path.to_string(), None));
+        Ok(())
+    }
+
+    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
+        self.files
+            .push((path.to_string(), Some(file.to_path_buf())));
+        Ok(())
+    }
+
+    fn write_directory(&mut self, _directory: &str) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
 /// PEP 517 requires that the metadata directory from the prepare metadata call is identical to the
 /// build wheel call. This method performs a prudence check that `METADATA` and `entry_points.txt`
 /// match.
@@ -140,14 +176,13 @@ fn check_metadata_directory(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source_dist::build_source_dist;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
     use insta::assert_snapshot;
     use itertools::Itertools;
     use std::io::BufReader;
     use tempfile::TempDir;
-    use uv_fs::copy_dir_all;
+    use uv_fs::{copy_dir_all, relative_to};
 
     /// Test that source tree -> source dist -> wheel includes the right files and is stable and
     /// deterministic in dependent of the build path.
@@ -198,8 +233,9 @@ mod tests {
         let mut direct_wheel_contents: Vec<_> = wheel.file_names().collect();
         direct_wheel_contents.sort_unstable();
 
-        // Build a source dist from the source tree
+        // List file and build a source dist from the source tree
         let source_dist_dir = TempDir::new().unwrap();
+        let (_name, source_dist_list_files) = list_source_dist(src.path(), "1.0.0+test").unwrap();
         build_source_dist(src.path(), source_dist_dir.path(), "1.0.0+test").unwrap();
 
         // Build a wheel from the source dist
@@ -264,6 +300,38 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/build-only.h
         built_by_uv-0.1.0/third-party-licenses
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
+        "###);
+        // Separate snapshot since it's missing directories
+        let file_listing = source_dist_list_files
+            .into_iter()
+            .map(|(path, source)| {
+                let path = path.replace('\\', "/");
+                if let Some(source) = source {
+                    let source = relative_to(source, src.path())
+                        .unwrap()
+                        .portable_display()
+                        .to_string();
+                    format!("{path} ({source})")
+                } else {
+                    format!("{path} (generated)")
+                }
+            })
+            .join("\n");
+        assert_snapshot!(file_listing, @r###"
+        built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
+        built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
+        built_by_uv-0.1.0/PKG-INFO (generated)
+        built_by_uv-0.1.0/README.md (README.md)
+        built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
+        built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
+        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
+        built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
+        built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+        built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
+        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
         "###);
 
         assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
