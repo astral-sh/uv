@@ -954,12 +954,24 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
+            let constraints = args
+                .constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
+            let overrides = args
+                .overrides
+                .into_iter()
+                .map(RequirementsSource::from_overrides_txt)
+                .collect::<Vec<_>>();
 
             Box::pin(commands::tool_install(
                 args.package,
                 args.editable,
                 args.from,
                 &requirements,
+                &constraints,
+                &overrides,
                 args.python,
                 args.install_mirrors,
                 args.force,

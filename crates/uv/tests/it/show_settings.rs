@@ -2704,6 +2704,8 @@ fn resolve_tool() -> anyhow::Result<()> {
         with: [],
         with_requirements: [],
         with_editable: [],
+        constraints: [],
+        overrides: [],
         python: None,
         refresh: None(
             Timestamp(
