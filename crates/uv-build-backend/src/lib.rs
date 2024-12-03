@@ -77,6 +77,8 @@ pub enum Error {
 /// error case).
 trait DirectoryWriter {
     /// Add a file with the given content.
+    ///
+    /// Files added through the method are considered generated when listing included files.
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error>;
 
     /// Add a local file.
