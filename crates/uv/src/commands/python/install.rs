@@ -490,7 +490,7 @@ pub(crate) async fn install(
         }
 
         for event in changelog.events() {
-            let executables = format_executables(&event, &changelog);
+            let executables = format_executables(&event, &changelog.installed_executables);
             match event.kind {
                 ChangeEventKind::Added => {
                     writeln!(
@@ -554,8 +554,11 @@ pub(crate) async fn install(
     Ok(ExitStatus::Success)
 }
 
-fn format_executables(event: &ChangeEvent, changelog: &Changelog) -> String {
-    let Some(installed) = changelog.installed_executables.get(&event.key) else {
+pub(crate) fn format_executables(
+    event: &ChangeEvent,
+    executables: &FxHashMap<PythonInstallationKey, FxHashSet<PathBuf>>,
+) -> String {
+    let Some(installed) = executables.get(&event.key) else {
         return String::new();
     };
 
