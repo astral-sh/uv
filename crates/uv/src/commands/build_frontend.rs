@@ -566,6 +566,7 @@ async fn build_package(
         LowerBound::Allow,
         sources,
         concurrency,
+        preview,
     );
 
     prepare_output_directory(&output_dir).await?;

@@ -8,7 +8,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, LowerBound, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    IndexStrategy, LowerBound, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -85,6 +85,7 @@ pub(crate) async fn pip_install(
     cache: Cache,
     dry_run: bool,
     printer: Printer,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -383,6 +384,7 @@ pub(crate) async fn pip_install(
         LowerBound::Warn,
         sources,
         concurrency,
+        preview,
     );
 
     let options = OptionsBuilder::new()

@@ -374,6 +374,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.quiet,
                 cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -445,6 +446,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 args.dry_run,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -535,6 +537,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 args.dry_run,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -807,6 +810,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
                 args.relocatable,
+                globals.preview,
             )
             .await
         }
@@ -927,6 +931,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.allow_insecure_host,
                 cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -991,6 +996,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.allow_insecure_host,
                 cache,
                 printer,
+                globals.preview,
             ))
             .await
         }
@@ -1037,6 +1043,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.allow_insecure_host,
                 &cache,
                 printer,
+                globals.preview,
             ))
             .await
         }
@@ -1375,6 +1382,7 @@ async fn run_project(
                 printer,
                 args.env_file,
                 args.no_env_file,
+                globals.preview,
             ))
             .await
         }
@@ -1414,6 +1422,7 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1445,6 +1454,7 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1500,6 +1510,7 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
+                globals.preview,
             ))
             .await
         }
@@ -1544,6 +1555,7 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
+                globals.preview,
             ))
             .await
         }
@@ -1581,6 +1593,7 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1620,6 +1633,7 @@ async fn run_project(
                 globals.quiet,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }

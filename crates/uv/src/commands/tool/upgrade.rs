@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, TrustedHost};
+use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
 use uv_dispatch::SharedState;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
@@ -48,6 +48,7 @@ pub(crate) async fn upgrade(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
@@ -129,6 +130,7 @@ pub(crate) async fn upgrade(
             concurrency,
             native_tls,
             allow_insecure_host,
+            preview,
         )
         .await;
 
@@ -219,6 +221,7 @@ async fn upgrade_tool(
     concurrency: Concurrency,
     native_tls: bool,
     allow_insecure_host: &[TrustedHost],
+    preview: PreviewMode,
 ) -> Result<UpgradeOutcome> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
@@ -301,6 +304,7 @@ async fn upgrade_tool(
             allow_insecure_host,
             cache,
             printer,
+            preview,
         )
         .await?;
 
@@ -319,6 +323,7 @@ async fn upgrade_tool(
             allow_insecure_host,
             cache,
             printer,
+            preview,
         )
         .await?;
 
@@ -344,6 +349,7 @@ async fn upgrade_tool(
             allow_insecure_host,
             cache,
             printer,
+            preview,
         )
         .await?;
 

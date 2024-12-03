@@ -15,8 +15,8 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, Reinstall,
-    SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, PreviewMode,
+    Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
@@ -57,6 +57,7 @@ pub struct BuildDispatch<'a> {
     bounds: LowerBound,
     sources: SourceStrategy,
     concurrency: Concurrency,
+    preview: PreviewMode,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -79,6 +80,7 @@ impl<'a> BuildDispatch<'a> {
         bounds: LowerBound,
         sources: SourceStrategy,
         concurrency: Concurrency,
+        preview: PreviewMode,
     ) -> Self {
         Self {
             client,
@@ -101,6 +103,7 @@ impl<'a> BuildDispatch<'a> {
             bounds,
             sources,
             concurrency,
+            preview,
         }
     }
 
