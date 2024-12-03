@@ -751,6 +751,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) force: bool,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) default: bool,
 }
 
 impl PythonInstallSettings {
@@ -774,6 +775,7 @@ impl PythonInstallSettings {
             force,
             mirror: _,
             pypy_mirror: _,
+            default,
         } = args;
 
         Self {
@@ -782,6 +784,7 @@ impl PythonInstallSettings {
             force,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
+            default,
         }
     }
 }
