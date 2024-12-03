@@ -623,6 +623,7 @@ jobs:
               --exclude "*" \
               . firecracker:
           run-in-vm: |
+            growfs -s 2G /dev/vtbd0
             cp target/x86_64-unknown-freebsd/debug/uv uv
             chmod +x uv
             ./uv --version
