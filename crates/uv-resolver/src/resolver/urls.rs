@@ -191,11 +191,14 @@ impl Urls {
 fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
     match (a, b) {
         (ParsedUrl::Archive(a), ParsedUrl::Archive(b)) => {
-            a.subdirectory == b.subdirectory
+            a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                == b.subdirectory.as_deref().map(uv_fs::normalize_path)
                 && CanonicalUrl::new(&a.url) == CanonicalUrl::new(&b.url)
         }
         (ParsedUrl::Git(a), ParsedUrl::Git(b)) => {
-            a.subdirectory == b.subdirectory && git.same_ref(&a.url, &b.url)
+            a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                == b.subdirectory.as_deref().map(uv_fs::normalize_path)
+                && git.same_ref(&a.url, &b.url)
         }
         (ParsedUrl::Path(a), ParsedUrl::Path(b)) => {
             a.install_path == b.install_path

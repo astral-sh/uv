@@ -5319,6 +5319,97 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     Ok(())
 }
 
+/// See: <https://github.com/astral-sh/uv/issues/8887>
+#[test]
+fn sync_git_repeated_member_backwards_path() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["package", "dependency"]
+        [tool.uv.sources]
+        package = { git = "https://github.com/astral-sh/uv-backwards-path-test", subdirectory = "root" }
+        dependency = { git = "https://github.com/astral-sh/uv-backwards-path-test", subdirectory = "dependency" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "dependency"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/uv-backwards-path-test?subdirectory=dependency#4bcc7fcd2e548c2ab7ba6b97b1c4e3ababccc7a9" }
+
+            [[package]]
+            name = "foo"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "dependency" },
+                { name = "package" },
+            ]
+
+            [package.metadata]
+            requires-dist = [
+                { name = "dependency", git = "https://github.com/astral-sh/uv-backwards-path-test?subdirectory=dependency" },
+                { name = "package", git = "https://github.com/astral-sh/uv-backwards-path-test?subdirectory=root" },
+            ]
+
+            [[package]]
+            name = "package"
+            version = "0.1.0"
+            source = { git = "https://github.com/astral-sh/uv-backwards-path-test?subdirectory=root#4bcc7fcd2e548c2ab7ba6b97b1c4e3ababccc7a9" }
+            dependencies = [
+                { name = "dependency" },
+            ]
+            "###
+            );
+        }
+    );
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + dependency==0.1.0 (from git+https://github.com/astral-sh/uv-backwards-path-test@4bcc7fcd2e548c2ab7ba6b97b1c4e3ababccc7a9#subdirectory=dependency)
+     + package==0.1.0 (from git+https://github.com/astral-sh/uv-backwards-path-test@4bcc7fcd2e548c2ab7ba6b97b1c4e3ababccc7a9#subdirectory=root)
+    "###);
+
+    Ok(())
+}
+
 /// The project itself is marked as an editable dependency, but under the wrong name. The project
 /// is a package.
 #[test]
