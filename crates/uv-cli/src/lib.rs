@@ -2184,7 +2184,7 @@ pub struct BuildArgs {
     /// backend, but use a fast path that calls into the build backend directly. This option forces
     /// always using PEP 517.
     #[arg(long)]
-    pub no_fast_path: bool,
+    pub force_pep517: bool,
 
     /// Constrain build dependencies using the given requirements files when building
     /// distributions.
