@@ -2285,7 +2285,10 @@ fn list_files_errors() -> Result<()> {
 
     let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
 
-    uv_snapshot!(context.build()
+    let mut filters = context.filters();
+    // In CI, we run with link mode settings.
+    filters.push(("--link-mode <LINK_MODE> ", ""));
+    uv_snapshot!(filters, context.build()
         .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
@@ -2306,7 +2309,10 @@ fn list_files_errors() -> Result<()> {
 
     // Not a uv build backend package, we can't list it.
     let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
-    uv_snapshot!(context.filters(), context.build()
+    let mut filters = context.filters();
+    // Windows normalization
+    filters.push(("/crates/uv/../../", "/"));
+    uv_snapshot!(filters, context.build()
         .arg("--preview")
         .arg(&anyio_local)
         .arg("--out-dir")
@@ -2317,7 +2323,7 @@ fn list_files_errors() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `[WORKSPACE]/crates/uv/../../scripts/packages/anyio_local`
+      × Failed to build `[WORKSPACE]/scripts/packages/anyio_local`
       ╰─▶ Can only use `--list` with the uv backend
     "###);
     Ok(())
