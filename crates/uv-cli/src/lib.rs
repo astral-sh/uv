@@ -2171,6 +2171,17 @@ pub struct BuildArgs {
     #[arg(long)]
     pub wheel: bool,
 
+    /// When using the uv build backend, list the files that would be included when building.
+    ///
+    /// Skips building the actual distribution, except when the source distribution is needed to
+    /// build the wheel.
+    ///
+    /// This option can be combined with `--sdist` and `--wheel` for inspecting different build
+    /// paths.
+    // Hidden while in preview.
+    #[arg(long, hide = true)]
+    pub list: bool,
+
     #[arg(long, overrides_with("no_build_logs"), hide = true)]
     pub build_logs: bool,
 
@@ -2183,7 +2194,7 @@ pub struct BuildArgs {
     /// By default, uv won't create a PEP 517 build environment for packages using the uv build
     /// backend, but use a fast path that calls into the build backend directly. This option forces
     /// always using PEP 517.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "list")]
     pub force_pep517: bool,
 
     /// Constrain build dependencies using the given requirements files when building

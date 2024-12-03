@@ -2028,6 +2028,7 @@ pub(crate) struct BuildSettings {
     pub(crate) out_dir: Option<PathBuf>,
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
+    pub(crate) list: bool,
     pub(crate) build_logs: bool,
     pub(crate) force_pep517: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
@@ -2048,6 +2049,7 @@ impl BuildSettings {
             all_packages,
             sdist,
             wheel,
+            list,
             force_pep517,
             build_constraints,
             require_hashes,
@@ -2074,6 +2076,7 @@ impl BuildSettings {
             out_dir,
             sdist,
             wheel,
+            list,
             build_logs: flag(build_logs, no_build_logs).unwrap_or(true),
             build_constraints: build_constraints
                 .into_iter()
