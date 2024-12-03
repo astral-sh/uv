@@ -580,7 +580,7 @@ jobs:
             arch: ppc64le
             # see https://github.com/astral-sh/uv/issues/6528
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-            toolchain: nightly
+            toolchain: nightly-2024-10-01
       fail-fast: false
 
     steps:
@@ -600,6 +600,7 @@ jobs:
           args: ${{ matrix.platform.arch == 'ppc64le' && '--profile release-no-lto' || '--release'}} --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
+          before-script-linux: "rustup target add powerpc64le-unknown-linux-musl --toolchain nightly-2024-11-01"
       - uses: uraimo/run-on-arch-action@v2
         name: Test wheel
         with:
