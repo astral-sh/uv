@@ -1,7 +1,8 @@
 # Troubleshooting build failures
 
 uv needs to build packages when there is not a compatible wheel (a pre-built distribution of the
-package) available. Building packages can fail for many reasons.
+package) available. Building packages can fail for many reasons, some of which may be unrelated to
+uv itself.
 
 ## Recognizing a build failure
 
@@ -84,9 +85,9 @@ ModuleNotFoundError: No module named 'distutils'
 
 Since this build failure occurs in pip too, it is not likely to be a bug with uv.
 
-If a build failure is reproducible with another installer, you should file an issue upstream (in
-this example, with `numpy` or `setuptools`), find a way to avoid building the package in the first
-place, or make the necessary adjustments to your system for the build to succeed.
+If a build failure is reproducible with another installer, you should investigate upstream (in this
+example, `numpy` or `setuptools`), find a way to avoid building the package in the first place, or
+make the necessary adjustments to your system for the build to succeed.
 
 ## Why does uv build a package?
 
