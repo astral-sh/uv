@@ -51,6 +51,7 @@ pub(crate) async fn pip_sync(
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     allow_empty_requirements: bool,
+    installer_metadata: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
@@ -394,6 +395,7 @@ pub(crate) async fn pip_sync(
         &cache,
         &environment,
         Box::new(DefaultInstallLogger),
+        installer_metadata,
         dry_run,
         printer,
     )

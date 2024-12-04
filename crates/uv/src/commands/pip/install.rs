@@ -61,6 +61,7 @@ pub(crate) async fn pip_install(
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
+    installer_metadata: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
@@ -449,6 +450,7 @@ pub(crate) async fn pip_install(
         &cache,
         &environment,
         Box::new(DefaultInstallLogger),
+        installer_metadata,
         dry_run,
         printer,
     )

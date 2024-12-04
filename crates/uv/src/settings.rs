@@ -63,6 +63,7 @@ pub(crate) struct GlobalSettings {
     pub(crate) python_preference: PythonPreference,
     pub(crate) python_downloads: PythonDownloads,
     pub(crate) no_progress: bool,
+    pub(crate) installer_metadata: bool,
 }
 
 impl GlobalSettings {
@@ -150,6 +151,7 @@ impl GlobalSettings {
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
                 .unwrap_or_default(),
             no_progress: args.no_progress,
+            installer_metadata: !args.no_installer_metadata,
         }
     }
 }

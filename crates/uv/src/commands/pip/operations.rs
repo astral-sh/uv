@@ -397,6 +397,7 @@ pub(crate) async fn install(
     cache: &Cache,
     venv: &PythonEnvironment,
     logger: Box<dyn InstallLogger>,
+    installer_metadata: bool,
     dry_run: bool,
     printer: Printer,
 ) -> Result<Changelog, Error> {
@@ -546,6 +547,7 @@ pub(crate) async fn install(
         installs = uv_installer::Installer::new(venv)
             .with_link_mode(link_mode)
             .with_cache(cache)
+            .with_installer_metadata(installer_metadata)
             .with_reporter(InstallReporter::from(printer).with_length(installs.len() as u64))
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking

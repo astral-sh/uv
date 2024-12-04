@@ -60,6 +60,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -213,6 +214,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -367,6 +369,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -553,6 +556,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -708,6 +712,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -843,6 +848,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -1021,6 +1027,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -1204,6 +1211,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -1440,6 +1448,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -1617,6 +1626,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -1758,6 +1768,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -1939,6 +1950,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -2144,6 +2156,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -2275,6 +2288,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -2406,6 +2420,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -2539,6 +2554,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -2691,6 +2707,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -2854,6 +2871,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -3013,6 +3031,7 @@ fn resolve_both() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -3289,6 +3308,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -3543,6 +3563,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -3677,6 +3698,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -3830,6 +3852,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -3975,6 +3998,7 @@ fn index_priority() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -4158,6 +4182,7 @@ fn index_priority() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -4347,6 +4372,7 @@ fn index_priority() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -4531,6 +4557,7 @@ fn index_priority() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -4722,6 +4749,7 @@ fn index_priority() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -4906,6 +4934,7 @@ fn index_priority() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -5103,6 +5132,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -5228,6 +5258,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -5351,6 +5382,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -5476,6 +5508,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -5599,6 +5632,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,
@@ -5723,6 +5757,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         python_preference: Managed,
         python_downloads: Automatic,
         no_progress: false,
+        installer_metadata: true,
     }
     CacheSettings {
         no_cache: false,

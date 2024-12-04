@@ -256,6 +256,10 @@ pub struct GlobalArgs {
     #[arg(global = true, long, env = EnvVars::UV_NO_PROGRESS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_progress: bool,
 
+    /// Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
+    #[arg(global = true, long, hide = true, env = EnvVars::UV_NO_INSTALLER_METADATA, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_installer_metadata: bool,
+
     /// Change to the given directory prior to running the command.
     ///
     /// Relative paths are resolved with the given directory as the base.

@@ -612,7 +612,7 @@ pub(crate) fn write_file_recorded(
 }
 
 /// Adds `INSTALLER`, `REQUESTED` and `direct_url.json` to the .dist-info dir
-pub(crate) fn extra_dist_info(
+pub(crate) fn write_installer_metadata(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,

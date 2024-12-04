@@ -77,6 +77,7 @@ pub(crate) async fn run(
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
+    installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
@@ -333,6 +334,7 @@ pub(crate) async fn run(
                 } else {
                     Box::new(SummaryInstallLogger)
                 },
+                installer_metadata,
                 connectivity,
                 concurrency,
                 native_tls,
@@ -733,6 +735,7 @@ pub(crate) async fn run(
                     } else {
                         Box::new(SummaryInstallLogger)
                     },
+                    installer_metadata,
                     connectivity,
                     concurrency,
                     native_tls,
@@ -883,6 +886,7 @@ pub(crate) async fn run(
                     } else {
                         Box::new(SummaryInstallLogger)
                     },
+                    installer_metadata,
                     connectivity,
                     concurrency,
                     native_tls,
