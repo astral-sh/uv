@@ -784,12 +784,13 @@ mod test {
             .filter(|path| !path.is_empty())
             .collect();
         files.sort();
-        assert_snapshot!(files.join("\n"), @r"
+        assert_snapshot!(files.join("\n"), @r###"
         built_by_uv-0.1.0.dist-info
         built_by_uv-0.1.0.dist-info/METADATA
         built_by_uv-0.1.0.dist-info/RECORD
         built_by_uv-0.1.0.dist-info/WHEEL
-        ");
+        built_by_uv-0.1.0.dist-info/entry_points.txt
+        "###);
 
         let metadata_file = metadata_dir
             .path()
@@ -816,6 +817,7 @@ mod test {
             .join("built_by_uv-0.1.0.dist-info/RECORD");
         assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
         built_by_uv-0.1.0.dist-info/WHEEL,sha256=3da1bfa0e8fd1b6cc246aa0b2b44a35815596c600cb485c39a6f8c106c3d5a8d,83
+        built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=f883bac9aabac7a1d297ecd61fdeab666818bdfc87947d342f9590a02a73f982,50
         built_by_uv-0.1.0.dist-info/METADATA,sha256=9ba12456f2ab1a6ab1e376ff551e392c70f7ec86713d80b4348e90c7dfd45cb1,474
         built_by_uv-0.1.0.dist-info/RECORD,,
         "###);

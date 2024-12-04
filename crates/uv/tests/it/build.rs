@@ -2192,6 +2192,7 @@ fn list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
     built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
+    built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
     built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
@@ -2199,6 +2200,7 @@ fn list_files() -> Result<()> {
     built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
     built_by_uv-0.1.0.dist-info/METADATA (generated)
     built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
     built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
     built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
@@ -2206,6 +2208,7 @@ fn list_files() -> Result<()> {
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+    built_by_uv/cli.py (src/built_by_uv/cli.py)
 
     ----- stderr -----
     Building source distribution (uv build backend)...
@@ -2247,6 +2250,7 @@ fn list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
     built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
+    built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
     built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
@@ -2254,6 +2258,7 @@ fn list_files() -> Result<()> {
     built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
     built_by_uv-0.1.0.dist-info/METADATA (generated)
     built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
     built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
     built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
@@ -2261,6 +2266,7 @@ fn list_files() -> Result<()> {
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+    built_by_uv/cli.py (src/built_by_uv/cli.py)
 
     ----- stderr -----
     "###);

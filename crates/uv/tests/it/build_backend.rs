@@ -1,4 +1,4 @@
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, venv_bin_path, TestContext};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use flate2::bufread::GzDecoder;
@@ -60,6 +60,16 @@ fn built_by_uv_direct_wheel() -> Result<()> {
     ----- stdout -----
     Hello 👋
     Area of a circle with r=2: 12.56636
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(Command::new("say-hi")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hi from a script!
 
     ----- stderr -----
     "###);
