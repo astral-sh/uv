@@ -27,7 +27,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -92,7 +92,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    dev: Vec<GroupName>,
     source_trees: Vec<PathBuf>,
     mut project: Option<PackageName>,
     workspace_members: Option<BTreeSet<PackageName>>,
@@ -249,7 +248,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &requirements,
                 &constraints,
                 &overrides,
-                &dev,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
@@ -269,7 +267,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements,
         constraints,
         overrides,
-        dev,
         preferences,
         project,
         workspace_members,

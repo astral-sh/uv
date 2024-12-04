@@ -136,6 +136,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                         Requirement {
                             name: requirement.name.clone(),
                             extras: requirement.extras.clone(),
+                            groups: requirement.groups.clone(),
                             source: requirement.source.clone(),
                             origin: requirement.origin.clone(),
                             marker: marker.simplify_extras(slice::from_ref(&extra)),

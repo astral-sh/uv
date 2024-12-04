@@ -305,9 +305,6 @@ pub(crate) async fn pip_sync(
     // When resolving, don't take any external preferences into account.
     let preferences = Vec::default();
 
-    // Ignore development dependencies.
-    let dev = Vec::default();
-
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -345,7 +342,6 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
-        dev,
         source_trees,
         project,
         None,

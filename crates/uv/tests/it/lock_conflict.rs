@@ -1447,8 +1447,8 @@ fn group_basic() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and project:group2 depends on sortedcontainers==2.4.0, we can conclude that project:group1 and project:group2 are incompatible.
-          And because your project depends on project:group1 and project:group2, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project:group2 depends on sortedcontainers==2.4.0 and project:group1 depends on sortedcontainers==2.3.0, we can conclude that project:group1 and project:group2 are incompatible.
+          And because your project requires project:group1 and project:group2, we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     // And now with the same group configuration, we tell uv about
@@ -1837,8 +1837,8 @@ fn mixed() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project:group1 depends on sortedcontainers==2.3.0 and your project depends on project:group1, we can conclude that your project depends on sortedcontainers==2.3.0.
-          And because project[extra1] depends on sortedcontainers==2.4.0 and your project requires project[extra1], we can conclude that your projects's requirements are unsatisfiable.
+      ╰─▶ Because project[extra1] depends on sortedcontainers==2.4.0 and project:group1 depends on sortedcontainers==2.3.0, we can conclude that project:group1 and project[extra1] are incompatible.
+          And because your project requires project[extra1] and project:group1, we can conclude that your projects's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra/group configuration, we tell uv

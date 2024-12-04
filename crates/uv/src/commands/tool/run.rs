@@ -475,6 +475,7 @@ async fn get_or_create_environment(
         Target::Unspecified(name) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
+            groups: vec![],
             marker: MarkerTree::default(),
             source: RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
@@ -487,6 +488,7 @@ async fn get_or_create_environment(
         Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
+            groups: vec![],
             marker: MarkerTree::default(),
             source: RequirementSource::Registry {
                 specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
@@ -501,6 +503,7 @@ async fn get_or_create_environment(
         Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
             name: PackageName::from_str(name)?,
             extras: vec![],
+            groups: vec![],
             marker: MarkerTree::default(),
             source: RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),

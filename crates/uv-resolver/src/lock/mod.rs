@@ -3725,6 +3725,7 @@ fn normalize_requirement(
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
+                groups: requirement.groups,
                 marker: requirement.marker,
                 source: RequirementSource::Git {
                     repository,
@@ -3748,6 +3749,7 @@ fn normalize_requirement(
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
+                groups: requirement.groups,
                 marker: requirement.marker,
                 source: RequirementSource::Path {
                     install_path,
@@ -3770,6 +3772,7 @@ fn normalize_requirement(
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
+                groups: requirement.groups,
                 marker: requirement.marker,
                 source: RequirementSource::Directory {
                     install_path,
@@ -3791,6 +3794,7 @@ fn normalize_requirement(
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,
+                groups: requirement.groups,
                 marker: requirement.marker,
                 source: RequirementSource::Registry {
                     specifier,
@@ -3808,6 +3812,7 @@ fn normalize_requirement(
         } => Ok(Requirement {
             name: requirement.name,
             extras: requirement.extras,
+            groups: requirement.groups,
             marker: requirement.marker,
             source: RequirementSource::Url {
                 location,

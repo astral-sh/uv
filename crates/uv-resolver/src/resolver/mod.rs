@@ -65,7 +65,6 @@ pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::UniversalMarker;
 
-use crate::resolver::groups::Groups;
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
 pub use crate::resolver::provider::{
@@ -82,7 +81,6 @@ mod batch_prefetch;
 mod derivation;
 mod environment;
 mod fork_map;
-mod groups;
 mod index;
 mod indexes;
 mod provider;
@@ -101,7 +99,6 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
-    groups: Groups,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -218,7 +215,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode)?,
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
-            groups: Groups::from_manifest(&manifest, &env),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
             requirements: manifest.requirements,
@@ -1281,11 +1277,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })
                     .collect()
             }
+
             PubGrubPackageInner::Package {
                 name,
                 extra,
                 dev,
-                marker,
+                marker: _,
             } => {
                 // If we're excluding transitive dependencies, short-circuit.
                 if self.dependency_mode.is_direct() {
@@ -1462,7 +1459,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                let mut dependencies: Vec<_> = requirements
+                requirements
                     .iter()
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
@@ -1472,34 +1469,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             Some(name),
                         )
                     })
-                    .collect();
-
-                // If a package has metadata for an enabled dependency group,
-                // add a dependency from it to the same package with the group
-                // enabled.
-                //
-                // TODO(charlie): Instead, we should add a `dev` key to our requirement type. Then
-                // we can model this like extras! Such that we add it before we see the metadata,
-                // rather than after.
-                if extra.is_none() && dev.is_none() {
-                    for group in self.groups.get(name).into_iter().flatten() {
-                        if !metadata.dependency_groups.contains_key(group) {
-                            continue;
-                        }
-                        dependencies.push(PubGrubDependency {
-                            package: PubGrubPackage::from(PubGrubPackageInner::Dev {
-                                name: name.clone(),
-                                dev: group.clone(),
-                                marker: *marker,
-                            }),
-                            version: Range::singleton(version.clone()),
-                            url: None,
-                        });
-                    }
-                }
-
-                dependencies
+                    .collect()
             }
+
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
 
             // Add a dependency on both the marker and base package.
@@ -1549,26 +1521,21 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ))
             }
 
-            // Add a dependency on both the development dependency group and base package, with and
-            // without the marker.
+            // Add a dependency on the dependency group, with and without the marker.
             PubGrubPackageInner::Dev { name, dev, marker } => {
                 return Ok(Dependencies::Unforkable(
                     [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .dedup()
-                        .flat_map(move |marker| {
-                            [None, Some(dev)]
-                                .into_iter()
-                                .map(move |dev| PubGrubDependency {
-                                    package: PubGrubPackage::from(PubGrubPackageInner::Package {
-                                        name: name.clone(),
-                                        extra: None,
-                                        dev: dev.cloned(),
-                                        marker,
-                                    }),
-                                    version: Range::singleton(version.clone()),
-                                    url: None,
-                                })
+                        .map(|marker| PubGrubDependency {
+                            package: PubGrubPackage::from(PubGrubPackageInner::Package {
+                                name: name.clone(),
+                                extra: None,
+                                dev: Some(dev.clone()),
+                                marker,
+                            }),
+                            version: Range::singleton(version.clone()),
+                            url: None,
                         })
                         .collect(),
                 ))
@@ -1642,6 +1609,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         Requirement {
                             name: requirement.name.clone(),
                             extras: requirement.extras.clone(),
+                            groups: requirement.groups.clone(),
                             source: requirement.source.clone(),
                             origin: requirement.origin.clone(),
                             marker: marker.simplify_extras(slice::from_ref(&extra)),
@@ -1762,6 +1730,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     Cow::Owned(Requirement {
                                         name: constraint.name.clone(),
                                         extras: constraint.extras.clone(),
+                                        groups: constraint.groups.clone(),
                                         source: constraint.source.clone(),
                                         origin: constraint.origin.clone(),
                                         marker,
@@ -1799,6 +1768,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     Cow::Owned(Requirement {
                                         name: constraint.name.clone(),
                                         extras: constraint.extras.clone(),
+                                        groups: constraint.groups.clone(),
                                         source: constraint.source.clone(),
                                         origin: constraint.origin.clone(),
                                         marker,
@@ -2584,12 +2554,6 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_dev.is_none()
-                            && self_name.is_some_and(|self_name| self_name == dependency_name)
-                        {
-                            continue;
-                        }
-
                         // Add an edge from the dependent package to the dev package, but _not_ the
                         // base package.
                         let to_url = self.fork_urls.get(dependency_name);
