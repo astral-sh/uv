@@ -121,7 +121,8 @@ fn build() -> Result<()> {
     adding 'project-0.1.0.dist-info/top_level.txt'
     adding 'project-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built project/dist/project-0.1.0.tar.gz and project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
     "###);
 
     project
@@ -213,7 +214,8 @@ fn build() -> Result<()> {
     adding 'project-0.1.0.dist-info/top_level.txt'
     adding 'project-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
 
     project
@@ -317,7 +319,8 @@ fn build() -> Result<()> {
     adding 'project-0.1.0.dist-info/top_level.txt'
     adding 'project-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built out/project-0.1.0.tar.gz and out/project-0.1.0-py3-none-any.whl
+    Successfully built out/project-0.1.0.tar.gz
+    Successfully built out/project-0.1.0-py3-none-any.whl
     "###);
 
     project
@@ -630,7 +633,8 @@ fn sdist_wheel() -> Result<()> {
     adding 'project-0.1.0.dist-info/top_level.txt'
     adding 'project-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
 
     project
@@ -1052,7 +1056,8 @@ fn workspace() -> Result<()> {
     adding 'member-0.1.0.dist-info/top_level.txt'
     adding 'member-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built dist/member-0.1.0.tar.gz and dist/member-0.1.0-py3-none-any.whl
+    Successfully built dist/member-0.1.0.tar.gz
+    Successfully built dist/member-0.1.0-py3-none-any.whl
     "###);
 
     project
@@ -1075,8 +1080,10 @@ fn workspace() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built dist/member-0.1.0.tar.gz and dist/member-0.1.0-py3-none-any.whl
-    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    Successfully built dist/member-0.1.0.tar.gz
+    Successfully built dist/member-0.1.0-py3-none-any.whl
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
 
     project
@@ -1174,7 +1181,8 @@ fn workspace() -> Result<()> {
     adding 'member-0.1.0.dist-info/top_level.txt'
     adding 'member-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built project/dist/member-0.1.0.tar.gz and project/dist/member-0.1.0-py3-none-any.whl
+    Successfully built project/dist/member-0.1.0.tar.gz
+    Successfully built project/dist/member-0.1.0-py3-none-any.whl
     "###);
 
     // If a source is provided, discover the workspace from the source.
@@ -1188,8 +1196,10 @@ fn workspace() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built project/dist/member-0.1.0.tar.gz and project/dist/member-0.1.0-py3-none-any.whl
-    Successfully built project/dist/project-0.1.0.tar.gz and project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built project/dist/member-0.1.0.tar.gz
+    Successfully built project/dist/member-0.1.0-py3-none-any.whl
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
     "###);
 
     // Fail when `--package` is provided without a workspace.
@@ -1331,10 +1341,12 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building source distribution...
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
-    Successfully built dist/member_a-0.1.0.tar.gz and dist/member_a-0.1.0-py3-none-any.whl
+    Successfully built dist/member_a-0.1.0.tar.gz
+    Successfully built dist/member_a-0.1.0-py3-none-any.whl
       × Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
       ╰─▶ Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
-    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
 
     // project and member_a should be built, regardless of member_b build failure
@@ -1628,7 +1640,8 @@ fn sha() -> Result<()> {
     adding 'project-0.1.0.dist-info/top_level.txt'
     adding 'project-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
 
     project
@@ -1710,7 +1723,8 @@ fn build_no_build_logs() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built project/dist/project-0.1.0.tar.gz and project/dist/project-0.1.0-py3-none-any.whl
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
     "###);
 
     Ok(())
@@ -1867,7 +1881,8 @@ fn tool_uv_sources() -> Result<()> {
     adding 'project-0.1.0.dist-info/top_level.txt'
     adding 'project-0.1.0.dist-info/RECORD'
     removing build/bdist.linux-x86_64/wheel
-    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+    Successfully built dist/project-0.1.0.tar.gz
+    Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);
 
     project
@@ -1915,7 +1930,8 @@ fn git_boundary_in_dist_build() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Building wheel from source distribution...
-    Successfully built dist/demo-0.1.0.tar.gz and dist/demo-0.1.0-py3-none-any.whl
+    Successfully built dist/demo-0.1.0.tar.gz
+    Successfully built dist/demo-0.1.0-py3-none-any.whl
     "###);
 
     // Check that the source file is included
@@ -2048,6 +2064,7 @@ fn build_fast_path() -> Result<()> {
     let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
 
     uv_snapshot!(context.build()
+        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1")), @r###"
@@ -2058,7 +2075,8 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
     Building wheel from source distribution (uv build backend)...
-    Successfully built output1/built_by_uv-0.1.0.tar.gz and output1/built_by_uv-0.1.0-py3-none-any.whl
+    Successfully built output1/built_by_uv-0.1.0.tar.gz
+    Successfully built output1/built_by_uv-0.1.0-py3-none-any.whl
     "###);
     context
         .temp_dir
@@ -2072,6 +2090,7 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
+        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
@@ -2091,6 +2110,7 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
+        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
@@ -2110,6 +2130,7 @@ fn build_fast_path() -> Result<()> {
         .assert(predicate::path::is_file());
 
     uv_snapshot!(context.build()
+        .arg("--preview")
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
@@ -2122,7 +2143,8 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
     Building wheel (uv build backend)...
-    Successfully built output4/built_by_uv-0.1.0.tar.gz and output4/built_by_uv-0.1.0-py3-none-any.whl
+    Successfully built output4/built_by_uv-0.1.0.tar.gz
+    Successfully built output4/built_by_uv-0.1.0-py3-none-any.whl
     "###);
     context
         .temp_dir
@@ -2135,5 +2157,174 @@ fn build_fast_path() -> Result<()> {
         .child("built_by_uv-0.1.0-py3-none-any.whl")
         .assert(predicate::path::is_file());
 
+    Ok(())
+}
+
+/// Test the `--list` option.
+#[test]
+fn list_files() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+
+    // By default, we build the wheel from the source dist, which we need to do even for the list
+    // task.
+    uv_snapshot!(context.build()
+        .arg("--preview")
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output1"))
+        .arg("--list"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Building built_by_uv-0.1.0.tar.gz will include the following files:
+    built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0/PKG-INFO (generated)
+    built_by_uv-0.1.0/README.md (README.md)
+    built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
+    built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
+    built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
+    built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
+    built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
+    built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+    built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
+    built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
+    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0.dist-info/METADATA (generated)
+    built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    built_by_uv/__init__.py (src/built_by_uv/__init__.py)
+    built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
+    built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
+    built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Successfully built output1/built_by_uv-0.1.0.tar.gz
+    "###);
+    context
+        .temp_dir
+        .child("output1")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    context
+        .temp_dir
+        .child("output1")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+
+    uv_snapshot!(context.build()
+        .arg("--preview")
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output2"))
+        .arg("--list")
+        .arg("--sdist")
+        .arg("--wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Building built_by_uv-0.1.0.tar.gz will include the following files:
+    built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0/PKG-INFO (generated)
+    built_by_uv-0.1.0/README.md (README.md)
+    built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
+    built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
+    built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
+    built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
+    built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
+    built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+    built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
+    built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
+    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0.dist-info/METADATA (generated)
+    built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    built_by_uv/__init__.py (src/built_by_uv/__init__.py)
+    built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
+    built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
+    built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+
+    ----- stderr -----
+    "###);
+    context
+        .temp_dir
+        .child("output2")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("output2")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Test `--list` option errors.
+#[test]
+fn list_files_errors() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+
+    let mut filters = context.filters();
+    // In CI, we run with link mode settings.
+    filters.push(("--link-mode <LINK_MODE> ", ""));
+    uv_snapshot!(filters, context.build()
+        .arg("--preview")
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output1"))
+        .arg("--list")
+        .arg("--force-pep517"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--list' cannot be used with '--force-pep517'
+
+    Usage: uv build --cache-dir [CACHE_DIR] --out-dir <OUT_DIR> --exclude-newer <EXCLUDE_NEWER> <SRC>
+
+    For more information, try '--help'.
+    "###);
+
+    // Not a uv build backend package, we can't list it.
+    let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
+    let mut filters = context.filters();
+    // Windows normalization
+    filters.push(("/crates/uv/../../", "/"));
+    uv_snapshot!(filters, context.build()
+        .arg("--preview")
+        .arg(&anyio_local)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output2"))
+        .arg("--list"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `[WORKSPACE]/scripts/packages/anyio_local`
+      ╰─▶ Can only use `--list` with the uv backend
+    "###);
     Ok(())
 }

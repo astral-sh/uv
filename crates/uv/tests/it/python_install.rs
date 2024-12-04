@@ -543,7 +543,7 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
-    The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default
+    The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`
     "###);
 
     // Install a specific version

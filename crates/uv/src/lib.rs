@@ -733,6 +733,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.out_dir,
                 args.sdist,
                 args.wheel,
+                args.list,
                 args.build_logs,
                 args.force_pep517,
                 build_constraints,
@@ -749,6 +750,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.allow_insecure_host,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
