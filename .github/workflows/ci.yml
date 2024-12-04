@@ -605,7 +605,7 @@ jobs:
         uses: acj/freebsd-firecracker-action@4121afd0dc0c96b86c2b3b27e70e50c9f3921387
         with:
           verbose: false
-          checkout: false
+          checkout: true
           pre-run: |
             # The exclude `*` prevents examination of directories so we need to
             # include each parent directory of the binary
