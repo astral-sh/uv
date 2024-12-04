@@ -1,5 +1,11 @@
+"""Create a mirror of Python distributions for use with uv.
+
+Example usage:
+    uv run ./scripts/create-python-mirror.py --name cpython --arch x86_64 --os linux
+"""
+
 # /// script
-# requires-python = ">=3.13"
+# requires-python = ">=3.8"
 # dependencies = [
 #     "gitpython",
 #     "httpx",
