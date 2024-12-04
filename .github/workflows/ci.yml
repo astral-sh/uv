@@ -624,7 +624,7 @@ jobs:
               --exclude "*" \
               . firecracker:
           run-in-vm: |
-            du -a . | sort -rn | head -n 20
+            du -a / | sort -rn | head -n 20
             mv target/x86_64-unknown-freebsd/debug/uv uv
             chmod +x uv
             ./uv --version
