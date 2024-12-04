@@ -76,7 +76,7 @@ async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zs
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.9.1" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["deflate", "tokio"] }
-axoupdater = { git = "https://github.com/axodotdev/axoupdater", rev = "9c43536f34df2b1a588ef5249222902d884d5ad2", default-features = false }
+axoupdater = { version = "0.8.2", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.1" }
 bitflags = { version = "2.6.0" }
