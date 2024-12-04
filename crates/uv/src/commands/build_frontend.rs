@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::{fmt, io};
 
 use anyhow::{Context, Result};
@@ -25,7 +26,9 @@ use uv_configuration::{
     TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution_filename::SourceDistExtension;
+use uv_distribution_filename::{
+    DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
+};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
 use uv_fs::{relative_to, Simplified};
 use uv_install_wheel::linker::LinkMode;
@@ -76,6 +79,10 @@ enum Error {
          distribution ending in one of: {1}."
     )]
     InvalidSourceDistExt(String, uv_distribution_filename::ExtensionError),
+    #[error("The built source distribution has an invalid filename")]
+    InvalidBuiltSourceDistFilename(#[source] uv_distribution_filename::SourceDistFilenameError),
+    #[error("The built wheel has an invalid filename")]
+    InvalidBuiltWheelFilename(#[source] uv_distribution_filename::WheelFilenameError),
 }
 
 /// Build source distributions and wheels.
@@ -649,7 +656,7 @@ async fn build_package(
             build_results.push(sdist_build.clone());
 
             // Extract the source distribution into a temporary directory.
-            let path = output_dir.join(sdist_build.filename());
+            let path = output_dir.join(sdist_build.filename().to_string());
             let reader = fs_err::tokio::File::open(&path).await?;
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
@@ -837,7 +844,7 @@ async fn build_sdist(
             .await??;
 
             BuildMessage::List {
-                filename: filename.to_string(),
+                filename: DistFilename::SourceDistFilename(filename),
                 source_tree: source_tree.to_path_buf(),
                 file_list,
             }
@@ -866,7 +873,10 @@ async fn build_sdist(
             .to_string();
 
             BuildMessage::Build {
-                filename,
+                filename: DistFilename::SourceDistFilename(
+                    SourceDistFilename::parsed_normalized_filename(&filename)
+                        .map_err(Error::InvalidBuiltSourceDistFilename)?,
+                ),
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -896,7 +906,10 @@ async fn build_sdist(
                 .map_err(Error::BuildDispatch)?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
-                filename,
+                filename: DistFilename::SourceDistFilename(
+                    SourceDistFilename::parsed_normalized_filename(&filename)
+                        .map_err(Error::InvalidBuiltSourceDistFilename)?,
+                ),
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -924,12 +937,12 @@ async fn build_wheel(
     let build_message = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
-            let (name, file_list) = tokio::task::spawn_blocking(move || {
+            let (filename, file_list) = tokio::task::spawn_blocking(move || {
                 uv_build_backend::list_wheel(&source_tree_, uv_version::version())
             })
             .await??;
             BuildMessage::List {
-                filename: name.to_string(),
+                filename: DistFilename::WheelFilename(filename),
                 source_tree: source_tree.to_path_buf(),
                 file_list,
             }
@@ -955,11 +968,10 @@ async fn build_wheel(
                     uv_version::version(),
                 )
             })
-            .await??
-            .to_string();
+            .await??;
 
             BuildMessage::Build {
-                filename,
+                filename: DistFilename::WheelFilename(filename),
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -989,7 +1001,9 @@ async fn build_wheel(
                 .map_err(Error::BuildDispatch)?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
-                filename,
+                filename: DistFilename::WheelFilename(
+                    WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?,
+                ),
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -1086,19 +1100,19 @@ impl<'a> Source<'a> {
 
 /// We run all builds in parallel, so we wait until all builds are done to show the success messages
 /// in order.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 enum BuildMessage {
     /// A built wheel or source distribution.
     Build {
         /// The name of the built distribution.
-        filename: String,
+        filename: DistFilename,
         /// The location of the built distribution.
         output_dir: PathBuf,
     },
     /// Show the list of files that would be included in a distribution.
     List {
         /// The name of the build distribution.
-        filename: String,
+        filename: DistFilename,
         // All source files are relative to the source tree.
         source_tree: PathBuf,
         // Included file and source file, if not generated.
@@ -1108,7 +1122,7 @@ enum BuildMessage {
 
 impl BuildMessage {
     /// The filename of the wheel or source distribution.
-    fn filename(&self) -> &str {
+    fn filename(&self) -> &DistFilename {
         match self {
             BuildMessage::Build { filename: name, .. } => name,
             BuildMessage::List { filename: name, .. } => name,
@@ -1124,7 +1138,11 @@ impl BuildMessage {
                 writeln!(
                     printer.stderr(),
                     "Successfully built {}",
-                    output_dir.join(filename).user_display().bold().cyan()
+                    output_dir
+                        .join(filename.to_string())
+                        .user_display()
+                        .bold()
+                        .cyan()
                 )?;
             }
             BuildMessage::List {
