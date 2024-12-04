@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, EditableMode,
-    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, TrustedHost,
+    ExtrasSpecification, HashCheckingMode, InstallOptions, LowerBound, PreviewMode, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -67,6 +67,7 @@ pub(crate) async fn sync(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Identify the project.
     let project = if frozen {
@@ -156,6 +157,7 @@ pub(crate) async fn sync(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {
@@ -231,6 +233,7 @@ pub(crate) async fn sync(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {
@@ -265,6 +268,7 @@ pub(super) async fn do_sync(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<(), ProjectError> {
     // Use isolated state for universal resolution. When resolving, we don't enforce that the
     // prioritized distributions match the current platform. So if we lock here, then try to
@@ -425,6 +429,7 @@ pub(super) async fn do_sync(
         bounds,
         sources,
         concurrency,
+        preview,
     );
 
     let site_packages = SitePackages::from_environment(venv)?;

@@ -8,7 +8,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, LowerBound, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    IndexStrategy, LowerBound, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -74,6 +74,7 @@ pub(crate) async fn pip_sync(
     cache: Cache,
     dry_run: bool,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
@@ -326,6 +327,7 @@ pub(crate) async fn pip_sync(
         LowerBound::Warn,
         sources,
         concurrency,
+        preview,
     );
 
     // Determine the set of installed packages.

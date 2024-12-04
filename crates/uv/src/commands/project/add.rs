@@ -15,8 +15,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, DevMode, EditableMode,
-    ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, SourceStrategy,
-    TrustedHost,
+    ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, PreviewMode,
+    SourceStrategy, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
@@ -85,6 +85,7 @@ pub(crate) async fn add(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     for source in &requirements {
         match source {
@@ -340,6 +341,7 @@ pub(crate) async fn add(
         bounds,
         sources,
         concurrency,
+        preview,
     );
 
     // Resolve any unnamed requirements.
@@ -681,6 +683,7 @@ pub(crate) async fn add(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {
@@ -724,6 +727,7 @@ async fn lock_and_sync(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<(), ProjectError> {
     let mode = if locked {
         LockMode::Locked(environment.interpreter())
@@ -744,6 +748,7 @@ async fn lock_and_sync(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await?
     .into_lock();
@@ -862,6 +867,7 @@ async fn lock_and_sync(
                 allow_insecure_host,
                 cache,
                 printer,
+                preview,
             )
             .await?
             .into_lock();
@@ -928,6 +934,7 @@ async fn lock_and_sync(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await?;
 

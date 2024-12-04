@@ -2,7 +2,7 @@ mod metadata;
 mod source_dist;
 mod wheel;
 
-pub use metadata::PyProjectToml;
+pub use metadata::{check_direct_build, PyProjectToml};
 pub use source_dist::{build_source_dist, list_source_dist};
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 

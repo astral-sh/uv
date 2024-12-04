@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExportFormat, ExtrasSpecification,
-    InstallOptions, LowerBound, TrustedHost,
+    InstallOptions, LowerBound, PreviewMode, TrustedHost,
 };
 use uv_dispatch::SharedState;
 use uv_normalize::PackageName;
@@ -58,6 +58,7 @@ pub(crate) async fn export(
     quiet: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Identify the project.
     let project = if frozen {
@@ -145,6 +146,7 @@ pub(crate) async fn export(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {

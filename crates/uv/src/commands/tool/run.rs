@@ -14,7 +14,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, TrustedHost};
+use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
 use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -84,6 +84,7 @@ pub(crate) async fn run(
     allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     let Some(command) = command else {
         // When a command isn't provided, we'll show a brief help including available tools
@@ -128,6 +129,7 @@ pub(crate) async fn run(
         allow_insecure_host,
         &cache,
         printer,
+        preview,
     )
     .await;
 
@@ -446,6 +448,7 @@ async fn get_or_create_environment(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<(Requirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
@@ -529,6 +532,7 @@ async fn get_or_create_environment(
             allow_insecure_host,
             cache,
             printer,
+            preview,
         )
         .await?
         .pop()
@@ -560,6 +564,7 @@ async fn get_or_create_environment(
                 allow_insecure_host,
                 cache,
                 printer,
+                preview,
             )
             .await?,
         );
@@ -638,6 +643,7 @@ async fn get_or_create_environment(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await?;
 

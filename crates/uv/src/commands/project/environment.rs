@@ -9,7 +9,7 @@ use crate::settings::ResolverInstallerSettings;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::Connectivity;
-use uv_configuration::{Concurrency, TrustedHost};
+use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
 use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
@@ -41,6 +41,7 @@ impl CachedEnvironment {
         allow_insecure_host: &[TrustedHost],
         cache: &Cache,
         printer: Printer,
+        preview: PreviewMode,
     ) -> Result<Self, ProjectError> {
         // When caching, always use the base interpreter, rather than that of the virtual
         // environment.
@@ -72,6 +73,7 @@ impl CachedEnvironment {
                 allow_insecure_host,
                 cache,
                 printer,
+                preview,
             )
             .await?,
         );
@@ -125,6 +127,7 @@ impl CachedEnvironment {
             allow_insecure_host,
             cache,
             printer,
+            preview,
         )
         .await?;
 

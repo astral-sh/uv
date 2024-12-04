@@ -9,7 +9,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DevGroupsManifest, DevGroupsSpecification, ExtrasSpecification,
-    GroupsSpecification, LowerBound, Reinstall, TrustedHost, Upgrade,
+    GroupsSpecification, LowerBound, PreviewMode, Reinstall, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
@@ -896,6 +896,7 @@ pub(crate) async fn resolve_names(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
@@ -991,6 +992,7 @@ pub(crate) async fn resolve_names(
         LowerBound::Allow,
         *sources,
         concurrency,
+        preview,
     );
 
     // Resolve the unnamed requirements.
@@ -1045,6 +1047,7 @@ pub(crate) async fn resolve_environment<'a>(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ResolverOutput, ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
@@ -1172,6 +1175,7 @@ pub(crate) async fn resolve_environment<'a>(
         LowerBound::Allow,
         sources,
         concurrency,
+        preview,
     );
 
     // Resolve the requirements.
@@ -1218,6 +1222,7 @@ pub(crate) async fn sync_environment(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<PythonEnvironment, ProjectError> {
     let InstallerSettingsRef {
         index_locations,
@@ -1305,6 +1310,7 @@ pub(crate) async fn sync_environment(
         LowerBound::Allow,
         sources,
         concurrency,
+        preview,
     );
 
     // Sync the environment.
@@ -1370,6 +1376,7 @@ pub(crate) async fn update_environment(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<EnvironmentUpdate, ProjectError> {
     warn_on_requirements_txt_setting(&spec, settings.as_ref().into());
 
@@ -1510,6 +1517,7 @@ pub(crate) async fn update_environment(
         LowerBound::Allow,
         *sources,
         concurrency,
+        preview,
     );
 
     // Resolve the requirements.

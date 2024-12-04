@@ -18,7 +18,7 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
-    InstallOptions, LowerBound, SourceStrategy, TrustedHost,
+    InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
@@ -86,6 +86,7 @@ pub(crate) async fn run(
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
@@ -341,6 +342,7 @@ pub(crate) async fn run(
                 allow_insecure_host,
                 cache,
                 printer,
+                preview,
             )
             .await;
 
@@ -662,6 +664,7 @@ pub(crate) async fn run(
                     allow_insecure_host,
                     cache,
                     printer,
+                    preview,
                 )
                 .await
                 {
@@ -742,6 +745,7 @@ pub(crate) async fn run(
                     allow_insecure_host,
                     cache,
                     printer,
+                    preview,
                 )
                 .await
                 {
@@ -893,6 +897,7 @@ pub(crate) async fn run(
                     allow_insecure_host,
                     cache,
                     printer,
+                    preview,
                 )
                 .await;
 

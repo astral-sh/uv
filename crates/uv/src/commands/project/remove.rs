@@ -8,7 +8,7 @@ use uv_cache::Cache;
 use uv_client::Connectivity;
 use uv_configuration::{
     Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
-    TrustedHost,
+    PreviewMode, TrustedHost,
 };
 use uv_dispatch::SharedState;
 use uv_fs::Simplified;
@@ -54,6 +54,7 @@ pub(crate) async fn remove(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let target = if let Some(script) = script {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -231,6 +232,7 @@ pub(crate) async fn remove(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {
@@ -285,6 +287,7 @@ pub(crate) async fn remove(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {

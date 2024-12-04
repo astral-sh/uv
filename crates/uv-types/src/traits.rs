@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use uv_distribution_filename::DistFilename;
 
 use anyhow::Result;
 
@@ -115,12 +116,27 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         install_path: &'a Path,
-        version_id: Option<String>,
+        version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
         sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
+
+    /// Build by calling directly into the uv build backend without PEP 517, if possible.
+    ///
+    /// Checks if the source tree uses uv as build backend. If not, it returns `Ok(None)`, otherwise
+    /// it builds and returns the name of the built file.
+    ///
+    /// `version_id` is for error reporting only.
+    fn direct_build<'a>(
+        &'a self,
+        source: &'a Path,
+        subdirectory: Option<&'a Path>,
+        output_dir: &'a Path,
+        build_kind: BuildKind,
+        version_id: Option<&'a str>,
+    ) -> impl Future<Output = Result<Option<DistFilename>>> + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
@@ -140,7 +156,9 @@ pub trait SourceBuildTrait {
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
-    /// Returns the filename of the built wheel inside the given `wheel_dir`.
+    /// Returns the filename of the built wheel inside the given `wheel_dir`. The filename is a
+    /// string and not a `WheelFilename` because the on disk filename might not be normalized in the
+    /// same way as uv would.
     fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> impl Future<Output = Result<String>> + 'a;
 }
 
