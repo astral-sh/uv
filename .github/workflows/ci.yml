@@ -625,7 +625,7 @@ jobs:
               . firecracker:
           run-in-vm: |
             du -a . | sort -rn | head -n 20
-            cp target/x86_64-unknown-freebsd/debug/uv uv
+            mv target/x86_64-unknown-freebsd/debug/uv uv
             chmod +x uv
             ./uv --version
 
