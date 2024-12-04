@@ -231,6 +231,12 @@ impl<'a> OutputWriter<'a> {
     /// Commit the buffer to the output file.
     async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
+            if let Some(parent_dir) = output_file.parent() {
+                if !parent_dir.as_os_str().is_empty() && !parent_dir.is_dir() {
+                    fs_err::tokio::create_dir(parent_dir).await?;
+                }
+            }
+
             // If the output file is an existing symlink, write to the destination instead.
             let output_file = fs_err::read_link(output_file)
                 .map(Cow::Owned)
