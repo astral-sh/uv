@@ -7,6 +7,9 @@ requires-python = ">=3.12"
 dependencies = ["anyio>=4,<5"]
 license-files = ["LICENSE*", "third-party-licenses/*"]
 
+[project.scripts]
+say-hi = "built_by_uv.cli:hello"
+
 [tool.uv.build-backend]
 # A file we need for the source dist -> wheel step, but not in the wheel itself (currently unused)
 source-include = ["data/build-script.py"]

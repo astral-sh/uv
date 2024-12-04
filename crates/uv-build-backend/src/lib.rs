@@ -319,6 +319,7 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py
         built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt
         built_by_uv-0.1.0/src/built_by_uv/build-only.h
+        built_by_uv-0.1.0/src/built_by_uv/cli.py
         built_by_uv-0.1.0/third-party-licenses
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
         "###);
@@ -336,6 +337,7 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
         built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
         built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
+        built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
         "###);
 
@@ -350,6 +352,7 @@ mod tests {
         built_by_uv-0.1.0.dist-info/METADATA
         built_by_uv-0.1.0.dist-info/RECORD
         built_by_uv-0.1.0.dist-info/WHEEL
+        built_by_uv-0.1.0.dist-info/entry_points.txt
         built_by_uv-0.1.0.dist-info/licenses/
         built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE
         built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT
@@ -361,6 +364,7 @@ mod tests {
         built_by_uv/arithmetic/__init__.py
         built_by_uv/arithmetic/circle.py
         built_by_uv/arithmetic/pi.txt
+        built_by_uv/cli.py
         "###);
 
         assert_snapshot!(format_file_list(wheel_list_files), @r###"
@@ -369,6 +373,7 @@ mod tests {
         built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
         built_by_uv-0.1.0.dist-info/METADATA (generated)
         built_by_uv-0.1.0.dist-info/WHEEL (generated)
+        built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
         built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
         built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
@@ -376,6 +381,7 @@ mod tests {
         built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
         built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
         built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+        built_by_uv/cli.py (src/built_by_uv/cli.py)
         "###);
 
         // Check that we write deterministic wheels.
