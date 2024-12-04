@@ -140,13 +140,20 @@ If the build error mentions a missing command, for example, `gcc`:
 Then, you'll need to install it with your system package manager, e.g., to resolve the error above:
 
 ```console
-$ apt-get install gcc
+$ apt install gcc
 ```
 
-!!! note
+!!! tip
 
     When using the uv-managed Python versions, it's common to need `clang` installed instead of
     `gcc`.
+
+    Many Linux distributions provide a package that includes all the common build dependencies.
+    You can address most build requirements by installing it, e.g., for Debian or Ubuntu:
+
+    ```console
+    $ apt install build-essential
+    ```
 
 ### Header or library is missing
 
