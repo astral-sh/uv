@@ -267,7 +267,8 @@ dependencies = ["flask==1.0.x"]
 
     ----- stderr -----
       × Failed to build `project @ file://[TEMP_DIR]/path_dep`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
           [stdout]
           configuration error: `project.dependencies[0]` must be pep508
@@ -4020,6 +4021,7 @@ fn no_build_isolation() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
           [stderr]
@@ -4088,6 +4090,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
           [stderr]
@@ -7085,6 +7088,7 @@ fn install_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
           [stderr]
@@ -7344,7 +7348,8 @@ fn sklearn() {
 
     ----- stderr -----
       × Failed to download and build `sklearn==0.0.post12`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
           [stderr]
           The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
@@ -7400,7 +7405,8 @@ fn resolve_derivation_chain() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):

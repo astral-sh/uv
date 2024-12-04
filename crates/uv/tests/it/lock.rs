@@ -18659,7 +18659,8 @@ fn lock_derivation_chain_prod() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -18717,7 +18718,8 @@ fn lock_derivation_chain_extra() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -18777,7 +18779,8 @@ fn lock_derivation_chain_group() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -18848,7 +18851,8 @@ fn lock_derivation_chain_extended() -> Result<()> {
 
     ----- stderr -----
       × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):

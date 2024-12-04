@@ -858,8 +858,8 @@ async fn create_pep517_build_environment(
     if !output.status.success() {
         return Err(Error::from_command_output(
             format!(
-                "Build backend failed to determine requirements with `{}`",
-                format!("build_{build_kind}()").green()
+                "Call to `{}.build_{build_kind}()` failed",
+                pep517_backend.backend,
             ),
             &output,
             level,
@@ -869,37 +869,28 @@ async fn create_pep517_build_environment(
         ));
     }
 
-    // Read the requirements from the output file.
-    let contents = fs_err::read(&outfile).map_err(|err| {
-        Error::from_command_output(
-            format!(
-                "Build backend failed to read requirements from `{}`: {err}",
-                format!("get_requires_for_build_{build_kind}").green(),
-            ),
-            &output,
-            level,
-            package_name,
-            package_version,
-            version_id,
-        )
-    })?;
-
-    // Deserialize the requirements from the output file.
-    let extra_requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> =
-        serde_json::from_slice::<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>(&contents)
-            .map_err(|err| {
-                Error::from_command_output(
-                    format!(
-                        "Build backend failed to return requirements from `{}`: {err}",
-                        format!("get_requires_for_build_{build_kind}").green(),
-                    ),
-                    &output,
-                    level,
-                    package_name,
-                    package_version,
-                    version_id,
-                )
-            })?;
+    // Read and deserialize the requirements from the output file.
+    let read_requires_result = fs_err::read(&outfile)
+        .map_err(|err| err.to_string())
+        .and_then(|contents| serde_json::from_slice(&contents).map_err(|err| err.to_string()));
+    let extra_requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>> = match read_requires_result
+    {
+        Ok(extra_requires) => extra_requires,
+        Err(err) => {
+            return Err(Error::from_command_output(
+                format!(
+                    "Build backend failed to return requirements from \
+                    `{}.get_requires_for_build_{build_kind}`: {err}",
+                    pep517_backend.backend,
+                ),
+                &output,
+                level,
+                package_name,
+                package_version,
+                version_id,
+            ))
+        }
+    };
 
     // If necessary, lower the requirements.
     let extra_requires = match source_strategy {

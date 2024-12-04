@@ -75,9 +75,9 @@ pub enum Error {
     Virtualenv(#[from] uv_virtualenv::Error),
     #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
-    #[error(transparent)]
+    #[error("The build backend returned an error. This likely means a problem with the package or your environment.")]
     BuildBackend(#[from] BuildBackendError),
-    #[error(transparent)]
+    #[error("The build backend returned an error. This likely means a problem with the package or your environment.")]
     MissingHeader(#[from] MissingHeaderError),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
@@ -416,7 +416,10 @@ mod test {
 
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
-        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        let formatted = std::error::Error::source(&err)
+            .unwrap()
+            .to_string()
+            .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py (exit code: 0)
@@ -471,7 +474,10 @@ mod test {
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
-        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        let formatted = std::error::Error::source(&err)
+            .unwrap()
+            .to_string()
+            .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py (exit code: 0)
@@ -516,7 +522,10 @@ mod test {
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
-        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        let formatted = std::error::Error::source(&err)
+            .unwrap()
+            .to_string()
+            .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py (exit code: 0)
@@ -559,7 +568,10 @@ mod test {
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
-        let formatted = err.to_string().replace("exit status: ", "exit code: ");
+        let formatted = std::error::Error::source(&err)
+            .unwrap()
+            .to_string()
+            .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r###"
         Failed building wheel through setup.py (exit code: 0)

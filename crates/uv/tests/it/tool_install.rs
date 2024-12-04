@@ -1470,6 +1470,7 @@ fn tool_install_uninstallable() {
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to download and build `pyenv==0.0.1`
+      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
           [stdout]
