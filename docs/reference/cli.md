@@ -4771,7 +4771,9 @@ uv python find [OPTIONS] [REQUEST]
 
 Pin to a specific Python version.
 
-Writes the pinned Python version to a `.python-version` file or reads the current pinned version from the file. This file is used by other uv commands to determine the required Python version.
+Writes the pinned Python version to a `.python-version` file, which is used by other uv commands to determine the required Python version.
+
+If no version is provided, uv will look for an existing `.python-version` file and display the currently pinned version. If no `.python-version` file is found, uv will exit with an error.
 
 See `uv help python` to view supported request formats.
 
@@ -4787,9 +4789,9 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>uv supports more formats than other tools that read <code>.python-version</code> files, i.e., <code>pyenv</code>. If compatibility with those tools is needed, only use version numbers instead of complex requests such as <code>cpython@3.10</code>.</p>
 
-<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
+<p>If no request is provided, the currently pinned version will be shown.</p>
 
-<p>Running <code>uv python pin</code> without a <code>REQUEST</code> argument prints the current pinned versions. If a <code>.python-version</code> file does not exists, it exits with an error message.</p>
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 </dd></dl>
 
