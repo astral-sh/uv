@@ -7904,6 +7904,8 @@ uv build [OPTIONS] [SRC]
 
 <p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
 
+</dd><dt><code>--no-build-logs</code></dt><dd><p>Hide logs from the build backend</p>
+
 </dd><dt><code>--no-build-package</code> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
 
 </dd><dt><code>--no-cache</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>

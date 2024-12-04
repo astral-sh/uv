@@ -2191,7 +2191,7 @@ pub struct BuildArgs {
     pub build_logs: bool,
 
     /// Hide logs from the build backend.
-    #[arg(long, overrides_with("build_logs"), hide = true)]
+    #[arg(long, overrides_with("build_logs"))]
     pub no_build_logs: bool,
 
     /// Always build through PEP 517, don't use the fast path for the uv build backend.
