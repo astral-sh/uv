@@ -26,7 +26,7 @@ use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
-use uv_distribution_filename::{SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{DistFilename, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
     PathSourceUrl, SourceDist, SourceUrl,
@@ -1820,6 +1820,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::Build)?
         {
+            // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
         } else {
             self.build_context

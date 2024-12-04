@@ -156,7 +156,9 @@ pub trait SourceBuildTrait {
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
-    /// Returns the filename of the built wheel inside the given `wheel_dir`.
+    /// Returns the filename of the built wheel inside the given `wheel_dir`. The filename is a
+    /// string and not a `WheelFilename` because the on disk filename might not be normalized in the
+    /// same way as uv would.
     fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> impl Future<Output = Result<String>> + 'a;
 }
 
