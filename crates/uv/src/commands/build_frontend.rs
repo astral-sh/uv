@@ -33,6 +33,7 @@ use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDis
 use uv_fs::{relative_to, Simplified};
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -83,6 +84,8 @@ enum Error {
     InvalidBuiltSourceDistFilename(#[source] uv_distribution_filename::SourceDistFilenameError),
     #[error("The built wheel has an invalid filename")]
     InvalidBuiltWheelFilename(#[source] uv_distribution_filename::WheelFilenameError),
+    #[error("The source distribution declares version {0}, but the wheel declares version {1}")]
+    VersionMismatch(Version, Version),
 }
 
 /// Build source distributions and wheels.
@@ -683,6 +686,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
+                Some(sdist_build.filename().version()),
             )
             .await?;
             build_results.push(wheel_build);
@@ -719,6 +723,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
+                None,
             )
             .await?;
             build_results.push(wheel_build);
@@ -739,7 +744,6 @@ async fn build_package(
                 build_output,
             )
             .await?;
-            build_results.push(sdist_build);
 
             let wheel_build = build_wheel(
                 source.path(),
@@ -754,8 +758,10 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
+                Some(sdist_build.filename().version()),
             )
             .await?;
+            build_results.push(sdist_build);
             build_results.push(wheel_build);
         }
         BuildPlan::WheelFromSdist => {
@@ -766,6 +772,14 @@ async fn build_package(
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
             uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+
+            // If the source distribution has a version in its filename, check the version.
+            let version = source
+                .path()
+                .file_name()
+                .and_then(|filename| filename.to_str())
+                .and_then(|filename| SourceDistFilename::parsed_normalized_filename(filename).ok())
+                .map(|filename| filename.version);
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -787,6 +801,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
+                version.as_ref(),
             )
             .await?;
             build_results.push(wheel_build);
@@ -933,6 +948,8 @@ async fn build_wheel(
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
     build_output: BuildOutput,
+    // Used for checking version consistency
+    version: Option<&Version>,
 ) -> Result<BuildMessage, Error> {
     let build_message = match action {
         BuildAction::List => {
@@ -1008,6 +1025,12 @@ async fn build_wheel(
             }
         }
     };
+    if let Some(expected) = version {
+        let actual = build_message.filename().version();
+        if expected != actual {
+            return Err(Error::VersionMismatch(expected.clone(), actual.clone()));
+        }
+    }
     Ok(build_message)
 }
 
