@@ -3789,9 +3789,10 @@ fn lock_requires_python_upper() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI with an exact Python bound.
+#[cfg(feature = "python-patch")]
 #[test]
 fn lock_requires_python_exact() -> Result<()> {
-    let context = TestContext::new("3.12.0");
+    let context = TestContext::new("3.13.0");
 
     let lockfile = context.temp_dir.join("uv.lock");
 
@@ -3801,7 +3802,7 @@ fn lock_requires_python_exact() -> Result<()> {
         [project]
         name = "warehouse"
         version = "1.0.0"
-        requires-python = "==3.12"
+        requires-python = "==3.13"
         dependencies = ["iniconfig"]
 
         [build-system]
@@ -3816,7 +3817,7 @@ fn lock_requires_python_exact() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The workspace `requires-python` value (`==3.12`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.12.0`). Did you mean `==3.12.*`?
+    warning: The workspace `requires-python` value (`==3.13`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.13.0`). Did you mean `==3.13.*`?
     Resolved 2 packages in [TIME]
     "###);
 
@@ -3828,7 +3829,7 @@ fn lock_requires_python_exact() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
-        requires-python = "==3.12"
+        requires-python = "==3.13"
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -3863,7 +3864,7 @@ fn lock_requires_python_exact() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The workspace `requires-python` value (`==3.12`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.12.0`). Did you mean `==3.12.*`?
+    warning: The workspace `requires-python` value (`==3.13`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `==3.13.0`). Did you mean `==3.13.*`?
     Resolved 2 packages in [TIME]
     "###);
 
