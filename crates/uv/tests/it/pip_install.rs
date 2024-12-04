@@ -1,9 +1,12 @@
+use std::io::Cursor;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use flate2::write::GzEncoder;
 use fs_err as fs;
+use fs_err::File;
 use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
@@ -7454,4 +7457,62 @@ fn respect_no_installer_metadata_env_var() {
         .join("urllib3-2.2.3.dist-info")
         .join("INSTALLER");
     assert!(!installer_file.exists());
+}
+
+/// Check that we error if a source dist lies about its built wheel version.
+#[test]
+fn test_dynamic_version_sdist_wrong_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a source dist that has a version in its name, a dynamic version in pyproject.toml,
+    // but reports the wrong version when built.
+    let pyproject_toml = r#"
+    [project]
+    name = "foo"
+    requires-python = ">=3.9"
+    dependencies = []
+    dynamic = ["version"]
+    "#;
+
+    let setup_py = indoc! {r#"
+    from setuptools import setup
+
+    setup(name="foo", version="10.11.12")
+    "#};
+
+    let source_dist = context.temp_dir.child("foo-1.2.3.tar.gz");
+    // Flush the file after we're done.
+    {
+        let file = File::create(source_dist.path())?;
+        let enc = GzEncoder::new(file, flate2::Compression::default());
+        let mut tar = tar::Builder::new(enc);
+
+        for (path, contents) in [
+            ("foo-1.2.3/pyproject.toml", pyproject_toml),
+            ("foo-1.2.3/setup.py", setup_py),
+        ] {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(contents.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append_data(&mut header, path, Cursor::new(contents))?;
+        }
+        tar.finish()?;
+    }
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(source_dist.path()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `foo @ file://[TEMP_DIR]/foo-1.2.3.tar.gz`
+      ╰─▶ Package metadata version `10.11.12` does not match given version `1.2.3`
+    "###
+    );
+
+    Ok(())
 }
