@@ -2795,11 +2795,10 @@ fn shared_optional_dependency_extra1() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.5
-     + idna==3.6
      + sniffio==1.3.1
     "###);
 
@@ -2826,8 +2825,8 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" } },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" } },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-bar' or extra != 'extra-7-project-foo'" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
@@ -2946,10 +2945,11 @@ fn shared_optional_dependency_extra2() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
+     + sniffio==1.3.1
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -2975,8 +2975,8 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" } },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" } },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-bar'" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
@@ -3117,8 +3117,8 @@ fn shared_dependency_extra() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" } },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" } },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-bar' or extra != 'extra-7-project-foo'" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
@@ -3194,9 +3194,9 @@ fn shared_dependency_extra() -> Result<()> {
     Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.6
      + idna==3.5
-     ~ idna==3.6
     "###);
 
     uv_snapshot!(context.filters(), context.sync().arg("--extra=bar"), @r###"
@@ -3206,10 +3206,10 @@ fn shared_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     ~ idna==3.5
-     ~ idna==3.6
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.5
+     + idna==3.6
     "###);
 
     uv_snapshot!(context.filters(), context.sync(), @r###"
@@ -3219,10 +3219,7 @@ fn shared_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     ~ idna==3.5
-     ~ idna==3.6
+    Audited 3 packages in [TIME]
     "###);
 
     Ok(())
@@ -3340,9 +3337,9 @@ conflicts = [
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", version = "3.4", source = { registry = "https://pypi.org/simple" } },
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" } },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" } },
+            { name = "idna", version = "3.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x2' or (extra == 'extra-6-proxy1-x3' and extra == 'extra-7-project-x1')" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-6-proxy1-x3' or (extra == 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1') or (extra != 'extra-6-proxy1-x2' and extra != 'extra-7-project-x1')" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-6-proxy1-x2' and extra == 'extra-6-proxy1-x3') or (extra != 'extra-6-proxy1-x3' and extra == 'extra-7-project-x1') or (extra != 'extra-6-proxy1-x2' and extra == 'extra-7-project-x1')" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
