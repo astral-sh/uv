@@ -190,7 +190,7 @@ impl ResolverOutput {
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-            report_missing_lower_bounds(&graph, &mut diagnostics);
+            report_missing_lower_bounds(&graph, &mut diagnostics, constraints, overrides);
         }
 
         let output = Self {
@@ -879,6 +879,8 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
 fn report_missing_lower_bounds(
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
+    constraints: &Constraints,
+    overrides: &Overrides,
 ) {
     for node_index in graph.node_indices() {
         let ResolutionGraphNode::Dist(dist) = graph.node_weight(node_index).unwrap() else {
@@ -892,7 +894,8 @@ fn report_missing_lower_bounds(
             // have to drop.
             continue;
         }
-        if !has_lower_bound(node_index, dist.name(), graph) {
+
+        if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
             diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
                 package_name: dist.name().clone(),
             });
@@ -905,6 +908,8 @@ fn has_lower_bound(
     node_index: NodeIndex,
     package_name: &PackageName,
     graph: &Graph<ResolutionGraphNode, UniversalMarker>,
+    constraints: &Constraints,
+    overrides: &Overrides,
 ) -> bool {
     for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
         let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
@@ -931,7 +936,10 @@ fn has_lower_bound(
         for requirement in metadata
             .requires_dist
             .iter()
+            // These bounds sources are missing from the graph.
             .chain(metadata.dependency_groups.values().flatten())
+            .chain(constraints.requirements())
+            .chain(overrides.requirements())
         {
             if requirement.name != *package_name {
                 continue;

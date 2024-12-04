@@ -2277,11 +2277,11 @@ impl ForkState {
         for_version: &Version,
         urls: &Urls,
         indexes: &Indexes,
-        mut dependencies: Vec<PubGrubDependency>,
+        dependencies: Vec<PubGrubDependency>,
         git: &GitResolver,
         resolution_strategy: &ResolutionStrategy,
     ) -> Result<(), ResolveError> {
-        for dependency in &mut dependencies {
+        for dependency in &dependencies {
             let PubGrubDependency {
                 package,
                 version,
@@ -2313,6 +2313,22 @@ impl ForkState {
                 // A dependency from the root package or requirements.txt.
                 debug!("Adding direct dependency: {package}{version}");
 
+                let name = package.name_no_root().unwrap();
+
+                // Catch cases where we pass a package once by name with extras and then once as
+                // URL for the specific distribution.
+                has_url = has_url
+                    || dependencies
+                        .iter()
+                        .filter(|other_dep| *other_dep != dependency)
+                        .filter(|other_dep| {
+                            other_dep
+                                .package
+                                .name()
+                                .is_some_and(|other_name| other_name == name)
+                        })
+                        .any(|other_dep| other_dep.url.is_some());
+
                 // Warn the user if a direct dependency lacks a lower bound in `--lowest` resolution.
                 let missing_lower_bound = version
                     .bounding_range()
@@ -2327,7 +2343,6 @@ impl ForkState {
                         "The direct dependency `{name}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
                         to avoid using outdated versions.",
-                        name = package.name_no_root().unwrap(),
                     );
                 }
             }
