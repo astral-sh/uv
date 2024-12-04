@@ -39,7 +39,9 @@ use std::str::FromStr;
 
 use url::Url;
 
-use uv_distribution_filename::{DistExtension, SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{
+    DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
+};
 use uv_fs::normalize_absolute_path;
 use uv_git::GitUrl;
 use uv_normalize::PackageName;
@@ -312,6 +314,7 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PathSourceDist {
     pub name: PackageName,
+    pub version: Option<Version>,
     /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -410,12 +413,24 @@ impl Dist {
                     url,
                 })))
             }
-            DistExtension::Source(ext) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                name,
-                install_path,
-                ext,
-                url,
-            }))),
+            DistExtension::Source(ext) => {
+                // If there is a version in the filename, record it.
+                let version = url
+                    .filename()
+                    .ok()
+                    .and_then(|filename| {
+                        SourceDistFilename::parse(filename.as_ref(), ext, &name).ok()
+                    })
+                    .map(|filename| filename.version);
+
+                Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                    name,
+                    version,
+                    install_path,
+                    ext,
+                    url,
+                })))
+            }
         }
     }
 
