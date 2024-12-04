@@ -1,0 +1,1 @@
+We don't want this file in the source dist or wheel.

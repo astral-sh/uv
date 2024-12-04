@@ -70,6 +70,8 @@ pub(crate) fn install_executables(
     force: bool,
     python: Option<String>,
     requirements: Vec<Requirement>,
+    constraints: Vec<Requirement>,
+    overrides: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let site_packages = SitePackages::from_environment(environment)?;
@@ -183,7 +185,9 @@ pub(crate) fn install_executables(
 
     debug!("Adding receipt for tool `{name}`");
     let tool = Tool::new(
-        requirements.into_iter().collect(),
+        requirements,
+        constraints,
+        overrides,
         python,
         target_entry_points
             .into_iter()

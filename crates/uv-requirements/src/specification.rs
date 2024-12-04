@@ -45,6 +45,7 @@ use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
 use uv_pypi_types::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::PyProjectToml;
 
 use crate::RequirementsSource;
@@ -113,6 +114,18 @@ impl RequirementsSpecification {
                 }
 
                 let requirements_txt = RequirementsTxt::parse(path, &*CWD, client_builder).await?;
+
+                if requirements_txt == RequirementsTxt::default() {
+                    if path == Path::new("-") {
+                        warn_user!("No dependencies found in stdin");
+                    } else {
+                        warn_user!(
+                            "Requirements file `{}` does not contain any dependencies",
+                            path.user_display()
+                        );
+                    }
+                }
+
                 Self {
                     requirements: requirements_txt
                         .requirements
@@ -331,6 +344,46 @@ impl RequirementsSpecification {
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints.
+    pub fn from_constraints(requirements: Vec<Requirement>, constraints: Vec<Requirement>) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
+    /// constraints and overrides.
+    pub fn from_overrides(
+        requirements: Vec<Requirement>,
+        constraints: Vec<Requirement>,
+        overrides: Vec<Requirement>,
+    ) -> Self {
+        Self {
+            requirements: requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            overrides: overrides
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from)
                 .collect(),

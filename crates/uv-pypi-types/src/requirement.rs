@@ -9,15 +9,15 @@ use uv_distribution_filename::DistExtension;
 
 use uv_fs::{relative_to, PortablePathBuf, CWD};
 use uv_git::{GitReference, GitSha, GitUrl};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
 };
 
 use crate::{
-    Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
-    ParsedUrlError, VerbatimParsedUrl,
+    ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
+    ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -36,13 +36,17 @@ pub enum RequirementError {
 ///
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
 /// [`VersionOrUrl`], which collapses all URL sources into a single stringly type.
-#[derive(
-    Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
-)]
+///
+/// Additionally, this requirement type makes room for dependency groups, which lack a standardized
+/// representation in PEP 508. In the context of this type, extras and groups are assumed to be
+/// mutually exclusive, in that if `extras` is non-empty, `groups` must be empty and vice versa.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Requirement {
     pub name: PackageName,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub extras: Vec<ExtraName>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub groups: Vec<GroupName>,
     #[serde(
         skip_serializing_if = "marker::ser::is_empty",
         serialize_with = "marker::ser::serialize",
@@ -85,6 +89,93 @@ impl Requirement {
         };
         let fragment = url.fragment()?;
         Hashes::parse_fragment(fragment).ok()
+    }
+
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
+        Self {
+            origin: Some(origin),
+            ..self
+        }
+    }
+}
+
+impl std::hash::Hash for Requirement {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            name,
+            extras,
+            groups,
+            marker,
+            source,
+            origin: _,
+        } = self;
+        name.hash(state);
+        extras.hash(state);
+        groups.hash(state);
+        marker.hash(state);
+        source.hash(state);
+    }
+}
+
+impl PartialEq for Requirement {
+    fn eq(&self, other: &Self) -> bool {
+        let Self {
+            name,
+            extras,
+            groups,
+            marker,
+            source,
+            origin: _,
+        } = self;
+        let Self {
+            name: other_name,
+            extras: other_extras,
+            groups: other_groups,
+            marker: other_marker,
+            source: other_source,
+            origin: _,
+        } = other;
+        name == other_name
+            && extras == other_extras
+            && groups == other_groups
+            && marker == other_marker
+            && source == other_source
+    }
+}
+
+impl Eq for Requirement {}
+
+impl Ord for Requirement {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let Self {
+            name,
+            extras,
+            groups,
+            marker,
+            source,
+            origin: _,
+        } = self;
+        let Self {
+            name: other_name,
+            extras: other_extras,
+            groups: other_groups,
+            marker: other_marker,
+            source: other_source,
+            origin: _,
+        } = other;
+        name.cmp(other_name)
+            .then_with(|| extras.cmp(other_extras))
+            .then_with(|| groups.cmp(other_groups))
+            .then_with(|| marker.cmp(other_marker))
+            .then_with(|| source.cmp(other_source))
+    }
+}
+
+impl PartialOrd for Requirement {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -192,11 +283,13 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
             None => RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: None,
+                conflict: None,
             },
             // The most popular case: just a name, a version range and maybe extras.
             Some(VersionOrUrl::VersionSpecifier(specifier)) => RequirementSource::Registry {
                 specifier,
                 index: None,
+                conflict: None,
             },
             Some(VersionOrUrl::Url(url)) => {
                 RequirementSource::from_parsed_url(url.parsed_url, url.verbatim)
@@ -204,6 +297,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
         };
         Requirement {
             name: requirement.name,
+            groups: vec![],
             extras: requirement.extras,
             marker: requirement.marker,
             source,
@@ -229,7 +323,9 @@ impl Display for Requirement {
             )?;
         }
         match &self.source {
-            RequirementSource::Registry { specifier, index } => {
+            RequirementSource::Registry {
+                specifier, index, ..
+            } => {
                 write!(f, "{specifier}")?;
                 if let Some(index) = index {
                     write!(f, " (index: {index})")?;
@@ -283,6 +379,8 @@ pub enum RequirementSource {
         specifier: VersionSpecifiers,
         /// Choose a version from the index at the given URL.
         index: Option<Url>,
+        /// The conflict item associated with the source, if any.
+        conflict: Option<ConflictItem>,
     },
     // TODO(konsti): Track and verify version specifier from `project.dependencies` matches the
     // version in remote location.
@@ -513,7 +611,9 @@ impl Display for RequirementSource {
     /// rather than for inclusion in a `requirements.txt` file.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Registry { specifier, index } => {
+            Self::Registry {
+                specifier, index, ..
+            } => {
                 write!(f, "{specifier}")?;
                 if let Some(index) = index {
                     write!(f, " (index: {index})")?;
@@ -571,6 +671,7 @@ enum RequirementSourceWire {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
         index: Option<Url>,
+        conflict: Option<ConflictItem>,
     },
 }
 
@@ -580,11 +681,16 @@ impl From<RequirementSource> for RequirementSourceWire {
             RequirementSource::Registry {
                 specifier,
                 mut index,
+                conflict,
             } => {
                 if let Some(index) = index.as_mut() {
                     redact_credentials(index);
                 }
-                Self::Registry { specifier, index }
+                Self::Registry {
+                    specifier,
+                    index,
+                    conflict,
+                }
             }
             RequirementSource::Url {
                 subdirectory,
@@ -686,9 +792,15 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
     fn try_from(wire: RequirementSourceWire) -> Result<RequirementSource, RequirementError> {
         match wire {
-            RequirementSourceWire::Registry { specifier, index } => {
-                Ok(Self::Registry { specifier, index })
-            }
+            RequirementSourceWire::Registry {
+                specifier,
+                index,
+                conflict,
+            } => Ok(Self::Registry {
+                specifier,
+                index,
+                conflict,
+            }),
             RequirementSourceWire::Git { git } => {
                 let mut repository = Url::parse(&git)?;
 
@@ -798,4 +910,53 @@ pub fn redact_credentials(url: &mut Url) {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::path::PathBuf;
+
+    use uv_pep508::{MarkerTree, VerbatimUrl};
+
+    use crate::{Requirement, RequirementSource};
+
+    #[test]
+    fn roundtrip() {
+        let requirement = Requirement {
+            name: "foo".parse().unwrap(),
+            extras: vec![],
+            groups: vec![],
+            marker: MarkerTree::TRUE,
+            source: RequirementSource::Registry {
+                specifier: ">1,<2".parse().unwrap(),
+                index: None,
+                conflict: None,
+            },
+            origin: None,
+        };
+
+        let raw = toml::to_string(&requirement).unwrap();
+        let deserialized: Requirement = toml::from_str(&raw).unwrap();
+        assert_eq!(requirement, deserialized);
+
+        let path = if cfg!(windows) {
+            "C:\\home\\ferris\\foo"
+        } else {
+            "/home/ferris/foo"
+        };
+        let requirement = Requirement {
+            name: "foo".parse().unwrap(),
+            extras: vec![],
+            groups: vec![],
+            marker: MarkerTree::TRUE,
+            source: RequirementSource::Directory {
+                install_path: PathBuf::from(path),
+                editable: false,
+                r#virtual: false,
+                url: VerbatimUrl::from_absolute_path(path).unwrap(),
+            },
+            origin: None,
+        };
+
+        let raw = toml::to_string(&requirement).unwrap();
+        let deserialized: Requirement = toml::from_str(&raw).unwrap();
+        assert_eq!(requirement, deserialized);
+    }
+}

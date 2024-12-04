@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-
+use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::Yanked;
 
@@ -15,14 +15,16 @@ use crate::{
 #[derive(Debug, Clone, Hash)]
 #[allow(clippy::large_enum_variant)]
 pub enum ResolvedDist {
-    Installed(InstalledDist),
-    Installable(Dist),
+    Installed { dist: InstalledDist },
+    Installable { dist: Dist, version: Version },
 }
 
 /// A variant of [`ResolvedDist`] with borrowed inner distributions.
 #[derive(Debug, Clone)]
 pub enum ResolvedDistRef<'a> {
-    Installed(&'a InstalledDist),
+    Installed {
+        dist: &'a InstalledDist,
+    },
     InstallableRegistrySourceDist {
         /// The source distribution that should be used.
         sdist: &'a RegistrySourceDist,
@@ -41,36 +43,44 @@ impl ResolvedDist {
     /// Return true if the distribution is editable.
     pub fn is_editable(&self) -> bool {
         match self {
-            Self::Installable(dist) => dist.is_editable(),
-            Self::Installed(dist) => dist.is_editable(),
+            Self::Installable { dist, .. } => dist.is_editable(),
+            Self::Installed { dist } => dist.is_editable(),
         }
     }
 
     /// Return true if the distribution refers to a local file or directory.
     pub fn is_local(&self) -> bool {
         match self {
-            Self::Installable(dist) => dist.is_local(),
-            Self::Installed(dist) => dist.is_local(),
+            Self::Installable { dist, .. } => dist.is_local(),
+            Self::Installed { dist } => dist.is_local(),
         }
     }
 
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {
-            Self::Installable(dist) => dist.index(),
-            Self::Installed(_) => None,
+            Self::Installable { dist, .. } => dist.index(),
+            Self::Installed { .. } => None,
         }
     }
 
     /// Returns the [`Yanked`] status of the distribution, if available.
     pub fn yanked(&self) -> Option<&Yanked> {
         match self {
-            Self::Installable(dist) => match dist {
+            Self::Installable { dist, .. } => match dist {
                 Dist::Source(SourceDist::Registry(sdist)) => sdist.file.yanked.as_ref(),
                 Dist::Built(BuiltDist::Registry(wheel)) => wheel.best_wheel().file.yanked.as_ref(),
                 _ => None,
             },
-            Self::Installed(_) => None,
+            Self::Installed { .. } => None,
+        }
+    }
+
+    /// Returns the version of the distribution.
+    pub fn version(&self) -> &Version {
+        match self {
+            Self::Installable { version, .. } => version,
+            Self::Installed { dist } => dist.version(),
         }
     }
 }
@@ -87,7 +97,10 @@ impl ResolvedDistRef<'_> {
                     (&source.name, &source.version),
                     "expected chosen sdist to match prioritized sdist"
                 );
-                ResolvedDist::Installable(Dist::Source(SourceDist::Registry(source)))
+                ResolvedDist::Installable {
+                    dist: Dist::Source(SourceDist::Registry(source)),
+                    version: sdist.version.clone(),
+                }
             }
             Self::InstallableRegistryBuiltDist {
                 wheel, prioritized, ..
@@ -100,9 +113,14 @@ impl ResolvedDistRef<'_> {
                 // This is okay because we're only here if the prioritized dist
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized.built_dist().expect("at least one wheel");
-                ResolvedDist::Installable(Dist::Built(BuiltDist::Registry(built)))
+                ResolvedDist::Installable {
+                    dist: Dist::Built(BuiltDist::Registry(built)),
+                    version: wheel.filename.version.clone(),
+                }
             }
-            Self::Installed(dist) => ResolvedDist::Installed((*dist).clone()),
+            Self::Installed { dist } => ResolvedDist::Installed {
+                dist: (*dist).clone(),
+            },
         }
     }
 }
@@ -112,7 +130,7 @@ impl Display for ResolvedDistRef<'_> {
         match self {
             Self::InstallableRegistrySourceDist { sdist, .. } => Display::fmt(sdist, f),
             Self::InstallableRegistryBuiltDist { wheel, .. } => Display::fmt(wheel, f),
-            Self::Installed(dist) => Display::fmt(dist, f),
+            Self::Installed { dist } => Display::fmt(dist, f),
         }
     }
 }
@@ -122,7 +140,7 @@ impl Name for ResolvedDistRef<'_> {
         match self {
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.name(),
             Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.name(),
-            Self::Installed(dist) => dist.name(),
+            Self::Installed { dist } => dist.name(),
         }
     }
 }
@@ -130,7 +148,7 @@ impl Name for ResolvedDistRef<'_> {
 impl DistributionMetadata for ResolvedDistRef<'_> {
     fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
-            Self::Installed(installed) => VersionOrUrlRef::Version(installed.version()),
+            Self::Installed { dist } => VersionOrUrlRef::Version(dist.version()),
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.version_or_url(),
             Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.version_or_url(),
         }
@@ -140,7 +158,7 @@ impl DistributionMetadata for ResolvedDistRef<'_> {
 impl Identifier for ResolvedDistRef<'_> {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            Self::Installed(dist) => dist.distribution_id(),
+            Self::Installed { dist } => dist.distribution_id(),
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.distribution_id(),
             Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.distribution_id(),
         }
@@ -148,7 +166,7 @@ impl Identifier for ResolvedDistRef<'_> {
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            Self::Installed(dist) => dist.resource_id(),
+            Self::Installed { dist } => dist.resource_id(),
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.resource_id(),
             Self::InstallableRegistryBuiltDist { wheel, .. } => wheel.resource_id(),
         }
@@ -158,8 +176,8 @@ impl Identifier for ResolvedDistRef<'_> {
 impl Name for ResolvedDist {
     fn name(&self) -> &PackageName {
         match self {
-            Self::Installable(dist) => dist.name(),
-            Self::Installed(dist) => dist.name(),
+            Self::Installable { dist, .. } => dist.name(),
+            Self::Installed { dist } => dist.name(),
         }
     }
 }
@@ -167,8 +185,8 @@ impl Name for ResolvedDist {
 impl DistributionMetadata for ResolvedDist {
     fn version_or_url(&self) -> VersionOrUrlRef {
         match self {
-            Self::Installed(installed) => installed.version_or_url(),
-            Self::Installable(dist) => dist.version_or_url(),
+            Self::Installed { dist } => dist.version_or_url(),
+            Self::Installable { dist, .. } => dist.version_or_url(),
         }
     }
 }
@@ -176,30 +194,24 @@ impl DistributionMetadata for ResolvedDist {
 impl Identifier for ResolvedDist {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            Self::Installed(dist) => dist.distribution_id(),
-            Self::Installable(dist) => dist.distribution_id(),
+            Self::Installed { dist } => dist.distribution_id(),
+            Self::Installable { dist, .. } => dist.distribution_id(),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            Self::Installed(dist) => dist.resource_id(),
-            Self::Installable(dist) => dist.resource_id(),
+            Self::Installed { dist } => dist.resource_id(),
+            Self::Installable { dist, .. } => dist.resource_id(),
         }
-    }
-}
-
-impl From<Dist> for ResolvedDist {
-    fn from(value: Dist) -> Self {
-        ResolvedDist::Installable(value)
     }
 }
 
 impl Display for ResolvedDist {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Installed(dist) => dist.fmt(f),
-            Self::Installable(dist) => dist.fmt(f),
+            Self::Installed { dist } => dist.fmt(f),
+            Self::Installable { dist, .. } => dist.fmt(f),
         }
     }
 }

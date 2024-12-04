@@ -14,7 +14,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_pypi_types::Requirement;
-use uv_python::PythonEnvironment;
+use uv_python::{Interpreter, PythonEnvironment};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -55,6 +55,9 @@ use uv_python::PythonEnvironment;
 /// them.
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
+
+    /// Return a reference to the interpreter.
+    fn interpreter(&self) -> &Interpreter;
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;

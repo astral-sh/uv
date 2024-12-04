@@ -6,24 +6,27 @@
 //!
 //! Then lowers them into a dependency specification.
 
-use glob::Pattern;
-use owo_colors::OwoColorize;
-use serde::de::SeqAccess;
-use serde::{de::IntoDeserializer, Deserialize, Deserializer, Serialize};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{collections::BTreeMap, mem};
+
+use glob::Pattern;
+use owo_colors::OwoColorize;
+use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
+
 use uv_distribution_types::{Index, IndexName};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git::GitReference;
 use uv_macros::OptionsMetadata;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{RequirementSource, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{
+    Conflicts, RequirementSource, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
+};
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -44,6 +47,8 @@ pub struct PyProjectToml {
     pub project: Option<Project>,
     /// Tool-specific metadata.
     pub tool: Option<Tool>,
+    /// Non-project dependency groups, as defined in PEP 735.
+    pub dependency_groups: Option<DependencyGroups>,
     /// The raw unserialized document.
     #[serde(skip)]
     pub raw: String,
@@ -95,6 +100,24 @@ impl PyProjectToml {
             false
         }
     }
+
+    /// Returns the set of conflicts for the project.
+    pub fn conflicts(&self) -> Conflicts {
+        let empty = Conflicts::empty();
+        let Some(project) = self.project.as_ref() else {
+            return empty;
+        };
+        let Some(tool) = self.tool.as_ref() else {
+            return empty;
+        };
+        let Some(tooluv) = tool.uv.as_ref() else {
+            return empty;
+        };
+        let Some(conflicting) = tooluv.conflicts.as_ref() else {
+            return empty;
+        };
+        conflicting.to_conflicts_with_package_name(&project.name)
+    }
 }
 
 // Ignore raw document in comparison.
@@ -109,6 +132,73 @@ impl Eq for PyProjectToml {}
 impl AsRef<[u8]> for PyProjectToml {
     fn as_ref(&self) -> &[u8] {
         self.raw.as_bytes()
+    }
+}
+
+/// A specifier item in a [PEP 735](https://peps.python.org/pep-0735/) Dependency Group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+pub enum DependencyGroupSpecifier {
+    /// A PEP 508-compatible requirement string.
+    Requirement(String),
+    /// A reference to another dependency group.
+    IncludeGroup {
+        /// The name of the group to include.
+        include_group: GroupName,
+    },
+    /// A Dependency Object Specifier.
+    Object(BTreeMap<String, String>),
+}
+
+impl<'de> Deserialize<'de> for DependencyGroupSpecifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = DependencyGroupSpecifier;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string or a map with the `include-group` key")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(DependencyGroupSpecifier::Requirement(value.to_owned()))
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut map_data = BTreeMap::new();
+                while let Some((key, value)) = map.next_entry()? {
+                    map_data.insert(key, value);
+                }
+
+                if map_data.is_empty() {
+                    return Err(serde::de::Error::custom("missing field `include-group`"));
+                }
+
+                if let Some(include_group) = map_data
+                    .get("include-group")
+                    .map(String::as_str)
+                    .map(GroupName::from_str)
+                    .transpose()
+                    .map_err(serde::de::Error::custom)?
+                {
+                    Ok(DependencyGroupSpecifier::IncludeGroup { include_group })
+                } else {
+                    Ok(DependencyGroupSpecifier::Object(map_data))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(Visitor)
     }
 }
 
@@ -152,8 +242,23 @@ pub struct Tool {
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUv {
-    /// The sources to use (e.g., workspace members, Git repositories, local paths) when resolving
-    /// dependencies.
+    /// The sources to use when resolving dependencies.
+    ///
+    /// `tool.uv.sources` enriches the dependency metadata with additional sources, incorporated
+    /// during development. A dependency source can be a Git repository, a URL, a local path, or an
+    /// alternative registry.
+    ///
+    /// See [Dependencies](../concepts/projects/dependencies.md) for more.
+    #[option(
+        default = "{}",
+        value_type = "dict",
+        example = r#"
+            [tool.uv.sources]
+            httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
+            pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
+            pydantic = { path = "/path/to/pydantic", editable = true }
+        "#
+    )]
     pub sources: Option<ToolUvSources>,
 
     /// The indexes to use when resolving dependencies.
@@ -184,7 +289,7 @@ pub struct ToolUv {
     /// given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
     /// PyPI default index.
     #[option(
-        default = "\"[]\"",
+        default = "[]",
         value_type = "dict",
         example = r#"
             [[tool.uv.index]]
@@ -228,8 +333,25 @@ pub struct ToolUv {
     )]
     pub package: Option<bool>,
 
-    /// The project's development dependencies. Development dependencies will be installed by
-    /// default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
+    /// The list of `dependency-groups` to install by default.
+    #[option(
+        default = r#"["dev"]"#,
+        value_type = "list[str]",
+        example = r#"
+            default-groups = ["docs"]
+        "#
+    )]
+    pub default_groups: Option<Vec<GroupName>>,
+
+    /// The project's development dependencies.
+    ///
+    /// Development dependencies will be installed by default in `uv run` and `uv sync`, but will
+    /// not appear in the project's published metadata.
+    ///
+    /// Use of this field is not recommend anymore. Instead, use the `dependency-groups.dev` field
+    /// which is a standardized way to declare development dependencies. The contents of
+    /// `tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the the
+    /// final requirements of the `dev` dependency group.
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -238,38 +360,13 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             dev-dependencies = ["ruff==0.5.0"]
         "#
     )]
     pub dev_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-
-    /// A list of supported environments against which to resolve dependencies.
-    ///
-    /// By default, uv will resolve for all possible environments during a `uv lock` operation.
-    /// However, you can restrict the set of supported environments to improve performance and avoid
-    /// unsatisfiable branches in the solution space.
-    ///
-    /// These environments will also respected when `uv pip compile` is invoked with the
-    /// `--universal` flag.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "A list of environment markers, e.g., `python_version >= '3.6'`."
-        )
-    )]
-    #[option(
-        default = r#"[]"#,
-        value_type = "str | list[str]",
-        example = r#"
-            # Resolve for macOS, but not for Linux or Windows.
-            environments = ["sys_platform == 'darwin'"]
-        "#
-    )]
-    pub environments: Option<SupportedEnvironments>,
 
     /// Overrides to apply when resolving the project's dependencies.
     ///
@@ -297,7 +394,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
@@ -328,7 +425,7 @@ pub struct ToolUv {
         )
     )]
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             # Ensure that the grpcio version is always less than 1.65, if it's requested by a
@@ -337,6 +434,79 @@ pub struct ToolUv {
         "#
     )]
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
+    /// A list of supported environments against which to resolve dependencies.
+    ///
+    /// By default, uv will resolve for all possible environments during a `uv lock` operation.
+    /// However, you can restrict the set of supported environments to improve performance and avoid
+    /// unsatisfiable branches in the solution space.
+    ///
+    /// These environments will also respected when `uv pip compile` is invoked with the
+    /// `--universal` flag.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "A list of environment markers, e.g., `python_version >= '3.6'`."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "str | list[str]",
+        example = r#"
+            # Resolve for macOS, but not for Linux or Windows.
+            environments = ["sys_platform == 'darwin'"]
+        "#
+    )]
+    pub environments: Option<SupportedEnvironments>,
+
+    /// Conflicting extras or groups may be declared here.
+    ///
+    /// It's useful to declare conflicts when, for example, two or more extras
+    /// have mutually incompatible dependencies. Extra `foo` might depend
+    /// on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
+    /// These extras cannot be activated at the same time. This usually isn't
+    /// a problem for pip-style workflows, but when using projects in uv that
+    /// support with universal resolution, it will try to produce a resolution
+    /// that satisfies both extras simultaneously.
+    ///
+    /// When this happens, resolution will fail, because one cannot install
+    /// both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
+    ///
+    /// To work around this, you may specify `foo` and `bar` as conflicting
+    /// extras (you can do the same with groups). When doing universal
+    /// resolution in project mode, these extras will get their own "forks"
+    /// distinct from one another in order to permit conflicting dependencies.
+    /// In exchange, if one tries to install from the lock file with both
+    /// conflicting extras activated, installation will fail.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(description = "A list sets of conflicting groups or extras.")
+    )]
+    #[option(
+        default = r#"[]"#,
+        value_type = "list[list[dict]]",
+        example = r#"
+            # Require that `package[test1]` and `package[test2]`
+            # requirements are resolved in different forks so that they
+            # cannot conflict with one another.
+            conflicts = [
+                [
+                    { extra = "test1" },
+                    { extra = "test2" },
+                ]
+            ]
+
+            # Or, to declare conflicting groups:
+            conflicts = [
+                [
+                    { group = "test1" },
+                    { group = "test2" },
+                ]
+            ]
+        "#
+    )]
+    pub conflicts: Option<SchemaConflicts>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -409,7 +579,7 @@ pub struct ToolUvWorkspace {
     ///
     /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             members = ["member1", "path/to/member2", "libs/*"]
@@ -423,7 +593,7 @@ pub struct ToolUvWorkspace {
     ///
     /// For more information on the glob syntax, refer to the [`glob` documentation](https://docs.rs/glob/latest/glob/struct.Pattern.html).
     #[option(
-        default = r#"[]"#,
+        default = "[]",
         value_type = "list[str]",
         example = r#"
             exclude = ["member1", "path/to/member2", "libs/*"]
@@ -455,6 +625,84 @@ impl Deref for SerdePattern {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+pub struct DependencyGroups(BTreeMap<GroupName, Vec<DependencyGroupSpecifier>>);
+
+impl DependencyGroups {
+    /// Returns the names of the dependency groups.
+    pub fn keys(&self) -> impl Iterator<Item = &GroupName> {
+        self.0.keys()
+    }
+
+    /// Returns the dependency group with the given name.
+    pub fn get(&self, group: &GroupName) -> Option<&Vec<DependencyGroupSpecifier>> {
+        self.0.get(group)
+    }
+
+    /// Returns `true` if the dependency group is in the list.
+    pub fn contains_key(&self, group: &GroupName) -> bool {
+        self.0.contains_key(group)
+    }
+
+    /// Returns an iterator over the dependency groups.
+    pub fn iter(&self) -> impl Iterator<Item = (&GroupName, &Vec<DependencyGroupSpecifier>)> {
+        self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a DependencyGroups {
+    type Item = (&'a GroupName, &'a Vec<DependencyGroupSpecifier>);
+    type IntoIter = std::collections::btree_map::Iter<'a, GroupName, Vec<DependencyGroupSpecifier>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+/// Ensure that all keys in the TOML table are unique.
+impl<'de> serde::de::Deserialize<'de> for DependencyGroups {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct GroupVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for GroupVisitor {
+            type Value = DependencyGroups;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a table with unique dependency group names")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut sources = BTreeMap::new();
+                while let Some((key, value)) =
+                    access.next_entry::<GroupName, Vec<DependencyGroupSpecifier>>()?
+                {
+                    match sources.entry(key) {
+                        std::collections::btree_map::Entry::Occupied(entry) => {
+                            return Err(serde::de::Error::custom(format!(
+                                "duplicate dependency group: `{}`",
+                                entry.key()
+                            )));
+                        }
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(value);
+                        }
+                    }
+                }
+                Ok(DependencyGroups(sources))
+            }
+        }
+
+        deserializer.deserialize_map(GroupVisitor)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", try_from = "SourcesWire")]
@@ -478,6 +726,12 @@ impl Sources {
     /// Returns the number of sources in the list.
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+}
+
+impl FromIterator<Source> for Sources {
+    fn from_iter<T: IntoIterator<Item = Source>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 
@@ -544,30 +798,34 @@ impl TryFrom<SourcesWire> for Sources {
         match wire {
             SourcesWire::One(source) => Ok(Self(vec![source])),
             SourcesWire::Many(sources) => {
-                // Ensure that the markers are disjoint.
-                for (lhs, rhs) in sources
-                    .iter()
-                    .map(Source::marker)
-                    .zip(sources.iter().skip(1).map(Source::marker))
-                {
-                    if !lhs.is_disjoint(&rhs) {
-                        let mut hint = lhs.negate();
-                        hint.and(rhs.clone());
+                for (lhs, rhs) in sources.iter().zip(sources.iter().skip(1)) {
+                    if lhs.extra() != rhs.extra() {
+                        continue;
+                    };
+                    if lhs.group() != rhs.group() {
+                        continue;
+                    };
 
-                        let lhs = lhs
-                            .contents()
-                            .map(|contents| contents.to_string())
-                            .unwrap_or_else(|| "true".to_string());
-                        let rhs = rhs
-                            .contents()
-                            .map(|contents| contents.to_string())
-                            .unwrap_or_else(|| "true".to_string());
+                    let lhs = lhs.marker();
+                    let rhs = rhs.marker();
+                    if !lhs.is_disjoint(rhs) {
+                        let Some(left) = lhs.contents().map(|contents| contents.to_string()) else {
+                            return Err(SourceError::MissingMarkers);
+                        };
+
+                        let Some(right) = rhs.contents().map(|contents| contents.to_string())
+                        else {
+                            return Err(SourceError::MissingMarkers);
+                        };
+
+                        let mut hint = lhs.negate();
+                        hint.and(rhs);
                         let hint = hint
                             .contents()
                             .map(|contents| contents.to_string())
                             .unwrap_or_else(|| "true".to_string());
 
-                        return Err(SourceError::OverlappingMarkers(lhs, rhs, hint));
+                        return Err(SourceError::OverlappingMarkers(left, right, hint));
                     }
                 }
 
@@ -608,6 +866,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A remote `http://` or `https://` URL, either a wheel (`.whl`) or a source distribution
     /// (`.zip`, `.tar.gz`).
@@ -627,6 +887,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// The path to a dependency, either a wheel (a `.whl` file), source distribution (a `.zip` or
     /// `.tar.gz` file), or source tree (i.e., a directory containing a `pyproject.toml` or
@@ -641,6 +903,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A dependency pinned to a specific index, e.g., `torch` after setting `torch` to `https://download.pytorch.org/whl/cu118`.
     Registry {
@@ -651,6 +915,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
     /// A dependency on another package in the workspace.
     Workspace {
@@ -663,6 +929,8 @@ pub enum Source {
             default
         )]
         marker: MarkerTree,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
     },
 }
 
@@ -692,6 +960,8 @@ impl<'de> Deserialize<'de> for Source {
                 default
             )]
             marker: MarkerTree,
+            extra: Option<ExtraName>,
+            group: Option<GroupName>,
         }
 
         // Attempt to deserialize as `CatchAll`.
@@ -707,7 +977,16 @@ impl<'de> Deserialize<'de> for Source {
             index,
             workspace,
             marker,
+            extra,
+            group,
         } = CatchAll::deserialize(deserializer)?;
+
+        // If both `extra` and `group` are set, return an error.
+        if extra.is_some() && group.is_some() {
+            return Err(serde::de::Error::custom(
+                "cannot specify both `extra` and `group`",
+            ));
+        }
 
         // If the `git` field is set, we're dealing with a Git source.
         if let Some(git) = git {
@@ -764,6 +1043,8 @@ impl<'de> Deserialize<'de> for Source {
                 tag,
                 branch,
                 marker,
+                extra,
+                group,
             });
         }
 
@@ -814,6 +1095,8 @@ impl<'de> Deserialize<'de> for Source {
                 url,
                 subdirectory,
                 marker,
+                extra,
+                group,
             });
         }
 
@@ -859,6 +1142,8 @@ impl<'de> Deserialize<'de> for Source {
                 path,
                 editable,
                 marker,
+                extra,
+                group,
             });
         }
 
@@ -905,7 +1190,12 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
-            return Ok(Self::Registry { index, marker });
+            return Ok(Self::Registry {
+                index,
+                marker,
+                extra,
+                group,
+            });
         }
 
         // If the `workspace` field is set, we're dealing with a workspace source.
@@ -951,7 +1241,12 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
-            return Ok(Self::Workspace { workspace, marker });
+            return Ok(Self::Workspace {
+                workspace,
+                marker,
+                extra,
+                group,
+            });
         }
 
         // If none of the fields are set, we're dealing with an error.
@@ -983,6 +1278,8 @@ pub enum SourceError {
     NonUtf8Path(PathBuf),
     #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
     OverlappingMarkers(String, String, String),
+    #[error("When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)")]
+    MissingMarkers,
     #[error("Must provide at least one source")]
     EmptySources,
 }
@@ -1019,6 +1316,8 @@ impl Source {
                     Ok(Some(Source::Workspace {
                         workspace: true,
                         marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
                     }))
                 }
                 RequirementSource::Url { .. } => {
@@ -1042,6 +1341,8 @@ impl Source {
                     Source::Registry {
                         index,
                         marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
                     }
                 } else {
                     return Ok(None);
@@ -1056,6 +1357,8 @@ impl Source {
                         .map_err(SourceError::Absolute)?,
                 ),
                 marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
             },
             RequirementSource::Url {
                 subdirectory, url, ..
@@ -1063,6 +1366,8 @@ impl Source {
                 url: url.to_url(),
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
             },
             RequirementSource::Git {
                 repository,
@@ -1088,6 +1393,8 @@ impl Source {
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
                     }
                 } else {
                     Source::Git {
@@ -1097,6 +1404,8 @@ impl Source {
                         git: repository,
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
+                        extra: None,
+                        group: None,
                     }
                 }
             }
@@ -1108,11 +1417,33 @@ impl Source {
     /// Return the [`MarkerTree`] for the source.
     pub fn marker(&self) -> MarkerTree {
         match self {
-            Source::Git { marker, .. } => marker.clone(),
-            Source::Url { marker, .. } => marker.clone(),
-            Source::Path { marker, .. } => marker.clone(),
-            Source::Registry { marker, .. } => marker.clone(),
-            Source::Workspace { marker, .. } => marker.clone(),
+            Source::Git { marker, .. } => *marker,
+            Source::Url { marker, .. } => *marker,
+            Source::Path { marker, .. } => *marker,
+            Source::Registry { marker, .. } => *marker,
+            Source::Workspace { marker, .. } => *marker,
+        }
+    }
+
+    /// Return the extra name for the source.
+    pub fn extra(&self) -> Option<&ExtraName> {
+        match self {
+            Source::Git { extra, .. } => extra.as_ref(),
+            Source::Url { extra, .. } => extra.as_ref(),
+            Source::Path { extra, .. } => extra.as_ref(),
+            Source::Registry { extra, .. } => extra.as_ref(),
+            Source::Workspace { extra, .. } => extra.as_ref(),
+        }
+    }
+
+    /// Return the dependency group name for the source.
+    pub fn group(&self) -> Option<&GroupName> {
+        match self {
+            Source::Git { group, .. } => group.as_ref(),
+            Source::Url { group, .. } => group.as_ref(),
+            Source::Path { group, .. } => group.as_ref(),
+            Source::Registry { group, .. } => group.as_ref(),
+            Source::Workspace { group, .. } => group.as_ref(),
         }
     }
 }
@@ -1126,6 +1457,8 @@ pub enum DependencyType {
     Dev,
     /// A dependency in `project.optional-dependencies.{0}`.
     Optional(ExtraName),
+    /// A dependency in `dependency-groups.{0}`.
+    Group(GroupName),
 }
 
 /// <https://github.com/serde-rs/serde/issues/1316#issue-332908452>

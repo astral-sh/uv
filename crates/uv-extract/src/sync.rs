@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-
-use rayon::prelude::*;
-use rustc_hash::FxHashSet;
-use zip::ZipArchive;
+use std::sync::{LazyLock, Mutex};
 
 use crate::vendor::{CloneableSeekableReader, HasLength};
 use crate::Error;
+use rayon::prelude::*;
+use rustc_hash::FxHashSet;
+use tracing::warn;
+use uv_configuration::RAYON_INITIALIZE;
+use zip::ZipArchive;
 
 /// Unzip a `.zip` archive into the target directory.
 pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
@@ -17,6 +18,8 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
     let reader = std::io::BufReader::new(reader);
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
     let directories = Mutex::new(FxHashSet::default());
+    // Initialize the threadpool with the user settings.
+    LazyLock::force(&RAYON_INITIALIZE);
     (0..archive.len())
         .into_par_iter()
         .map(|file_number| {
@@ -25,6 +28,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
 
             // Determine the path of the file within the wheel.
             let Some(enclosed_name) = file.enclosed_name() else {
+                warn!("Skipping unsafe file name: {}", file.name());
                 return Ok(());
             };
 

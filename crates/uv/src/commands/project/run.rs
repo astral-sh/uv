@@ -5,7 +5,6 @@ use std::fmt::Write;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anstream::eprint;
 use anyhow::{anyhow, bail, Context};
 use futures::StreamExt;
 use itertools::Itertools;
@@ -13,42 +12,44 @@ use owo_colors::OwoColorize;
 use tokio::process::Command;
 use tracing::{debug, warn};
 use url::Url;
+
 use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    Concurrency, DevMode, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
-    SourceStrategy,
+    Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
+    InstallOptions, LowerBound, SourceStrategy, TrustedHost,
 };
+use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
-
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionRequest,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::Lock;
+use uv_resolver::{InstallTarget, Lock};
 use uv_scripts::Pep723Item;
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, InstallTarget, VirtualProject, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::environment::CachedEnvironment;
+use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    validate_requires_python, EnvironmentSpecification, ProjectError, PythonRequestSource,
-    WorkspacePython,
+    default_dependency_groups, validate_requires_python, validate_script_requires_python,
+    DependencyGroupsTarget, EnvironmentSpecification, ProjectError, ScriptPython, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{diagnostics, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -64,21 +65,26 @@ pub(crate) async fn run(
     frozen: bool,
     no_sync: bool,
     isolated: bool,
+    all_packages: bool,
     package: Option<PackageName>,
     no_project: bool,
     no_config: bool,
     extras: ExtrasSpecification,
-    dev: DevMode,
+    dev: DevGroupsSpecification,
     editable: EditableMode,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    env_file: Vec<PathBuf>,
+    no_env_file: bool,
 ) -> anyhow::Result<ExitStatus> {
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
@@ -104,6 +110,44 @@ pub(crate) async fn run(
 
     // Initialize any shared state.
     let state = SharedState::default();
+
+    // Read from the `.env` file, if necessary.
+    if !no_env_file {
+        for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
+            match dotenvy::from_path(env_file_path) {
+                Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    bail!(
+                        "No environment file found at: `{}`",
+                        env_file_path.simplified_display()
+                    );
+                }
+                Err(dotenvy::Error::Io(err)) => {
+                    bail!(
+                        "Failed to read environment file `{}`: {err}",
+                        env_file_path.simplified_display()
+                    );
+                }
+                Err(dotenvy::Error::LineParse(content, position)) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}` at position {position}: {content}",
+                        env_file_path.simplified_display(),
+                    );
+                }
+                Err(err) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}`: {err}",
+                        env_file_path.simplified_display(),
+                    );
+                }
+                Ok(()) => {
+                    debug!(
+                        "Read environment file at: `{}`",
+                        env_file_path.simplified_display()
+                    );
+                }
+            }
+        }
+    }
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
@@ -135,35 +179,22 @@ pub(crate) async fn run(
             }
         }
 
-        let (source, python_request) = if let Some(request) = python.as_deref() {
-            // (1) Explicit request from user
-            let source = PythonRequestSource::UserRequest;
-            let request = Some(PythonRequest::parse(request));
-            (source, request)
-        } else if let Some(file) = PythonVersionFile::discover(&project_dir, false, false).await? {
-            // (2) Request from `.python-version`
-            let source = PythonRequestSource::DotPythonVersion(file.file_name().to_string());
-            let request = file.into_version();
-            (source, request)
-        } else {
-            // (3) `Requires-Python` in the script
-            let request = script
-                .metadata()
-                .requires_python
-                .as_ref()
-                .map(|requires_python| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        requires_python.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
-            let source = PythonRequestSource::RequiresPython;
-            (source, request)
-        };
+        let ScriptPython {
+            source,
+            python_request,
+            requires_python,
+        } = ScriptPython::from_request(
+            python.as_deref().map(PythonRequest::parse),
+            None,
+            &script,
+            no_config,
+        )
+        .await?;
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
 
         let interpreter = PythonInstallation::find_or_download(
             python_request.as_ref(),
@@ -173,34 +204,24 @@ pub(crate) async fn run(
             &client_builder,
             cache,
             Some(&download_reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
         )
         .await?
         .into_interpreter();
 
-        if let Some(requires_python) = script.metadata().requires_python.as_ref() {
-            if !requires_python.contains(interpreter.python_version()) {
-                let err = match source {
-                    PythonRequestSource::UserRequest => {
-                        ProjectError::RequestedPythonScriptIncompatibility(
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                    PythonRequestSource::DotPythonVersion(file) => {
-                        ProjectError::DotPythonVersionScriptIncompatibility(
-                            file,
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                    PythonRequestSource::RequiresPython => {
-                        ProjectError::RequiresPythonScriptIncompatibility(
-                            interpreter.python_version().clone(),
-                            requires_python.clone(),
-                        )
-                    }
-                };
-                warn_user!("{err}");
+        if let Some((requires_python, requires_python_source)) = requires_python {
+            match validate_script_requires_python(
+                &interpreter,
+                None,
+                &requires_python,
+                &requires_python_source,
+                &source,
+            ) {
+                Ok(()) => {}
+                Err(err) => {
+                    warn_user!("{err}");
+                }
             }
         }
 
@@ -223,7 +244,7 @@ pub(crate) async fn run(
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.indexes.as_deref())
+                    .and_then(|uv| uv.top_level.index.as_deref())
                     .unwrap_or(&empty),
                 SourceStrategy::Disabled => &empty,
             };
@@ -254,7 +275,49 @@ pub(crate) async fn run(
                     .map_ok(LoweredRequirement::into_inner)
                 })
                 .collect::<Result<_, _>>()?;
-            let spec = RequirementsSpecification::from_requirements(requirements);
+            let constraints = script
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.constraint_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .flat_map(|requirement| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
+                    )
+                    .map_ok(LoweredRequirement::into_inner)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let overrides = script
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.override_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .flat_map(|requirement| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        LowerBound::Allow,
+                    )
+                    .map_ok(LoweredRequirement::into_inner)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let spec =
+                RequirementsSpecification::from_overrides(requirements, constraints, overrides);
             let result = CachedEnvironment::get_or_create(
                 EnvironmentSpecification::from(spec),
                 interpreter,
@@ -273,6 +336,7 @@ pub(crate) async fn run(
                 connectivity,
                 concurrency,
                 native_tls,
+                allow_insecure_host,
                 cache,
                 printer,
             )
@@ -280,23 +344,10 @@ pub(crate) async fn run(
 
             let environment = match result {
                 Ok(resolution) => resolution,
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::NoSolution(err),
-                ))) => {
-                    diagnostics::no_solution_context(&err, "script");
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                ))) => {
-                    diagnostics::fetch_and_build(dist, err);
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(ProjectError::Operation(operations::Error::Resolve(
-                    uv_resolver::ResolveError::Build(dist, err),
-                ))) => {
-                    diagnostics::build(dist, err);
-                    return Ok(ExitStatus::Failure);
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::with_context("script")
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -304,7 +355,7 @@ pub(crate) async fn run(
             Some(environment.into_interpreter())
         } else {
             // Create a virtual environment.
-            temp_dir = cache.environment()?;
+            temp_dir = cache.venv_dir()?;
             let environment = uv_virtualenv::create_venv(
                 temp_dir.path(),
                 interpreter,
@@ -322,7 +373,7 @@ pub(crate) async fn run(
     };
 
     // The lockfile used for the base environment.
-    let mut lock: Option<Lock> = None;
+    let mut lock: Option<(Lock, PathBuf)> = None;
 
     // Discover and sync the base environment.
     let temp_dir;
@@ -336,11 +387,19 @@ pub(crate) async fn run(
         if !extras.is_empty() {
             warn_user!("Extras are not supported for Python scripts with inline metadata");
         }
-        if matches!(dev, DevMode::Exclude) {
-            warn_user!("`--no-dev` is not supported for Python scripts with inline metadata");
+        if let Some(dev_mode) = dev.dev_mode() {
+            warn_user!(
+                "`{}` is not supported for Python scripts with inline metadata",
+                dev_mode.as_flag()
+            );
         }
-        if matches!(dev, DevMode::Only) {
-            warn_user!("`--only-dev` is not supported for Python scripts with inline metadata");
+        if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+            warn_user!("`{flag}` is not supported for Python scripts with inline metadata");
+        }
+        if all_packages {
+            warn_user!(
+                "`--all-packages` is a no-op for Python scripts with inline metadata, which always run in isolation"
+            );
         }
         if package.is_some() {
             warn_user!(
@@ -370,7 +429,7 @@ pub(crate) async fn run(
 
         script_interpreter
     } else {
-        let project = if let Some(package) = package {
+        let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
@@ -413,11 +472,14 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used alongside `--no-project`");
             }
-            if matches!(dev, DevMode::Exclude) {
-                warn_user!("`--no-dev` has no effect when used alongside `--no-project`");
+            if let Some(dev_mode) = dev.dev_mode() {
+                warn_user!(
+                    "`{}` has no effect when used alongside `--no-project`",
+                    dev_mode.as_flag()
+                );
             }
-            if matches!(dev, DevMode::Only) {
-                warn_user!("`--only-dev` has no effect when used alongside `--no-project`");
+            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+                warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             if locked {
                 warn_user!("`--locked` has no effect when used alongside `--no-project`");
@@ -433,11 +495,14 @@ pub(crate) async fn run(
             if !extras.is_empty() {
                 warn_user!("Extras have no effect when used outside of a project");
             }
-            if matches!(dev, DevMode::Exclude) {
-                warn_user!("`--no-dev` has no effect when used outside of a project");
+            if let Some(dev_mode) = dev.dev_mode() {
+                warn_user!(
+                    "`{}` has no effect when used outside of a project",
+                    dev_mode.as_flag()
+                );
             }
-            if matches!(dev, DevMode::Only) {
-                warn_user!("`--only-dev` has no effect when used outside of a project");
+            if let Some(flag) = dev.groups().and_then(GroupsSpecification::as_flag) {
+                warn_user!("`{flag}` has no effect when used outside of a project");
             }
             if locked {
                 warn_user!("`--locked` has no effect when used outside of a project");
@@ -467,7 +532,8 @@ pub(crate) async fn run(
                 // base environment for the project.
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
-                    .native_tls(native_tls);
+                    .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec());
 
                 // Resolve the Python request and requirement for the workspace.
                 let WorkspacePython {
@@ -476,7 +542,9 @@ pub(crate) async fn run(
                     requires_python,
                 } = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
-                    project.workspace(),
+                    Some(project.workspace()),
+                    project_dir,
+                    no_config,
                 )
                 .await?;
 
@@ -488,6 +556,8 @@ pub(crate) async fn run(
                     &client_builder,
                     cache,
                     Some(&download_reporter),
+                    install_mirrors.python_install_mirror.as_deref(),
+                    install_mirrors.pypy_install_mirror.as_deref(),
                 )
                 .await?
                 .into_interpreter();
@@ -495,14 +565,14 @@ pub(crate) async fn run(
                 if let Some(requires_python) = requires_python.as_ref() {
                     validate_requires_python(
                         &interpreter,
-                        project.workspace(),
+                        Some(project.workspace()),
                         requires_python,
                         &source,
                     )?;
                 }
 
                 // Create a virtual environment
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
                     interpreter,
@@ -518,10 +588,13 @@ pub(crate) async fn run(
                 project::get_or_init_environment(
                     project.workspace(),
                     python.as_deref().map(PythonRequest::parse),
+                    install_mirrors,
                     python_preference,
                     python_downloads,
                     connectivity,
                     native_tls,
+                    allow_insecure_host,
+                    no_config,
                     cache,
                     printer,
                 )
@@ -537,15 +610,42 @@ pub(crate) async fn run(
                     lock = project::lock::read(project.workspace())
                         .await
                         .ok()
-                        .flatten();
+                        .flatten()
+                        .map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
             } else {
+                // Validate that any referenced dependency groups are defined in the workspace.
+                if !frozen {
+                    let target = match &project {
+                        VirtualProject::Project(project) => {
+                            if all_packages {
+                                DependencyGroupsTarget::Workspace(project.workspace())
+                            } else {
+                                DependencyGroupsTarget::Project(project)
+                            }
+                        }
+                        VirtualProject::NonProject(workspace) => {
+                            DependencyGroupsTarget::Workspace(workspace)
+                        }
+                    };
+                    target.validate(&dev)?;
+                }
+
+                // Determine the default groups to include.
+                let defaults = default_dependency_groups(project.pyproject_toml())?;
+
+                // Determine the lock mode.
+                let mode = if frozen {
+                    LockMode::Frozen
+                } else if locked {
+                    LockMode::Locked(venv.interpreter())
+                } else {
+                    LockMode::Write(venv.interpreter())
+                };
+
                 let result = match project::lock::do_safe_lock(
-                    locked,
-                    frozen,
-                    false,
+                    mode,
                     project.workspace(),
-                    venv.interpreter(),
                     settings.as_ref().into(),
                     LowerBound::Allow,
                     &state,
@@ -557,41 +657,73 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
                 .await
                 {
                     Ok(result) => result,
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::NoSolution(err),
-                    ))) => {
-                        diagnostics::no_solution(&err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::fetch_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 };
 
+                // Identify the installation target.
+                let target = match &project {
+                    VirtualProject::Project(project) => {
+                        if all_packages {
+                            InstallTarget::Workspace {
+                                workspace: project.workspace(),
+                                lock: result.lock(),
+                            }
+                        } else if let Some(package) = package.as_ref() {
+                            InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: package,
+                                lock: result.lock(),
+                            }
+                        } else {
+                            // By default, install the root package.
+                            InstallTarget::Project {
+                                workspace: project.workspace(),
+                                name: project.project_name(),
+                                lock: result.lock(),
+                            }
+                        }
+                    }
+                    VirtualProject::NonProject(workspace) => {
+                        if all_packages {
+                            InstallTarget::NonProjectWorkspace {
+                                workspace,
+                                lock: result.lock(),
+                            }
+                        } else if let Some(package) = package.as_ref() {
+                            InstallTarget::Project {
+                                workspace,
+                                name: package,
+                                lock: result.lock(),
+                            }
+                        } else {
+                            // By default, install the entire workspace.
+                            InstallTarget::NonProjectWorkspace {
+                                workspace,
+                                lock: result.lock(),
+                            }
+                        }
+                    }
+                };
+
                 let install_options = InstallOptions::default();
 
-                project::sync::do_sync(
-                    InstallTarget::from(&project),
+                match project::sync::do_sync(
+                    target,
                     &venv,
-                    result.lock(),
                     &extras,
-                    dev,
+                    &dev.with_defaults(defaults),
                     editable,
                     install_options,
                     Modifications::Sufficient,
@@ -604,12 +736,25 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
-                .await?;
+                .await
+                {
+                    Ok(()) => {}
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    }
+                    Err(err) => return Err(err.into()),
+                }
 
-                lock = Some(result.into_lock());
+                lock = Some((
+                    result.into_lock(),
+                    project.workspace().install_path().to_owned(),
+                ));
             }
 
             venv.into_interpreter()
@@ -619,16 +764,20 @@ pub(crate) async fn run(
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
                     .connectivity(connectivity)
-                    .native_tls(native_tls);
+                    .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec());
 
                 // (1) Explicit request from user
                 let python_request = if let Some(request) = python.as_deref() {
                     Some(PythonRequest::parse(request))
                 // (2) Request from `.python-version`
                 } else {
-                    PythonVersionFile::discover(&project_dir, no_config, false)
-                        .await?
-                        .and_then(PythonVersionFile::into_version)
+                    PythonVersionFile::discover(
+                        &project_dir,
+                        &VersionFileDiscoveryOptions::default().with_no_config(no_config),
+                    )
+                    .await?
+                    .and_then(PythonVersionFile::into_version)
                 };
 
                 let python = PythonInstallation::find_or_download(
@@ -640,6 +789,8 @@ pub(crate) async fn run(
                     &client_builder,
                     cache,
                     Some(&download_reporter),
+                    install_mirrors.python_install_mirror.as_deref(),
+                    install_mirrors.pypy_install_mirror.as_deref(),
                 )
                 .await?;
 
@@ -650,7 +801,7 @@ pub(crate) async fn run(
                 debug!("Creating isolated virtual environment");
 
                 // If we're isolating the environment, use an ephemeral virtual environment.
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 let venv = uv_virtualenv::create_venv(
                     temp_dir.path(),
                     interpreter,
@@ -681,7 +832,8 @@ pub(crate) async fn run(
     } else {
         let client_builder = BaseClientBuilder::new()
             .connectivity(connectivity)
-            .native_tls(native_tls);
+            .native_tls(native_tls)
+            .allow_insecure_host(allow_insecure_host.to_vec());
 
         let spec =
             RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
@@ -699,7 +851,7 @@ pub(crate) async fn run(
         Some(match spec.filter(|spec| !spec.is_empty()) {
             None => {
                 // Create a virtual environment
-                temp_dir = cache.environment()?;
+                temp_dir = cache.venv_dir()?;
                 uv_virtualenv::create_venv(
                     temp_dir.path(),
                     base_interpreter.clone(),
@@ -714,7 +866,10 @@ pub(crate) async fn run(
                 debug!("Syncing ephemeral requirements");
 
                 let result = CachedEnvironment::get_or_create(
-                    EnvironmentSpecification::from(spec).with_lock(lock.as_ref()),
+                    EnvironmentSpecification::from(spec).with_lock(
+                        lock.as_ref()
+                            .map(|(lock, install_path)| (lock, install_path.as_ref())),
+                    ),
                     base_interpreter.clone(),
                     &settings,
                     &state,
@@ -731,6 +886,7 @@ pub(crate) async fn run(
                     connectivity,
                     concurrency,
                     native_tls,
+                    allow_insecure_host,
                     cache,
                     printer,
                 )
@@ -738,29 +894,10 @@ pub(crate) async fn run(
 
                 let environment = match result {
                     Ok(resolution) => resolution,
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::NoSolution(err),
-                    ))) => {
-                        diagnostics::no_solution_context(&err, "`--with`");
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::FetchAndBuild(dist, err),
-                    ))) => {
-                        diagnostics::fetch_and_build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Resolve(
-                        uv_resolver::ResolveError::Build(dist, err),
-                    ))) => {
-                        diagnostics::build(dist, err);
-                        return Ok(ExitStatus::Failure);
-                    }
-                    Err(ProjectError::Operation(operations::Error::Requirements(err))) => {
-                        let err = miette::Report::msg(format!("{err}"))
-                            .context("Invalid `--with` requirement");
-                        eprint!("{err:?}");
-                        return Ok(ExitStatus::Failure);
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::with_context("`--with`")
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -833,7 +970,11 @@ pub(crate) async fn run(
             .map(|entry| entry.path())
             .filter(|path| is_executable(path))
             .map(|path| {
-                if cfg!(windows) {
+                if cfg!(windows)
+                    && path
+                        .extension()
+                        .is_some_and(|exe| exe == std::env::consts::EXE_EXTENSION)
+                {
                     // Remove the extensions.
                     path.with_extension("")
                 } else {
@@ -876,6 +1017,15 @@ pub(crate) async fn run(
             .map(PythonEnvironment::scripts)
             .into_iter()
             .chain(std::iter::once(base_interpreter.scripts()))
+            .chain(
+                // On Windows, non-virtual Python distributions put `python.exe` in the top-level
+                // directory, rather than in the `Scripts` subdirectory.
+                cfg!(windows)
+                    .then(|| base_interpreter.sys_executable().parent())
+                    .flatten()
+                    .into_iter(),
+            )
+            .dedup()
             .map(PathBuf::from)
             .chain(
                 std::env::var_os(EnvVars::PATH)
@@ -903,9 +1053,30 @@ pub(crate) async fn run(
     // signal handlers after the command completes.
     let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
 
-    let status = handle.wait().await.context("Child process disappeared")?;
+    // Exit based on the result of the command.
+    #[cfg(unix)]
+    let status = {
+        use tokio::select;
+        use tokio::signal::unix::{signal, SignalKind};
 
-    // Exit based on the result of the command
+        let mut term_signal = signal(SignalKind::terminate())?;
+        loop {
+            select! {
+                result = handle.wait() => {
+                    break result;
+                },
+
+                // `SIGTERM`
+                _ = term_signal.recv() => {
+                    let _ = terminate_process(&mut handle);
+                }
+            };
+        }
+    }?;
+
+    #[cfg(not(unix))]
+    let status = handle.wait().await?;
+
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
@@ -922,6 +1093,15 @@ pub(crate) async fn run(
         }
         Ok(ExitStatus::Failure)
     }
+}
+
+#[cfg(unix)]
+fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
+    use nix::sys::signal::{self, Signal};
+    use nix::unistd::Pid;
+
+    let pid = child.id().context("Failed to get child process ID")?;
+    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
@@ -946,7 +1126,7 @@ fn can_skip_ephemeral(
     match site_packages.satisfies(
         &spec.requirements,
         &spec.constraints,
-        &base_interpreter.resolver_markers(),
+        &base_interpreter.resolver_marker_environment(),
     ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {
@@ -1155,6 +1335,7 @@ impl RunCommand {
         script: bool,
         connectivity: Connectivity,
         native_tls: bool,
+        allow_insecure_host: &[TrustedHost],
     ) -> anyhow::Result<Self> {
         let (target, args) = command.split();
         let Some(target) = target else {
@@ -1185,6 +1366,7 @@ impl RunCommand {
                 let client = BaseClientBuilder::new()
                     .connectivity(connectivity)
                     .native_tls(native_tls)
+                    .allow_insecure_host(allow_insecure_host.to_vec())
                     .build();
                 let response = client.for_host(&url).get(url.clone()).send().await?;
 

@@ -11,7 +11,7 @@ use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 
-use crate::{DependencyMode, Manifest, ResolveError, ResolverMarkers};
+use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 
 /// The URLs that are allowed for packages.
 ///
@@ -36,7 +36,7 @@ pub(crate) struct Urls {
 impl Urls {
     pub(crate) fn from_manifest(
         manifest: &Manifest,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         git: &GitResolver,
         dependencies: DependencyMode,
     ) -> Result<Self, ResolveError> {
@@ -44,7 +44,7 @@ impl Urls {
         let mut overrides: FxHashMap<PackageName, VerbatimParsedUrl> = FxHashMap::default();
 
         // Add all direct regular requirements and constraints URL.
-        for requirement in manifest.requirements_no_overrides(markers, dependencies) {
+        for requirement in manifest.requirements_no_overrides(env, dependencies) {
             let Some(url) = requirement.source.to_verbatim_parsed_url() else {
                 // Registry requirement
                 continue;
@@ -77,7 +77,7 @@ impl Urls {
 
         // Add all URLs from overrides. If there is an override URL, all other URLs from
         // requirements and constraints are moot and will be removed.
-        for requirement in manifest.overrides(markers, dependencies) {
+        for requirement in manifest.overrides(env, dependencies) {
             let Some(url) = requirement.source.to_verbatim_parsed_url() else {
                 // Registry requirement
                 continue;
@@ -112,6 +112,7 @@ impl Urls {
     /// if there is no override.
     pub(crate) fn get_url<'a>(
         &'a self,
+        env: &ResolverEnvironment,
         name: &'a PackageName,
         url: Option<&'a VerbatimParsedUrl>,
         git: &'a GitResolver,
@@ -120,6 +121,7 @@ impl Urls {
             Ok(Some(override_url))
         } else if let Some(url) = url {
             Ok(Some(self.canonicalize_allowed_url(
+                env,
                 name,
                 git,
                 &url.verbatim,
@@ -150,6 +152,7 @@ impl Urls {
     /// Check if a URL is allowed (known), and if so, return its canonical form.
     fn canonicalize_allowed_url<'a>(
         &'a self,
+        env: &ResolverEnvironment,
         package_name: &'a PackageName,
         git: &'a GitResolver,
         verbatim_url: &'a VerbatimUrl,
@@ -174,10 +177,11 @@ impl Urls {
                 .chain(iter::once(verbatim_url.verbatim().to_string()))
                 .collect();
             conflicting_urls.sort();
-            return Err(ResolveError::ConflictingUrlsUniversal(
-                package_name.clone(),
-                conflicting_urls,
-            ));
+            return Err(ResolveError::ConflictingUrls {
+                package_name: package_name.clone(),
+                urls: conflicting_urls,
+                env: env.clone(),
+            });
         };
         Ok(*allowed_url)
     }
@@ -187,11 +191,14 @@ impl Urls {
 fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
     match (a, b) {
         (ParsedUrl::Archive(a), ParsedUrl::Archive(b)) => {
-            a.subdirectory == b.subdirectory
+            a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                == b.subdirectory.as_deref().map(uv_fs::normalize_path)
                 && CanonicalUrl::new(&a.url) == CanonicalUrl::new(&b.url)
         }
         (ParsedUrl::Git(a), ParsedUrl::Git(b)) => {
-            a.subdirectory == b.subdirectory && git.same_ref(&a.url, &b.url)
+            a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                == b.subdirectory.as_deref().map(uv_fs::normalize_path)
+                && git.same_ref(&a.url, &b.url)
         }
         (ParsedUrl::Path(a), ParsedUrl::Path(b)) => {
             a.install_path == b.install_path

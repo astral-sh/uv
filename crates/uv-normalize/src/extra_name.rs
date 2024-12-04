@@ -23,6 +23,11 @@ impl ExtraName {
     pub fn new(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_owned(name).map(Self)
     }
+
+    /// Return the underlying extra name as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl FromStr for ExtraName {
@@ -51,6 +56,6 @@ impl Display for ExtraName {
 
 impl AsRef<str> for ExtraName {
     fn as_ref(&self) -> &str {
-        &self.0
+        self.as_str()
     }
 }

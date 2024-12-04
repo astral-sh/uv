@@ -39,7 +39,7 @@ fn freeze_many() -> Result<()> {
 #[test]
 #[cfg(unix)]
 fn freeze_duplicate() -> Result<()> {
-    use crate::common::copy_dir_all;
+    use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
     let context1 = TestContext::new("3.12");
@@ -72,7 +72,7 @@ fn freeze_duplicate() -> Result<()> {
     )?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @r#"
+    uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -80,10 +80,10 @@ fn freeze_duplicate() -> Result<()> {
     pip==22.1.1
 
     ----- stderr -----
-    warning: The package `pip` has multiple installed distributions: 
+    warning: The package `pip` has multiple installed distributions:
       - [SITE_PACKAGES]/pip-21.3.1.dist-info
       - [SITE_PACKAGES]/pip-22.1.1.dist-info
-    "#
+    "###
     );
 
     Ok(())

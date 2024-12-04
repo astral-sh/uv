@@ -6,7 +6,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::RequirementSource;
 
-use crate::{DependencyMode, Manifest, ResolverMarkers};
+use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
@@ -16,13 +16,13 @@ pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
 impl AllowedYanks {
     pub fn from_manifest(
         manifest: &Manifest,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         dependencies: DependencyMode,
     ) -> Self {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
 
         // Allow yanks for any pinned input requirements.
-        for requirement in manifest.requirements(markers, dependencies) {
+        for requirement in manifest.requirements(env, dependencies) {
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };
@@ -45,7 +45,7 @@ impl AllowedYanks {
             allowed_yanks
                 .entry(name.clone())
                 .or_default()
-                .extend(preferences.map(|(_markers, version)| version.clone()));
+                .extend(preferences.map(|(.., version)| version.clone()));
         }
 
         Self(Arc::new(allowed_yanks))

@@ -28,6 +28,8 @@ uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-shell = { workspace = true }
+uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true, optional = true, features = ["derive"] }
@@ -51,7 +53,11 @@ tracing = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+same-file = { workspace = true }
+self-replace = { workspace = true }
+
 [dev-dependencies]
 anyhow = { version = "1.0.89" }
 assert_fs = { version = "1.1.2" }
-indoc = { version = "2.0.5" }
+indoc = { workspace = true }

@@ -26,11 +26,11 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
-    PythonRequirement, Resolver, ResolverMarkers,
+    DerivationChainBuilder, ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest,
+    OptionsBuilder, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -44,11 +44,8 @@ pub struct BuildDispatch<'a> {
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
     flat_index: &'a FlatIndex,
-    index: &'a InMemoryIndex,
-    git: &'a GitResolver,
-    capabilities: &'a IndexCapabilities,
+    shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
-    in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
     link_mode: uv_install_wheel::linker::LinkMode,
     build_options: &'a BuildOptions,
@@ -71,10 +68,7 @@ impl<'a> BuildDispatch<'a> {
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
         dependency_metadata: &'a DependencyMetadata,
-        index: &'a InMemoryIndex,
-        git: &'a GitResolver,
-        capabilities: &'a IndexCapabilities,
-        in_flight: &'a InFlight,
+        shared_state: SharedState,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
@@ -93,11 +87,8 @@ impl<'a> BuildDispatch<'a> {
             interpreter,
             index_locations,
             flat_index,
-            index,
-            git,
-            capabilities,
+            shared_state,
             dependency_metadata,
-            in_flight,
             index_strategy,
             config_settings,
             build_isolation,
@@ -132,16 +123,20 @@ impl<'a> BuildDispatch<'a> {
 impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
 
+    fn interpreter(&self) -> &Interpreter {
+        self.interpreter
+    }
+
     fn cache(&self) -> &Cache {
         self.cache
     }
 
     fn git(&self) -> &GitResolver {
-        self.git
+        &self.shared_state.git
     }
 
     fn capabilities(&self) -> &IndexCapabilities {
-        self.capabilities
+        &self.shared_state.capabilities
     }
 
     fn dependency_metadata(&self) -> &DependencyMetadata {
@@ -170,7 +165,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
-        let markers = self.interpreter.resolver_markers();
+        let marker_env = self.interpreter.resolver_marker_environment();
         let tags = self.interpreter.tags()?;
 
         let resolver = Resolver::new(
@@ -181,16 +176,19 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
-            ResolverMarkers::specific_environment(markers),
+            ResolverEnvironment::specific(marker_env),
+            // Conflicting groups only make sense when doing
+            // universal resolution.
+            Conflicts::empty(),
             Some(tags),
             self.flat_index,
-            self.index,
+            &self.shared_state.index,
             self.hasher,
             self,
             EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
-        let graph = resolver.resolve().await.with_context(|| {
+        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements
@@ -198,8 +196,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                     .map(|requirement| format!("`{requirement}`"))
                     .join(", ")
             )
-        })?;
-        Ok(Resolution::from(graph))
+        })?);
+        Ok(resolution)
     }
 
     #[instrument(
@@ -272,9 +270,32 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             );
 
             preparer
-                .prepare(remote, self.in_flight)
+                .prepare(remote, &self.shared_state.in_flight)
                 .await
-                .context("Failed to prepare distributions")?
+                .map_err(|err| match err {
+                    uv_installer::PrepareError::DownloadAndBuild(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)
+                    }
+                    uv_installer::PrepareError::Download(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::Download(dist, chain, err)
+                    }
+                    uv_installer::PrepareError::Build(dist, chain, err) => {
+                        debug_assert!(chain.is_empty());
+                        let chain =
+                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
+                                .unwrap_or_default();
+                        uv_installer::PrepareError::Build(dist, chain, err)
+                    }
+                    _ => err,
+                })?
         };
 
         // Remove any unnecessary packages.
@@ -372,5 +393,52 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         .boxed_local()
         .await?;
         Ok(builder)
+    }
+}
+
+/// Shared state used during resolution and installation.
+///
+/// All elements are `Arc`s, so we can clone freely.
+#[derive(Default, Clone)]
+pub struct SharedState {
+    /// The resolved Git references.
+    git: GitResolver,
+    /// The fetched package versions and metadata.
+    index: InMemoryIndex,
+    /// The downloaded distributions.
+    in_flight: InFlight,
+    /// The discovered capabilities for each registry index.
+    capabilities: IndexCapabilities,
+}
+
+impl SharedState {
+    pub fn new(
+        git: GitResolver,
+        index: InMemoryIndex,
+        in_flight: InFlight,
+        capabilities: IndexCapabilities,
+    ) -> Self {
+        Self {
+            git,
+            index,
+            in_flight,
+            capabilities,
+        }
+    }
+
+    pub fn git(&self) -> &GitResolver {
+        &self.git
+    }
+
+    pub fn index(&self) -> &InMemoryIndex {
+        &self.index
+    }
+
+    pub fn in_flight(&self) -> &InFlight {
+        &self.in_flight
+    }
+
+    pub fn capabilities(&self) -> &IndexCapabilities {
+        &self.capabilities
     }
 }

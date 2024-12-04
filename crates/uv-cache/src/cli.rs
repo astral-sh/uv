@@ -23,8 +23,10 @@ pub struct CacheArgs {
 
     /// Path to the cache directory.
     ///
-    /// Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
-    /// Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
+    /// Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on macOS and Linux, and
+    /// `%LOCALAPPDATA%\uv\cache` on Windows.
+    ///
+    /// To view the location of the cache directory, run `uv cache dir`.
     #[arg(global = true, long, env = EnvVars::UV_CACHE_DIR)]
     pub cache_dir: Option<PathBuf>,
 }

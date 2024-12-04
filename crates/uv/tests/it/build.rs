@@ -5,6 +5,7 @@ use fs_err::File;
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use std::env::current_dir;
 use zip::ZipArchive;
 
 #[test]
@@ -234,8 +235,8 @@ fn build() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
-
+      × Failed to build `[TEMP_DIR]/`
+      ╰─▶ [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
     "###);
 
     // Build to a specified path.
@@ -738,7 +739,8 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Pass `--wheel` explicitly to build a wheel from a source distribution
+      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
+      ╰─▶ Pass `--wheel` explicitly to build a wheel from a source distribution
     "###);
 
     // Error if `--sdist` is specified.
@@ -748,7 +750,8 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Building an `--sdist` from a source distribution is not supported
+      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
+      ╰─▶ Building an `--sdist` from a source distribution is not supported
     "###);
 
     // Build the wheel from the sdist.
@@ -815,8 +818,8 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building wheel from source distribution...
-    error: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
+      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
+      ╰─▶ `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
     "###);
 
     Ok(())
@@ -888,7 +891,8 @@ fn fail() -> Result<()> {
       File "<string>", line 2
         from setuptools import setup
     IndentationError: unexpected indent
-    error: Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
+      × Failed to build `[TEMP_DIR]/project`
+      ╰─▶ Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
     "###);
 
     Ok(())
@@ -1206,7 +1210,7 @@ fn workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `--all` was provided, but no workspace was found
+    error: `--all-packages` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
     "###);
 
@@ -1328,7 +1332,8 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building wheel from source distribution...
     [PKG] Building wheel from source distribution...
     Successfully built dist/member_a-0.1.0.tar.gz and dist/member_a-0.1.0-py3-none-any.whl
-    [PKG] error: Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
+      × Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
+      ╰─▶ Build backend failed to determine requirements with `build_sdist()` (exit status: 1)
     Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
     "###);
 
@@ -1397,9 +1402,10 @@ fn build_constraints() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `setuptools>=42`
-      Caused by: Because you require setuptools>=42 and setuptools==0.1.0, we can conclude that your requirements are unsatisfiable.
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `setuptools>=42`
+      ╰─▶ Because you require setuptools>=42 and setuptools==0.1.0, we can conclude that your requirements are unsatisfiable.
     "###);
 
     project
@@ -1447,103 +1453,41 @@ fn sha() -> Result<()> {
     project.child("src").child("__init__.py").touch()?;
     project.child("README").touch()?;
 
-    // Ignore an incorrect hash, if `--require-hashes` is not provided.
+    // Reject an incorrect hash.
     let constraints = project.child("constraints.txt");
     constraints.write_str("setuptools==68.2.2 --hash=sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2")?;
 
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-    running egg_info
-    creating src/project.egg-info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running sdist
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running check
-    creating project-0.1.0
-    creating project-0.1.0/src
-    creating project-0.1.0/src/project.egg-info
-    copying files to project-0.1.0...
-    copying README -> project-0.1.0
-    copying pyproject.toml -> project-0.1.0
-    copying src/__init__.py -> project-0.1.0/src
-    copying src/project.egg-info/PKG-INFO -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/SOURCES.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/dependency_links.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/requires.txt -> project-0.1.0/src/project.egg-info
-    copying src/project.egg-info/top_level.txt -> project-0.1.0/src/project.egg-info
-    Writing project-0.1.0/setup.cfg
-    Creating tar archive
-    removing 'project-0.1.0' (and everything under it)
-    Building wheel from source distribution...
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    running bdist_wheel
-    running build
-    running build_py
-    creating build
-    creating build/lib
-    copying src/__init__.py -> build/lib
-    running egg_info
-    writing src/project.egg-info/PKG-INFO
-    writing dependency_links to src/project.egg-info/dependency_links.txt
-    writing requirements to src/project.egg-info/requires.txt
-    writing top-level names to src/project.egg-info/top_level.txt
-    reading manifest file 'src/project.egg-info/SOURCES.txt'
-    writing manifest file 'src/project.egg-info/SOURCES.txt'
-    installing to build/bdist.linux-x86_64/wheel
-    running install
-    running install_lib
-    creating build/bdist.linux-x86_64
-    creating build/bdist.linux-x86_64/wheel
-    copying build/lib/__init__.py -> build/bdist.linux-x86_64/wheel
-    running install_egg_info
-    Copying src/project.egg-info to build/bdist.linux-x86_64/wheel/project-0.1.0-py3.8.egg-info
-    running install_scripts
-    creating build/bdist.linux-x86_64/wheel/project-0.1.0.dist-info/WHEEL
-    creating '[TEMP_DIR]/project/dist/[TMP]/wheel' to it
-    adding '__init__.py'
-    adding 'project-0.1.0.dist-info/METADATA'
-    adding 'project-0.1.0.dist-info/WHEEL'
-    adding 'project-0.1.0.dist-info/top_level.txt'
-    adding 'project-0.1.0.dist-info/RECORD'
-    removing build/bdist.linux-x86_64/wheel
-    Successfully built dist/project-0.1.0.tar.gz and dist/project-0.1.0-py3-none-any.whl
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `setuptools==68.2.2`
+      ╰─▶ Hash mismatch for `setuptools==68.2.2`
+
+          Expected:
+            sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+
+          Computed:
+            sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
     "###);
 
     project
         .child("dist")
         .child("project-0.1.0.tar.gz")
-        .assert(predicate::path::is_file());
+        .assert(predicate::path::missing());
     project
         .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
-        .assert(predicate::path::is_file());
+        .assert(predicate::path::missing());
 
     fs_err::remove_dir_all(project.child("dist"))?;
 
-    // Reject an incorrect hash.
+    // Reject an incorrect hash with --requires-hashes.
     uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r###"
     success: false
     exit_code: 2
@@ -1551,16 +1495,16 @@ fn sha() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to install requirements from `build-system.requires`
-      Caused by: Failed to prepare distributions
-      Caused by: Failed to download `setuptools==68.2.2`
-      Caused by: Hash mismatch for `setuptools==68.2.2`
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to download `setuptools==68.2.2`
+      ╰─▶ Hash mismatch for `setuptools==68.2.2`
 
-    Expected:
-      sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+          Expected:
+            sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
 
-    Computed:
-      sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
+          Computed:
+            sha256:b454a35605876da60632df1a60f736524eb73cc47bbc9f3f1ef1b644de74fd2a
     "###);
 
     project
@@ -1585,9 +1529,10 @@ fn sha() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    error: Failed to resolve requirements from `build-system.requires`
-      Caused by: No solution found when resolving: `setuptools>=42`
-      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `setuptools`
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `setuptools>=42`
+      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `setuptools`
     "###);
 
     project
@@ -1598,6 +1543,8 @@ fn sha() -> Result<()> {
         .child("dist")
         .child("project-0.1.0-py3-none-any.whl")
         .assert(predicate::path::missing());
+
+    fs_err::remove_dir_all(project.child("dist"))?;
 
     // Accept a correct hash.
     let constraints = project.child("constraints.txt");
@@ -1611,10 +1558,12 @@ fn sha() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     running egg_info
+    creating src/project.egg-info
     writing src/project.egg-info/PKG-INFO
     writing dependency_links to src/project.egg-info/dependency_links.txt
     writing requirements to src/project.egg-info/requires.txt
     writing top-level names to src/project.egg-info/top_level.txt
+    writing manifest file 'src/project.egg-info/SOURCES.txt'
     reading manifest file 'src/project.egg-info/SOURCES.txt'
     writing manifest file 'src/project.egg-info/SOURCES.txt'
     running sdist
@@ -1982,6 +1931,209 @@ fn git_boundary_in_dist_build() -> Result<()> {
     demo-0.1.0.dist-info/WHEEL
     demo/__init__.py
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn build_non_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"bdist\.[^/\\\s]+-[^/\\\s]+", "bdist.linux-x86_64"),
+            (r"\\\.", ""),
+            (r"\[project\]", "[PKG]"),
+            (r"\[member\]", "[PKG]"),
+        ])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    project.child("src").child("__init__.py").touch()?;
+    project.child("README").touch()?;
+
+    let member = project.child("packages").child("member");
+    fs_err::create_dir_all(member.path())?;
+
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    member.child("src").child("__init__.py").touch()?;
+    member.child("README").touch()?;
+
+    // Build the member.
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `member` is missing a `build-system`. For example, to build with `setuptools`, add the following to `packages/member/pyproject.toml`:
+    ```toml
+    [build-system]
+    requires = ["setuptools"]
+    build-backend = "setuptools.build_meta"
+    ```
+    "###);
+
+    project
+        .child("dist")
+        .child("member-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("member-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+
+    // Build all packages.
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Workspace does contain any buildable packages. For example, to build `member` with `setuptools`, add a `build-system` to `packages/member/pyproject.toml`:
+    ```toml
+    [build-system]
+    requires = ["setuptools"]
+    build-backend = "setuptools.build_meta"
+    ```
+    "###);
+
+    project
+        .child("dist")
+        .child("member-0.1.0.tar.gz")
+        .assert(predicate::path::missing());
+    project
+        .child("dist")
+        .child("member-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Test the uv fast path. Tests all four possible build plans:
+/// * Defaults
+/// * `--sdist`
+/// * `--wheel`
+/// * `--sdist --wheel`
+#[test]
+fn build_fast_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output1")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built output1/built_by_uv-0.1.0.tar.gz and output1/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output1")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    context
+        .temp_dir
+        .child("output1")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output2"))
+        .arg("--sdist"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Successfully built output2/built_by_uv-0.1.0.tar.gz
+    "###);
+    context
+        .temp_dir
+        .child("output2")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output3"))
+        .arg("--wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+    Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output3")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output4"))
+        .arg("--sdist")
+        .arg("--wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel (uv build backend)...
+    Successfully built output4/built_by_uv-0.1.0.tar.gz and output4/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output4")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    context
+        .temp_dir
+        .child("output4")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
 
     Ok(())
 }

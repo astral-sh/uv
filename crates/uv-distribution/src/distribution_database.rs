@@ -87,7 +87,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.client.unmanaged.timeout().as_secs()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
+                    self.client.unmanaged.timeout().as_secs()
                 ),
             )
         } else {
@@ -320,6 +321,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .boxed_local()
             .await?;
 
+        // Validate that the metadata is consistent with the distribution.
+
         // If the wheel was unzipped previously, respect it. Source distributions are
         // cached under a unique revision ID, so unzipped directories are never stale.
         match built_wheel.target.canonicalize() {
@@ -396,7 +399,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .await;
 
         match result {
-            Ok(metadata) => Ok(ArchiveMetadata::from_metadata23(metadata)),
+            Ok(metadata) => {
+                // Validate that the metadata is consistent with the distribution.
+                Ok(ArchiveMetadata::from_metadata23(metadata))
+            }
             Err(err) if err.is_http_streaming_unsupported() => {
                 warn!("Streaming unsupported when fetching metadata for {dist}; downloading wheel directly ({err})");
 
@@ -459,6 +465,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .download_and_build_metadata(source, hashes, &self.client)
             .boxed_local()
             .await?;
+
+        // Validate that the metadata is consistent with the distribution.
 
         Ok(metadata)
     }
@@ -555,9 +563,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = self
             .client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &http_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -577,7 +588,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(|client| async {
                     client
                         .cached_client()
-                        .skip_cache(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,
@@ -709,9 +720,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let archive = self
             .client
             .managed(|client| {
-                client
-                    .cached_client()
-                    .get_serde(req, &http_entry, cache_control, download)
+                client.cached_client().get_serde_with_retry(
+                    req,
+                    &http_entry,
+                    cache_control,
+                    download,
+                )
             })
             .await
             .map_err(|err| match err {
@@ -731,7 +745,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .managed(|client| async {
                     client
                         .cached_client()
-                        .skip_cache(self.request(url)?, &http_entry, download)
+                        .skip_cache_with_retry(self.request(url)?, &http_entry, download)
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback(err) => err,

@@ -88,10 +88,10 @@ When testing debug builds on Windows, the stack can overflow resulting in a `STA
 error code. This is due to a small stack size limit on Windows that we encounter when running
 unoptimized builds — the release builds do not have this problem. We
 [added a `UV_STACK_SIZE` variable](https://github.com/astral-sh/uv/pull/941) to bypass this problem
-during testing. We recommend bumping the stack size from the default of 1MB to 2MB, for example:
+during testing. We recommend bumping the stack size from the default of 1MB to 3MB, for example:
 
 ```powershell
-$Env:UV_STACK_SIZE = '2000000'
+$Env:UV_STACK_SIZE = '3000000'
 ```
 
 ## Running inside a Docker container
@@ -200,7 +200,7 @@ Releases can only be performed by Astral team members.
 
 Changelog entries and version bumps are automated. First, run:
 
-```
+```shell
 ./scripts/release.sh
 ```
 

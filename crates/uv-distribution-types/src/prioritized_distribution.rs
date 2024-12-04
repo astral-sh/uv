@@ -442,7 +442,7 @@ impl<'a> CompatibleDist<'a> {
     /// Return the [`ResolvedDistRef`] to use during resolution.
     pub fn for_resolution(&self) -> ResolvedDistRef<'a> {
         match *self {
-            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed(dist),
+            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
             CompatibleDist::SourceDist { sdist, prioritized } => {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
@@ -458,7 +458,7 @@ impl<'a> CompatibleDist<'a> {
     /// Return the [`ResolvedDistRef`] to use during installation.
     pub fn for_installation(&self) -> ResolvedDistRef<'a> {
         match *self {
-            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed(dist),
+            CompatibleDist::InstalledDist(dist) => ResolvedDistRef::Installed { dist },
             CompatibleDist::SourceDist { sdist, prioritized } => {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, prioritized }
             }
@@ -572,7 +572,7 @@ impl IncompatibleWheel {
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
-                Self::Tag(tag_other) => tag_other > tag_self,
+                Self::Tag(tag_other) => tag_self > tag_other,
                 Self::NoBinary | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {

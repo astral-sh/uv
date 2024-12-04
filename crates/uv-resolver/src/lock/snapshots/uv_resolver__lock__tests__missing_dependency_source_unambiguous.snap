@@ -6,6 +6,9 @@ Ok(
     Lock {
         version: 1,
         fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
         supported_environments: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(
@@ -71,10 +74,10 @@ Ok(
                 fork_markers: [],
                 dependencies: [],
                 optional_dependencies: {},
-                dev_dependencies: {},
+                dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
-                    requires_dev: {},
+                    dependency_groups: {},
                 },
             },
             Package {
@@ -132,14 +135,17 @@ Ok(
                         simplified_marker: SimplifiedMarkerTree(
                             true,
                         ),
-                        complexified_marker: python_full_version >= '3.12',
+                        complexified_marker: UniversalMarker {
+                            pep508_marker: python_full_version >= '3.12',
+                            conflict_marker: true,
+                        },
                     },
                 ],
                 optional_dependencies: {},
-                dev_dependencies: {},
+                dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
-                    requires_dev: {},
+                    dependency_groups: {},
                 },
             },
         ],

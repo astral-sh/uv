@@ -1,0 +1,27 @@
+[package]
+name = "uv-globfilter"
+version = "0.1.0"
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+globset = { workspace = true }
+regex = { workspace = true }
+regex-automata = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+fs-err = { workspace = true }
+insta = "1.41.1"
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

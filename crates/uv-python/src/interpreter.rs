@@ -45,6 +45,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
+    sysconfig_prefix: Option<PathBuf>,
     tags: OnceLock<Tags>,
     target: Option<Target>,
     prefix: Option<Prefix>,
@@ -78,6 +79,7 @@ impl Interpreter {
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
             stdlib: info.stdlib,
+            sysconfig_prefix: info.sysconfig_prefix,
             tags: OnceLock::new(),
             target: None,
             prefix: None,
@@ -147,7 +149,7 @@ impl Interpreter {
     }
 
     /// Return the [`ResolverMarkerEnvironment`] for this Python executable.
-    pub fn resolver_markers(&self) -> ResolverMarkerEnvironment {
+    pub fn resolver_marker_environment(&self) -> ResolverMarkerEnvironment {
         ResolverMarkerEnvironment::from(self.markers().clone())
     }
 
@@ -365,6 +367,11 @@ impl Interpreter {
         &self.stdlib
     }
 
+    /// Return the `prefix` path for this Python interpreter, as returned by `sysconfig.get_config_var("prefix")`.
+    pub fn sysconfig_prefix(&self) -> Option<&Path> {
+        self.sysconfig_prefix.as_deref()
+    }
+
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn purelib(&self) -> &Path {
         &self.scheme.purelib
@@ -422,6 +429,19 @@ impl Interpreter {
     /// Return the `--prefix` directory for this interpreter, if any.
     pub fn prefix(&self) -> Option<&Prefix> {
         self.prefix.as_ref()
+    }
+
+    /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
+    ///
+    /// This method may return false positives, but it should not return false negatives. In other
+    /// words, if this method returns `true`, the interpreter _may_ be from
+    /// `python-build-standalone`; if it returns `false`, the interpreter is definitely _not_ from
+    /// `python-build-standalone`.
+    ///
+    /// See: <https://github.com/indygreg/python-build-standalone/issues/382>
+    pub fn is_standalone(&self) -> bool {
+        self.sysconfig_prefix()
+            .is_some_and(|prefix| prefix == Path::new("/install"))
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -605,6 +625,7 @@ struct InterpreterInfo {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
+    sysconfig_prefix: Option<PathBuf>,
     pointer_size: PointerSize,
     gil_disabled: bool,
 }
@@ -802,4 +823,108 @@ impl InterpreterInfo {
 
 #[cfg(unix)]
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::str::FromStr;
+
+    use fs_err as fs;
+    use indoc::{formatdoc, indoc};
+    use tempfile::tempdir;
+
+    use uv_cache::Cache;
+    use uv_pep440::Version;
+
+    use crate::Interpreter;
+
+    #[test]
+    fn test_cache_invalidation() {
+        let mock_dir = tempdir().unwrap();
+        let mocked_interpreter = mock_dir.path().join("python");
+        let json = indoc! {r##"
+        {
+            "result": "success",
+            "platform": {
+                "os": {
+                    "name": "manylinux",
+                    "major": 2,
+                    "minor": 38
+                },
+                "arch": "x86_64"
+            },
+            "manylinux_compatible": false,
+            "markers": {
+                "implementation_name": "cpython",
+                "implementation_version": "3.12.0",
+                "os_name": "posix",
+                "platform_machine": "x86_64",
+                "platform_python_implementation": "CPython",
+                "platform_release": "6.5.0-13-generic",
+                "platform_system": "Linux",
+                "platform_version": "#13-Ubuntu SMP PREEMPT_DYNAMIC Fri Nov  3 12:16:05 UTC 2023",
+                "python_full_version": "3.12.0",
+                "python_version": "3.12",
+                "sys_platform": "linux"
+            },
+            "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+            "sys_base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
+            "sys_prefix": "/home/ferris/projects/uv/.venv",
+            "sys_executable": "/home/ferris/projects/uv/.venv/bin/python",
+            "sys_path": [
+                "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
+                "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+            ],
+            "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
+            "scheme": {
+                "data": "/home/ferris/.pyenv/versions/3.12.0",
+                "include": "/home/ferris/.pyenv/versions/3.12.0/include",
+                "platlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
+                "purelib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages",
+                "scripts": "/home/ferris/.pyenv/versions/3.12.0/bin"
+            },
+            "virtualenv": {
+                "data": "",
+                "include": "include",
+                "platlib": "lib/python3.12/site-packages",
+                "purelib": "lib/python3.12/site-packages",
+                "scripts": "bin"
+            },
+            "pointer_size": "64",
+            "gil_disabled": true
+        }
+    "##};
+
+        let cache = Cache::temp().unwrap().init().unwrap();
+
+        fs::write(
+            &mocked_interpreter,
+            formatdoc! {r##"
+        #!/bin/bash
+        echo '{json}'
+        "##},
+        )
+        .unwrap();
+
+        fs::set_permissions(
+            &mocked_interpreter,
+            std::os::unix::fs::PermissionsExt::from_mode(0o770),
+        )
+        .unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        assert_eq!(
+            interpreter.markers.python_version().version,
+            Version::from_str("3.12").unwrap()
+        );
+        fs::write(
+            &mocked_interpreter,
+            formatdoc! {r##"
+        #!/bin/bash
+        echo '{}'
+        "##, json.replace("3.12", "3.13")},
+        )
+        .unwrap();
+        let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();
+        assert_eq!(
+            interpreter.markers.python_version().version,
+            Version::from_str("3.13").unwrap()
+        );
+    }
+}

@@ -1,3 +1,4 @@
+use crate::cpuinfo::detect_hardware_floating_point_support;
 use crate::libc::{detect_linux_libc, LibcDetectionError, LibcVersion};
 use std::fmt::Display;
 use std::ops::Deref;
@@ -30,13 +31,27 @@ impl Libc {
     pub(crate) fn from_env() -> Result<Self, LibcDetectionError> {
         match std::env::consts::OS {
             "linux" => Ok(Self::Some(match detect_linux_libc()? {
-                LibcVersion::Manylinux { .. } => target_lexicon::Environment::Gnu,
+                LibcVersion::Manylinux { .. } => match std::env::consts::ARCH {
+                    // Checks if the CPU supports hardware floating-point operations.
+                    // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
+                    // download-metadata.json only includes armv7.
+                    "arm" | "armv7" => match detect_hardware_floating_point_support() {
+                        Ok(true) => target_lexicon::Environment::Gnueabihf,
+                        Ok(false) => target_lexicon::Environment::Gnueabi,
+                        Err(_) => target_lexicon::Environment::Gnu,
+                    },
+                    _ => target_lexicon::Environment::Gnu,
+                },
                 LibcVersion::Musllinux { .. } => target_lexicon::Environment::Musl,
             })),
             "windows" | "macos" => Ok(Self::None),
             // Use `None` on platforms without explicit support.
             _ => Ok(Self::None),
         }
+    }
+
+    pub fn is_musl(&self) -> bool {
+        matches!(self, Self::Some(target_lexicon::Environment::Musl))
     }
 }
 
@@ -165,6 +180,9 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 target_lexicon::X86_32Architecture::I686,
             )),
             uv_platform_tags::Arch::X86_64 => Self(target_lexicon::Architecture::X86_64),
+            uv_platform_tags::Arch::Riscv64 => Self(target_lexicon::Architecture::Riscv64(
+                target_lexicon::Riscv64Architecture::Riscv64,
+            )),
         }
     }
 }
@@ -189,9 +207,9 @@ impl From<&uv_platform_tags::Os> for Os {
             uv_platform_tags::Os::Haiku { .. } => Self(target_lexicon::OperatingSystem::Haiku),
             uv_platform_tags::Os::Illumos { .. } => Self(target_lexicon::OperatingSystem::Illumos),
             uv_platform_tags::Os::Macos { .. } => Self(target_lexicon::OperatingSystem::Darwin),
-            uv_platform_tags::Os::Manylinux { .. } | uv_platform_tags::Os::Musllinux { .. } => {
-                Self(target_lexicon::OperatingSystem::Linux)
-            }
+            uv_platform_tags::Os::Manylinux { .. }
+            | uv_platform_tags::Os::Musllinux { .. }
+            | uv_platform_tags::Os::Android { .. } => Self(target_lexicon::OperatingSystem::Linux),
             uv_platform_tags::Os::NetBsd { .. } => Self(target_lexicon::OperatingSystem::Netbsd),
             uv_platform_tags::Os::OpenBsd { .. } => Self(target_lexicon::OperatingSystem::Openbsd),
             uv_platform_tags::Os::Windows => Self(target_lexicon::OperatingSystem::Windows),

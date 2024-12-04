@@ -6,7 +6,7 @@ use uv_static::EnvVars;
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
-fn test_tool_upgrade_name() {
+fn tool_upgrade_name() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -56,7 +56,7 @@ fn test_tool_upgrade_name() {
 }
 
 #[test]
-fn test_tool_upgrade_multiple_names() {
+fn tool_upgrade_multiple_names() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -131,7 +131,7 @@ fn test_tool_upgrade_multiple_names() {
 }
 
 #[test]
-fn test_tool_upgrade_all() {
+fn tool_upgrade_all() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -205,7 +205,7 @@ fn test_tool_upgrade_all() {
 }
 
 #[test]
-fn test_tool_upgrade_non_existing_package() {
+fn tool_upgrade_non_existing_package() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -223,7 +223,8 @@ fn test_tool_upgrade_non_existing_package() {
     ----- stdout -----
 
     ----- stderr -----
-    `black` is not installed; run `uv tool install black` to install
+    error: Failed to upgrade black
+      Caused by: `black` is not installed; run `uv tool install black` to install
     "###);
 
     // Attempt to upgrade all.
@@ -242,7 +243,7 @@ fn test_tool_upgrade_non_existing_package() {
 }
 
 #[test]
-fn test_tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
+fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -314,14 +315,15 @@ fn test_tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
      + babel==2.14.0
      - pytz==2018.5
     Installed 1 executable: pybabel
-    Failed to upgrade `python-dotenv`: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
+    error: Failed to upgrade python-dotenv
+      Caused by: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
     "###);
 
     Ok(())
 }
 
 #[test]
-fn test_tool_upgrade_settings() {
+fn tool_upgrade_settings() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -386,7 +388,7 @@ fn test_tool_upgrade_settings() {
 }
 
 #[test]
-fn test_tool_upgrade_respect_constraints() {
+fn tool_upgrade_respect_constraints() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -437,7 +439,7 @@ fn test_tool_upgrade_respect_constraints() {
 }
 
 #[test]
-fn test_tool_upgrade_constraint() {
+fn tool_upgrade_constraint() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -465,7 +467,28 @@ fn test_tool_upgrade_constraint() {
     Installed 1 executable: pybabel
     "###);
 
-    // Upgrade `babel`, but apply a constraint.
+    // Upgrade `babel`, but apply a constraint inline.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel<2.12.0")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated babel v2.6.0 -> v2.11.0
+     - babel==2.6.0
+     + babel==2.11.0
+     - pytz==2018.5
+     + pytz==2024.1
+    Installed 1 executable: pybabel
+    "###);
+
+    // Upgrade `babel`, but apply a constraint via `--upgrade-package`.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
@@ -480,10 +503,11 @@ fn test_tool_upgrade_constraint() {
     ----- stdout -----
 
     ----- stderr -----
-    Updated babel v2.6.0 -> v2.13.1
-     - babel==2.6.0
+    warning: `--upgrade-package` is enabled by default on `uv tool upgrade`
+    Updated babel v2.11.0 -> v2.13.1
+     - babel==2.11.0
      + babel==2.13.1
-     - pytz==2018.5
+     - pytz==2024.1
      + setuptools==69.2.0
     Installed 1 executable: pybabel
     "###);
@@ -530,7 +554,7 @@ fn test_tool_upgrade_constraint() {
 /// Upgrade a tool, but only by upgrading one of it's `--with` dependencies, and not the tool
 /// itself.
 #[test]
-fn test_tool_upgrade_with() {
+fn tool_upgrade_with() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -578,7 +602,7 @@ fn test_tool_upgrade_with() {
 }
 
 #[test]
-fn test_tool_upgrade_python() {
+fn tool_upgrade_python() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -639,7 +663,7 @@ fn test_tool_upgrade_python() {
 }
 
 #[test]
-fn test_tool_upgrade_python_with_all() {
+fn tool_upgrade_python_with_all() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();

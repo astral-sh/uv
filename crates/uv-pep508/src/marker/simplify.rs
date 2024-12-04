@@ -3,9 +3,9 @@ use std::ops::Bound;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use pubgrub::Range;
 use rustc_hash::FxBuildHasher;
 use uv_pep440::{Version, VersionSpecifier};
+use version_ranges::Ranges;
 
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 
@@ -17,7 +17,7 @@ use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerT
 /// which can be used to create a CNF expression.
 ///
 /// We choose DNF as it is easier to simplify for user-facing output.
-pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
+pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let mut dnf = Vec::new();
     collect_dnf(tree, &mut dnf, &mut Vec::new());
     simplify(&mut dnf);
@@ -31,7 +31,7 @@ pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
 ///
 /// `path` is the list of marker expressions traversed on the current path.
 fn collect_dnf(
-    tree: &MarkerTree,
+    tree: MarkerTree,
     dnf: &mut Vec<Vec<MarkerExpression>>,
     path: &mut Vec<MarkerExpression>,
 ) {
@@ -51,12 +51,12 @@ fn collect_dnf(
                     let current = path.len();
                     for version in excluded {
                         path.push(MarkerExpression::Version {
-                            key: marker.key().clone(),
+                            key: marker.key().into(),
                             specifier: VersionSpecifier::not_equals_version(version.clone()),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                     continue;
                 }
@@ -64,11 +64,11 @@ fn collect_dnf(
                 // Detect whether the range for this edge can be simplified as a star inequality.
                 if let Some(specifier) = star_range_inequality(&range) {
                     path.push(MarkerExpression::Version {
-                        key: marker.key().clone(),
+                        key: marker.key().into(),
                         specifier,
                     });
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.pop();
                     continue;
                 }
@@ -77,12 +77,12 @@ fn collect_dnf(
                     let current = path.len();
                     for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
                         path.push(MarkerExpression::Version {
-                            key: marker.key().clone(),
+                            key: marker.key().into(),
                             specifier,
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
             }
@@ -94,13 +94,13 @@ fn collect_dnf(
                     let current = path.len();
                     for value in excluded {
                         path.push(MarkerExpression::String {
-                            key: marker.key().clone(),
+                            key: marker.key().into(),
                             operator: MarkerOperator::NotEqual,
                             value: value.clone(),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                     continue;
                 }
@@ -109,13 +109,13 @@ fn collect_dnf(
                     let current = path.len();
                     for (operator, value) in MarkerOperator::from_bounds(bounds) {
                         path.push(MarkerExpression::String {
-                            key: marker.key().clone(),
+                            key: marker.key().into(),
                             operator,
                             value: value.clone(),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
             }
@@ -129,13 +129,13 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::String {
-                    key: marker.key().clone(),
+                    key: marker.key().into(),
                     value: marker.value().to_owned(),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -148,13 +148,13 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::String {
-                    key: marker.key().clone(),
+                    key: marker.key().into(),
                     value: marker.value().to_owned(),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -167,12 +167,12 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::Extra {
-                    name: marker.name().clone(),
+                    name: marker.name().clone().into(),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -280,17 +280,17 @@ fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
 
 /// Merge any edges that lead to identical subtrees into a single range.
 pub(crate) fn collect_edges<'a, T>(
-    map: impl ExactSizeIterator<Item = (&'a Range<T>, MarkerTree)>,
-) -> IndexMap<MarkerTree, Range<T>, FxBuildHasher>
+    map: impl ExactSizeIterator<Item = (&'a Ranges<T>, MarkerTree)>,
+) -> IndexMap<MarkerTree, Ranges<T>, FxBuildHasher>
 where
     T: Ord + Clone + 'a,
 {
-    let mut paths: IndexMap<_, Range<_>, FxBuildHasher> = IndexMap::default();
+    let mut paths: IndexMap<_, Ranges<_>, FxBuildHasher> = IndexMap::default();
     for (range, tree) in map {
         // OK because all ranges are guaranteed to be non-empty.
         let (start, end) = range.bounding_range().unwrap();
         // Combine the ranges.
-        let range = Range::from_range_bounds((start.cloned(), end.cloned()));
+        let range = Ranges::from_range_bounds((start.cloned(), end.cloned()));
         paths
             .entry(tree)
             .and_modify(|union| *union = union.union(&range))
@@ -305,7 +305,7 @@ where
 ///
 /// For example, `os_name < 'Linux' or os_name > 'Linux'` can be simplified to
 /// `os_name != 'Linux'`.
-fn range_inequality<T>(range: &Range<T>) -> Option<Vec<&T>>
+fn range_inequality<T>(range: &Ranges<T>) -> Option<Vec<&T>>
 where
     T: Ord + Clone + fmt::Debug,
 {
@@ -329,7 +329,7 @@ where
 ///
 /// For example, `python_full_version < '3.8' or python_full_version >= '3.9'` can be simplified to
 /// `python_full_version != '3.8.*'`.
-fn star_range_inequality(range: &Range<Version>) -> Option<VersionSpecifier> {
+fn star_range_inequality(range: &Ranges<Version>) -> Option<VersionSpecifier> {
     let (b1, b2) = range.iter().collect_tuple()?;
 
     match (b1, b2) {

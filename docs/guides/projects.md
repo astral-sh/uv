@@ -93,8 +93,8 @@ Python version to use when creating the project's virtual environment.
 The `.venv` folder contains your project's virtual environment, a Python environment that is
 isolated from the rest of your system. This is where uv will install your project's dependencies.
 
-See the [project environment](../concepts/projects.md#project-environments) documentation for more
-details.
+See the [project environment](../concepts/projects/layout.md#the-project-environment) documentation
+for more details.
 
 ### `uv.lock`
 
@@ -106,7 +106,7 @@ reproducible installations across machines.
 
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually.
 
-See the [lockfile](../concepts/projects.md#project-lockfile) documentation for more details.
+See the [lockfile](../concepts/projects/layout.md#the-lockfile) documentation for more details.
 
 ## Managing dependencies
 
@@ -142,8 +142,8 @@ $ uv lock --upgrade-package requests
 The `--upgrade-package` flag will attempt to update the specified package to the latest compatible
 version, while keeping the rest of the lockfile intact.
 
-See the documentation on [managing dependencies](../concepts/projects.md#managing-dependencies) for
-more details.
+See the documentation on [managing dependencies](../concepts/projects/dependencies.md) for more
+details.
 
 ## Running commands
 
@@ -188,8 +188,8 @@ $ python example.py
 
     The virtual environment must be active to run scripts and commands in the project without `uv run`. Virtual environment activation differs per shell and platform.
 
-See the documentation on [running commands](../concepts/projects.md#running-commands) and
-[running scripts](../concepts/projects.md#running-scripts) in projects for more details.
+See the documentation on [running commands and scripts](../concepts/projects/run.md) in projects for
+more details.
 
 ## Building distributions
 
@@ -206,12 +206,12 @@ hello-world-0.1.0-py3-none-any.whl
 hello-world-0.1.0.tar.gz
 ```
 
-See the documentation on [building projects](../concepts/projects.md#building-projects) for more
-details.
+See the documentation on [building projects](../concepts/projects/build.md) for more details.
 
 ## Next steps
 
-To learn more about working on projects with uv, see the [Projects concept](../concepts/projects.md)
-page and the [command reference](../reference/cli.md#uv).
+To learn more about working on projects with uv, see the
+[projects concept](../concepts/projects/index.md) page and the
+[command reference](../reference/cli.md#uv).
 
 Or, read on to learn how to [publish your project as a package](./publish.md).

@@ -23,10 +23,13 @@
 //!   the version matching needs to catch all sorts of special cases
 #![warn(missing_docs)]
 
+#[cfg(feature = "version-ranges")]
+pub use version_ranges::{release_specifier_to_range, release_specifiers_to_ranges};
 pub use {
     version::{
-        LocalSegment, Operator, OperatorParseError, Prerelease, PrereleaseKind, Version,
-        VersionParseError, VersionPattern, VersionPatternParseError, MIN_VERSION,
+        LocalSegment, LocalVersion, LocalVersionSlice, Operator, OperatorParseError, Prerelease,
+        PrereleaseKind, Version, VersionParseError, VersionPattern, VersionPatternParseError,
+        MIN_VERSION,
     },
     version_specifier::{
         VersionSpecifier, VersionSpecifierBuildError, VersionSpecifiers,
@@ -37,5 +40,20 @@ pub use {
 mod version;
 mod version_specifier;
 
+#[cfg(feature = "version-ranges")]
+mod version_ranges;
+
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::{Version, VersionSpecifier, VersionSpecifiers};
+    use std::str::FromStr;
+
+    #[test]
+    fn test_version() {
+        let version = Version::from_str("1.19").unwrap();
+        let version_specifier = VersionSpecifier::from_str("== 1.*").unwrap();
+        assert!(version_specifier.contains(&version));
+        let version_specifiers = VersionSpecifiers::from_str(">=1.16, <2.0").unwrap();
+        assert!(version_specifiers.contains(&version));
+    }
+}

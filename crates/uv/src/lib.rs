@@ -1,12 +1,14 @@
 use std::borrow::Cow;
+use std::env;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
 use std::path::Path;
 use std::process::ExitCode;
+use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use owo_colors::OwoColorize;
@@ -149,6 +151,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     *script,
                     settings.connectivity,
                     settings.native_tls,
+                    &settings.allow_insecure_host,
                 )
                 .await?,
             )
@@ -252,10 +255,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         )
     }))?;
 
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(globals.concurrency.installs)
-        .build_global()
-        .expect("failed to initialize global rayon pool");
+    // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
+    uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::SeqCst);
 
     debug!("uv {}", uv_cli::version::version());
 
@@ -307,17 +308,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
             let constraints = args
-                .constraint
+                .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
             let overrides = args
-                .r#override
+                .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
             let build_constraints = args
-                .build_constraint
+                .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
@@ -352,7 +353,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &globals.allow_insecure_host,
                 args.settings.config_setting,
                 globals.connectivity,
                 args.settings.no_build_isolation,
@@ -398,12 +399,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_requirements_file)
                 .collect::<Vec<_>>();
             let constraints = args
-                .constraint
+                .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
             let build_constraints = args
-                .build_constraint
+                .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
@@ -420,7 +421,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
                 args.settings.allow_empty_requirements,
                 globals.connectivity,
                 &args.settings.config_setting,
@@ -437,8 +437,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.target,
                 args.settings.prefix,
                 args.settings.sources,
+                globals.python_preference,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 args.dry_run,
                 printer,
@@ -465,25 +467,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .package
                 .into_iter()
                 .map(RequirementsSource::from_package)
-                .chain(args.editable.into_iter().map(RequirementsSource::Editable))
+                .chain(args.editables.into_iter().map(RequirementsSource::Editable))
                 .chain(
-                    args.requirement
+                    args.requirements
                         .into_iter()
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
             let constraints = args
-                .constraint
+                .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
             let overrides = args
-                .r#override
+                .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
             let build_constraints = args
-                .build_constraint
+                .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
@@ -504,7 +506,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
                 args.settings.reinstall,
                 args.settings.link_mode,
                 args.settings.compile_bytecode,
@@ -525,8 +526,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.break_system_packages,
                 args.settings.target,
                 args.settings.prefix,
+                globals.python_preference,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 args.dry_run,
                 printer,
@@ -548,7 +551,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_package)
                 .chain(
-                    args.requirement
+                    args.requirements
                         .into_iter()
                         .map(RequirementsSource::from_requirements_txt),
                 )
@@ -564,7 +567,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.native_tls,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &globals.allow_insecure_host,
+                args.dry_run,
                 printer,
             )
             .await
@@ -604,12 +608,23 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.editable,
                 &args.exclude,
                 &args.format,
+                args.outdated,
+                args.settings.prerelease,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.keyring_provider,
+                globals.allow_insecure_host,
+                globals.connectivity,
+                globals.concurrency,
                 args.settings.strict,
+                args.settings.exclude_newer,
                 args.settings.python.as_deref(),
                 args.settings.system,
+                globals.native_tls,
                 &cache,
                 printer,
             )
+            .await
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
@@ -643,8 +658,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::pip_tree(
                 args.show_version_specifiers,
                 args.depth,
-                args.prune,
-                args.package,
+                &args.prune,
+                &args.package,
                 args.no_dedupe,
                 args.invert,
                 args.shared.strict,
@@ -703,7 +718,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             // Resolve the build constraints.
             let build_constraints = args
-                .build_constraint
+                .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
@@ -712,14 +727,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &project_dir,
                 args.src,
                 args.package,
-                args.all,
+                args.all_packages,
                 args.out_dir,
                 args.sdist,
                 args.wheel,
                 args.build_logs,
+                args.force_pep517,
                 build_constraints,
                 args.hash_checking,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 cli.top_level.no_config,
                 globals.python_preference,
@@ -727,6 +744,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
@@ -763,6 +781,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &project_dir,
                 args.path,
                 args.settings.python.as_deref(),
+                args.settings.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings.link_mode,
@@ -770,7 +789,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_strategy,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
-                args.settings.allow_insecure_host,
+                &globals.allow_insecure_host,
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 globals.connectivity,
@@ -891,6 +910,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 args.show_resolution || globals.verbose > 0,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 invocation_source,
                 args.isolated,
@@ -899,6 +919,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 printer,
             )
@@ -933,13 +954,26 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Vec<_>>();
+            let constraints = args
+                .constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
+            let overrides = args
+                .overrides
+                .into_iter()
+                .map(RequirementsSource::from_overrides_txt)
+                .collect::<Vec<_>>();
 
             Box::pin(commands::tool_install(
                 args.package,
                 args.editable,
                 args.from,
                 &requirements,
+                &constraints,
+                &overrides,
                 args.python,
+                args.install_mirrors,
                 args.force,
                 args.options,
                 args.settings,
@@ -948,6 +982,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 cache,
                 printer,
             ))
@@ -982,8 +1017,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(Refresh::All(Timestamp::now()));
 
             Box::pin(commands::tool_upgrade(
-                args.name,
+                args.names,
                 args.python,
+                args.install_mirrors,
                 globals.connectivity,
                 args.args,
                 args.filesystem,
@@ -991,6 +1027,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             ))
@@ -1053,10 +1090,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &project_dir,
                 args.targets,
                 args.reinstall,
+                args.force,
+                args.python_install_mirror,
+                args.pypy_install_mirror,
+                args.default,
                 globals.python_downloads,
                 globals.native_tls,
                 globals.connectivity,
+                &globals.allow_insecure_host,
                 cli.top_level.no_config,
+                globals.preview,
                 printer,
             )
             .await
@@ -1111,9 +1154,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Python(PythonNamespace {
-            command: PythonCommand::Dir,
+            command: PythonCommand::Dir(args),
         }) => {
-            commands::python_dir()?;
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::PythonDirSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            commands::python_dir(args.bin)?;
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {
@@ -1121,6 +1168,16 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if globals.preview.is_disabled() {
                 warn_user_once!("`uv publish` is experimental and may change without warning");
+            }
+
+            if args.skip_existing {
+                bail!(
+                    "`uv publish` does not support `--skip-existing` because there is not a \
+                    reliable way to identify when an upload fails due to an existing \
+                    distribution. Instead, use `--check-url` to provide the URL to the simple \
+                    API for your index. uv will check the index for existing distributions before \
+                    attempting uploads."
+                );
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
@@ -1131,7 +1188,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
-                allow_insecure_host,
+                check_url,
             } = PublishSettings::resolve(args, filesystem);
 
             commands::publish(
@@ -1139,9 +1196,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
-                allow_insecure_host,
+                &globals.allow_insecure_host,
                 username,
                 password,
+                check_url,
+                &cache,
                 globals.connectivity,
                 globals.native_tls,
                 printer,
@@ -1237,11 +1296,14 @@ async fn run_project(
                 args.author_from,
                 args.no_pin_python,
                 args.python,
+                args.install_mirrors,
                 args.no_workspace,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1285,6 +1347,7 @@ async fn run_project(
                 args.frozen,
                 args.no_sync,
                 args.isolated,
+                args.all_packages,
                 args.package,
                 args.no_project,
                 no_config,
@@ -1292,14 +1355,18 @@ async fn run_project(
                 args.dev,
                 args.editable,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
+                args.env_file,
+                args.no_env_file,
             ))
             .await
         }
@@ -1319,6 +1386,7 @@ async fn run_project(
                 project_dir,
                 args.locked,
                 args.frozen,
+                args.all_packages,
                 args.package,
                 args.extras,
                 args.dev,
@@ -1326,12 +1394,15 @@ async fn run_project(
                 args.install_options,
                 args.modifications,
                 args.python,
+                args.install_mirrors,
                 globals.python_preference,
                 globals.python_downloads,
                 args.settings,
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1354,12 +1425,15 @@ async fn run_project(
                 args.frozen,
                 args.dry_run,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1404,6 +1478,7 @@ async fn run_project(
                 args.extras,
                 args.package,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 args.script,
                 globals.python_preference,
@@ -1411,6 +1486,8 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             ))
@@ -1435,7 +1512,7 @@ async fn run_project(
                 Pep723Item::Remote(_) => unreachable!("`uv remove` does not support remote files"),
             });
 
-            commands::remove(
+            Box::pin(commands::remove(
                 project_dir,
                 args.locked,
                 args.frozen,
@@ -1444,6 +1521,7 @@ async fn run_project(
                 args.dependency_type,
                 args.package,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 script,
                 globals.python_preference,
@@ -1451,9 +1529,11 @@ async fn run_project(
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
-            )
+            ))
             .await
         }
         ProjectCommand::Tree(args) => {
@@ -1475,15 +1555,19 @@ async fn run_project(
                 args.package,
                 args.no_dedupe,
                 args.invert,
+                args.outdated,
                 args.python_version,
                 args.python_platform,
                 args.python,
+                args.install_mirrors,
                 args.resolver,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 &cache,
                 printer,
             )
@@ -1500,7 +1584,9 @@ async fn run_project(
             commands::export(
                 project_dir,
                 args.format,
+                args.all_packages,
                 args.package,
+                args.prune,
                 args.hashes,
                 args.install_options,
                 args.output_file,
@@ -1511,12 +1597,15 @@ async fn run_project(
                 args.frozen,
                 args.include_header,
                 args.python,
+                args.install_mirrors,
                 args.settings,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.connectivity,
                 globals.concurrency,
                 globals.native_tls,
+                &globals.allow_insecure_host,
+                no_config,
                 globals.quiet,
                 &cache,
                 printer,
