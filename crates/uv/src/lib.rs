@@ -1007,6 +1007,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::tool_list(
                 args.show_paths,
                 args.show_version_specifiers,
+                args.outdated,
+                globals.python_preference,
+                globals.connectivity,
+                globals.concurrency,
+                globals.native_tls,
+                &globals.allow_insecure_host,
                 &cache,
                 printer,
             )
