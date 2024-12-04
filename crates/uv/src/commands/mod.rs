@@ -232,9 +232,7 @@ impl<'a> OutputWriter<'a> {
     async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
             if let Some(parent_dir) = output_file.parent() {
-                if !parent_dir.as_os_str().is_empty() && !parent_dir.is_dir() {
-                    fs_err::tokio::create_dir(parent_dir).await?;
-                }
+                fs_err::create_dir_all(parent_dir)?;
             }
 
             // If the output file is an existing symlink, write to the destination instead.
