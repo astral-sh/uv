@@ -4147,8 +4147,9 @@ pub enum PythonCommand {
 
     /// Pin to a specific Python version.
     ///
-    /// Writes the pinned version to a `.python-version` file, which is then
-    /// read by other uv commands when determining the required Python version.
+    /// Writes the pinned Python version to a `.python-version` file or reads the
+    /// current pinned version from the file.
+    /// This file is used by other uv commands to determine the required Python version.
     ///
     /// See `uv help python` to view supported request formats.
     Pin(PythonPinArgs),
@@ -4328,6 +4329,10 @@ pub struct PythonPinArgs {
     /// use version numbers instead of complex requests such as `cpython@3.10`.
     ///
     /// See `uv help python` to view supported request formats.
+    ///
+    /// Running `uv python pin` without a `REQUEST` argument prints the current
+    /// pinned versions.
+    /// If a `.python-version` file does not exists, it exits with an error message.
     pub request: Option<String>,
 
     /// Write the resolved Python interpreter path instead of the request.
