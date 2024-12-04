@@ -554,6 +554,6 @@ impl EnvVars {
     /// installer and `self update` feature.
     pub const INSTALLER_NO_MODIFY_PATH: &'static str = "INSTALLER_NO_MODIFY_PATH";
 
-    /// Skip writing `uv` installer metadata files to site-packages dist-info.
+    /// Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
     pub const UV_NO_INSTALLER_METADATA: &'static str = "UV_NO_INSTALLER_METADATA";
 }

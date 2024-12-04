@@ -151,9 +151,7 @@ impl GlobalSettings {
                 .combine(workspace.and_then(|workspace| workspace.globals.python_downloads))
                 .unwrap_or_default(),
             no_progress: args.no_progress,
-            installer_metadata: std::env::var_os(EnvVars::UV_NO_INSTALLER_METADATA)
-                .filter(|v| !v.is_empty())
-                .is_none(),
+            installer_metadata: !args.no_installer_metadata,
         }
     }
 }

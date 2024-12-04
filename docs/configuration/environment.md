@@ -181,7 +181,7 @@ Ignore `.env` files when executing `uv run` commands.
 
 ### `UV_NO_INSTALLER_METADATA`
 
-Skip writing `uv` installer metadata files to site-packages dist-info.
+Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
 
 ### `UV_NO_PROGRESS`
 
