@@ -21,6 +21,17 @@ uv:
     # your `uv` commands
 ```
 
+!!! note
+
+    If you are using a distroless image, you have to specify the entrypoint:
+    ```yaml
+    uv:
+      image:
+        name: ghcr.io/astral-sh/uv:$UV_VERSION
+        entrypoint: [""]
+      # ...
+    ```
+
 ## Caching
 
 Persisting the uv cache between workflow runs can improve performance.
