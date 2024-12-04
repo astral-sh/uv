@@ -1784,6 +1784,7 @@ impl Package {
                 };
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
+                    version: Some(self.id.version.clone()),
                     url: verbatim_url(workspace_root.join(path), &self.id)?,
                     install_path: workspace_root.join(path),
                     ext,
