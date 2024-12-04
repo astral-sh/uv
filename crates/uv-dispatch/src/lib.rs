@@ -20,6 +20,7 @@ use uv_configuration::{
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
     SourceDist, VersionOrUrlRef,
@@ -343,7 +344,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         source: &'data Path,
         subdirectory: Option<&'data Path>,
         install_path: &'data Path,
-        version_id: Option<String>,
+        version_id: Option<&'data str>,
         dist: Option<&'data SourceDist>,
         sources: SourceStrategy,
         build_kind: BuildKind,
@@ -404,8 +405,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         subdirectory: Option<&'data Path>,
         output_dir: &'data Path,
         build_kind: BuildKind,
-        version_id: Option<String>,
-    ) -> Result<Option<String>> {
+        version_id: Option<&'data str>,
+    ) -> Result<Option<DistFilename>> {
         // Direct builds are a preview feature with the uv build backend.
         if self.preview.is_disabled() {
             trace!("Preview is disabled, not checking for direct build");
@@ -419,8 +420,9 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         };
 
         // Only perform the direct build if the backend is uv in a compatible version.
-        let identifier = version_id.unwrap_or_else(|| source_tree.display().to_string());
-        if !check_direct_build(&source_tree, &identifier) {
+        let source_tree_str = source_tree.display().to_string();
+        let identifier = version_id.unwrap_or_else(|| &source_tree_str);
+        if !check_direct_build(&source_tree, identifier) {
             trace!("Requirements for direct build not matched: {identifier}");
             return Ok(None);
         }
@@ -428,33 +430,38 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         debug!("Performing direct build for {identifier}");
 
         let output_dir = output_dir.to_path_buf();
-        let filename = tokio::task::spawn_blocking(move || -> Result<String> {
+        let filename = tokio::task::spawn_blocking(move || -> Result<_> {
             let filename = match build_kind {
-                BuildKind::Wheel => uv_build_backend::build_wheel(
-                    &source_tree,
-                    &output_dir,
-                    None,
-                    uv_version::version(),
-                )?
-                .to_string(),
-                BuildKind::Sdist => uv_build_backend::build_source_dist(
-                    &source_tree,
-                    &output_dir,
-                    uv_version::version(),
-                )?
-                .to_string(),
-                BuildKind::Editable => uv_build_backend::build_editable(
-                    &source_tree,
-                    &output_dir,
-                    None,
-                    uv_version::version(),
-                )?
-                .to_string(),
+                BuildKind::Wheel => {
+                    let wheel = uv_build_backend::build_wheel(
+                        &source_tree,
+                        &output_dir,
+                        None,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::WheelFilename(wheel)
+                }
+                BuildKind::Sdist => {
+                    let source_dist = uv_build_backend::build_source_dist(
+                        &source_tree,
+                        &output_dir,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::SourceDistFilename(source_dist)
+                }
+                BuildKind::Editable => {
+                    let wheel = uv_build_backend::build_editable(
+                        &source_tree,
+                        &output_dir,
+                        None,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::WheelFilename(wheel)
+                }
             };
             Ok(filename)
         })
-        .await??
-        .to_string();
+        .await??;
 
         Ok(Some(filename))
     }

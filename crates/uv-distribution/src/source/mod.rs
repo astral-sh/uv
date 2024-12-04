@@ -1815,19 +1815,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 } else {
                     BuildKind::Wheel
                 },
-                Some(source.to_string()),
+                Some(&source.to_string()),
             )
             .await
             .map_err(Error::Build)?
         {
-            name
+            name.to_string()
         } else {
             self.build_context
                 .setup_build(
                     source_root,
                     subdirectory,
                     source_root,
-                    Some(source.to_string()),
+                    Some(&source.to_string()),
                     source.as_dist(),
                     source_strategy,
                     if source.is_editable() {
@@ -1903,7 +1903,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root,
                 subdirectory,
                 source_root,
-                Some(source.to_string()),
+                Some(&source.to_string()),
                 source.as_dist(),
                 source_strategy,
                 if source.is_editable() {

@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use uv_distribution_filename::DistFilename;
 
 use anyhow::Result;
 
@@ -115,7 +116,7 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         install_path: &'a Path,
-        version_id: Option<String>,
+        version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
         sources: SourceStrategy,
         build_kind: BuildKind,
@@ -134,8 +135,8 @@ pub trait BuildContext {
         subdirectory: Option<&'a Path>,
         output_dir: &'a Path,
         build_kind: BuildKind,
-        version_id: Option<String>,
-    ) -> impl Future<Output = Result<Option<String>>> + 'a;
+        version_id: Option<&'a str>,
+    ) -> impl Future<Output = Result<Option<DistFilename>>> + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
