@@ -23,26 +23,23 @@ from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import unquote
 
 import httpx
-from git import GitCommandError, Repo  # GitPython
+from git import GitCommandError, Repo
 from tqdm import tqdm
 
-# Constants
 SELF_DIR = Path(__file__).parent
-REPO_ROOT = SELF_DIR.parent.parent
-VERSIONS_FILE = SELF_DIR / "download-metadata.json"
-DST_DIR = SELF_DIR / "mirror"
+REPO_ROOT = SELF_DIR.parent
+VERSIONS_FILE = REPO_ROOT / "crates" / "uv-python" / "download-metadata.json"
 PREFIXES = [
     "https://github.com/indygreg/python-build-standalone/releases/download/",
     "https://downloads.python.org/pypy/",
 ]
 
-# Logger setup
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# Silence httpx logging
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
@@ -171,7 +168,9 @@ async def download_file(
     return True
 
 
-async def download_files(urls: Set[Tuple[str, Optional[str]]], max_concurrent: int):
+async def download_files(
+    urls: Set[Tuple[str, Optional[str]]], target: Path, max_concurrent: int
+):
     """Download files with a limit on concurrent downloads using httpx."""
     async with httpx.AsyncClient(follow_redirects=True) as client:
         progress_bar = tqdm(total=len(urls), desc="Downloading", unit="file")
@@ -185,7 +184,7 @@ async def download_files(urls: Set[Tuple[str, Optional[str]]], max_concurrent: i
                 success = await download_file(
                     client,
                     url,
-                    DST_DIR / sanitize_url(url),
+                    target / sanitize_url(url),
                     sha256,
                     progress_bar,
                     errors,
@@ -217,6 +216,11 @@ def parse_arguments():
         action="store_true",
         help="Collect URLs from the entire git history.",
     )
+    parser.add_argument(
+        "--target",
+        default=SELF_DIR / "mirror",
+        help="Directory to store the downloaded files.",
+    )
     return parser.parse_args()
 
 
@@ -237,16 +241,19 @@ def main():
         logger.error("No URLs found.")
         return
 
-    logger.info(f"Starting download of {len(urls)} files.")
+    target = Path(args.target)
+    logger.info(f"Downloading {len(urls)} files to {target}...")
     try:
-        success_count, errors = asyncio.run(download_files(urls, args.max_concurrent))
-        print(f"Successfully downloaded: {success_count}")
+        success_count, errors = asyncio.run(
+            download_files(urls, target, args.max_concurrent)
+        )
+        print(f"Successfully downloaded: {success_count} files.")
         if errors:
             print("Failed downloads:")
             for url, error in errors:
                 print(f"- {url}: {error}")
         print(
-            f"now you can run UV_PYTHON_INSTALL_MIRROR='file://{DST_DIR.absolute()}' uv python install"
+            f"Example usage: `UV_PYTHON_INSTALL_MIRROR='file://{target.absolute()}' uv python install 3.13`"
         )
     except Exception as e:
         logger.error(f"Error during download: {e}")
