@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#     "gitpython",
+#     "httpx",
+#     "tqdm",
+# ]
+# ///
+
 import argparse
 import asyncio
 import hashlib
