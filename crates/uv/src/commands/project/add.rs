@@ -18,7 +18,7 @@ use uv_configuration::{
     ExtrasSpecification, GroupsSpecification, InstallOptions, LowerBound, SourceStrategy,
     TrustedHost,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{Index, IndexName, UnresolvedRequirement, VersionId};
 use uv_fs::Simplified;
@@ -50,7 +50,7 @@ use crate::commands::project::{
     ProjectInterpreter, ScriptPython,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverInstallerSettingsRef};
 
@@ -329,10 +329,7 @@ pub(crate) async fn add(
         &settings.index_locations,
         &flat_index,
         &settings.dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         settings.index_strategy,
         &settings.config_setting,
         build_isolation,
@@ -370,7 +367,7 @@ pub(crate) async fn add(
             requirements.extend(
                 NamedRequirementsResolver::new(
                     &hasher,
-                    &state.index,
+                    state.index(),
                     DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
                 )
                 .with_reporter(ResolverReporter::from(printer))
@@ -846,7 +843,7 @@ async fn lock_and_sync(
                 let url = Url::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
-                let existing = state.index.distributions().remove(&version_id);
+                let existing = state.index().distributions().remove(&version_id);
                 debug_assert!(existing.is_some(), "distribution should exist");
             }
 

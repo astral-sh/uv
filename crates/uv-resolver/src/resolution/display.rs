@@ -332,9 +332,7 @@ type RequirementsTxtGraph<'dist> = Graph<RequirementsTxtDist<'dist>, (), Directe
 /// We also remove the root node, to simplify the graph structure.
 fn combine_extras<'dist>(graph: &IntermediatePetGraph<'dist>) -> RequirementsTxtGraph<'dist> {
     /// Return the key for a node.
-    fn version_marker<'dist>(
-        dist: &'dist RequirementsTxtDist,
-    ) -> (&'dist PackageName, &'dist MarkerTree) {
+    fn version_marker<'dist>(dist: &'dist RequirementsTxtDist) -> (&'dist PackageName, MarkerTree) {
         (dist.name(), dist.markers)
     }
 

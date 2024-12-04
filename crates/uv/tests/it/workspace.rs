@@ -1697,7 +1697,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
       ├─▶ Failed to parse entry: `anyio`
-      ╰─▶ Package is not included as workspace package in `tool.uv.workspace`
+      ╰─▶ `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
     "###
     );
 

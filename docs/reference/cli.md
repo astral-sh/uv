@@ -3241,6 +3241,13 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt><code>--config-setting</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt><code>--constraints</code>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
+
+<p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that&#8217;s installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
+
+<p>This is equivalent to pip&#8217;s <code>--constraint</code> option.</p>
+
+<p>May also be set with the <code>UV_CONSTRAINT</code> environment variable.</p>
 </dd><dt><code>--default-index</code> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -3388,6 +3395,13 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--overrides</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
+
+<p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
+
+<p>While constraints are <em>additive</em>, in that they&#8217;re combined with the requirements of the constituent packages, overrides are <em>absolute</em>, in that they completely replace the requirements of the constituent packages.</p>
+
+<p>May also be set with the <code>UV_OVERRIDE</code> environment variable.</p>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -4513,6 +4527,14 @@ uv python install [OPTIONS] [TARGETS]...
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
 
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt><code>--default</code></dt><dd><p>Use as the default Python version.</p>
+
+<p>By default, only a <code>python{major}.{minor}</code> executable is installed, e.g., <code>python3.10</code>. When the <code>--default</code> flag is used, <code>python{major}</code>, e.g., <code>python3</code>, and <code>python</code> executables are also installed.</p>
+
+<p>Alternative Python variants will still include their tag. For example, installing 3.13+freethreaded with <code>--default</code> will include in <code>python3t</code> and <code>pythont</code>, not <code>python3</code> and <code>python</code>.</p>
+
+<p>If multiple Python versions are requested during the installation, the first request will be the default.</p>
+
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
 <p>Relative paths are resolved with the given directory as the base.</p>
@@ -6554,6 +6576,8 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--dry-run</code></dt><dd><p>Perform a dry run, i.e., don&#8217;t actually uninstall anything but print the resulting plan</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
@@ -7788,6 +7812,10 @@ uv build [OPTIONS] [SRC]
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
+</dd><dt><code>--force-pep517</code></dt><dd><p>Always build through PEP 517, don&#8217;t use the fast path for the uv build backend.</p>
+
+<p>By default, uv won&#8217;t create a PEP 517 build environment for packages using the uv build backend, but use a fast path that calls into the build backend directly. This option forces always using PEP 517.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>

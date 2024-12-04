@@ -20,6 +20,7 @@ use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
     InstallOptions, LowerBound, SourceStrategy, TrustedHost,
 };
+use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
@@ -48,7 +49,7 @@ use crate::commands::project::{
     DependencyGroupsTarget, EnvironmentSpecification, ProjectError, ScriptPython, WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{diagnostics, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -1020,6 +1021,15 @@ pub(crate) async fn run(
             .map(PythonEnvironment::scripts)
             .into_iter()
             .chain(std::iter::once(base_interpreter.scripts()))
+            .chain(
+                // On Windows, non-virtual Python distributions put `python.exe` in the top-level
+                // directory, rather than in the `Scripts` subdirectory.
+                cfg!(windows)
+                    .then(|| base_interpreter.sys_executable().parent())
+                    .flatten()
+                    .into_iter(),
+            )
+            .dedup()
             .map(PathBuf::from)
             .chain(
                 std::env::var_os(EnvVars::PATH)

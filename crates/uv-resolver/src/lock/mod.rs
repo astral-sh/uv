@@ -148,7 +148,7 @@ impl Lock {
                     .fork_markers
                     .iter()
                     .filter(|fork_markers| !fork_markers.is_disjoint(&dist.marker))
-                    .cloned()
+                    .copied()
                     .collect()
             } else {
                 vec![]
@@ -163,7 +163,7 @@ impl Lock {
                 else {
                     continue;
                 };
-                let marker = edge.weight().clone();
+                let marker = *edge.weight();
                 package.add_dependency(&requires_python, dependency_dist, marker, root)?;
             }
 
@@ -196,7 +196,7 @@ impl Lock {
                     else {
                         continue;
                     };
-                    let marker = edge.weight().clone();
+                    let marker = *edge.weight();
                     package.add_optional_dependency(
                         &requires_python,
                         extra.clone(),
@@ -221,7 +221,7 @@ impl Lock {
                     else {
                         continue;
                     };
-                    let marker = edge.weight().clone();
+                    let marker = *edge.weight();
                     package.add_group_dependency(
                         &requires_python,
                         group.clone(),
@@ -588,7 +588,7 @@ impl Lock {
     pub fn simplified_supported_environments(&self) -> Vec<MarkerTree> {
         self.supported_environments()
             .iter()
-            .cloned()
+            .copied()
             .map(|marker| self.simplify_environment(marker))
             .collect()
     }
@@ -623,9 +623,9 @@ impl Lock {
                         // include conflicting marker info. In which case, we should serialize
                         // the entire `UniversalMarker` (taking care to still make the PEP 508
                         // simplified).
-                        SimplifiedMarkerTree::new(&self.requires_python, marker.pep508().clone())
+                        SimplifiedMarkerTree::new(&self.requires_python, marker.pep508())
                     })
-                    .filter_map(|marker| marker.try_to_string()),
+                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
             );
             doc.insert("resolution-markers", value(fork_markers));
         }
@@ -634,8 +634,9 @@ impl Lock {
             let supported_environments = each_element_on_its_line_array(
                 self.supported_environments
                     .iter()
-                    .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker.clone()))
-                    .filter_map(|marker| marker.try_to_string()),
+                    .copied()
+                    .map(|marker| SimplifiedMarkerTree::new(&self.requires_python, marker))
+                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
             );
             doc.insert("supported-markers", value(supported_environments));
         }
@@ -1974,10 +1975,8 @@ impl Package {
                     // include conflicting marker info. In which case, we should serialize
                     // the entire `UniversalMarker` (taking care to still make the PEP 508
                     // simplified).
-                    .map(|marker| {
-                        SimplifiedMarkerTree::new(requires_python, marker.pep508().clone())
-                    })
-                    .filter_map(|marker| marker.try_to_string()),
+                    .map(|marker| SimplifiedMarkerTree::new(requires_python, marker.pep508()))
+                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
             );
             table.insert("resolution-markers", value(wheels));
         }
@@ -3535,7 +3534,7 @@ impl Dependency {
         complexified_marker: UniversalMarker,
     ) -> Dependency {
         let simplified_marker =
-            SimplifiedMarkerTree::new(requires_python, complexified_marker.pep508().clone());
+            SimplifiedMarkerTree::new(requires_python, complexified_marker.pep508());
         Dependency {
             package_id,
             extra,
@@ -3624,7 +3623,7 @@ impl DependencyWire {
         requires_python: &RequiresPython,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
-        let complexified_marker = self.marker.clone().into_marker(requires_python);
+        let complexified_marker = self.marker.into_marker(requires_python);
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,

@@ -5,6 +5,7 @@ use fs_err::File;
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use std::env::current_dir;
 use zip::ZipArchive;
 
 #[test]
@@ -817,7 +818,6 @@ fn wheel_from_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building wheel from source distribution...
       × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
       ╰─▶ `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
     "###);
@@ -2032,6 +2032,108 @@ fn build_non_package() -> Result<()> {
         .child("dist")
         .child("member-0.1.0-py3-none-any.whl")
         .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// Test the uv fast path. Tests all four possible build plans:
+/// * Defaults
+/// * `--sdist`
+/// * `--wheel`
+/// * `--sdist --wheel`
+#[test]
+fn build_fast_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output1")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built output1/built_by_uv-0.1.0.tar.gz and output1/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output1")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    context
+        .temp_dir
+        .child("output1")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output2"))
+        .arg("--sdist"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Successfully built output2/built_by_uv-0.1.0.tar.gz
+    "###);
+    context
+        .temp_dir
+        .child("output2")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output3"))
+        .arg("--wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+    Successfully built output3/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output3")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
+    uv_snapshot!(context.build()
+        .arg(&built_by_uv)
+        .arg("--out-dir")
+        .arg(context.temp_dir.join("output4"))
+        .arg("--sdist")
+        .arg("--wheel"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel (uv build backend)...
+    Successfully built output4/built_by_uv-0.1.0.tar.gz and output4/built_by_uv-0.1.0-py3-none-any.whl
+    "###);
+    context
+        .temp_dir
+        .child("output4")
+        .child("built_by_uv-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    context
+        .temp_dir
+        .child("output4")
+        .child("built_by_uv-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
 
     Ok(())
 }

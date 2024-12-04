@@ -542,7 +542,7 @@ impl From<RequiresPythonRange> for Range<Version> {
 /// setting can be assumed. In order to get a "normal" marker out of
 /// a simplified marker, one must re-contextualize it by adding the
 /// `requires-python` constraint back to the marker.
-#[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 pub(crate) struct SimplifiedMarkerTree(MarkerTree);
 
 impl SimplifiedMarkerTree {
@@ -565,13 +565,13 @@ impl SimplifiedMarkerTree {
     ///
     /// This only returns `None` when the underlying marker is always true,
     /// i.e., it matches all possible marker environments.
-    pub(crate) fn try_to_string(&self) -> Option<String> {
+    pub(crate) fn try_to_string(self) -> Option<String> {
         self.0.try_to_string()
     }
 
     /// Returns the underlying marker tree without re-complexifying them.
-    pub(crate) fn as_simplified_marker_tree(&self) -> &MarkerTree {
-        &self.0
+    pub(crate) fn as_simplified_marker_tree(self) -> MarkerTree {
+        self.0
     }
 }
 

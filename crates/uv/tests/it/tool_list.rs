@@ -256,7 +256,7 @@ fn tool_list_show_version_specifiers() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black`
+    // Install `black` with a version specifier
     context
         .tool_install()
         .arg("black<24.3.0")
@@ -265,30 +265,43 @@ fn tool_list_show_version_specifiers() {
         .assert()
         .success();
 
+    // Install `flask`
+    context
+        .tool_install()
+        .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-version-specifiers")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     black v24.2.0 [required: <24.3.0]
     - black
     - blackd
+    flask v3.0.2
+    - flask
 
     ----- stderr -----
-    "###);
+    "#);
 
     // with paths
     uv_snapshot!(context.filters(), context.tool_list().arg("--show-version-specifiers").arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     black v24.2.0 [required: <24.3.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
+    flask v3.0.2 ([TEMP_DIR]/tools/flask)
+    - flask ([TEMP_DIR]/bin/flask)
 
     ----- stderr -----
-    "###);
+    "#);
 }

@@ -465,13 +465,12 @@ impl SourceBuild {
                                 .or(package_name)
                             {
                                 let build_requires = uv_pypi_types::BuildRequires {
-                                    name: name.clone(),
+                                    name: Some(name.clone()),
                                     requires_dist: build_system.requires,
                                 };
                                 let build_requires = BuildRequires::from_project_maybe_workspace(
                                     build_requires,
                                     install_path,
-                                    None,
                                     locations,
                                     source_strategy,
                                     LowerBound::Allow,
@@ -905,25 +904,20 @@ async fn create_pep517_build_environment(
     // If necessary, lower the requirements.
     let extra_requires = match source_strategy {
         SourceStrategy::Enabled => {
-            if let Some(package_name) = package_name {
-                let build_requires = uv_pypi_types::BuildRequires {
-                    name: package_name.clone(),
-                    requires_dist: extra_requires,
-                };
-                let build_requires = BuildRequires::from_project_maybe_workspace(
-                    build_requires,
-                    install_path,
-                    None,
-                    locations,
-                    source_strategy,
-                    LowerBound::Allow,
-                )
-                .await
-                .map_err(Error::Lowering)?;
-                build_requires.requires_dist
-            } else {
-                extra_requires.into_iter().map(Requirement::from).collect()
-            }
+            let build_requires = uv_pypi_types::BuildRequires {
+                name: package_name.cloned(),
+                requires_dist: extra_requires,
+            };
+            let build_requires = BuildRequires::from_project_maybe_workspace(
+                build_requires,
+                install_path,
+                locations,
+                source_strategy,
+                LowerBound::Allow,
+            )
+            .await
+            .map_err(Error::Lowering)?;
+            build_requires.requires_dist
         }
         SourceStrategy::Disabled => extra_requires.into_iter().map(Requirement::from).collect(),
     };

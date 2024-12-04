@@ -7,7 +7,7 @@ use std::fmt::{Display, Formatter, Write};
 use std::ops::Bound;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{iter, thread};
+use std::{iter, slice, thread};
 
 use dashmap::DashMap;
 use either::Either;
@@ -20,10 +20,6 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, instrument, trace, warn, Level};
 
-use environment::ForkingPossibility;
-pub use environment::ResolverEnvironment;
-pub(crate) use fork_map::{ForkMap, ForkSet};
-pub(crate) use urls::Urls;
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
@@ -63,6 +59,10 @@ pub(crate) use crate::resolver::availability::{
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
+use crate::resolver::environment::ForkingPossibility;
+pub use crate::resolver::environment::ResolverEnvironment;
+pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
+pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::UniversalMarker;
 
 use crate::resolver::groups::Groups;
@@ -359,7 +359,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })
                 else {
                     if tracing::enabled!(Level::DEBUG) {
-                        prefetcher.log_tried_versions(&state.pubgrub);
+                        prefetcher.log_tried_versions();
                     }
                     debug!(
                         "{} resolution took {:.3}s",
@@ -424,7 +424,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // (idempotent due to caching).
                 self.request_package(next_package, url, index, &request_sink)?;
 
-                prefetcher.version_tried(next_id, next_package);
+                prefetcher.version_tried(next_package);
 
                 let term_intersection = state
                     .pubgrub
@@ -490,7 +490,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Only consider registry packages for prefetch.
                 if url.is_none() {
                     prefetcher.prefetch_batches(
-                        next_id,
                         next_package,
                         index,
                         &version,
@@ -563,7 +562,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let PubGrubDependency {
                                 package,
                                 version: _,
-                                specifier: _,
                                 url: _,
                             } = dependency;
                             let url = package.name().and_then(|name| state.fork_urls.get(name));
@@ -731,7 +729,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let PubGrubDependency {
                         package,
                         version: _,
-                        specifier: _,
                         url: _,
                     } = dependency;
                     let url = package
@@ -825,7 +822,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 name,
                 extra: None,
                 dev: None,
-                marker: None,
+                marker: MarkerTree::TRUE,
             } = &**package
             else {
                 continue;
@@ -1275,7 +1272,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, None, None)
+                        PubGrubDependency::from_requirement(
+                            &self.conflicts,
+                            requirement,
+                            None,
+                            None,
+                        )
                     })
                     .collect()
             }
@@ -1449,6 +1451,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         return Err(err);
                     }
                 }
+
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dependency_groups,
@@ -1462,13 +1465,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let mut dependencies: Vec<_> = requirements
                     .iter()
                     .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(requirement, dev.as_ref(), Some(name))
+                        PubGrubDependency::from_requirement(
+                            &self.conflicts,
+                            requirement,
+                            dev.as_ref(),
+                            Some(name),
+                        )
                     })
                     .collect();
 
                 // If a package has metadata for an enabled dependency group,
                 // add a dependency from it to the same package with the group
                 // enabled.
+                //
+                // TODO(charlie): Instead, we should add a `dev` key to our requirement type. Then
+                // we can model this like extras! Such that we add it before we see the metadata,
+                // rather than after.
                 if extra.is_none() && dev.is_none() {
                     for group in self.groups.get(name).into_iter().flatten() {
                         if !metadata.dependency_groups.contains_key(group) {
@@ -1478,10 +1490,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             package: PubGrubPackage::from(PubGrubPackageInner::Dev {
                                 name: name.clone(),
                                 dev: group.clone(),
-                                marker: marker.clone(),
+                                marker: *marker,
                             }),
                             version: Range::singleton(version.clone()),
-                            specifier: None,
                             url: None,
                         });
                     }
@@ -1494,17 +1505,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // Add a dependency on both the marker and base package.
             PubGrubPackageInner::Marker { name, marker } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, Some(marker)]
+                    [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .map(move |marker| PubGrubDependency {
                             package: PubGrubPackage::from(PubGrubPackageInner::Package {
                                 name: name.clone(),
                                 extra: None,
                                 dev: None,
-                                marker: marker.and_then(MarkerTree::contents),
+                                marker,
                             }),
                             version: Range::singleton(version.clone()),
-                            specifier: None,
                             url: None,
                         })
                         .collect(),
@@ -1518,7 +1528,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 marker,
             } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, marker.as_ref()]
+                    [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
@@ -1529,10 +1539,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         extra: extra.cloned(),
                                         dev: None,
-                                        marker: marker.cloned(),
+                                        marker,
                                     }),
                                     version: Range::singleton(version.clone()),
-                                    specifier: None,
                                     url: None,
                                 })
                         })
@@ -1544,7 +1553,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // without the marker.
             PubGrubPackageInner::Dev { name, dev, marker } => {
                 return Ok(Dependencies::Unforkable(
-                    [None, marker.as_ref()]
+                    [MarkerTree::TRUE, *marker]
                         .into_iter()
                         .dedup()
                         .flat_map(move |marker| {
@@ -1555,10 +1564,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         name: name.clone(),
                                         extra: None,
                                         dev: dev.cloned(),
-                                        marker: marker.cloned(),
+                                        marker,
                                     }),
                                     version: Range::singleton(version.clone()),
-                                    specifier: None,
                                     url: None,
                                 })
                         })
@@ -1610,25 +1618,48 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // Transitively process all extras that are recursively included, starting with the current
         // extra.
-        let mut seen = FxHashSet::default();
+        let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
         let mut queue: VecDeque<_> = requirements
             .iter()
             .filter(|req| name == Some(&req.name))
-            .flat_map(|req| req.extras.iter().cloned())
+            .flat_map(|req| req.extras.iter().cloned().map(|extra| (extra, req.marker)))
             .collect();
-        while let Some(extra) = queue.pop_front() {
-            if !seen.insert(extra.clone()) {
+        while let Some((extra, marker)) = queue.pop_front() {
+            if !seen.insert((extra.clone(), marker)) {
                 continue;
             }
             for requirement in
                 self.requirements_for_extra(dependencies, Some(&extra), env, python_requirement)
             {
+                let requirement = match requirement {
+                    Cow::Owned(mut requirement) => {
+                        requirement.marker.and(marker);
+                        requirement
+                    }
+                    Cow::Borrowed(requirement) => {
+                        let mut marker = marker;
+                        marker.and(requirement.marker);
+                        Requirement {
+                            name: requirement.name.clone(),
+                            extras: requirement.extras.clone(),
+                            source: requirement.source.clone(),
+                            origin: requirement.origin.clone(),
+                            marker: marker.simplify_extras(slice::from_ref(&extra)),
+                        }
+                    }
+                };
                 if name == Some(&requirement.name) {
                     // Add each transitively included extra.
-                    queue.extend(requirement.extras.iter().cloned());
+                    queue.extend(
+                        requirement
+                            .extras
+                            .iter()
+                            .cloned()
+                            .map(|extra| (extra, requirement.marker)),
+                    );
                 } else {
                     // Add the requirements for that extra.
-                    requirements.push(requirement);
+                    requirements.push(Cow::Owned(requirement));
                 }
             }
         }
@@ -1657,7 +1688,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let python_marker = python_requirement.to_marker_tree();
                 // If the requirement would not be selected with any Python version
                 // supported by the root, skip it.
-                if python_marker.is_disjoint(&requirement.marker) {
+                if python_marker.is_disjoint(requirement.marker) {
                     trace!(
                         "skipping {requirement} because of Requires-Python: {requires_python}",
                         requires_python = python_requirement.target(),
@@ -1667,7 +1698,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // If we're in a fork in universal mode, ignore any dependency that isn't part of
                 // this fork (but will be part of another fork).
-                if !env.included_by_marker(&requirement.marker) {
+                if !env.included_by_marker(requirement.marker) {
                     trace!("skipping {requirement} because of {env}");
                     return None;
                 }
@@ -1716,8 +1747,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 if requirement.marker.is_true() {
                                     Cow::Borrowed(constraint)
                                 } else {
-                                    let mut marker = constraint.marker.clone();
-                                    marker.and(requirement.marker.clone());
+                                    let mut marker = constraint.marker;
+                                    marker.and(requirement.marker);
+
+                                    if marker.is_false() {
+                                        trace!(
+                                            "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                            constraint.marker.try_to_string().unwrap(),
+                                            requirement.marker.try_to_string().unwrap(),
+                                        );
+                                        return None;
+                                    }
 
                                     Cow::Owned(Requirement {
                                         name: constraint.name.clone(),
@@ -1731,20 +1771,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 let requires_python = python_requirement.target();
                                 let python_marker = python_requirement.to_marker_tree();
 
-                                let mut marker = constraint.marker.clone();
-                                marker.and(requirement.marker.clone());
+                                let mut marker = constraint.marker;
+                                marker.and(requirement.marker);
+
+                                if marker.is_false() {
+                                    trace!(
+                                        "skipping {constraint} because of disjoint markers: `{}` vs. `{}`",
+                                        constraint.marker.try_to_string().unwrap(),
+                                        requirement.marker.try_to_string().unwrap(),
+                                    );
+                                    return None;
+                                }
 
                                 // Additionally, if the requirement is `requests ; sys_platform == 'darwin'`
                                 // and the constraint is `requests ; python_version == '3.6'`, the
                                 // constraint should only apply when _both_ markers are true.
-                                if marker.is_false() {
-                                    trace!("skipping {constraint} because of Requires-Python: {requires_python}");
-                                    return None;
-                                }
-                                if python_marker.is_disjoint(&marker) {
+                                if python_marker.is_disjoint(marker) {
                                     trace!(
-                                        "skipping constraint {requirement} because of Requires-Python: {requires_python}",
-                                        requires_python = python_requirement.target(),
+                                        "skipping constraint {requirement} because of Requires-Python: {requires_python}"
                                     );
                                     return None;
                                 }
@@ -1764,7 +1808,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                             // If we're in a fork in universal mode, ignore any dependency that isn't part of
                             // this fork (but will be part of another fork).
-                            if !env.included_by_marker(&constraint.marker) {
+                            if !env.included_by_marker(constraint.marker) {
                                 trace!("skipping {constraint} because of {env}");
                                 return None;
                             }
@@ -2272,7 +2316,6 @@ impl ForkState {
                 package,
                 version,
                 url,
-                ..
             } = dependency;
 
             let mut has_url = false;
@@ -2311,9 +2354,10 @@ impl ForkState {
                 );
                 if !has_url && missing_lower_bound && strategy_lowest {
                     warn_user_once!(
-                        "The direct dependency `{package}` is unpinned. \
+                        "The direct dependency `{name}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
-                        to avoid using outdated versions."
+                        to avoid using outdated versions.",
+                        name = package.name_no_root().unwrap(),
                     );
                 }
             }
@@ -2329,7 +2373,6 @@ impl ForkState {
                 let PubGrubDependency {
                     package,
                     version,
-                    specifier: _,
                     url: _,
                 } = dependency;
                 (package, version)
@@ -2423,7 +2466,7 @@ impl ForkState {
                         name: self_name,
                         extra: self_extra,
                         dev: self_dev,
-                        ..
+                        marker: _,
                     } => (Some(self_name), self_extra.as_ref(), self_dev.as_ref()),
 
                     PubGrubPackageInner::Root(_) => (None, None, None),
@@ -2440,13 +2483,9 @@ impl ForkState {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
                         dev: ref dependency_dev,
+                        marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_dev.is_none()
-                            && self_name.is_some_and(|self_name| self_name == dependency_name)
-                        {
-                            continue;
-                        }
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2462,7 +2501,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: dependency_extra.clone(),
                             to_dev: dependency_dev.clone(),
-                            marker: MarkerTree::TRUE,
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2472,11 +2511,6 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_dev.is_none()
-                            && self_name.is_some_and(|self_name| self_name == dependency_name)
-                        {
-                            continue;
-                        }
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2492,7 +2526,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: None,
                             to_dev: None,
-                            marker: dependency_marker.clone(),
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2503,11 +2537,7 @@ impl ForkState {
                         marker: ref dependency_marker,
                         ..
                     } => {
-                        if self_dev.is_none()
-                            && self_name.is_some_and(|self_name| self_name == dependency_name)
-                        {
-                            continue;
-                        }
+                        // Insert an edge from the dependent package to the extra package.
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2523,7 +2553,27 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: Some(dependency_extra.clone()),
                             to_dev: None,
-                            marker: MarkerTree::from(dependency_marker.clone()),
+                            marker: *dependency_marker,
+                        };
+                        edges.insert(edge);
+
+                        // Insert an edge from the dependent package to the base package.
+                        let to_url = self.fork_urls.get(dependency_name);
+                        let to_index = self.fork_indexes.get(dependency_name);
+                        let edge = ResolutionDependencyEdge {
+                            from: self_name.cloned(),
+                            from_version: self_version.clone(),
+                            from_url: self_url.cloned(),
+                            from_index: self_index.cloned(),
+                            from_extra: self_extra.cloned(),
+                            from_dev: self_dev.cloned(),
+                            to: dependency_name.clone(),
+                            to_version: dependency_version.clone(),
+                            to_url: to_url.cloned(),
+                            to_index: to_index.cloned(),
+                            to_extra: None,
+                            to_dev: None,
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2539,6 +2589,9 @@ impl ForkState {
                         {
                             continue;
                         }
+
+                        // Add an edge from the dependent package to the dev package, but _not_ the
+                        // base package.
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2554,7 +2607,7 @@ impl ForkState {
                             to_index: to_index.cloned(),
                             to_extra: None,
                             to_dev: Some(dependency_dev.clone()),
-                            marker: MarkerTree::from(dependency_marker.clone()),
+                            marker: *dependency_marker,
                         };
                         edges.insert(edge);
                     }
@@ -2571,7 +2624,7 @@ impl ForkState {
                     name,
                     extra,
                     dev,
-                    marker: None,
+                    marker: MarkerTree::TRUE,
                 } = &*self.pubgrub.package_store[package]
                 {
                     Some((
@@ -2649,7 +2702,7 @@ pub(crate) struct ResolutionDependencyEdge {
 impl ResolutionDependencyEdge {
     pub(crate) fn universal_marker(&self) -> UniversalMarker {
         // FIXME: Account for extras and groups here.
-        UniversalMarker::new(self.marker.clone(), MarkerTree::TRUE)
+        UniversalMarker::new(self.marker, MarkerTree::TRUE)
     }
 }
 
@@ -2887,9 +2940,9 @@ impl Forks {
                     .is_some_and(|bound| python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
-                    let markers = dep.package.marker().cloned().unwrap_or(MarkerTree::TRUE);
+                    let markers = dep.package.marker().unwrap_or(MarkerTree::TRUE);
                     for fork in &mut forks {
-                        if fork.env.included_by_marker(&markers) {
+                        if fork.env.included_by_marker(markers) {
                             fork.add_dependency(dep.clone());
                         }
                     }
@@ -2936,7 +2989,7 @@ impl Forks {
                         }
                         // Filter out any forks we created that are disjoint with our
                         // Python requirement.
-                        if new_fork.env.included_by_marker(&python_marker) {
+                        if new_fork.env.included_by_marker(python_marker) {
                             new.push(new_fork);
                         }
                     }

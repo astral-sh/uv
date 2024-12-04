@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
@@ -135,6 +135,7 @@ impl<'a> Planner<'a> {
                         Some(&entry.dist)
                     }) {
                         debug!("Requirement already cached: {distribution}");
+                        // STOPSHIP(charlie): If these are mismatched, skip and warn.
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
@@ -176,6 +177,7 @@ impl<'a> Planner<'a> {
                             );
 
                             debug!("URL wheel requirement already cached: {cached_dist}");
+                            // STOPSHIP(charlie): If these are mismatched, skip and warn.
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
                         }
@@ -236,6 +238,9 @@ impl<'a> Planner<'a> {
                         if *entry.index.url() != sdist.index {
                             return None;
                         }
+                        if entry.dist.filename.name != sdist.name {
+                            return None;
+                        }
                         if entry.dist.filename.version != sdist.version {
                             return None;
                         };
@@ -256,20 +261,36 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.url(sdist)? {
-                        let cached_dist = wheel.into_url_dist(sdist.url.clone());
-                        debug!("URL source requirement already cached: {cached_dist}");
-                        cached.push(CachedDist::Url(cached_dist));
-                        continue;
+                        if wheel.filename.name == sdist.name {
+                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
+                            debug!("URL source requirement already cached: {cached_dist}");
+                            cached.push(CachedDist::Url(cached_dist));
+                            continue;
+                        }
+
+                        warn!(
+                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            sdist,
+                            wheel.filename
+                        );
                     }
                 }
                 Dist::Source(SourceDist::Git(sdist)) => {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.git(sdist) {
-                        let cached_dist = wheel.into_url_dist(sdist.url.clone());
-                        debug!("Git source requirement already cached: {cached_dist}");
-                        cached.push(CachedDist::Url(cached_dist));
-                        continue;
+                        if wheel.filename.name == sdist.name {
+                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
+                            debug!("Git source requirement already cached: {cached_dist}");
+                            cached.push(CachedDist::Url(cached_dist));
+                            continue;
+                        }
+
+                        warn!(
+                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            sdist,
+                            wheel.filename
+                        );
                     }
                 }
                 Dist::Source(SourceDist::Path(sdist)) => {
@@ -281,10 +302,18 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.path(sdist)? {
-                        let cached_dist = wheel.into_url_dist(sdist.url.clone());
-                        debug!("Path source requirement already cached: {cached_dist}");
-                        cached.push(CachedDist::Url(cached_dist));
-                        continue;
+                        if wheel.filename.name == sdist.name {
+                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
+                            debug!("Path source requirement already cached: {cached_dist}");
+                            cached.push(CachedDist::Url(cached_dist));
+                            continue;
+                        }
+
+                        warn!(
+                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            sdist,
+                            wheel.filename
+                        );
                     }
                 }
                 Dist::Source(SourceDist::Directory(sdist)) => {
@@ -296,14 +325,22 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.directory(sdist)? {
-                        let cached_dist = if sdist.editable {
-                            wheel.into_editable(sdist.url.clone())
-                        } else {
-                            wheel.into_url_dist(sdist.url.clone())
-                        };
-                        debug!("Directory source requirement already cached: {cached_dist}");
-                        cached.push(CachedDist::Url(cached_dist));
-                        continue;
+                        if wheel.filename.name == sdist.name {
+                            let cached_dist = if sdist.editable {
+                                wheel.into_editable(sdist.url.clone())
+                            } else {
+                                wheel.into_url_dist(sdist.url.clone())
+                            };
+                            debug!("Directory source requirement already cached: {cached_dist}");
+                            cached.push(CachedDist::Url(cached_dist));
+                            continue;
+                        }
+
+                        warn!(
+                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            sdist,
+                            wheel.filename
+                        );
                     }
                 }
             }

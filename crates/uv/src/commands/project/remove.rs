@@ -10,6 +10,7 @@ use uv_configuration::{
     Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
     TrustedHost,
 };
+use uv_dispatch::SharedState;
 use uv_fs::Simplified;
 use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
@@ -25,7 +26,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{default_dependency_groups, ProjectError};
-use crate::commands::{diagnostics, project, ExitStatus, SharedState};
+use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 

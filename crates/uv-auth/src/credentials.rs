@@ -76,7 +76,7 @@ impl Credentials {
         }
     }
 
-    pub(crate) fn username(&self) -> Option<&str> {
+    pub fn username(&self) -> Option<&str> {
         self.username.as_deref()
     }
 
@@ -84,7 +84,7 @@ impl Credentials {
         self.username.clone()
     }
 
-    pub(crate) fn password(&self) -> Option<&str> {
+    pub fn password(&self) -> Option<&str> {
         self.password.as_deref()
     }
 

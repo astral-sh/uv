@@ -34,7 +34,8 @@ use uv_distribution_types::{
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic, LockedFile};
 use uv_metadata::read_archive_metadata;
-use uv_pep440::release_specifiers_to_ranges;
+use uv_normalize::PackageName;
+use uv_pep440::{release_specifiers_to_ranges, Version};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata12, RequiresTxt, ResolutionMetadata};
 use uv_types::{BuildContext, SourceBuildTrait};
@@ -416,7 +417,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
+        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
+        {
             return Ok(built_wheel.with_hashes(revision.into_hashes()));
         }
 
@@ -520,10 +523,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
+        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
+            .await?
+            .filter(|metadata| metadata.matches(source.name(), source.version()))
+        {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata),
+                metadata: Metadata::from_metadata23(metadata.into()),
                 hashes: revision.into_hashes(),
             });
         }
@@ -732,7 +738,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
+        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
+        {
             return Ok(built_wheel);
         }
 
@@ -824,10 +832,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
+        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
+            .await?
+            .filter(|metadata| metadata.matches(source.name(), source.version()))
+        {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadata {
-                metadata: Metadata::from_metadata23(metadata),
+                metadata: Metadata::from_metadata23(metadata.into()),
                 hashes: revision.into_hashes(),
             });
         }
@@ -1000,7 +1011,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
+        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
+        {
             return Ok(built_wheel);
         }
 
@@ -1095,11 +1108,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
+        if let Some(metadata) = CachedMetadata::read(&metadata_entry)
+            .await?
+            .filter(|metadata| metadata.matches(source.name(), source.version()))
+        {
             debug!("Using cached metadata for: {source}");
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
-                    metadata,
+                    metadata.into(),
                     resource.install_path.as_ref(),
                     None,
                     self.build_context.locations(),
@@ -1278,7 +1294,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard) {
+        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+            .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
+        {
             return Ok(built_wheel);
         }
 
@@ -1360,13 +1378,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Cow::Borrowed(fetch.path())
         };
 
+        let git_member = GitWorkspaceMember {
+            fetch_root: fetch.path(),
+            git_source: resource,
+        };
+
         if let Some(metadata) =
             Self::read_static_metadata(source, fetch.path(), resource.subdirectory).await?
         {
-            let git_member = GitWorkspaceMember {
-                fetch_root: fetch.path(),
-                git_source: resource,
-            };
             return Ok(ArchiveMetadata::from(
                 Metadata::from_workspace(
                     metadata,
@@ -1388,19 +1407,27 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?
             .is_fresh()
         {
-            if let Some(metadata) = read_cached_metadata(&metadata_entry).await? {
+            if let Some(metadata) = CachedMetadata::read(&metadata_entry)
+                .await?
+                .filter(|metadata| metadata.matches(source.name(), source.version()))
+            {
                 let path = if let Some(subdirectory) = resource.subdirectory {
                     Cow::Owned(fetch.path().join(subdirectory))
                 } else {
                     Cow::Borrowed(fetch.path())
                 };
 
+                let git_member = GitWorkspaceMember {
+                    fetch_root: fetch.path(),
+                    git_source: resource,
+                };
+
                 debug!("Using cached metadata for: {source}");
                 return Ok(ArchiveMetadata::from(
                     Metadata::from_workspace(
-                        metadata,
+                        metadata.into(),
                         &path,
-                        None,
+                        Some(&git_member),
                         self.build_context.locations(),
                         self.build_context.sources(),
                         self.build_context.bounds(),
@@ -1433,7 +1460,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Metadata::from_workspace(
                     metadata,
                     &path,
-                    None,
+                    Some(&git_member),
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.bounds(),
@@ -1481,7 +1508,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Metadata::from_workspace(
                 metadata,
                 fetch.path(),
-                None,
+                Some(&git_member),
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.bounds(),
@@ -1798,6 +1825,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::Build)?;
 
+        // Read the metadata from the wheel.
+        let filename = WheelFilename::from_str(&disk_filename)?;
+        let metadata = read_wheel_metadata(&filename, &temp_dir.path().join(&disk_filename))?;
+
+        // Validate the metadata.
+        validate_metadata(source, &metadata)?;
+        validate_filename(&filename, &metadata)?;
+
         // Move the wheel to the cache.
         rename_with_retry(
             temp_dir.path().join(&disk_filename),
@@ -1805,13 +1840,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         )
         .await
         .map_err(Error::CacheWrite)?;
-
-        // Read the metadata from the wheel.
-        let filename = WheelFilename::from_str(&disk_filename)?;
-        let metadata = read_wheel_metadata(&filename, &cache_shard.join(&disk_filename))?;
-
-        // Validate the metadata.
-        validate(source, &metadata)?;
 
         debug!("Finished building: {source}");
         Ok((disk_filename, filename, metadata))
@@ -1883,7 +1911,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata = ResolutionMetadata::parse_metadata(&content)?;
 
         // Validate the metadata.
-        validate(source, &metadata)?;
+        validate_metadata(source, &metadata)?;
 
         Ok(Some(metadata))
     }
@@ -1899,7 +1927,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 debug!("Found static `pyproject.toml` for: {source}");
 
                 // Validate the metadata.
-                validate(source, &metadata)?;
+                validate_metadata(source, &metadata)?;
 
                 return Ok(Some(metadata));
             }
@@ -1929,7 +1957,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 debug!("Found static `PKG-INFO` for: {source}");
 
                 // Validate the metadata.
-                validate(source, &metadata)?;
+                validate_metadata(source, &metadata)?;
 
                 return Ok(Some(metadata));
             }
@@ -1953,7 +1981,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 debug!("Found static `egg-info` for: {source}");
 
                 // Validate the metadata.
-                validate(source, &metadata)?;
+                validate_metadata(source, &metadata)?;
 
                 return Ok(Some(metadata));
             }
@@ -2065,10 +2093,13 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
 }
 
 /// Validate that the source distribution matches the built metadata.
-fn validate(source: &BuildableSource<'_>, metadata: &ResolutionMetadata) -> Result<(), Error> {
+fn validate_metadata(
+    source: &BuildableSource<'_>,
+    metadata: &ResolutionMetadata,
+) -> Result<(), Error> {
     if let Some(name) = source.name() {
         if metadata.name != *name {
-            return Err(Error::NameMismatch {
+            return Err(Error::WheelMetadataNameMismatch {
                 metadata: metadata.name.clone(),
                 given: name.clone(),
             });
@@ -2077,11 +2108,30 @@ fn validate(source: &BuildableSource<'_>, metadata: &ResolutionMetadata) -> Resu
 
     if let Some(version) = source.version() {
         if metadata.version != *version {
-            return Err(Error::VersionMismatch {
+            return Err(Error::WheelMetadataVersionMismatch {
                 metadata: metadata.version.clone(),
                 given: version.clone(),
             });
         }
+    }
+
+    Ok(())
+}
+
+/// Validate that the source distribution matches the built filename.
+fn validate_filename(filename: &WheelFilename, metadata: &ResolutionMetadata) -> Result<(), Error> {
+    if metadata.name != filename.name {
+        return Err(Error::WheelFilenameNameMismatch {
+            metadata: metadata.name.clone(),
+            filename: filename.name.clone(),
+        });
+    }
+
+    if metadata.version != filename.version {
+        return Err(Error::WheelFilenameVersionMismatch {
+            metadata: metadata.version.clone(),
+            filename: filename.version.clone(),
+        });
     }
 
     Ok(())
@@ -2335,14 +2385,30 @@ async fn read_requires_dist(project_root: &Path) -> Result<uv_pypi_types::Requir
     Ok(requires_dist)
 }
 
-/// Read an existing cached [`ResolutionMetadata`], if it exists.
-async fn read_cached_metadata(
-    cache_entry: &CacheEntry,
-) -> Result<Option<ResolutionMetadata>, Error> {
-    match fs::read(&cache_entry.path()).await {
-        Ok(cached) => Ok(Some(rmp_serde::from_slice(&cached)?)),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(Error::CacheRead(err)),
+/// Wheel metadata stored in the source distribution cache.
+#[derive(Debug, Clone)]
+struct CachedMetadata(ResolutionMetadata);
+
+impl CachedMetadata {
+    /// Read an existing cached [`ResolutionMetadata`], if it exists.
+    async fn read(cache_entry: &CacheEntry) -> Result<Option<Self>, Error> {
+        match fs::read(&cache_entry.path()).await {
+            Ok(cached) => Ok(Some(Self(rmp_serde::from_slice(&cached)?))),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(Error::CacheRead(err)),
+        }
+    }
+
+    /// Returns `true` if the metadata matches the given package name and version.
+    fn matches(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
+        name.map_or(true, |name| self.0.name == *name)
+            && version.map_or(true, |version| self.0.version == *version)
+    }
+}
+
+impl From<CachedMetadata> for ResolutionMetadata {
+    fn from(value: CachedMetadata) -> Self {
+        value.0
     }
 }
 

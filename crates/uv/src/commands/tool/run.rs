@@ -15,6 +15,7 @@ use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, TrustedHost};
+use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -37,10 +38,10 @@ use crate::commands::pip::loggers::{
 use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::Target;
+use crate::commands::ExitStatus;
 use crate::commands::{
     diagnostics, project::environment::CachedEnvironment, tool::common::matching_packages,
 };
-use crate::commands::{ExitStatus, SharedState};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 

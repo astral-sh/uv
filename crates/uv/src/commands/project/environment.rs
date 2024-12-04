@@ -4,13 +4,13 @@ use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::project::{
     resolve_environment, sync_environment, EnvironmentSpecification, ProjectError,
 };
-use crate::commands::SharedState;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::Connectivity;
 use uv_configuration::{Concurrency, TrustedHost};
+use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
 

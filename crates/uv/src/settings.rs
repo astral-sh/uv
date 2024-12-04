@@ -466,6 +466,8 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with: Vec<String>,
     pub(crate) with_requirements: Vec<PathBuf>,
     pub(crate) with_editable: Vec<String>,
+    pub(crate) constraints: Vec<PathBuf>,
+    pub(crate) overrides: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -486,6 +488,8 @@ impl ToolInstallSettings {
             with,
             with_editable,
             with_requirements,
+            constraints,
+            overrides,
             installer,
             force,
             build,
@@ -520,6 +524,14 @@ impl ToolInstallSettings {
                 .flat_map(CommaSeparatedRequirements::into_iter)
                 .collect(),
             with_requirements: with_requirements
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            constraints: constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            overrides: overrides
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -755,6 +767,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) force: bool,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) default: bool,
 }
 
 impl PythonInstallSettings {
@@ -778,6 +791,7 @@ impl PythonInstallSettings {
             force,
             mirror: _,
             pypy_mirror: _,
+            default,
         } = args;
 
         Self {
@@ -786,6 +800,7 @@ impl PythonInstallSettings {
             force,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
+            default,
         }
     }
 }
@@ -1764,6 +1779,7 @@ impl PipInstallSettings {
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
+    pub(crate) dry_run: bool,
     pub(crate) settings: PipSettings,
 }
 
@@ -1781,12 +1797,14 @@ impl PipUninstallSettings {
             no_break_system_packages,
             target,
             prefix,
+            dry_run,
             compat_args: _,
         } = args;
 
         Self {
             package,
             requirements,
+            dry_run,
             settings: PipSettings::combine(
                 PipOptions {
                     python: python.and_then(Maybe::into_option),
@@ -2015,6 +2033,7 @@ pub(crate) struct BuildSettings {
     pub(crate) sdist: bool,
     pub(crate) wheel: bool,
     pub(crate) build_logs: bool,
+    pub(crate) force_pep517: bool,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) python: Option<String>,
@@ -2033,6 +2052,7 @@ impl BuildSettings {
             all_packages,
             sdist,
             wheel,
+            force_pep517,
             build_constraints,
             require_hashes,
             no_require_hashes,
@@ -2063,6 +2083,7 @@ impl BuildSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            force_pep517,
             hash_checking: HashCheckingMode::from_args(
                 flag(require_hashes, no_require_hashes),
                 flag(verify_hashes, no_verify_hashes),
@@ -2827,6 +2848,7 @@ impl PublishSettings {
         let PublishOptions {
             publish_url,
             trusted_publishing,
+            check_url,
         } = publish;
         let ResolverInstallerOptions {
             keyring_provider, ..
@@ -2854,7 +2876,7 @@ impl PublishSettings {
                 .keyring_provider
                 .combine(keyring_provider)
                 .unwrap_or_default(),
-            check_url: args.check_url,
+            check_url: args.check_url.combine(check_url),
         }
     }
 }

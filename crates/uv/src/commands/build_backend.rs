@@ -5,14 +5,12 @@ use anyhow::{Context, Result};
 use std::env;
 use std::io::Write;
 use std::path::Path;
-use uv_build_backend::SourceDistSettings;
 
 /// PEP 517 hook to build a source distribution.
 pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
     let filename = uv_build_backend::build_source_dist(
         &env::current_dir()?,
         sdist_directory,
-        SourceDistSettings::default(),
         uv_version::version(),
     )?;
     // Tell the build frontend about the name of the artifact we built

@@ -8,6 +8,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, TrustedHost};
+use uv_dispatch::SharedState;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pypi_types::Requirement;
@@ -27,7 +28,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{conjunction, tool::common::install_executables, ExitStatus, SharedState};
+use crate::commands::{conjunction, tool::common::install_executables, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -268,9 +269,16 @@ async fn upgrade_tool(
     let settings = ResolverInstallerSettings::from(options.clone());
 
     // Resolve the requirements.
-    let requirements = existing_tool_receipt.requirements();
-    let spec =
-        RequirementsSpecification::from_constraints(requirements.to_vec(), constraints.to_vec());
+    let spec = RequirementsSpecification::from_overrides(
+        existing_tool_receipt.requirements().to_vec(),
+        existing_tool_receipt
+            .constraints()
+            .iter()
+            .chain(constraints)
+            .cloned()
+            .collect(),
+        existing_tool_receipt.overrides().to_vec(),
+    );
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -366,7 +374,9 @@ async fn upgrade_tool(
             ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
-            requirements.to_vec(),
+            existing_tool_receipt.requirements().to_vec(),
+            existing_tool_receipt.constraints().to_vec(),
+            existing_tool_receipt.overrides().to_vec(),
             printer,
         )?;
     }

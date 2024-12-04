@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
-use crate::Metadata;
 use uv_configuration::{LowerBound, SourceStrategy};
 use uv_distribution_types::IndexLocations;
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
+
+use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
+use crate::Metadata;
 
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
@@ -164,7 +165,7 @@ impl RequiresDist {
                             let extra = None;
                             LoweredRequirement::from_requirement(
                                 requirement,
-                                &metadata.name,
+                                Some(&metadata.name),
                                 project_workspace.project_root(),
                                 project_sources,
                                 project_indexes,
@@ -209,7 +210,7 @@ impl RequiresDist {
                     let group = None;
                     LoweredRequirement::from_requirement(
                         requirement,
-                        &metadata.name,
+                        Some(&metadata.name),
                         project_workspace.project_root(),
                         project_sources,
                         project_indexes,
@@ -586,7 +587,7 @@ mod test {
 
         assert_snapshot!(format_err(input).await, @r###"
         error: Failed to parse entry: `tqdm`
-          Caused by: Package is not included as workspace package in `tool.uv.workspace`
+          Caused by: `tqdm` references a workspace in `tool.uv.sources` (e.g., `tqdm = { workspace = true }`), but is not a workspace member
         "###);
     }
 

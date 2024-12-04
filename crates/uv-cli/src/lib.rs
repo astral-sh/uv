@@ -1839,6 +1839,10 @@ pub struct PipUninstallArgs {
     #[arg(long, conflicts_with = "target")]
     pub prefix: Option<PathBuf>,
 
+    /// Perform a dry run, i.e., don't actually uninstall anything but print the resulting plan.
+    #[arg(long)]
+    pub dry_run: bool,
+
     #[command(flatten)]
     pub compat_args: compat::PipGlobalCompatArgs,
 }
@@ -2173,6 +2177,14 @@ pub struct BuildArgs {
     /// Hide logs from the build backend.
     #[arg(long, overrides_with("build_logs"), hide = true)]
     pub no_build_logs: bool,
+
+    /// Always build through PEP 517, don't use the fast path for the uv build backend.
+    ///
+    /// By default, uv won't create a PEP 517 build environment for packages using the uv build
+    /// backend, but use a fast path that calls into the build backend directly. This option forces
+    /// always using PEP 517.
+    #[arg(long)]
+    pub force_pep517: bool,
 
     /// Constrain build dependencies using the given requirements files when building
     /// distributions.
@@ -3766,6 +3778,28 @@ pub struct ToolInstallArgs {
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
+    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub constraints: Vec<Maybe<PathBuf>>,
+
+    /// Override versions using the given requirements files.
+    ///
+    /// Overrides files are `requirements.txt`-like files that force a specific version of a
+    /// requirement to be installed, regardless of the requirements declared by any constituent
+    /// package, and regardless of whether this would be considered an invalid resolution.
+    ///
+    /// While constraints are _additive_, in that they're combined with the requirements of the
+    /// constituent packages, overrides are _absolute_, in that they completely replace the
+    /// requirements of the constituent packages.
+    #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub overrides: Vec<Maybe<PathBuf>>,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -4214,6 +4248,21 @@ pub struct PythonInstallArgs {
     /// Implies `--reinstall`.
     #[arg(long, short)]
     pub force: bool,
+
+    /// Use as the default Python version.
+    ///
+    /// By default, only a `python{major}.{minor}` executable is installed, e.g., `python3.10`. When
+    /// the `--default` flag is used, `python{major}`, e.g., `python3`, and `python` executables are
+    /// also installed.
+    ///
+    /// Alternative Python variants will still include their tag. For example, installing
+    /// 3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
+    /// and `python`.
+    ///
+    /// If multiple Python versions are requested during the installation, the first request will be
+    /// the default.
+    #[arg(long)]
+    pub default: bool,
 }
 
 #[derive(Args)]

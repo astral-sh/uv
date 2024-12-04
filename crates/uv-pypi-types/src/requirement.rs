@@ -36,9 +36,7 @@ pub enum RequirementError {
 ///
 /// The main change is using [`RequirementSource`] to represent all supported package sources over
 /// [`VersionOrUrl`], which collapses all URL sources into a single stringly type.
-#[derive(
-    Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Requirement {
     pub name: PackageName,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -85,6 +83,85 @@ impl Requirement {
         };
         let fragment = url.fragment()?;
         Hashes::parse_fragment(fragment).ok()
+    }
+
+    /// Set the source file containing the requirement.
+    #[must_use]
+    pub fn with_origin(self, origin: RequirementOrigin) -> Self {
+        Self {
+            origin: Some(origin),
+            ..self
+        }
+    }
+}
+
+impl std::hash::Hash for Requirement {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            name,
+            extras,
+            marker,
+            source,
+            origin: _,
+        } = self;
+        name.hash(state);
+        extras.hash(state);
+        marker.hash(state);
+        source.hash(state);
+    }
+}
+
+impl PartialEq for Requirement {
+    fn eq(&self, other: &Self) -> bool {
+        let Self {
+            name,
+            extras,
+            marker,
+            source,
+            origin: _,
+        } = self;
+        let Self {
+            name: other_name,
+            extras: other_extras,
+            marker: other_marker,
+            source: other_source,
+            origin: _,
+        } = other;
+        name == other_name
+            && extras == other_extras
+            && marker == other_marker
+            && source == other_source
+    }
+}
+
+impl Eq for Requirement {}
+
+impl Ord for Requirement {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let Self {
+            name,
+            extras,
+            marker,
+            source,
+            origin: _,
+        } = self;
+        let Self {
+            name: other_name,
+            extras: other_extras,
+            marker: other_marker,
+            source: other_source,
+            origin: _,
+        } = other;
+        name.cmp(other_name)
+            .then_with(|| extras.cmp(other_extras))
+            .then_with(|| marker.cmp(other_marker))
+            .then_with(|| source.cmp(other_source))
+    }
+}
+
+impl PartialOrd for Requirement {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 

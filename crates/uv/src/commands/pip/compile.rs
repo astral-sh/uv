@@ -14,13 +14,12 @@ use uv_configuration::{
     LowerBound, NoBinary, NoBuild, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexCapabilities, IndexLocations, NameRequirementSpecification,
-    Origin, UnresolvedRequirementSpecification, Verbatim,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin,
+    UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
-use uv_git::GitResolver;
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
@@ -36,7 +35,7 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverEnvironment,
 };
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -222,8 +221,8 @@ pub(crate) async fn pip_compile(
         }
     }
 
-    // Create a shared in-memory index.
-    let source_index = InMemoryIndex::default();
+    // Create the shared state.
+    let state = SharedState::default();
 
     // If we're resolving against a different Python version, use a separate index. Source
     // distributions will be built against the installed version, and so the index may contain
@@ -231,7 +230,7 @@ pub(crate) async fn pip_compile(
     let top_level_index = if python_version.is_some() {
         InMemoryIndex::default()
     } else {
-        source_index.clone()
+        state.index().clone()
     };
 
     // Determine the Python requirement, if the user requested a specific version.
@@ -306,8 +305,6 @@ pub(crate) async fn pip_compile(
 
     // Read the lockfile, if present.
     let preferences = read_requirements_txt(output_file, &upgrade).await?;
-    let git = GitResolver::default();
-    let capabilities = IndexCapabilities::default();
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
@@ -320,9 +317,6 @@ pub(crate) async fn pip_compile(
             .await?;
         FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };
-
-    // Track in-flight downloads, builds, etc., across resolutions.
-    let in_flight = InFlight::default();
 
     // Determine whether to enable build isolation.
     let environment;
@@ -352,10 +346,7 @@ pub(crate) async fn pip_compile(
         &index_locations,
         &flat_index,
         &dependency_metadata,
-        &source_index,
-        &git,
-        &capabilities,
-        &in_flight,
+        state,
         index_strategy,
         &config_settings,
         build_isolation,

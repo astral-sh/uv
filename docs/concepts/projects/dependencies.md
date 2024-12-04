@@ -454,7 +454,7 @@ You can specify multiple sources for a single dependency by providing a list of 
 disambiguated by [PEP 508](https://peps.python.org/pep-0508/#environment-markers)-compatible
 environment markers.
 
-For example, to pull in different `httpx` commits on macOS vs. Linux:
+For example, to pull in different `httpx` tags on macOS vs. Linux:
 
 ```toml title="pyproject.toml" hl_lines="8-9 13-14"
 [project]

@@ -64,7 +64,11 @@ pub(crate) async fn list(
                 .map(|req| req.source.to_string())
                 .filter(|s| !s.is_empty())
                 .join(", ");
-            format!(" [required: {specifiers}]")
+            if specifiers.is_empty() {
+                String::new()
+            } else {
+                format!(" [required: {specifiers}]")
+            }
         } else {
             String::new()
         };

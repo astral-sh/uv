@@ -13,7 +13,7 @@ use tracing::{instrument, warn};
 use walkdir::WalkDir;
 
 use uv_cache_info::CacheInfo;
-use uv_fs::{relative_to, Simplified};
+use uv_fs::{persist_with_retry_sync, relative_to, rename_with_retry_sync, Simplified};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -424,16 +424,8 @@ fn install_script(
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
-        target.persist(&script_absolute).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    path.user_display(),
-                    err.error
-                ),
-            )
-        })?;
+
+        persist_with_retry_sync(target, &script_absolute)?;
         fs::remove_file(&path)?;
 
         // Make the script executable. We just created the file, so we can set permissions directly.
@@ -467,7 +459,7 @@ fn install_script(
 
             if permissions.mode() & 0o111 == 0o111 {
                 // If the permissions are already executable, we don't need to change them.
-                fs::rename(&path, &script_absolute)?;
+                rename_with_retry_sync(&path, &script_absolute)?;
             } else {
                 // If we have to modify the permissions, copy the file, since we might not own it.
                 warn!(
@@ -488,7 +480,7 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            fs::rename(&path, &script_absolute)?;
+            rename_with_retry_sync(&path, &script_absolute)?;
         }
 
         None

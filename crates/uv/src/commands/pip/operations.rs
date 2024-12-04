@@ -30,7 +30,7 @@ use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
-use uv_python::PythonEnvironment;
+use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
@@ -573,6 +573,63 @@ pub(crate) async fn install(
     Ok(changelog)
 }
 
+/// Display a message about the interpreter that was selected for the operation.
+pub(crate) fn report_interpreter(
+    python: &PythonInstallation,
+    dimmed: bool,
+    printer: Printer,
+) -> Result<(), Error> {
+    let managed = python.source().is_managed();
+    let implementation = python.implementation();
+    let interpreter = python.interpreter();
+
+    if dimmed {
+        if managed {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Using {} {}",
+                    implementation.pretty(),
+                    interpreter.python_version()
+                )
+                .dimmed()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Using {} {} interpreter at: {}",
+                    implementation.pretty(),
+                    interpreter.python_version(),
+                    interpreter.sys_executable().user_display()
+                )
+                .dimmed()
+            )?;
+        }
+    } else {
+        if managed {
+            writeln!(
+                printer.stderr(),
+                "Using {} {}",
+                implementation.pretty(),
+                interpreter.python_version().cyan()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Using {} {} interpreter at: {}",
+                implementation.pretty(),
+                interpreter.python_version(),
+                interpreter.sys_executable().user_display().cyan()
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Display a message about the target environment for the operation.
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
@@ -580,7 +637,7 @@ pub(crate) fn report_target_environment(
     printer: Printer,
 ) -> Result<(), Error> {
     let message = format!(
-        "Using Python {} environment at {}",
+        "Using Python {} environment at: {}",
         env.interpreter().python_version(),
         env.root().user_display()
     );

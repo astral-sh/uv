@@ -1,5 +1,127 @@
 # Changelog
 
+## 0.5.6
+
+### Enhancements
+
+- Add `--dry-run` to `uv pip uninstall` ([#9557](https://github.com/astral-sh/uv/pull/9557))
+- Allow `--constraints` and `--overrides` in `uv tool install` ([#9547](https://github.com/astral-sh/uv/pull/9547))
+- Display removed Python executables on uninstall ([#9459](https://github.com/astral-sh/uv/pull/9459))
+- Warn when keyring has no password for `uv publish` ([#8827](https://github.com/astral-sh/uv/pull/8827))
+- Add suggested action when `.python-version` pin is incompatible with the project ([#9590](https://github.com/astral-sh/uv/pull/9590))
+- Improve error messages for mismatches in `tool.uv.sources` ([#9482](https://github.com/astral-sh/uv/pull/9482))
+- Use constraints in trace rather than irrelevant `requires-python` ([#9529](https://github.com/astral-sh/uv/pull/9529))
+
+### Preview features
+
+- Add `uv python install --default` ([#8650](https://github.com/astral-sh/uv/pull/8650))
+- Fix Python executable installation when multiple patch versions are requested ([#9607](https://github.com/astral-sh/uv/pull/9607))
+- Build backend: Revamp `include` / `exclude` ([#9525](https://github.com/astral-sh/uv/pull/9525))
+- Build backend: Add fast path  ([#9556](https://github.com/astral-sh/uv/pull/9556))
+- Build backend: Add functions to collect file list ([#9602](https://github.com/astral-sh/uv/pull/9602))
+- Build backend: Default excludes ([#9552](https://github.com/astral-sh/uv/pull/9552))
+- Build backend: Refactoring before list ([#9558](https://github.com/astral-sh/uv/pull/9558))
+- Build backend: Warn when visiting over 10k files  ([#9523](https://github.com/astral-sh/uv/pull/9523))
+
+### Configuration
+
+- Make `check-url` available in configuration files ([#9032](https://github.com/astral-sh/uv/pull/9032))
+
+### Performance
+
+- Avoid adding non-extra package with extra dependencies ([#9540](https://github.com/astral-sh/uv/pull/9540))
+- Avoid cloning `String` in marker evaluation ([#9598](https://github.com/astral-sh/uv/pull/9598))
+
+### Rust API
+
+- `uv-pep508`: Add more methods for simplifying `extra`-related expressions ([#9469](https://github.com/astral-sh/uv/pull/9469))
+
+### Bug fixes
+
+- Allow `file:` URLs to include package names ([#9493](https://github.com/astral-sh/uv/pull/9493))
+- Avoid using IDs across PubGrub states ([#9538](https://github.com/astral-sh/uv/pull/9538))
+- Consistently enforce requested-vs.-built metadata when retrieving wheels ([#9484](https://github.com/astral-sh/uv/pull/9484))
+- Do not show empty version specifier in `uv tool list` ([#9605](https://github.com/astral-sh/uv/pull/9605))
+- Include Git member information when getting metadata from cache ([#9388](https://github.com/astral-sh/uv/pull/9388))
+- Include base installation directory in uv run PATH ([#9585](https://github.com/astral-sh/uv/pull/9585))
+- Insert backslash when appending to system drive ([#9488](https://github.com/astral-sh/uv/pull/9488))
+- Normalize paths when lowering Git dependencies ([#9595](https://github.com/astral-sh/uv/pull/9595))
+- Omit origin when comparing requirements ([#9570](https://github.com/astral-sh/uv/pull/9570))
+- Override `manylinux_compatible` with `--python-platform` ([#9526](https://github.com/astral-sh/uv/pull/9526))
+- Pass extra when evaluating lockfile markers ([#9539](https://github.com/astral-sh/uv/pull/9539))
+- Propagate markers for recursive extras in resolver ([#9509](https://github.com/astral-sh/uv/pull/9509))
+- Respect path dependencies within Git dependencies ([#9594](https://github.com/astral-sh/uv/pull/9594))
+- Support recursive extras with marker in `pip compile -r pyproject.toml` ([#9535](https://github.com/astral-sh/uv/pull/9535))
+- Don't emit unpinned warning for proxy packages ([#9497](https://github.com/astral-sh/uv/pull/9497))
+- Fix `--refresh-package` flag mentioned as `--refresh-dependency` ([#9486](https://github.com/astral-sh/uv/pull/9486))
+- Handle Windows AV/EDR file locks during script installations ([#9543](https://github.com/astral-sh/uv/pull/9543))
+- Re-enable conflicting extra/group tests and fix regression from #9540 ([#9582](https://github.com/astral-sh/uv/pull/9582))
+
+### Documentation
+
+- Add missing word to docs for `run.md` ([#9527](https://github.com/astral-sh/uv/pull/9527))
+- Add policies reference section and license document ([#9367](https://github.com/astral-sh/uv/pull/9367))
+- Fix typo in entry point docs ([#9491](https://github.com/astral-sh/uv/pull/9491))
+- Fix up version in prior uninstall instructions ([#9485](https://github.com/astral-sh/uv/pull/9485))
+- Mention `uv pip` behavior in build system note ([#9586](https://github.com/astral-sh/uv/pull/9586))
+- Update build failures document ([#9584](https://github.com/astral-sh/uv/pull/9584))
+- Correct wording for multiple sources section ([#9504](https://github.com/astral-sh/uv/pull/9504))
+
+## 0.5.5
+
+### Enhancements
+
+- Add aliases for build backend requests ([#9294](https://github.com/astral-sh/uv/pull/9294))
+- Avoid displaying empty paths ([#9312](https://github.com/astral-sh/uv/pull/9312))
+- Allow constraints in `uv tool upgrade` ([#9375](https://github.com/astral-sh/uv/pull/9375))
+- Remove conflict between `--no-sync` and `--frozen` in `uv run` ([#9400](https://github.com/astral-sh/uv/pull/9400))
+- Respect dependency sources in overrides and constraints ([#9455](https://github.com/astral-sh/uv/pull/9455))
+- Show an interpreter-focused message for `--target` and `--prefix` ([#9373](https://github.com/astral-sh/uv/pull/9373))
+- Add `--no-extra` flag and setting ([#9387](https://github.com/astral-sh/uv/pull/9387))
+- Add `uv export --prune` ([#9389](https://github.com/astral-sh/uv/pull/9389))
+- Add dedicated error message for musl install attempts ([#9430](https://github.com/astral-sh/uv/pull/9430))
+- Add various grammar changes to conflict error messages ([#9369](https://github.com/astral-sh/uv/pull/9369))
+- Annotate default groups in conflict error messages ([#9368](https://github.com/astral-sh/uv/pull/9368))
+- Report marker diagnostics during parsing, rather than evaluation ([#9338](https://github.com/astral-sh/uv/pull/9338))
+- Use consistent formatting for build system errors ([#9340](https://github.com/astral-sh/uv/pull/9340))
+- Use rich diagnostics for build failures ([#9335](https://github.com/astral-sh/uv/pull/9335))
+
+### Preview features
+
+- Improve build backend excludes ([#9281](https://github.com/astral-sh/uv/pull/9281))
+- Include PEP 639 `license-files` metadata during `uv publish` ([#9442](https://github.com/astral-sh/uv/pull/9442))
+
+### Performance
+
+- Initialize rayon lazily ([#9435](https://github.com/astral-sh/uv/pull/9435))
+- Migrate to PubGrub's arena for package names ([#9448](https://github.com/astral-sh/uv/pull/9448))
+
+### Bug fixes
+
+- Allow dependency groups to include the containing package ([#9385](https://github.com/astral-sh/uv/pull/9385))
+- Allow syncing to empty virtual environment directories ([#9427](https://github.com/astral-sh/uv/pull/9427))
+- Allow system Python discovery with `--target` and `--prefix` ([#9371](https://github.com/astral-sh/uv/pull/9371))
+- Don't warn when `--output-file` is empty ([#9417](https://github.com/astral-sh/uv/pull/9417))
+- Fix Python interpreter discovery on non-glibc hosts ([#9005](https://github.com/astral-sh/uv/pull/9005))
+- Fix `tool.uv.dependency-metadata.[].version` schema ([#9468](https://github.com/astral-sh/uv/pull/9468))
+- Only respect preferences across the same indexes ([#9302](https://github.com/astral-sh/uv/pull/9302))
+- Re-compile when `--compile` is passed to an install operation ([#9378](https://github.com/astral-sh/uv/pull/9378))
+- Remove `--upgrade`, `--no-upgrade`, and `--upgrade-package` from `uv tool upgrade` ([#9318](https://github.com/astral-sh/uv/pull/9318))
+- Remove dev dependencies in `--all-groups --no-dev` ([#9300](https://github.com/astral-sh/uv/pull/9300))
+- Surface extras and group conflicts in `uv export` ([#9365](https://github.com/astral-sh/uv/pull/9365))
+- Treat deprecated aliases as equivalent in marker algebra ([#9342](https://github.com/astral-sh/uv/pull/9342))
+- Treat less compatible tags as lower priority in resolver ([#9339](https://github.com/astral-sh/uv/pull/9339))
+
+### Documentation
+
+- Avoid referencing `scikit-build` (instead of `scikit-build-core`) ([#9320](https://github.com/astral-sh/uv/pull/9320))
+- Expand entry points documentation ([#9329](https://github.com/astral-sh/uv/pull/9329))
+- Fix example `pyproject.toml` in project concept documentation ([#9298](https://github.com/astral-sh/uv/pull/9298))
+- Fix header level of "Conflicting dependencies" page ([#9330](https://github.com/astral-sh/uv/pull/9330))
+- Touch-up the extension module guide ([#9293](https://github.com/astral-sh/uv/pull/9293))
+- Update the dependencies documentation ([#9359](https://github.com/astral-sh/uv/pull/9359))
+- Reference `--no-progress` option in related environment variable ([#9357](https://github.com/astral-sh/uv/pull/9357))
+
 ## 0.5.4
 
 ### Enhancements

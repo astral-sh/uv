@@ -47,4 +47,4 @@ ignored = ["uv-options-metadata", "clap"]
 
 [dev-dependencies]
 assert_fs = { version = "1.1.2" }
-indoc = { version = "2.0.5" }
+indoc = { workspace = true }
