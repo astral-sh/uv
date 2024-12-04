@@ -4461,6 +4461,7 @@ dependencies = [
  "url",
  "uv-auth",
  "uv-build-backend",
+ "uv-build-frontend",
  "uv-cache",
  "uv-cache-info",
  "uv-cache-key",
