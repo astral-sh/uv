@@ -3193,3 +3193,81 @@ fn init_lib_build_backend_scikit() -> Result<()> {
 
     Ok(())
 }
+
+/// Run `uv init --app --package --build-backend uv` to create a packaged application project
+#[test]
+fn init_application_package_uv() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("uv"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The uv build backend is experimental and may change without warning
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    let mut filters = context.filters();
+    filters.push((r#"\["uv>=.*,<.*"\]"#, r#"["uv[SPECIFIERS]"]"#));
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv[SPECIFIERS]"]
+        build-backend = "uv"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        def main() -> None:
+            print("Hello from foo!")
+        "###
+        );
+    });
+
+    // Use preview to go through the fast path.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("foo").current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    "###);
+
+    Ok(())
+}

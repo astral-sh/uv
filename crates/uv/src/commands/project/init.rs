@@ -1,16 +1,16 @@
+use anyhow::{anyhow, Context, Result};
+use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-
-use anyhow::{anyhow, Context, Result};
-use owo_colors::OwoColorize;
+use std::str::FromStr;
 
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
-    ProjectBuildBackend, TrustedHost, VersionControlError, VersionControlSystem,
+    PreviewMode, ProjectBuildBackend, TrustedHost, VersionControlError, VersionControlSystem,
 };
 use uv_fs::{Simplified, CWD};
 use uv_git::GIT;
@@ -57,7 +57,11 @@ pub(crate) async fn init(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    if build_backend == Some(ProjectBuildBackend::Uv) && preview.is_disabled() {
+        warn_user_once!("The uv build backend is experimental and may change without warning");
+    }
     match init_kind {
         InitKind::Script => {
             let Some(path) = explicit_path.as_deref() else {
@@ -864,6 +868,21 @@ fn pyproject_project(
 fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBackend) -> String {
     let module_name = package.as_dist_info_name();
     match build_backend {
+        ProjectBuildBackend::Uv => {
+            // Limit to the stable version range.
+            let min_version = Version::from_str(uv_version::version()).unwrap();
+            debug_assert!(
+                min_version.release()[0] == 0,
+                "migrate to major version bumps"
+            );
+            let max_version = Version::new([0, min_version.release()[1] + 1]);
+            indoc::formatdoc! {r#"
+                [build-system]
+                requires = ["uv>={min_version},<{max_version}"]
+                build-backend = "uv"
+            "#}
+        }
+        .to_string(),
         // Pure-python backends
         ProjectBuildBackend::Hatch => indoc::indoc! {r#"
                 [build-system]
