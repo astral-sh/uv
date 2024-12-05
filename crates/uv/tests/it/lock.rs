@@ -19009,3 +19009,47 @@ fn lock_recursive_extra() -> Result<()> {
 
     Ok(())
 }
+
+/// Don't show an unpinned lower bound warning if the package was provided both by name and by URL,
+/// or if the package was part of a constraints files.
+///
+/// See <https://github.com/astral-sh/uv/issues/8155>, the original example was:
+/// ```
+/// uv pip install dist/pymatgen-2024.10.3.tar.gz pymatgen[ci,optional] --resolution=lowest
+/// ```
+#[test]
+fn no_lowest_warning_with_name_and_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio[trio]",
+            "anyio @ https://files.pythonhosted.org/packages/e6/e3/c4c8d473d6780ef1853d630d581f70d655b4f8d7553c6997958c283039a2/anyio-4.4.0.tar.gz"
+        ]
+
+        [tool.uv]
+        constraint-dependencies = [
+            "sortedcontainers==2.4.0",
+            "outcome==1.3.0.post0",
+            "pycparser==2.20",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    "###);
+
+    Ok(())
+}
