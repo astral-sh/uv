@@ -29,7 +29,7 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
+use uv_distribution_types::{AnyErrorBuild, DependencyMetadata, Index, IndexLocations, SourceDist};
 use uv_fs::{relative_to, Simplified};
 use uv_install_wheel::linker::LinkMode;
 use uv_normalize::PackageName;
@@ -66,7 +66,7 @@ enum Error {
     #[error(transparent)]
     BuildBackend(#[from] uv_build_backend::Error),
     #[error(transparent)]
-    BuildDispatch(anyhow::Error),
+    BuildDispatch(AnyErrorBuild),
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
     #[error("Failed to write message")]
@@ -922,7 +922,7 @@ async fn build_sdist(
                     build_output,
                 )
                 .await
-                .map_err(Error::BuildDispatch)?;
+                .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 filename: DistFilename::SourceDistFilename(
@@ -1019,7 +1019,7 @@ async fn build_wheel(
                     build_output,
                 )
                 .await
-                .map_err(Error::BuildDispatch)?;
+                .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 filename: DistFilename::WheelFilename(

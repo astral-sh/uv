@@ -4020,7 +4020,7 @@ fn no_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      × Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
@@ -4089,7 +4089,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      × Failed to build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
@@ -7087,7 +7087,7 @@ fn install_build_isolation_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      × Failed to build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
@@ -7347,7 +7347,7 @@ fn sklearn() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `sklearn==0.0.post12`
+      × Failed to build `sklearn==0.0.post12`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
@@ -7404,7 +7404,7 @@ fn resolve_derivation_chain() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `wsgiref==0.1.2`
+      × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 

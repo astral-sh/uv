@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexUrl, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef,
-    SourceDist, VersionOrUrlRef,
+    IndexUrl, InstalledDist, IsBuildBackendError, PythonRequirementKind, RemoteSource,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -956,36 +956,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             MetadataResponse::Error(dist, err) => {
                 // TODO(charlie): Add derivation chain for URL dependencies. In practice, this isn't
                 // critical since we fetch URL dependencies _prior_ to invoking the resolver.
-                let chain = DerivationChain::default();
-                let (kind, dist) = match &**dist {
-                    Dist::Built(built_dist @ BuiltDist::Path(_)) => {
-                        (DistErrorKind::Read, Dist::Built(built_dist.clone()))
-                    }
-                    Dist::Source(source_dist @ SourceDist::Path(_)) => {
-                        (DistErrorKind::Build, Dist::Source(source_dist.clone()))
-                    }
-                    Dist::Source(source_dist @ SourceDist::Directory(_)) => {
-                        (DistErrorKind::Build, Dist::Source(source_dist.clone()))
-                    }
-                    Dist::Built(built_dist) => {
-                        (DistErrorKind::Download, Dist::Built(built_dist.clone()))
-                    }
-                    Dist::Source(source_dist) => {
-                        if source_dist.is_local() {
-                            (DistErrorKind::Build, Dist::Source(source_dist.clone()))
-                        } else {
-                            (
-                                DistErrorKind::DownloadAndBuild,
-                                Dist::Source(source_dist.clone()),
-                            )
+                let kind = if err.is_build_backend_error() {
+                    DistErrorKind::BuildBackend
+                } else {
+                    match &**dist {
+                        Dist::Built(BuiltDist::Path(_)) => DistErrorKind::Read,
+                        Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => {
+                            DistErrorKind::Build
+                        }
+                        Dist::Built(_) => DistErrorKind::Download,
+                        Dist::Source(source_dist) => {
+                            if source_dist.is_local() {
+                                DistErrorKind::Build
+                            } else {
+                                DistErrorKind::DownloadAndBuild
+                            }
                         }
                     }
                 };
                 return Err(ResolveError::Dist(
                     kind,
-                    Box::new(dist),
-                    chain,
-                    (*err).clone(),
+                    dist.clone(),
+                    DerivationChain::default(),
+                    err.clone(),
                 ));
             }
         };
@@ -1398,36 +1391,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     MetadataResponse::Error(dist, err) => {
                         let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
                             .unwrap_or_default();
-                        let (kind, dist) = match &**dist {
-                            Dist::Built(built_dist @ BuiltDist::Path(_)) => {
-                                (DistErrorKind::Read, Dist::Built(built_dist.clone()))
-                            }
-                            Dist::Source(source_dist @ SourceDist::Path(_)) => {
-                                (DistErrorKind::Build, Dist::Source(source_dist.clone()))
-                            }
-                            Dist::Source(source_dist @ SourceDist::Directory(_)) => {
-                                (DistErrorKind::Build, Dist::Source(source_dist.clone()))
-                            }
-                            Dist::Built(built_dist) => {
-                                (DistErrorKind::Download, Dist::Built(built_dist.clone()))
-                            }
-                            Dist::Source(source_dist) => {
-                                if source_dist.is_local() {
-                                    (DistErrorKind::Build, Dist::Source(source_dist.clone()))
-                                } else {
-                                    (
-                                        DistErrorKind::DownloadAndBuild,
-                                        Dist::Source(source_dist.clone()),
-                                    )
+                        let kind = if err.is_build_backend_error() {
+                            DistErrorKind::BuildBackend
+                        } else {
+                            match &**dist {
+                                Dist::Built(BuiltDist::Path(_)) => DistErrorKind::Read,
+                                Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => {
+                                    DistErrorKind::Build
+                                }
+                                Dist::Built(_) => DistErrorKind::Download,
+                                Dist::Source(source_dist) => {
+                                    if source_dist.is_local() {
+                                        DistErrorKind::Build
+                                    } else {
+                                        DistErrorKind::DownloadAndBuild
+                                    }
                                 }
                             }
                         };
-                        return Err(ResolveError::Dist(
-                            kind,
-                            Box::new(dist),
-                            chain,
-                            (*err).clone(),
-                        ));
+                        return Err(ResolveError::Dist(kind, dist.clone(), chain, err.clone()));
                     }
                 };
 
@@ -2261,11 +2243,11 @@ impl ForkState {
         for_version: &Version,
         urls: &Urls,
         indexes: &Indexes,
-        dependencies: Vec<PubGrubDependency>,
+        mut dependencies: Vec<PubGrubDependency>,
         git: &GitResolver,
         resolution_strategy: &ResolutionStrategy,
     ) -> Result<(), ResolveError> {
-        for dependency in &dependencies {
+        for dependency in &mut dependencies {
             let PubGrubDependency {
                 package,
                 version,
@@ -2297,22 +2279,6 @@ impl ForkState {
                 // A dependency from the root package or requirements.txt.
                 debug!("Adding direct dependency: {package}{version}");
 
-                let name = package.name_no_root().unwrap();
-
-                // Catch cases where we pass a package once by name with extras and then once as
-                // URL for the specific distribution.
-                has_url = has_url
-                    || dependencies
-                        .iter()
-                        .filter(|other_dep| *other_dep != dependency)
-                        .filter(|other_dep| {
-                            other_dep
-                                .package
-                                .name()
-                                .is_some_and(|other_name| other_name == name)
-                        })
-                        .any(|other_dep| other_dep.url.is_some());
-
                 // Warn the user if a direct dependency lacks a lower bound in `--lowest` resolution.
                 let missing_lower_bound = version
                     .bounding_range()
@@ -2327,6 +2293,7 @@ impl ForkState {
                         "The direct dependency `{name}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
                         to avoid using outdated versions.",
+                        name = package.name_no_root().unwrap(),
                     );
                 }
             }

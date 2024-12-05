@@ -9,8 +9,8 @@ use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, ConfigSettings, LowerBound, SourceStrategy,
 };
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist, Resolution,
-    SourceDist,
+    AnyErrorBuild, CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations,
+    InstalledDist, IsBuildBackendError, Resolution, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
@@ -94,7 +94,7 @@ pub trait BuildContext {
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-    ) -> impl Future<Output = Result<Resolution>> + 'a;
+    ) -> impl Future<Output = Result<Resolution, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base Python as [`BuildContext::interpreter`]
@@ -102,7 +102,7 @@ pub trait BuildContext {
         &'a self,
         resolution: &'a Resolution,
         venv: &'a PythonEnvironment,
-    ) -> impl Future<Output = Result<Vec<CachedDist>>> + 'a;
+    ) -> impl Future<Output = Result<Vec<CachedDist>, impl IsBuildBackendError>> + 'a;
 
     /// Set up a source distribution build by installing the required dependencies. A wrapper for
     /// `uv_build::SourceBuild::setup`.
@@ -121,7 +121,7 @@ pub trait BuildContext {
         sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
-    ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
+    ) -> impl Future<Output = Result<Self::SourceDistBuilder, impl IsBuildBackendError>> + 'a;
 
     /// Build by calling directly into the uv build backend without PEP 517, if possible.
     ///
@@ -136,7 +136,7 @@ pub trait BuildContext {
         output_dir: &'a Path,
         build_kind: BuildKind,
         version_id: Option<&'a str>,
-    ) -> impl Future<Output = Result<Option<DistFilename>>> + 'a;
+    ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
@@ -150,7 +150,7 @@ pub trait SourceBuildTrait {
     ///
     /// Returns the metadata directory if we're having a PEP 517 build and the
     /// `prepare_metadata_for_build_wheel` hook exists
-    fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>>>;
+    fn metadata(&mut self) -> impl Future<Output = Result<Option<PathBuf>, AnyErrorBuild>>;
 
     /// A wrapper for `uv_build::SourceBuild::build`.
     ///
@@ -159,7 +159,10 @@ pub trait SourceBuildTrait {
     /// Returns the filename of the built wheel inside the given `wheel_dir`. The filename is a
     /// string and not a `WheelFilename` because the on disk filename might not be normalized in the
     /// same way as uv would.
-    fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> impl Future<Output = Result<String>> + 'a;
+    fn wheel<'a>(
+        &'a self,
+        wheel_dir: &'a Path,
+    ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
 }
 
 /// A wrapper for [`uv_installer::SitePackages`]

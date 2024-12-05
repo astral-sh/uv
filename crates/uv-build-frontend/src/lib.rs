@@ -29,7 +29,7 @@ use tracing::{debug, info_span, instrument, Instrument};
 
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
 use uv_distribution::BuildRequires;
-use uv_distribution_types::{IndexLocations, Resolution};
+use uv_distribution_types::{AnyErrorBuild, IndexLocations, Resolution};
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -325,7 +325,7 @@ impl SourceBuild {
             build_context
                 .install(&resolved_requirements, &venv)
                 .await
-                .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err))?;
+                .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err.into()))?;
         } else {
             debug!("Proceeding without build isolation");
         }
@@ -423,7 +423,9 @@ impl SourceBuild {
                     let resolved_requirements = build_context
                         .resolve(&default_backend.requirements)
                         .await
-                        .map_err(|err| Error::RequirementsResolve("`setup.py` build", err))?;
+                        .map_err(|err| {
+                            Error::RequirementsResolve("`setup.py` build", err.into())
+                        })?;
                     *resolution = Some(resolved_requirements.clone());
                     resolved_requirements
                 }
@@ -431,7 +433,9 @@ impl SourceBuild {
                 build_context
                     .resolve(&pep517_backend.requirements)
                     .await
-                    .map_err(|err| Error::RequirementsResolve("`build-system.requires`", err))?
+                    .map_err(|err| {
+                        Error::RequirementsResolve("`build-system.requires`", err.into())
+                    })?
             },
         )
     }
@@ -776,11 +780,11 @@ impl SourceBuild {
 }
 
 impl SourceBuildTrait for SourceBuild {
-    async fn metadata(&mut self) -> anyhow::Result<Option<PathBuf>> {
+    async fn metadata(&mut self) -> Result<Option<PathBuf>, AnyErrorBuild> {
         Ok(self.get_metadata_without_build().await?)
     }
 
-    async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> anyhow::Result<String> {
+    async fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> Result<String, AnyErrorBuild> {
         Ok(self.build(wheel_dir).await?)
     }
 }
@@ -928,15 +932,16 @@ async fn create_pep517_build_environment(
             .cloned()
             .chain(extra_requires)
             .collect();
-        let resolution = build_context
-            .resolve(&requirements)
-            .await
-            .map_err(|err| Error::RequirementsResolve("`build-system.requires`", err))?;
+        let resolution = build_context.resolve(&requirements).await.map_err(|err| {
+            Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))
+        })?;
 
         build_context
             .install(&resolution, venv)
             .await
-            .map_err(|err| Error::RequirementsInstall("`build-system.requires`", err))?;
+            .map_err(|err| {
+                Error::RequirementsInstall("`build-system.requires`", AnyErrorBuild::from(err))
+            })?;
     }
 
     Ok(())

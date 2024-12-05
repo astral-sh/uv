@@ -10,6 +10,7 @@ use regex::Regex;
 use thiserror::Error;
 use tracing::error;
 use uv_configuration::BuildOutput;
+use uv_distribution_types::{AnyErrorBuild, IsBuildBackendError};
 use uv_fs::Simplified;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -68,11 +69,12 @@ pub enum Error {
     #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
     EditableSetupPy,
     #[error("Failed to resolve requirements from {0}")]
-    RequirementsResolve(&'static str, #[source] anyhow::Error),
+    RequirementsResolve(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to install requirements from {0}")]
-    RequirementsInstall(&'static str, #[source] anyhow::Error),
+    RequirementsInstall(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to create temporary virtualenv")]
     Virtualenv(#[from] uv_virtualenv::Error),
+    // Build backend errors
     #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
     #[error("The build backend returned an error. This likely means a problem with the package or your environment.")]
@@ -81,6 +83,33 @@ pub enum Error {
     MissingHeader(#[from] MissingHeaderError),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
+    // For the convenience of typing `setup_build` properly.
+    #[error("Building source distributions for {0} is disabled")]
+    NoSourceDistBuild(PackageName),
+    #[error("Building source distributions is disabled")]
+    NoSourceDistBuilds,
+}
+
+impl IsBuildBackendError for Error {
+    fn is_build_backend_error(&self) -> bool {
+        match self {
+            Self::Io(_)
+            | Self::Lowering(_)
+            | Self::InvalidSourceDist(_)
+            | Self::InvalidPyprojectTomlSyntax(_)
+            | Self::InvalidPyprojectTomlSchema(_)
+            | Self::EditableSetupPy
+            | Self::RequirementsResolve(_, _)
+            | Self::RequirementsInstall(_, _)
+            | Self::Virtualenv(_)
+            | Self::NoSourceDistBuild(_)
+            | Self::NoSourceDistBuilds => false,
+            Self::CommandFailed(_, _)
+            | Self::BuildBackend(_)
+            | Self::MissingHeader(_)
+            | Self::BuildScriptPath(_) => true,
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -3,10 +3,71 @@ use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::ops::Deref;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use version_ranges::Ranges;
+
+/// Orphan-rule workaround for inspecting build frontend errors.
+///
+/// Normally we would match on the variants, but we have to pass this error through an opaque type
+/// to avoid cyclical crate dependencies between the build frontend and resolver/installer.
+pub trait IsBuildBackendError: std::error::Error + Send + Sync + 'static {
+    /// Returns whether the build backend failed to build the package, so it's not a uv error.
+    fn is_build_backend_error(&self) -> bool;
+}
+
+/// Wrapper type to make `thiserror`'s `AsDynError` work with `IsBuildFrontendError`.
+///
+/// `thiserror` does not recognize `Box<dyn IsBuildFrontendError + Send + Sync + 'static>` as
+/// error source by itself.
+///
+/// TODO(konsti): The `From<IsBuildBackendError>` blocks implementing `IsBuildBackendError` on the
+/// type itself, so the wrapped
+pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
+
+impl Debug for AnyErrorBuild {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.0, f)
+    }
+}
+
+impl Display for AnyErrorBuild {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl std::error::Error for AnyErrorBuild {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+
+    #[allow(deprecated)]
+    fn description(&self) -> &str {
+        self.0.description()
+    }
+
+    #[allow(deprecated)]
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        self.0.cause()
+    }
+}
+
+impl<T: IsBuildBackendError> From<T> for AnyErrorBuild {
+    fn from(err: T) -> Self {
+        Self(Box::new(err))
+    }
+}
+
+impl Deref for AnyErrorBuild {
+    type Target = dyn IsBuildBackendError;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
 
 /// The operation(s) that failed when reporting an error with a distribution.
 #[derive(Debug)]

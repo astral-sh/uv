@@ -16,7 +16,7 @@ use uv_configuration::{
     LowerBound, NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
+use uv_distribution_types::{AnyErrorBuild, DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::Requirement;
@@ -113,7 +113,7 @@ enum VenvError {
 
     #[error("Failed to install seed packages")]
     #[diagnostic(code(uv::venv::seed))]
-    Seed(#[source] anyhow::Error),
+    Seed(#[source] AnyErrorBuild),
 
     #[error("Failed to extract interpreter tags")]
     #[diagnostic(code(uv::venv::tags))]
@@ -360,11 +360,11 @@ async fn venv_impl(
         let resolution = build_dispatch
             .resolve(&requirements)
             .await
-            .map_err(VenvError::Seed)?;
+            .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
             .install(&resolution, &venv)
             .await
-            .map_err(VenvError::Seed)?;
+            .map_err(|err| VenvError::Seed(err.into()))?;
 
         let changelog = Changelog::from_installed(installed);
         DefaultInstallLogger

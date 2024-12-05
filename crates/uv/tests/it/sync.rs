@@ -761,7 +761,7 @@ fn sync_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
@@ -853,7 +853,7 @@ fn sync_build_isolation_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
@@ -873,7 +873,7 @@ fn sync_build_isolation_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
@@ -4956,7 +4956,7 @@ fn sync_derivation_chain() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to download and build `wsgiref==0.1.2`
+      × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
@@ -5021,7 +5021,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to download and build `wsgiref==0.1.2`
+      × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
@@ -5088,7 +5088,7 @@ fn sync_derivation_chain_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to download and build `wsgiref==0.1.2`
+      × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
