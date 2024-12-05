@@ -277,26 +277,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .prepare(remote, &self.shared_state.in_flight)
                 .await
                 .map_err(|err| match err {
-                    uv_installer::PrepareError::DownloadAndBuild(dist, chain, err) => {
+                    uv_installer::PrepareError::Dist(kind, dist, chain, err) => {
                         debug_assert!(chain.is_empty());
                         let chain =
                             DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
                                 .unwrap_or_default();
-                        uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)
-                    }
-                    uv_installer::PrepareError::Download(dist, chain, err) => {
-                        debug_assert!(chain.is_empty());
-                        let chain =
-                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
-                                .unwrap_or_default();
-                        uv_installer::PrepareError::Download(dist, chain, err)
-                    }
-                    uv_installer::PrepareError::Build(dist, chain, err) => {
-                        debug_assert!(chain.is_empty());
-                        let chain =
-                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
-                                .unwrap_or_default();
-                        uv_installer::PrepareError::Build(dist, chain, err)
+                        uv_installer::PrepareError::Dist(kind, dist, chain, err)
                     }
                     _ => err,
                 })?

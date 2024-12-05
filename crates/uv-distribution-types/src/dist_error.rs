@@ -1,6 +1,29 @@
+use std::fmt::{Display, Formatter};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use version_ranges::Ranges;
+
+/// The operation(s) that failed when reporting an error with a distribution.
+#[derive(Debug)]
+pub enum DistErrorKind {
+    Download,
+    DownloadAndBuild,
+    Build,
+    BuildBackend,
+    Read,
+}
+
+impl Display for DistErrorKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DistErrorKind::Download => f.write_str("Failed to download"),
+            DistErrorKind::DownloadAndBuild => f.write_str("Failed to download and build"),
+            DistErrorKind::Build => f.write_str("Failed to build"),
+            DistErrorKind::BuildBackend => f.write_str("Failed to build"),
+            DistErrorKind::Read => f.write_str("Failed to read"),
+        }
+    }
+}
 
 /// A chain of derivation steps from the root package to the current package, to explain why a
 /// package is included in the resolution.
