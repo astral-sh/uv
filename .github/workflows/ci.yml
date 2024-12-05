@@ -767,11 +767,19 @@ jobs:
         run: |
           ./uv python install -v 3.13t
 
-      - name: "Create a virtual environment"
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          & (./uv python find 3.13t) -m venv .venv
+
+      - name: "Check version (stdlib)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Create a virtual environment (uv)"
         run: |
           ./uv venv -p 3.13t --python-preference only-managed
 
-      - name: "Check version"
+      - name: "Check version (uv)"
         run: |
           .venv/Scripts/python --version
 
