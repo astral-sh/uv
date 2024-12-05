@@ -13882,6 +13882,7 @@ fn no_lowest_warning_with_name_and_url() -> Result<()> {
     constraints.write_str(indoc::indoc! {r"
         sortedcontainers==2.4.0
         outcome==1.3.0.post0
+        pycparser==2.20
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
