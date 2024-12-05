@@ -1320,6 +1320,7 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }

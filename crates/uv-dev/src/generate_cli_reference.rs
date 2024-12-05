@@ -315,6 +315,7 @@ fn emit_possible_options(opt: &clap::Arg, output: &mut String) {
             "\nPossible values:\n{}",
             values
                 .into_iter()
+                .filter(|value| !value.is_hide_set())
                 .map(|value| {
                     let name = value.get_name();
                     value.get_help().map_or_else(
