@@ -560,3 +560,26 @@ fn python_find_unsupported_version() {
     error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
     "###);
 }
+
+#[test]
+fn python_find_equal() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    uv_snapshot!(context.filters(), context.python_find().arg("==3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_find().arg("==3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+}
