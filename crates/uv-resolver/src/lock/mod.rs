@@ -27,7 +27,9 @@ use crate::{
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::BuildOptions;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{
+    BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
+};
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
@@ -2094,20 +2096,24 @@ impl Package {
     }
 
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
-        let mut best: Option<(TagPriority, usize)> = None;
+        type WheelPriority<'lock> = (TagPriority, Option<&'lock BuildTag>);
+
+        let mut best: Option<(WheelPriority, usize)> = None;
         for (i, wheel) in self.wheels.iter().enumerate() {
-            let TagCompatibility::Compatible(priority) =
+            let TagCompatibility::Compatible(tag_priority) =
                 wheel.filename.compatibility(tag_policy.tags())
             else {
                 continue;
             };
+            let build_tag = wheel.filename.build_tag.as_ref();
+            let wheel_priority = (tag_priority, build_tag);
             match best {
                 None => {
-                    best = Some((priority, i));
+                    best = Some((wheel_priority, i));
                 }
                 Some((best_priority, _)) => {
-                    if priority > best_priority {
-                        best = Some((priority, i));
+                    if wheel_priority > best_priority {
+                        best = Some((wheel_priority, i));
                     }
                 }
             }
