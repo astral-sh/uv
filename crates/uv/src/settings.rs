@@ -703,6 +703,9 @@ impl ToolDirSettings {
 pub(crate) enum PythonListKinds {
     #[default]
     Default,
+    /// Only list version downloads.
+    Downloads,
+    /// Only list installed versions.
     Installed,
 }
 
@@ -713,6 +716,7 @@ pub(crate) struct PythonListSettings {
     pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
     pub(crate) all_versions: bool,
+    pub(crate) show_urls: bool,
 }
 
 impl PythonListSettings {
@@ -723,10 +727,14 @@ impl PythonListSettings {
             all_versions,
             all_platforms,
             only_installed,
+            only_downloads,
+            show_urls,
         } = args;
 
         let kinds = if only_installed {
             PythonListKinds::Installed
+        } else if only_downloads {
+            PythonListKinds::Downloads
         } else {
             PythonListKinds::default()
         };
@@ -735,6 +743,7 @@ impl PythonListSettings {
             kinds,
             all_platforms,
             all_versions,
+            show_urls,
         }
     }
 }
