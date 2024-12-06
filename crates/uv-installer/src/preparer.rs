@@ -10,7 +10,7 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_distribution_types::{
     BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
-    RemoteSource,
+    RemoteSource, Resolution,
 };
 use uv_pep508::PackageName;
 use uv_platform_tags::Tags;
@@ -65,11 +65,15 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         &'stream self,
         distributions: Vec<Dist>,
         in_flight: &'stream InFlight,
+        resolution: &'stream Resolution,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
             .map(|dist| async {
-                let wheel = self.get_wheel(dist, in_flight).boxed_local().await?;
+                let wheel = self
+                    .get_wheel(dist, in_flight, resolution)
+                    .boxed_local()
+                    .await?;
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
@@ -84,13 +88,14 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         &self,
         mut distributions: Vec<Dist>,
         in_flight: &InFlight,
+        resolution: &Resolution,
     ) -> Result<Vec<CachedDist>, Error> {
         // Sort the distributions by size.
         distributions
             .sort_unstable_by_key(|distribution| Reverse(distribution.size().unwrap_or(u64::MAX)));
 
         let wheels = self
-            .prepare_stream(distributions, in_flight)
+            .prepare_stream(distributions, in_flight, resolution)
             .try_collect()
             .await?;
 
@@ -102,7 +107,12 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     }
     /// Download, build, and unzip a single wheel.
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
-    pub async fn get_wheel(&self, dist: Dist, in_flight: &InFlight) -> Result<CachedDist, Error> {
+    pub async fn get_wheel(
+        &self,
+        dist: Dist,
+        in_flight: &InFlight,
+        resolution: &Resolution,
+    ) -> Result<CachedDist, Error> {
         // Validate that the distribution is compatible with the build options.
         match dist {
             Dist::Built(ref dist) => {
@@ -129,7 +139,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 .database
                 .get_or_build_wheel(&dist, self.tags, policy)
                 .boxed_local()
-                .map_err(|err| Error::from_dist(dist.clone(), err))
+                .map_err(|err| Error::from_dist(dist.clone(), err, resolution))
                 .await
                 .and_then(|wheel: LocalWheel| {
                     if wheel.satisfies(policy) {
@@ -140,7 +150,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                             policy.digests(),
                             wheel.hashes(),
                         );
-                        Err(Error::from_dist(dist, err))
+                        Err(Error::from_dist(dist, err, resolution))
                     }
                 })
                 .map(CachedDist::from);
@@ -178,7 +188,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                             given: dist.name().clone(),
                             metadata: cached.filename().name.clone(),
                         };
-                        return Err(Error::from_dist(dist, err));
+                        return Err(Error::from_dist(dist, err, resolution));
                     }
                     if let Some(version) = dist.version() {
                         if *version != cached.filename().version {
@@ -186,7 +196,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                                 given: version.clone(),
                                 metadata: cached.filename().version.clone(),
                             };
-                            return Err(Error::from_dist(dist, err));
+                            return Err(Error::from_dist(dist, err, resolution));
                         }
                     }
                     Ok(cached.clone())
@@ -216,7 +226,7 @@ pub enum Error {
 
 impl Error {
     /// Create an [`Error`] from a distribution error.
-    fn from_dist(dist: Dist, cause: uv_distribution::Error) -> Self {
+    fn from_dist(dist: Dist, cause: uv_distribution::Error, resolution: &Resolution) -> Self {
         let kind = match &dist {
             Dist::Built(_) => DistErrorKind::Download,
             Dist::Source(dist) => {
@@ -227,7 +237,9 @@ impl Error {
                 }
             }
         };
-        Self::Dist(kind, Box::new(dist), DerivationChain::default(), cause)
+        let chain =
+            DerivationChain::from_resolution(resolution, (&dist).into()).unwrap_or_default();
+        Self::Dist(kind, Box::new(dist), chain, cause)
     }
 }
 

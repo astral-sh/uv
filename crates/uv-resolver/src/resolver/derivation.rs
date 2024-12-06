@@ -1,88 +1,18 @@
-use std::collections::VecDeque;
+use pubgrub::{Id, Kind, State};
+use rustc_hash::FxHashMap;
 
-use petgraph::visit::EdgeRef;
-use petgraph::Direction;
-use pubgrub::{Id, Kind, Range, State};
-use rustc_hash::{FxHashMap, FxHashSet};
-
-use uv_distribution_types::{
-    DerivationChain, DerivationStep, DistRef, Edge, Name, Node, Resolution, ResolvedDist,
-};
+use uv_distribution_types::{DerivationChain, DerivationStep};
 use uv_pep440::Version;
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::pubgrub::PubGrubPackage;
 
-/// A chain of derivation steps from the root package to the current package, to explain why a
-/// package is included in the resolution.
+/// Build a [`DerivationChain`] from the pubgrub state, which is available in `uv-resolver`, but not
+/// in `uv-distribution-types`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct DerivationChainBuilder;
 
 impl DerivationChainBuilder {
-    /// Compute a [`DerivationChain`] from a resolution graph.
-    ///
-    /// This is used to construct a derivation chain upon install failure in the `uv pip` context,
-    /// where we don't have a lockfile describing the resolution.
-    pub fn from_resolution(
-        resolution: &Resolution,
-        target: DistRef<'_>,
-    ) -> Option<DerivationChain> {
-        // Find the target distribution in the resolution graph.
-        let target = resolution.graph().node_indices().find(|node| {
-            let Node::Dist {
-                dist: ResolvedDist::Installable { dist, .. },
-                ..
-            } = &resolution.graph()[*node]
-            else {
-                return false;
-            };
-            target == dist.as_ref()
-        })?;
-
-        // Perform a BFS to find the shortest path to the root.
-        let mut queue = VecDeque::new();
-        queue.push_back((target, None, None, Vec::new()));
-
-        // TODO(charlie): Consider respecting markers here.
-        let mut seen = FxHashSet::default();
-        while let Some((node, extra, group, mut path)) = queue.pop_front() {
-            if !seen.insert(node) {
-                continue;
-            }
-            match &resolution.graph()[node] {
-                Node::Root => {
-                    path.reverse();
-                    path.pop();
-                    return Some(DerivationChain::from_iter(path));
-                }
-                Node::Dist { dist, .. } => {
-                    for edge in resolution.graph().edges_directed(node, Direction::Incoming) {
-                        let mut path = path.clone();
-                        path.push(DerivationStep::new(
-                            dist.name().clone(),
-                            extra.clone(),
-                            group.clone(),
-                            dist.version().clone(),
-                            Range::empty(),
-                        ));
-                        let target = edge.source();
-                        let extra = match edge.weight() {
-                            Edge::Optional(extra, ..) => Some(extra.clone()),
-                            _ => None,
-                        };
-                        let group = match edge.weight() {
-                            Edge::Dev(group, ..) => Some(group.clone()),
-                            _ => None,
-                        };
-                        queue.push_back((target, extra, group, path));
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
     /// Compute a [`DerivationChain`] from the current PubGrub state.
     ///
     /// This is used to construct a derivation chain upon resolution failure.
