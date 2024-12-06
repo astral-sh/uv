@@ -10,8 +10,8 @@ use rustc_hash::FxHashMap;
 use tracing::trace;
 
 use uv_distribution_types::{
-    BuiltDist, DerivationChain, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist,
-    SourceDist,
+    DerivationChain, Dist, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl,
+    InstalledDist,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{LocalVersionSlice, Version};
@@ -97,23 +97,10 @@ pub enum ResolveError {
     #[error(transparent)]
     ParsedUrl(#[from] uv_pypi_types::ParsedUrlError),
 
-    #[error("Failed to download `{0}`")]
-    Download(
-        Box<BuiltDist>,
-        DerivationChain,
-        #[source] Arc<uv_distribution::Error>,
-    ),
-
-    #[error("Failed to download and build `{0}`")]
-    DownloadAndBuild(
-        Box<SourceDist>,
-        DerivationChain,
-        #[source] Arc<uv_distribution::Error>,
-    ),
-
-    #[error("Failed to read `{0}`")]
-    Read(
-        Box<BuiltDist>,
+    #[error("{0} `{1}`")]
+    Dist(
+        DistErrorKind,
+        Box<Dist>,
         DerivationChain,
         #[source] Arc<uv_distribution::Error>,
     ),
@@ -121,13 +108,6 @@ pub enum ResolveError {
     // TODO(zanieb): Use `thiserror` in `InstalledDist` so we can avoid chaining `anyhow`
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, DerivationChain, #[source] anyhow::Error),
-
-    #[error("Failed to build `{0}`")]
-    Build(
-        Box<SourceDist>,
-        DerivationChain,
-        #[source] Arc<uv_distribution::Error>,
-    ),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),

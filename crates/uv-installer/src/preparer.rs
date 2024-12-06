@@ -9,8 +9,8 @@ use uv_cache::Cache;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, CachedDist, DerivationChain, Dist, Hashed, Identifier, Name,
-    RemoteSource, SourceDist,
+    BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
+    RemoteSource,
 };
 use uv_pep508::PackageName;
 use uv_platform_tags::Tags;
@@ -203,21 +203,10 @@ pub enum Error {
     NoBuild(PackageName),
     #[error("Using pre-built wheels is disabled, but attempted to use `{0}`")]
     NoBinary(PackageName),
-    #[error("Failed to download `{0}`")]
-    Download(
-        Box<BuiltDist>,
-        DerivationChain,
-        #[source] uv_distribution::Error,
-    ),
-    #[error("Failed to download and build `{0}`")]
-    DownloadAndBuild(
-        Box<SourceDist>,
-        DerivationChain,
-        #[source] uv_distribution::Error,
-    ),
-    #[error("Failed to build `{0}`")]
-    Build(
-        Box<SourceDist>,
+    #[error("{0} `{1}`")]
+    Dist(
+        DistErrorKind,
+        Box<Dist>,
         DerivationChain,
         #[source] uv_distribution::Error,
     ),
@@ -228,16 +217,17 @@ pub enum Error {
 impl Error {
     /// Create an [`Error`] from a distribution error.
     fn from_dist(dist: Dist, cause: uv_distribution::Error) -> Self {
-        match dist {
-            Dist::Built(dist) => Self::Download(Box::new(dist), DerivationChain::default(), cause),
+        let kind = match &dist {
+            Dist::Built(_) => DistErrorKind::Download,
             Dist::Source(dist) => {
                 if dist.is_local() {
-                    Self::Build(Box::new(dist), DerivationChain::default(), cause)
+                    DistErrorKind::Build
                 } else {
-                    Self::DownloadAndBuild(Box::new(dist), DerivationChain::default(), cause)
+                    DistErrorKind::DownloadAndBuild
                 }
             }
-        }
+        };
+        Self::Dist(kind, Box::new(dist), DerivationChain::default(), cause)
     }
 }
 

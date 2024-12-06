@@ -54,8 +54,8 @@ pub use crate::any::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
 pub use crate::dependency_metadata::*;
-pub use crate::derivation::*;
 pub use crate::diagnostic::*;
+pub use crate::dist_error::*;
 pub use crate::error::*;
 pub use crate::file::*;
 pub use crate::hash::*;
@@ -77,8 +77,8 @@ mod any;
 mod buildable;
 mod cached;
 mod dependency_metadata;
-mod derivation;
 mod diagnostic;
+mod dist_error;
 mod error;
 mod file;
 mod hash;
@@ -549,6 +549,15 @@ impl Dist {
         match self {
             Self::Built(dist) => DistRef::Built(dist),
             Self::Source(dist) => DistRef::Source(dist),
+        }
+    }
+}
+
+impl<'a> From<&'a Dist> for DistRef<'a> {
+    fn from(dist: &'a Dist) -> Self {
+        match dist {
+            Dist::Built(built) => DistRef::Built(built),
+            Dist::Source(source) => DistRef::Source(source),
         }
     }
 }

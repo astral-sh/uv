@@ -23,10 +23,10 @@ use tracing::{debug, info, instrument, trace, warn, Level};
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
-    BuiltDist, CompatibleDist, DerivationChain, Dist, DistributionMetadata, IncompatibleDist,
-    IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations, IndexUrl,
-    InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef, SourceDist,
-    VersionOrUrlRef,
+    BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
+    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
+    IndexUrl, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef,
+    SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -957,35 +957,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // TODO(charlie): Add derivation chain for URL dependencies. In practice, this isn't
                 // critical since we fetch URL dependencies _prior_ to invoking the resolver.
                 let chain = DerivationChain::default();
-                return Err(match &**dist {
+                let (kind, dist) = match &**dist {
                     Dist::Built(built_dist @ BuiltDist::Path(_)) => {
-                        ResolveError::Read(Box::new(built_dist.clone()), chain, (*err).clone())
+                        (DistErrorKind::Read, Dist::Built(built_dist.clone()))
                     }
                     Dist::Source(source_dist @ SourceDist::Path(_)) => {
-                        ResolveError::Build(Box::new(source_dist.clone()), chain, (*err).clone())
+                        (DistErrorKind::Build, Dist::Source(source_dist.clone()))
                     }
                     Dist::Source(source_dist @ SourceDist::Directory(_)) => {
-                        ResolveError::Build(Box::new(source_dist.clone()), chain, (*err).clone())
+                        (DistErrorKind::Build, Dist::Source(source_dist.clone()))
                     }
                     Dist::Built(built_dist) => {
-                        ResolveError::Download(Box::new(built_dist.clone()), chain, (*err).clone())
+                        (DistErrorKind::Download, Dist::Built(built_dist.clone()))
                     }
                     Dist::Source(source_dist) => {
                         if source_dist.is_local() {
-                            ResolveError::Build(
-                                Box::new(source_dist.clone()),
-                                chain,
-                                (*err).clone(),
-                            )
+                            (DistErrorKind::Build, Dist::Source(source_dist.clone()))
                         } else {
-                            ResolveError::DownloadAndBuild(
-                                Box::new(source_dist.clone()),
-                                chain,
-                                (*err).clone(),
+                            (
+                                DistErrorKind::DownloadAndBuild,
+                                Dist::Source(source_dist.clone()),
                             )
                         }
                     }
-                });
+                };
+                return Err(ResolveError::Dist(
+                    kind,
+                    Box::new(dist),
+                    chain,
+                    (*err).clone(),
+                ));
             }
         };
 
@@ -1397,45 +1398,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     MetadataResponse::Error(dist, err) => {
                         let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
                             .unwrap_or_default();
-                        return Err(match &**dist {
-                            Dist::Built(built_dist @ BuiltDist::Path(_)) => ResolveError::Read(
-                                Box::new(built_dist.clone()),
-                                chain,
-                                (*err).clone(),
-                            ),
-                            Dist::Source(source_dist @ SourceDist::Path(_)) => ResolveError::Build(
-                                Box::new(source_dist.clone()),
-                                chain,
-                                (*err).clone(),
-                            ),
-                            Dist::Source(source_dist @ SourceDist::Directory(_)) => {
-                                ResolveError::Build(
-                                    Box::new(source_dist.clone()),
-                                    chain,
-                                    (*err).clone(),
-                                )
+                        let (kind, dist) = match &**dist {
+                            Dist::Built(built_dist @ BuiltDist::Path(_)) => {
+                                (DistErrorKind::Read, Dist::Built(built_dist.clone()))
                             }
-                            Dist::Built(built_dist) => ResolveError::Download(
-                                Box::new(built_dist.clone()),
-                                chain,
-                                (*err).clone(),
-                            ),
+                            Dist::Source(source_dist @ SourceDist::Path(_)) => {
+                                (DistErrorKind::Build, Dist::Source(source_dist.clone()))
+                            }
+                            Dist::Source(source_dist @ SourceDist::Directory(_)) => {
+                                (DistErrorKind::Build, Dist::Source(source_dist.clone()))
+                            }
+                            Dist::Built(built_dist) => {
+                                (DistErrorKind::Download, Dist::Built(built_dist.clone()))
+                            }
                             Dist::Source(source_dist) => {
                                 if source_dist.is_local() {
-                                    ResolveError::Build(
-                                        Box::new(source_dist.clone()),
-                                        chain,
-                                        (*err).clone(),
-                                    )
+                                    (DistErrorKind::Build, Dist::Source(source_dist.clone()))
                                 } else {
-                                    ResolveError::DownloadAndBuild(
-                                        Box::new(source_dist.clone()),
-                                        chain,
-                                        (*err).clone(),
+                                    (
+                                        DistErrorKind::DownloadAndBuild,
+                                        Dist::Source(source_dist.clone()),
                                     )
                                 }
                             }
-                        });
+                        };
+                        return Err(ResolveError::Dist(
+                            kind,
+                            Box::new(dist),
+                            chain,
+                            (*err).clone(),
+                        ));
                     }
                 };
 

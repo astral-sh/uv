@@ -469,28 +469,12 @@ pub(crate) async fn install(
             .map_err(Error::from)
             .map_err(|err| match err {
                 // Attach resolution context to the error.
-                Error::Prepare(uv_installer::PrepareError::Download(dist, chain, err)) => {
+                Error::Prepare(uv_installer::PrepareError::Dist(kind, dist, chain, err)) => {
                     debug_assert!(chain.is_empty());
                     let chain =
                         DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
                             .unwrap_or_default();
-                    Error::Prepare(uv_installer::PrepareError::Download(dist, chain, err))
-                }
-                Error::Prepare(uv_installer::PrepareError::Build(dist, chain, err)) => {
-                    debug_assert!(chain.is_empty());
-                    let chain =
-                        DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
-                            .unwrap_or_default();
-                    Error::Prepare(uv_installer::PrepareError::Build(dist, chain, err))
-                }
-                Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)) => {
-                    debug_assert!(chain.is_empty());
-                    let chain =
-                        DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
-                            .unwrap_or_default();
-                    Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
-                        dist, chain, err,
-                    ))
+                    Error::Prepare(uv_installer::PrepareError::Dist(kind, dist, chain, err))
                 }
                 _ => err,
             })?;
