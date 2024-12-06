@@ -11,7 +11,7 @@ use tracing::trace;
 
 use uv_distribution_types::{
     DerivationChain, Dist, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl,
-    InstalledDist,
+    InstalledDist, InstalledDistError,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{LocalVersionSlice, Version};
@@ -105,9 +105,12 @@ pub enum ResolveError {
         #[source] Arc<uv_distribution::Error>,
     ),
 
-    // TODO(zanieb): Use `thiserror` in `InstalledDist` so we can avoid chaining `anyhow`
     #[error("Failed to read metadata from installed package `{0}`")]
-    ReadInstalled(Box<InstalledDist>, DerivationChain, #[source] anyhow::Error),
+    ReadInstalled(
+        Box<InstalledDist>,
+        DerivationChain,
+        #[source] InstalledDistError,
+    ),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
