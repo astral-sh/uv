@@ -602,9 +602,10 @@ jobs:
           cross build --target x86_64-unknown-freebsd
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@v0.2.0
+        uses: acj/freebsd-firecracker-action@v0.3.0
         with:
           verbose: false
+          checkout: false
           pre-run: |
             # The exclude `*` prevents examination of directories so we need to
             # include each parent directory of the binary
