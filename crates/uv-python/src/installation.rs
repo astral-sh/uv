@@ -327,6 +327,10 @@ impl PythonInstallationKey {
         &self.libc
     }
 
+    pub fn variant(&self) -> &PythonVariant {
+        &self.variant
+    }
+
     /// Return a canonical name for a minor versioned executable.
     pub fn executable_name_minor(&self) -> String {
         format!(
