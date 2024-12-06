@@ -767,20 +767,22 @@ jobs:
         run: |
           ./uv python install -v 3.13t
 
-      - name: "Create a virtual environment (stdlib)"
-        run: |
-          & (./uv python find 3.13t) -m venv .venv
+      # - name: "Create a virtual environment (stdlib)"
+      #   run: |
+      #     & (./uv python find 3.13t) -m venv .venv
 
-      - name: "Check version (stdlib)"
-        run: |
-          .venv/Scripts/python --version
+      # - name: "Check version (stdlib)"
+      #   run: |
+      #     .venv/Scripts/python --version
 
       - name: "Create a virtual environment (uv)"
         run: |
-          ./uv venv -p 3.13t --python-preference only-managed
+          ./uv venv -p 3.13t
 
       - name: "Check version (uv)"
         run: |
+          $env:PYTHONVERBOSE="1"
+          $env:PYTHONDEBUG="1"
           .venv/Scripts/python --version
 
       - name: "Check is free-threaded"
