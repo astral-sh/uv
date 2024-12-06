@@ -23,8 +23,8 @@ use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    AnyErrorBuild, CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations,
-    IsBuildBackendError, Name, Resolution, SourceDist, VersionOrUrlRef,
+    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -34,7 +34,9 @@ use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight,
+};
 
 #[derive(Debug, Error)]
 pub enum BuildDispatchError {

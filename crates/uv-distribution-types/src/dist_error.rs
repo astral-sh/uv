@@ -4,74 +4,14 @@ use petgraph::Direction;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::Deref;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use version_ranges::Ranges;
 
-/// Workaround for inspecting errors while avoiding cyclical crate dependencies.
-///
-/// The `uv-resolver`, `uv-installer` and `uv-build-frontend` error types all reference each other:
-/// Resolution and installation may need to build packages, while the build frontend needs to
-/// resolve and install for the PEP 517 build environment (See also: `BuildContext`). We use an
-/// opaque `dyn` error type, with this trait allowing to inspect it.
+/// Inspect whether an error type is a build error.
 pub trait IsBuildBackendError: std::error::Error + Send + Sync + 'static {
     /// Returns whether the build backend failed to build the package, so it's not a uv error.
     fn is_build_backend_error(&self) -> bool;
-}
-
-/// `anyhow::Error`-like wrapper type to make `IsBuildBackendError` work as `thiserror` `#[source]`.
-///
-/// The `uv-resolver`, `uv-installer` and `uv-build-frontend` error types all reference each other:
-/// Resolution and installation may need to build packages, while the build frontend needs to
-/// resolve and install for the PEP 517 build environment (See also: `BuildContext`). We use an
-/// opaque `dyn` error type with [`IsBuildBackendError`] making the error inspectable.
-///
-/// `thiserror` does not recognize `Box<dyn IsBuildFrontendError + Send + Sync + 'static>` as
-/// error source by itself, it complains about the internal `AsDynError` not being implemented.
-/// This struct is an otherwise transparent wrapper that thiserror recognizes.
-pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
-
-impl Debug for AnyErrorBuild {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.0, f)
-    }
-}
-
-impl Display for AnyErrorBuild {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl std::error::Error for AnyErrorBuild {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.source()
-    }
-
-    #[allow(deprecated)]
-    fn description(&self) -> &str {
-        self.0.description()
-    }
-
-    #[allow(deprecated)]
-    fn cause(&self) -> Option<&dyn std::error::Error> {
-        self.0.cause()
-    }
-}
-
-impl<T: IsBuildBackendError> From<T> for AnyErrorBuild {
-    fn from(err: T) -> Self {
-        Self(Box::new(err))
-    }
-}
-
-impl Deref for AnyErrorBuild {
-    type Target = dyn IsBuildBackendError;
-
-    fn deref(&self) -> &Self::Target {
-        &*self.0
-    }
 }
 
 /// The operation(s) that failed when reporting an error with a distribution.

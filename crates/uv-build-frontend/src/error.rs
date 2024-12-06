@@ -5,17 +5,17 @@ use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::LazyLock;
 
+use crate::PythonRunnerOutput;
 use owo_colors::OwoColorize;
 use regex::Regex;
 use thiserror::Error;
 use tracing::error;
 use uv_configuration::BuildOutput;
-use uv_distribution_types::{AnyErrorBuild, IsBuildBackendError};
+use uv_distribution_types::IsBuildBackendError;
 use uv_fs::Simplified;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
-
-use crate::PythonRunnerOutput;
+use uv_types::AnyErrorBuild;
 
 /// e.g. `pygraphviz/graphviz_wrap.c:3020:10: fatal error: graphviz/cgraph.h: No such file or directory`
 static MISSING_HEADER_RE_GCC: LazyLock<Regex> = LazyLock::new(|| {

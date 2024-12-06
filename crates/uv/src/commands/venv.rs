@@ -16,7 +16,7 @@ use uv_configuration::{
     LowerBound, NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution_types::{AnyErrorBuild, DependencyMetadata, Index, IndexLocations};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_pypi_types::Requirement;
@@ -26,7 +26,7 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
-use uv_types::{BuildContext, BuildIsolation, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 

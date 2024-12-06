@@ -28,14 +28,14 @@ use tracing::{debug, info_span, instrument, Instrument};
 
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
 use uv_distribution::BuildRequires;
-use uv_distribution_types::{AnyErrorBuild, IndexLocations, Resolution};
+use uv_distribution_types::{IndexLocations, Resolution};
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
-use uv_types::{BuildContext, BuildIsolation, SourceBuildTrait};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, SourceBuildTrait};
 
 pub use crate::error::{Error, MissingHeaderCause};
 
