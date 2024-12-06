@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.5.7
+
+### Enhancements
+
+- Ignore dynamic version in source dist ([#9549](https://github.com/astral-sh/uv/pull/9549))
+- Improve build frontend error handling ([#9611](https://github.com/astral-sh/uv/pull/9611))
+- Un-hide `uv build --no-build-logs` option ([#9642](https://github.com/astral-sh/uv/pull/9642))
+- Flag version mismatch between sdist and wheel during `uv build` ([#9633](https://github.com/astral-sh/uv/pull/9633))
+- Improve message when updater receipt is for a different uv executable ([#9487](https://github.com/astral-sh/uv/pull/9487))
+- Add environment variable to disable writing installer metadata files ([#8877](https://github.com/astral-sh/uv/pull/8877))
+- Add managed downloads for the latest CPython releases: `3.9.21`, `3.10.16`, `3.11.11`, `3.12.8`, and `3.13.1` ([#9696](https://github.com/astral-sh/uv/pull/9696))
+
+### Preview features
+
+- Build backend: Add hint on import with preview disabled ([#9691](https://github.com/astral-sh/uv/pull/9691))
+- Build backend: Add direct builds to the resolver and installer ([#9621](https://github.com/astral-sh/uv/pull/9621))
+- Build backend: Add integration test for scripts ([#9635](https://github.com/astral-sh/uv/pull/9635))
+- Build backend: Add template to `uv init` ([#9661](https://github.com/astral-sh/uv/pull/9661))
+- Build backend: Add `--list` option ([#9610](https://github.com/astral-sh/uv/pull/9610))
+
+### Bug fixes
+
+- Create missing parent directories for output file of `uv export` / `uv pip compile` ([#9648](https://github.com/astral-sh/uv/pull/9648))
+- Fix missing display of non-freethreaded Python 3.13 in `python list` ([#9669](https://github.com/astral-sh/uv/pull/9669))
+- Implement `Ord` and `PartialOrd` without origin for `Requirement` ([#9624](https://github.com/astral-sh/uv/pull/9624))
+- Include more sources to avoid lowest bound warning ([#9644](https://github.com/astral-sh/uv/pull/9644))
+- Respect build tag priority in `uv.lock` ([#9677](https://github.com/astral-sh/uv/pull/9677))
+
+### Documentation
+
+- Add `build-essentials` note to build failures doc ([#9641](https://github.com/astral-sh/uv/pull/9641))
+- Add entry-point for distroless image in GitLab documentation ([#9093](https://github.com/astral-sh/uv/pull/9093))
+- Add documentation for `uv python pin` without a `REQUEST` argument ([#9631](https://github.com/astral-sh/uv/pull/9631))
+- Add a link to `uv python pin` reference docs ([#9630](https://github.com/astral-sh/uv/pull/9630))
+
 ## 0.5.6
 
 ### Enhancements
