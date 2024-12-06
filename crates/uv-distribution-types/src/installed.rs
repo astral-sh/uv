@@ -46,14 +46,14 @@ pub enum InstalledDistError {
     MetadataParse {
         path: PathBuf,
         #[source]
-        err: MetadataError,
+        err: Box<MetadataError>,
     },
 
     #[error("Failed to parse `PKG-INFO` file: `{}`", path.user_display())]
     PkgInfoParse {
         path: PathBuf,
         #[source]
-        err: MetadataError,
+        err: Box<MetadataError>,
     },
 }
 
@@ -334,8 +334,8 @@ impl InstalledDist {
                 // TODO(zanieb): Update this to use thiserror so we can unpack parse errors downstream
                 uv_pypi_types::ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
                     InstalledDistError::MetadataParse {
-                        path: path.to_path_buf(),
-                        err,
+                        path: path.clone(),
+                        err: Box::new(err),
                     }
                 })
             }
@@ -350,7 +350,7 @@ impl InstalledDist {
                 uv_pypi_types::ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
                     InstalledDistError::PkgInfoParse {
                         path: path.to_path_buf(),
-                        err,
+                        err: Box::new(err),
                     }
                 })
             }

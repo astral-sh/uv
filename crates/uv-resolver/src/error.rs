@@ -106,7 +106,11 @@ pub enum ResolveError {
     ),
 
     #[error("Failed to read metadata from installed package `{0}`")]
-    ReadInstalled(Box<InstalledDist>, DerivationChain, #[source] InstalledDistError),
+    ReadInstalled(
+        Box<InstalledDist>,
+        DerivationChain,
+        #[source] InstalledDistError,
+    ),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
