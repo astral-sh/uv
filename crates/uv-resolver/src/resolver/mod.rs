@@ -2212,11 +2212,11 @@ impl ForkState {
         for_version: &Version,
         urls: &Urls,
         indexes: &Indexes,
-        mut dependencies: Vec<PubGrubDependency>,
+        dependencies: Vec<PubGrubDependency>,
         git: &GitResolver,
         resolution_strategy: &ResolutionStrategy,
     ) -> Result<(), ResolveError> {
-        for dependency in &mut dependencies {
+        for dependency in &dependencies {
             let PubGrubDependency {
                 package,
                 version,
