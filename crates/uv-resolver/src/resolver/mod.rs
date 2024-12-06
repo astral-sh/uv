@@ -1914,13 +1914,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             Request::Installed(dist) => {
                 // TODO(charlie): This should be return a `MetadataResponse`.
-                let metadata = dist.metadata().map_err(|err| {
-                    ResolveError::ReadInstalled(
-                        Box::new(dist.clone()),
-                        DerivationChain::default(),
-                        err,
-                    )
-                })?;
+                let metadata = dist
+                    .metadata()
+                    .map_err(|err| ResolveError::ReadInstalled(Box::new(dist.clone()), err))?;
                 Ok(Some(Response::Installed { dist, metadata }))
             }
 
@@ -2035,11 +2031,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                         ResolvedDist::Installed { dist } => {
                             let metadata = dist.metadata().map_err(|err| {
-                                ResolveError::ReadInstalled(
-                                    Box::new(dist.clone()),
-                                    DerivationChain::default(),
-                                    err,
-                                )
+                                ResolveError::ReadInstalled(Box::new(dist.clone()), err)
                             })?;
                             Response::Installed { dist, metadata }
                         }

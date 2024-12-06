@@ -30,8 +30,8 @@ use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    DerivationChainBuilder, ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest,
-    OptionsBuilder, PythonRequirement, Resolver, ResolverEnvironment,
+    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
+    PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -274,18 +274,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             );
 
             preparer
-                .prepare(remote, &self.shared_state.in_flight)
-                .await
-                .map_err(|err| match err {
-                    uv_installer::PrepareError::Dist(kind, dist, chain, err) => {
-                        debug_assert!(chain.is_empty());
-                        let chain =
-                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
-                                .unwrap_or_default();
-                        uv_installer::PrepareError::Dist(kind, dist, chain, err)
-                    }
-                    _ => err,
-                })?
+                .prepare(remote, &self.shared_state.in_flight, resolution)
+                .await?
         };
 
         // Remove any unnecessary packages.
