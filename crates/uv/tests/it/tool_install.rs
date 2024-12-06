@@ -1470,8 +1470,8 @@ fn tool_install_uninstallable() {
     ----- stderr -----
     Resolved 1 package in [TIME]
       × Failed to build `pyenv==0.0.1`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stdout]
           running bdist_wheel
@@ -1484,9 +1484,12 @@ fn tool_install_uninstallable() {
           We are sorry, but this package is not installable with pip.
 
           Please read the installation instructions at:
-     
+
           https://github.com/pyenv/pyenv#installation
           #
+
+
+          hint: This usually indicates a problem with the package or the build environment.
     "###);
 
     // Ensure the tool environment is not created.

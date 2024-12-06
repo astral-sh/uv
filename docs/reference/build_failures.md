@@ -13,7 +13,7 @@ unsupported version of Python:
 $ uv pip install -p 3.13 'numpy<1.20'
 Resolved 1 package in 62ms
   × Failed to build `numpy==1.19.5`
-  ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
+  ├─▶ The build backend returned an error
   ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
 
       [stderr]
@@ -120,7 +120,8 @@ If the build error mentions a missing command, for example, `gcc`:
 
 ```hl_lines="17"
 × Failed to build `pysha3==1.0.2`
-╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+├─▶ The build backend returned an error
+╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
     [stdout]
     running bdist_wheel
@@ -131,8 +132,8 @@ If the build error mentions a missing command, for example, `gcc`:
     running build_ext
     building '_pysha3' extension
     creating build/temp.linux-x86_64-cpython-310/Modules/_sha3
-    gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -fPIC -DPY_WITH_KECCAK=1 -I/root/.cache/uv/builds-v0/.tmpxAJdUa/include -I/usr/local/include/python3.10 -c Modules/_sha3/sha3module.c -o
-    build/temp.linux-x86_64-cpython-310/Modules/_sha3/sha3module.o
+    gcc -Wno-unused-result -Wsign-compare -DNDEBUG -g -fwrapv -O3 -Wall -fPIC -DPY_WITH_KECCAK=1 -I/root/.cache/uv/builds-v0/.tmp8V4iEk/include -I/usr/local/include/python3.10 -c
+    Modules/_sha3/sha3module.c -o build/temp.linux-x86_64-cpython-310/Modules/_sha3/sha3module.o
 
     [stderr]
     error: command 'gcc' failed: No such file or directory
@@ -167,7 +168,8 @@ For example, installing `pygraphviz` requires Graphviz to be installed:
 
 ```hl_lines="18-19"
 × Failed to build `pygraphviz==1.14`
-╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+├─▶ The build backend returned an error
+╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
   [stdout]
   running bdist_wheel
@@ -216,8 +218,9 @@ dependency:
 <!-- docker run --platform linux/x86_64 -it ghcr.io/astral-sh/uv:python3.12-bookworm-slim /bin/bash -c "uv pip install --system chumpy" -->
 
 ```hl_lines="7"
-× Failed to build `chumpy==0.70`
-╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+  × Failed to build `chumpy==0.70`
+  ├─▶ The build backend returned an error
+  ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
     [stderr]
     Traceback (most recent call last):
@@ -272,7 +275,8 @@ apache-beam<=2.49.0
 
 ```hl_lines="1"
 × Failed to build `apache-beam==2.0.0`
-╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+├─▶ The build backend returned an error
+╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
     [stderr]
     ...

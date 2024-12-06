@@ -897,8 +897,9 @@ fn fail() -> Result<()> {
         from setuptools import setup
     IndentationError: unexpected indent
       × Failed to build `[TEMP_DIR]/project`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Call to `setuptools.build_meta.build_sdist()` failed (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+          hint: This usually indicates a problem with the package or the build environment.
     "###);
 
     Ok(())
@@ -1346,8 +1347,9 @@ fn build_all_with_failure() -> Result<()> {
     Successfully built dist/member_a-0.1.0.tar.gz
     Successfully built dist/member_a-0.1.0-py3-none-any.whl
       × Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Call to `setuptools.build_meta.build_sdist()` failed (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+          hint: This usually indicates a problem with the package or the build environment.
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     "###);

@@ -9,22 +9,27 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use version_ranges::Ranges;
 
-/// Orphan-rule workaround for inspecting build frontend errors.
+/// Workaround for inspecting errors while avoiding cyclical crate dependencies.
 ///
-/// Normally we would match on the variants, but we have to pass this error through an opaque type
-/// to avoid cyclical crate dependencies between the build frontend and resolver/installer.
+/// The `uv-resolver`, `uv-installer` and `uv-build-frontend` error types all reference each other:
+/// Resolution and installation may need to build packages, while the build frontend needs to
+/// resolve and install for the PEP 517 build environment (See also: `BuildContext`). We use an
+/// opaque `dyn` error type, with this trait allowing to inspect it.
 pub trait IsBuildBackendError: std::error::Error + Send + Sync + 'static {
     /// Returns whether the build backend failed to build the package, so it's not a uv error.
     fn is_build_backend_error(&self) -> bool;
 }
 
-/// Wrapper type to make `thiserror`'s `AsDynError` work with `IsBuildFrontendError`.
+/// `anyhow::Error`-like wrapper type to make `IsBuildBackendError` work as `thiserror` `#[source]`.
+///
+/// The `uv-resolver`, `uv-installer` and `uv-build-frontend` error types all reference each other:
+/// Resolution and installation may need to build packages, while the build frontend needs to
+/// resolve and install for the PEP 517 build environment (See also: `BuildContext`). We use an
+/// opaque `dyn` error type with [`IsBuildBackendError`] making the error inspectable.
 ///
 /// `thiserror` does not recognize `Box<dyn IsBuildFrontendError + Send + Sync + 'static>` as
-/// error source by itself.
-///
-/// TODO(konsti): The `From<IsBuildBackendError>` blocks implementing `IsBuildBackendError` on the
-/// type itself, so the wrapped
+/// error source by itself, it complains about the internal `AsDynError` not being implemented.
+/// This struct is an otherwise transparent wrapper that thiserror recognizes.
 pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
 
 impl Debug for AnyErrorBuild {

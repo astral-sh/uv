@@ -77,9 +77,9 @@ pub enum Error {
     // Build backend errors
     #[error("Failed to run `{0}`")]
     CommandFailed(PathBuf, #[source] io::Error),
-    #[error("The build backend returned an error. This likely means a problem with the package or your environment.")]
+    #[error("The build backend returned an error")]
     BuildBackend(#[from] BuildBackendError),
-    #[error("The build backend returned an error. This likely means a problem with the package or your environment.")]
+    #[error("The build backend returned an error")]
     MissingHeader(#[from] MissingHeaderError),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
@@ -275,6 +275,13 @@ impl Display for BuildBackendError {
         if non_empty {
             writeln!(f)?;
         }
+
+        write!(
+            f,
+            "\n{}{} This usually indicates a problem with the package or the build environment.",
+            "hint".bold().cyan(),
+            ":".bold()
+        )?;
 
         Ok(())
     }

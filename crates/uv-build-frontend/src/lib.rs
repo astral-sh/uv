@@ -7,7 +7,6 @@ mod error;
 use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
@@ -626,8 +625,8 @@ impl SourceBuild {
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to determine metadata through `{}`",
-                    format!("prepare_metadata_for_build_{}", self.build_kind).green()
+                    "Call to `{}.prepare_metadata_for_build_{}` failed",
+                    self.pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
@@ -749,9 +748,8 @@ impl SourceBuild {
         if !output.status.success() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to build {} through `{}`",
-                    self.build_kind,
-                    format!("build_{}", self.build_kind).green(),
+                    "Call to `{}.build_{}` failed",
+                    pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
@@ -765,8 +763,8 @@ impl SourceBuild {
         if !output_dir.join(&distribution_filename).is_file() {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to produce {} through `{}`: `{distribution_filename}` not found",
-                    self.build_kind, format!("build_{}", self.build_kind).green(),
+                    "Call to `{}.build_{}` failed",
+                    pep517_backend.backend, self.build_kind
                 ),
                 &output,
                 self.level,
@@ -862,8 +860,8 @@ async fn create_pep517_build_environment(
     if !output.status.success() {
         return Err(Error::from_command_output(
             format!(
-                "Call to `{}.build_{build_kind}()` failed",
-                pep517_backend.backend,
+                "Call to `{}.build_{}` failed",
+                pep517_backend.backend, build_kind
             ),
             &output,
             level,
@@ -883,9 +881,8 @@ async fn create_pep517_build_environment(
         Err(err) => {
             return Err(Error::from_command_output(
                 format!(
-                    "Build backend failed to return requirements from \
-                    `{}.get_requires_for_build_{build_kind}`: {err}",
-                    pep517_backend.backend,
+                    "Call to `{}.get_requires_for_build_{}` failed: {}",
+                    pep517_backend.backend, build_kind, err
                 ),
                 &output,
                 level,

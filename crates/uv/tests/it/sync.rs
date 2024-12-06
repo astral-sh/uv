@@ -762,14 +762,15 @@ fn sync_build_isolation_package() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
     "###);
 
@@ -854,14 +855,15 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "###);
 
@@ -874,14 +876,15 @@ fn sync_build_isolation_extra() -> Result<()> {
     ----- stderr -----
     Resolved [N] packages in [TIME]
       × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
     "###);
 
@@ -4957,8 +4960,8 @@ fn sync_derivation_chain() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -4978,6 +4981,7 @@ fn sync_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
     "###);
 
@@ -5022,8 +5026,8 @@ fn sync_derivation_chain_extra() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -5043,6 +5047,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
     "###);
 
@@ -5089,8 +5094,8 @@ fn sync_derivation_chain_group() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
       × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error. This likely means a problem with the package or your environment.
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel()` failed (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -5110,6 +5115,7 @@ fn sync_derivation_chain_group() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
     "###);
 
