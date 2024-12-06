@@ -1,13 +1,13 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 
+use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
-
-use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
+use uv_fs::Simplified;
 use uv_static::EnvVars;
 
 #[test]
@@ -5585,6 +5585,127 @@ fn sync_git_path_dependency() -> Result<()> {
     Installed 2 packages in [TIME]
      + package1==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1)
      + package2==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2)
+    "###);
+
+    Ok(())
+}
+
+/// Sync a package with multiple wheels at the same version, differing only in the build tag. We
+/// should choose the wheel with the highest build tag.
+#[test]
+fn sync_build_tag() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Populate the `--find-links` entries.
+    fs_err::create_dir_all(context.temp_dir.join("links"))?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("build_tag-"))
+        {
+            let dest = context
+                .temp_dir
+                .join("links")
+                .join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["build-tag"]
+
+        [tool.uv]
+        find-links = ["{}"]
+        "#,
+            context.temp_dir.join("links/").portable_display(),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.child("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "build-tag"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [
+            { path = "build_tag-1.0.0-1-py2.py3-none-any.whl" },
+            { path = "build_tag-1.0.0-3-py2.py3-none-any.whl" },
+            { path = "build_tag-1.0.0-5-py2.py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "build-tag" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "build-tag" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + build-tag==1.0.0
+    "###);
+
+    // Ensure that we choose the highest build tag (5).
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import build_tag; build_tag.main()"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    5
+
+    ----- stderr -----
     "###);
 
     Ok(())

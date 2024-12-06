@@ -12,7 +12,8 @@ use predicates::prelude::predicate;
 use url::Url;
 
 use crate::common::{
-    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path, TestContext,
+    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path,
+    venv_to_interpreter, TestContext,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -7515,4 +7516,41 @@ fn test_dynamic_version_sdist_wrong_version() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Install a package with multiple wheels at the same version, differing only in the build tag. We
+/// should choose the wheel with the highest build tag.
+#[test]
+fn build_tag() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("build-tag")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + build-tag==1.0.0
+    "###
+    );
+
+    // Ensure that we choose the highest build tag (5).
+    uv_snapshot!(Command::new(venv_to_interpreter(&context.venv))
+        .arg("-B")
+        .arg("-c")
+        .arg("import build_tag; build_tag.main()")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    5
+
+    ----- stderr -----
+    "###);
 }
