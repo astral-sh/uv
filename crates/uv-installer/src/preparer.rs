@@ -9,8 +9,8 @@ use uv_cache::Cache;
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, LocalWheel};
 use uv_distribution_types::{
-    BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier,
-    IsBuildBackendError, Name, RemoteSource, Resolution,
+    BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
+    RemoteSource, Resolution,
 };
 use uv_pep508::PackageName;
 use uv_platform_tags::Tags;
@@ -226,24 +226,15 @@ pub enum Error {
 
 impl Error {
     /// Create an [`Error`] from a distribution error.
-    fn from_dist(dist: Dist, cause: uv_distribution::Error, resolution: &Resolution) -> Self {
-        let kind = if cause.is_build_backend_error() {
-            DistErrorKind::BuildBackend
-        } else {
-            match &dist {
-                Dist::Built(_) => DistErrorKind::Download,
-                Dist::Source(dist) => {
-                    if dist.is_local() {
-                        DistErrorKind::Build
-                    } else {
-                        DistErrorKind::DownloadAndBuild
-                    }
-                }
-            }
-        };
+    fn from_dist(dist: Dist, err: uv_distribution::Error, resolution: &Resolution) -> Self {
         let chain =
             DerivationChain::from_resolution(resolution, (&dist).into()).unwrap_or_default();
-        Self::Dist(kind, Box::new(dist), chain, cause)
+        Self::Dist(
+            DistErrorKind::from_dist_and_err(&dist, &err),
+            Box::new(dist),
+            chain,
+            err,
+        )
     }
 }
 

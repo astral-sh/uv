@@ -25,8 +25,8 @@ use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexUrl, InstalledDist, IsBuildBackendError, PythonRequirementKind, RemoteSource,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    IndexUrl, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef,
+    SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -956,26 +956,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             MetadataResponse::Error(dist, err) => {
                 // TODO(charlie): Add derivation chain for URL dependencies. In practice, this isn't
                 // critical since we fetch URL dependencies _prior_ to invoking the resolver.
-                let kind = if err.is_build_backend_error() {
-                    DistErrorKind::BuildBackend
-                } else {
-                    match &**dist {
-                        Dist::Built(BuiltDist::Path(_)) => DistErrorKind::Read,
-                        Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => {
-                            DistErrorKind::Build
-                        }
-                        Dist::Built(_) => DistErrorKind::Download,
-                        Dist::Source(source_dist) => {
-                            if source_dist.is_local() {
-                                DistErrorKind::Build
-                            } else {
-                                DistErrorKind::DownloadAndBuild
-                            }
-                        }
-                    }
-                };
                 return Err(ResolveError::Dist(
-                    kind,
+                    DistErrorKind::from_dist_and_err(dist, &**err),
                     dist.clone(),
                     DerivationChain::default(),
                     err.clone(),
@@ -1391,25 +1373,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     MetadataResponse::Error(dist, err) => {
                         let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
                             .unwrap_or_default();
-                        let kind = if err.is_build_backend_error() {
-                            DistErrorKind::BuildBackend
-                        } else {
-                            match &**dist {
-                                Dist::Built(BuiltDist::Path(_)) => DistErrorKind::Read,
-                                Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => {
-                                    DistErrorKind::Build
-                                }
-                                Dist::Built(_) => DistErrorKind::Download,
-                                Dist::Source(source_dist) => {
-                                    if source_dist.is_local() {
-                                        DistErrorKind::Build
-                                    } else {
-                                        DistErrorKind::DownloadAndBuild
-                                    }
-                                }
-                            }
-                        };
-                        return Err(ResolveError::Dist(kind, dist.clone(), chain, err.clone()));
+                        return Err(ResolveError::Dist(
+                            DistErrorKind::from_dist_and_err(dist, &**err),
+                            dist.clone(),
+                            chain,
+                            err.clone(),
+                        ));
                     }
                 };
 

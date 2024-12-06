@@ -5,9 +5,7 @@ pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
 
-use uv_distribution_types::{
-    Dist, DistErrorKind, GitSourceDist, IsBuildBackendError, SourceDist,
-};
+use uv_distribution_types::{Dist, DistErrorKind, GitSourceDist, SourceDist};
 use uv_git::GitUrl;
 use uv_pypi_types::{Requirement, RequirementSource};
 
@@ -36,22 +34,12 @@ pub enum Error {
 
 impl Error {
     /// Create an [`Error`] from a distribution error.
-    pub(crate) fn from_dist(dist: Dist, cause: uv_distribution::Error) -> Self {
-        let kind = if cause.is_build_backend_error() {
-            DistErrorKind::BuildBackend
-        } else {
-            match &dist {
-                Dist::Built(_) => DistErrorKind::Download,
-                Dist::Source(dist) => {
-                    if dist.is_local() {
-                        DistErrorKind::Build
-                    } else {
-                        DistErrorKind::DownloadAndBuild
-                    }
-                }
-            }
-        };
-        Self::Dist(kind, Box::new(dist), DerivationChain::default(), cause)
+    pub(crate) fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
+        Self::Dist(
+            DistErrorKind::from_dist_and_err(&dist, &err),
+            Box::new(dist),
+            err,
+        )
     }
 }
 

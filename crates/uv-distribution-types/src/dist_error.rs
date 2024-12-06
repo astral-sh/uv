@@ -1,4 +1,4 @@
-use crate::{DistRef, Edge, Name, Node, Resolution, ResolvedDist};
+use crate::{BuiltDist, Dist, DistRef, Edge, Name, Node, Resolution, ResolvedDist, SourceDist};
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::FxHashSet;
@@ -82,6 +82,29 @@ pub enum DistErrorKind {
     Build,
     BuildBackend,
     Read,
+}
+
+impl DistErrorKind {
+    pub fn from_dist_and_err(dist: &Dist, err: &impl IsBuildBackendError) -> Self {
+        if err.is_build_backend_error() {
+            DistErrorKind::BuildBackend
+        } else {
+            match dist {
+                Dist::Built(BuiltDist::Path(_)) => DistErrorKind::Read,
+                Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => {
+                    DistErrorKind::Build
+                }
+                Dist::Built(_) => DistErrorKind::Download,
+                Dist::Source(source_dist) => {
+                    if source_dist.is_local() {
+                        DistErrorKind::Build
+                    } else {
+                        DistErrorKind::DownloadAndBuild
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Display for DistErrorKind {
