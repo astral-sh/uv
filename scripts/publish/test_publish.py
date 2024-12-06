@@ -110,7 +110,7 @@ class TargetConfiguration:
         if not self.index:
             return None
         return (
-            f"[[tool.uv.index]]\n"
+            "[[tool.uv.index]]\n"
             + f'name = "{self.index}"\n'
             + f'url = "{self.index_url}"\n'
             + f'publish-url = "{self.publish_url}"\n'
