@@ -414,9 +414,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
 
     # Build a different source dist and wheel at the same version, so the upload fails
     del project_dir
-    modified_project_dir = build_project_at_version(
-        target, version, uv, modified=True
-    )
+    modified_project_dir = build_project_at_version(target, version, uv, modified=True)
 
     print(
         f"\n=== 4. Publishing modified {project_name} {version} "
