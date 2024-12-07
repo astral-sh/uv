@@ -317,10 +317,10 @@ impl LoweredRequirement {
                             let source = if let Some(git_member) = &git_member {
                                 // If the workspace comes from a Git dependency, all workspace
                                 // members need to be Git dependencies, too.
-                                let subdirectory = uv_fs::normalize_path(
-                                    &uv_fs::relative_to(member.root(), git_member.fetch_root)
-                                        .expect("Workspace member must be relative"),
-                                );
+                                let subdirectory =
+                                    uv_fs::relative_to(member.root(), git_member.fetch_root)
+                                        .expect("Workspace member must be relative");
+                                let subdirectory = uv_fs::normalize_path_buf(subdirectory);
                                 RequirementSource::Git {
                                     repository: git_member.git_source.git.repository().clone(),
                                     reference: git_member.git_source.git.reference().clone(),
@@ -711,10 +711,9 @@ fn path_source(
     };
     if is_dir {
         if let Some(git_member) = git_member {
-            let subdirectory = uv_fs::normalize_path(
-                &uv_fs::relative_to(install_path, git_member.fetch_root)
-                    .expect("Workspace member must be relative"),
-            );
+            let subdirectory = uv_fs::relative_to(install_path, git_member.fetch_root)
+                .expect("Workspace member must be relative");
+            let subdirectory = uv_fs::normalize_path_buf(subdirectory);
             return Ok(RequirementSource::Git {
                 repository: git_member.git_source.git.repository().clone(),
                 reference: git_member.git_source.git.reference().clone(),
