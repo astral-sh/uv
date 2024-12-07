@@ -272,13 +272,16 @@ pub fn relative_to(
     path: impl AsRef<Path>,
     base: impl AsRef<Path>,
 ) -> Result<PathBuf, std::io::Error> {
+    // Normalize both paths, to avoid intermediate `..` components.
+    let path = normalize_path(path.as_ref());
+    let base = normalize_path(base.as_ref());
+
     // Find the longest common prefix, and also return the path stripped from that prefix
     let (stripped, common_prefix) = base
-        .as_ref()
         .ancestors()
         .find_map(|ancestor| {
             // Simplifying removes the UNC path prefix on windows.
-            dunce::simplified(path.as_ref())
+            dunce::simplified(&path)
                 .strip_prefix(dunce::simplified(ancestor))
                 .ok()
                 .map(|stripped| (stripped, ancestor))
@@ -288,14 +291,14 @@ pub fn relative_to(
                 std::io::ErrorKind::Other,
                 format!(
                     "Trivial strip failed: {} vs. {}",
-                    path.as_ref().simplified_display(),
-                    base.as_ref().simplified_display()
+                    path.simplified_display(),
+                    base.simplified_display()
                 ),
             )
         })?;
 
     // go as many levels up as required
-    let levels_up = base.as_ref().components().count() - common_prefix.components().count();
+    let levels_up = base.components().count() - common_prefix.components().count();
     let up = std::iter::repeat("..").take(levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))

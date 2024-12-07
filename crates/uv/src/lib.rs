@@ -65,6 +65,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .as_deref()
         .map(std::path::absolute)
         .transpose()?
+        .as_deref()
+        .map(uv_fs::normalize_path)
         .map(Cow::Owned)
         .unwrap_or_else(|| Cow::Borrowed(&*CWD));
 
