@@ -2454,6 +2454,23 @@ impl ForkState {
                         dev: ref dependency_dev,
                         marker: ref dependency_marker,
                     } => {
+                        debug_assert!(
+                            dependency_extra.is_none(),
+                            "Packages should depend on an extra proxy"
+                        );
+                        debug_assert!(
+                            dependency_dev.is_none(),
+                            "Packages should depend on a group proxy"
+                        );
+
+                        // Ignore self-dependencies (e.g., `tensorflow-macos` depends on `tensorflow-macos`),
+                        // but allow groups to depend on other groups, or on the package itself.
+                        if self_dev.is_none() {
+                            if self_name == Some(dependency_name) {
+                                continue;
+                            }
+                        }
+
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2478,6 +2495,14 @@ impl ForkState {
                         name: ref dependency_name,
                         marker: ref dependency_marker,
                     } => {
+                        // Ignore self-dependencies (e.g., `tensorflow-macos` depends on `tensorflow-macos`),
+                        // but allow groups to depend on other groups, or on the package itself.
+                        if self_dev.is_none() {
+                            if self_name == Some(dependency_name) {
+                                continue;
+                            }
+                        }
+
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
                         let edge = ResolutionDependencyEdge {
@@ -2503,6 +2528,13 @@ impl ForkState {
                         extra: ref dependency_extra,
                         marker: ref dependency_marker,
                     } => {
+                        if self_dev.is_none() {
+                            debug_assert!(
+                                self_name != Some(dependency_name),
+                                "Extras should be flattened"
+                            );
+                        }
+
                         // Insert an edge from the dependent package to the extra package.
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
@@ -2549,6 +2581,11 @@ impl ForkState {
                         dev: ref dependency_dev,
                         marker: ref dependency_marker,
                     } => {
+                        debug_assert!(
+                            self_name != Some(dependency_name),
+                            "Groups should be flattened"
+                        );
+
                         // Add an edge from the dependent package to the dev package, but _not_ the
                         // base package.
                         let to_url = self.fork_urls.get(dependency_name);
