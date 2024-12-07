@@ -51,7 +51,7 @@ fn extra_basic() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra configuration, we tell uv about
@@ -257,7 +257,7 @@ fn extra_basic_three_extras() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[project3] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.2.0, we can conclude that project[extra1] and project[project3] are incompatible.
-          And because your project requires project[extra1] and project[project3], we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project[extra1] and project[project3], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra configuration, we tell uv about
@@ -553,7 +553,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[project4] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[project4] are incompatible.
-          And because your project requires project[extra1] and project[project4], we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project[extra1] and project[project4], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // If we define extra1/extra2 as conflicting and project3/project4
@@ -597,7 +597,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
-          And because your project requires project[extra2] and project[project3], we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // One could try to declare all pairs of conflicting extras as
@@ -730,7 +730,7 @@ fn extra_multiple_independent() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[project4] depends on anyio==4.2.0 and project[project3] depends on anyio==4.1.0, we can conclude that project[project3] and project[project4] are incompatible.
-          And because your project requires project[project3] and project[project4], we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project[project3] and project[project4], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // OK, responding to the error, we declare our anyio extras
@@ -770,7 +770,7 @@ fn extra_multiple_independent() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // Once we declare ALL our conflicting extras, resolution succeeds.
@@ -1078,7 +1078,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     Ok(())
@@ -1448,7 +1448,7 @@ fn group_basic() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project:group2 depends on sortedcontainers==2.4.0 and project:group1 depends on sortedcontainers==2.3.0, we can conclude that project:group1 and project:group2 are incompatible.
-          And because your project requires project:group1 and project:group2, we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project:group1 and project:group2, we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // And now with the same group configuration, we tell uv about
@@ -1838,7 +1838,7 @@ fn mixed() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because project[extra1] depends on sortedcontainers==2.4.0 and project:group1 depends on sortedcontainers==2.3.0, we can conclude that project:group1 and project[extra1] are incompatible.
-          And because your project requires project[extra1] and project:group1, we can conclude that your projects's requirements are unsatisfiable.
+          And because your project requires project[extra1] and project:group1, we can conclude that your project's requirements are unsatisfiable.
     "###);
 
     // And now with the same extra/group configuration, we tell uv

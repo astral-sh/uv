@@ -726,7 +726,7 @@ fn collapse_unavailable_versions(
 ///
 /// Intended to effectively change the root to a workspace member in single project
 /// workspaces, avoiding a level of indirection like "And because your project
-/// requires your project, we can conclude that your projects's requirements are
+/// requires your project, we can conclude that your project's requirements are
 /// unsatisfiable."
 fn drop_root_dependency_on_project(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
