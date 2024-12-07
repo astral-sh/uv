@@ -191,8 +191,12 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             )
         })?;
 
-        // If the path is a `pyproject.toml`, attempt to extract the requirements statically.
-        if let Ok(metadata) = self.database.requires_dist(source_tree).await {
+        // If the path is a `pyproject.toml`, attempt to extract the requirements statically. The
+        // distribution database will do this too, but we can be even more aggressive here since we
+        // _only_ need the requirements. So, for example, even if the version is dynamic, we can
+        // still extract the requirements without performing a build, unlike in the database where
+        // we typically construct a "complete" metadata object.
+        if let Some(metadata) = self.database.requires_dist(source_tree).await? {
             return Ok(metadata);
         }
 
