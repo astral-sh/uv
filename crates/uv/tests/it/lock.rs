@@ -6347,6 +6347,110 @@ fn lock_no_workspace_source() -> Result<()> {
     Ok(())
 }
 
+/// Lock a workspace with a member that's a peer to the root.
+#[test]
+fn lock_peer_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("project")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["../child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.child("project")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.child("project").child("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+            "project",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "../child" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "child" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "child", editable = "../child" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `pyproject.toml` found in current directory or any parent directory
+    "###);
+
+    Ok(())
+}
+
 /// Ensure that development dependencies are omitted for non-workspace members. Below, `bar` depends
 /// on `foo`, but `bar/uv.lock` should omit `anyio`, but should include `typing-extensions`.
 #[test]
@@ -18881,6 +18985,107 @@ fn mismatched_name_self_editable() -> Result<()> {
       × Failed to build `foo @ file://[TEMP_DIR]/`
       ╰─▶ Package metadata name `project` does not match given name `foo`
       help: `foo` was included because `project` (v0.1.0) depends on `foo`
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_relative_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("project")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+        "#,
+        )?;
+
+    let peer = context.temp_dir.child("peer");
+    fs_err::create_dir_all(&peer)?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--project").arg("../project").current_dir(&peer), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read(context.temp_dir.child("project").child("uv.lock"));
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "typing-extensions" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "typing-extensions" }]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--project").arg("../project").current_dir(&peer), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Create a virtual environment in the project directory.
+    context
+        .command()
+        .arg("venv")
+        .current_dir(context.temp_dir.child("project"))
+        .assert()
+        .success();
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--project").arg("../project").current_dir(&peer), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
