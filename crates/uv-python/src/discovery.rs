@@ -600,6 +600,9 @@ fn python_interpreters<'a>(
     )
     .filter(move |result| result_satisfies_environment_preference(result, environments))
     .filter(move |result| result_satisfies_version_request(result, version))
+    // Ensure that interpreters, e.g., from the search path, meet the preference for managed
+    // interpreters since the user can link them to arbitrary locations.
+    .filter(move |result| result_satisfies_python_preference(result, preference))
 }
 
 /// Lazily convert Python executables into interpreters.
@@ -699,6 +702,101 @@ fn result_satisfies_environment_preference(
 ) -> bool {
     result.as_ref().ok().map_or(true, |(source, interpreter)| {
         satisfies_environment_preference(*source, interpreter, preference)
+    })
+}
+
+/// Returns true if a Python interpreter matches the [`PythonPreference`].
+pub fn satisfies_python_preference(
+    source: PythonSource,
+    interpreter: &Interpreter,
+    preference: PythonPreference,
+) -> bool {
+    // If the source is "explicit", we will not apply the Python preference, e.g., if the user has
+    // activated a virtual environment, we should always respect allow it. We may want to invalidate
+    // the environment in some cases, like in projects, but we can't distinguish between explicit
+    // requests for a different Python preference or a persistent preference in a configuration file
+    // which would result in overly aggressive invalidation.
+    let is_explicit = match source {
+        PythonSource::ProvidedPath
+        | PythonSource::ParentInterpreter
+        | PythonSource::ActiveEnvironment
+        | PythonSource::CondaPrefix => true,
+        PythonSource::Managed
+        | PythonSource::DiscoveredEnvironment
+        | PythonSource::SearchPath
+        | PythonSource::Registry
+        | PythonSource::MicrosoftStore
+        | PythonSource::BaseCondaPrefix => false,
+    };
+
+    match preference {
+        PythonPreference::OnlyManaged => {
+            // Perform a fast check using the source before querying the interpreter
+            if matches!(source, PythonSource::Managed) || interpreter.is_managed() {
+                true
+            } else {
+                if is_explicit {
+                    debug!(
+                        "Allowing unmanaged Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
+                        interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only managed interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
+        }
+        // If not "only" a kind, any interpreter is okay
+        PythonPreference::Managed | PythonPreference::System => true,
+        PythonPreference::OnlySystem => {
+            let is_system = match source {
+                // A managed interpreter is never a system interpreter
+                PythonSource::Managed => false,
+                // We can't be sure if this is a system interpreter without checking
+                PythonSource::ProvidedPath
+                | PythonSource::ParentInterpreter
+                | PythonSource::ActiveEnvironment
+                | PythonSource::CondaPrefix
+                | PythonSource::DiscoveredEnvironment
+                | PythonSource::SearchPath
+                | PythonSource::Registry
+                | PythonSource::BaseCondaPrefix => !interpreter.is_managed(),
+                // Managed interpreters should never be found in the store
+                PythonSource::MicrosoftStore => true,
+            };
+
+            if is_system {
+                true
+            } else {
+                if is_explicit {
+                    debug!(
+                        "Allowing managed Python interpreter at `{}` (in conflict with the `python-preference`) since it is from source: {source}",
+                        interpreter.sys_executable().display()
+                    );
+                    true
+                } else {
+                    debug!(
+                        "Ignoring Python interpreter at `{}`: only system interpreters allowed",
+                        interpreter.sys_executable().display()
+                    );
+                    false
+                }
+            }
+        }
+    }
+}
+
+/// Utility for applying [`satisfies_python_preference`] to a result type.
+fn result_satisfies_python_preference(
+    result: &Result<(PythonSource, Interpreter), Error>,
+    preference: PythonPreference,
+) -> bool {
+    result.as_ref().ok().map_or(true, |(source, interpreter)| {
+        satisfies_python_preference(*source, interpreter, preference)
     })
 }
 
@@ -2396,6 +2494,18 @@ impl PythonPreference {
                     &[PythonSource::SearchPath]
                 }
             }
+        }
+    }
+
+    /// Return the canonical name.
+    // TODO(zanieb): This should be a `Display` impl and we should have a different view for
+    // the sources
+    pub fn canonical_name(&self) -> &'static str {
+        match self {
+            Self::OnlyManaged => "only managed",
+            Self::Managed => "prefer managed",
+            Self::System => "prefer system",
+            Self::OnlySystem => "only system",
         }
     }
 }
