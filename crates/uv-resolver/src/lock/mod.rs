@@ -3749,7 +3749,8 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path(&workspace.install_path().join(&install_path));
+            let install_path =
+                uv_fs::normalize_path_buf(workspace.install_path().join(&install_path));
             let url = VerbatimUrl::from_absolute_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -3772,7 +3773,8 @@ fn normalize_requirement(
             r#virtual,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path(&workspace.install_path().join(&install_path));
+            let install_path =
+                uv_fs::normalize_path_buf(workspace.install_path().join(&install_path));
             let url = VerbatimUrl::from_absolute_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 

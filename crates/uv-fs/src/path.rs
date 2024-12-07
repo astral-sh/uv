@@ -199,7 +199,33 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     Ok(ret)
 }
 
-/// Normalize a path, removing things like `.` and `..`.
+/// Normalize a [`Path`], removing things like `.` and `..`.
+pub fn normalize_path(path: &Path) -> Cow<Path> {
+    // Fast path: if the path is already normalized, return it as-is.
+    if path.components().all(|component| match component {
+        Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
+        Component::ParentDir | Component::CurDir => false,
+    }) {
+        Cow::Borrowed(path)
+    } else {
+        Cow::Owned(normalized(path))
+    }
+}
+
+/// Normalize a [`PathBuf`], removing things like `.` and `..`.
+pub fn normalize_path_buf(path: PathBuf) -> PathBuf {
+    // Fast path: if the path is already normalized, return it as-is.
+    if path.components().all(|component| match component {
+        Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
+        Component::ParentDir | Component::CurDir => false,
+    }) {
+        path
+    } else {
+        normalized(&path)
+    }
+}
+
+/// Normalize a [`Path`].
 ///
 /// Unlike [`normalize_absolute_path`], this works with relative paths and does never error.
 ///
@@ -216,8 +242,7 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 /// Out: `workspace-git-path-dep-test/packages/d`
 ///
 /// In: `./a/../../b`
-/// Out: `../b`
-pub fn normalize_path(path: &Path) -> PathBuf {
+fn normalized(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
