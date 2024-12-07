@@ -360,21 +360,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(metadata)
     }
 
-    /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-    pub(crate) async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
-        let requires_dist = read_requires_dist(project_root).await?;
-        let requires_dist = RequiresDist::from_project_maybe_workspace(
-            requires_dist,
-            project_root,
-            None,
-            self.build_context.locations(),
-            self.build_context.sources(),
-            self.build_context.bounds(),
-        )
-        .await?;
-        Ok(requires_dist)
-    }
-
     /// Build a source distribution from a remote URL.
     async fn url<'data>(
         &self,
@@ -1248,6 +1233,48 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         pointer.write_to(&entry).await?;
 
         Ok(pointer)
+    }
+
+    /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
+    pub(crate) async fn source_tree_requires_dist(
+        &self,
+        project_root: &Path,
+    ) -> Result<Option<RequiresDist>, Error> {
+        // Attempt to read static metadata from the `pyproject.toml`.
+        match read_requires_dist(project_root).await {
+            Ok(requires_dist) => {
+                debug!(
+                    "Found static `requires-dist` for: {}",
+                    project_root.display()
+                );
+                let requires_dist = RequiresDist::from_project_maybe_workspace(
+                    requires_dist,
+                    project_root,
+                    None,
+                    self.build_context.locations(),
+                    self.build_context.sources(),
+                    self.build_context.bounds(),
+                )
+                .await?;
+                Ok(Some(requires_dist))
+            }
+            Err(
+                err @ (Error::MissingPyprojectToml
+                | Error::PyprojectToml(
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::PoetrySyntax,
+                )),
+            ) => {
+                debug!(
+                    "No static `requires-dist` available for: {} ({err:?})",
+                    project_root.display()
+                );
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Build a source distribution from a Git repository.

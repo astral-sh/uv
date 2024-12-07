@@ -293,6 +293,37 @@ dependencies = [
     Ok(())
 }
 
+#[test]
+fn compile_pyproject_toml_eager_validation() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+        requires-python = ">=3.10"
+        dependencies = ["anyio==4.7.0"]
+
+        [tool.uv.sources]
+        anyio = { workspace = true }
+    "#})?;
+
+    // This should fail without attempting to build the package.
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("pyproject.toml"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse entry: `anyio`
+      Caused by: `anyio` references a workspace in `tool.uv.sources` (e.g., `anyio = { workspace = true }`), but is not a workspace member
+    "###);
+
+    Ok(())
+}
+
 /// Resolve a package from a `requirements.in` file, with a `constraints.txt` file.
 #[test]
 fn compile_constraints_txt() -> Result<()> {
