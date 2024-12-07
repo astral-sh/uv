@@ -32,13 +32,22 @@ impl From<CanonicalMarkerValueVersion> for MarkerValueVersion {
     }
 }
 
-/// Those environment markers with an arbitrary string as value such as `sys_platform`
+/// Those environment markers with an arbitrary string as value such as `sys_platform`.
+///
+/// As in [`crate::marker::algebra::Variable`], this `enum` also defines the variable ordering for
+/// all ADDs, which is in turn used when translating the ADD to DNF. As such, modifying the ordering
+/// will modify the output of marker expressions.
+///
+/// Critically, any variants that could be involved in a known-incompatible marker pair should
+/// be at the top of the ordering, i.e., given the maximum priority.
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerValueString {
-    /// `implementation_name`
-    ImplementationName,
     /// `os_name`
     OsName,
+    /// `sys_platform`
+    SysPlatform,
+    /// `platform_system`
+    PlatformSystem,
     /// `platform_machine`
     PlatformMachine,
     /// Deprecated `platform.machine` from <https://peps.python.org/pep-0345/#environment-markers>
@@ -46,12 +55,21 @@ pub enum CanonicalMarkerValueString {
     PlatformPythonImplementation,
     /// `platform_release`
     PlatformRelease,
-    /// `platform_system`
-    PlatformSystem,
     /// `platform_version`
     PlatformVersion,
-    /// `sys_platform`
-    SysPlatform,
+    /// `implementation_name`
+    ImplementationName,
+}
+
+impl CanonicalMarkerValueString {
+    /// Returns `true` if the marker is known to be involved in _at least_ one conflicting
+    /// marker pair.
+    ///
+    /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
+    /// never be true at the same time.
+    pub(crate) fn is_conflicting(self) -> bool {
+        self <= Self::PlatformSystem
+    }
 }
 
 impl From<MarkerValueString> for CanonicalMarkerValueString {

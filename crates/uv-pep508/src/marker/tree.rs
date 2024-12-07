@@ -5,9 +5,10 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use version_ranges::Ranges;
+
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
-use version_ranges::Ranges;
 
 use super::algebra::{Edges, NodeId, Variable, INTERNER};
 use super::simplify;
@@ -493,6 +494,19 @@ pub enum MarkerExpression {
     },
 }
 
+/// The kind of a [`MarkerExpression`].
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub(crate) enum MarkerExpressionKind {
+    /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
+    Version(MarkerValueVersion),
+    /// A version "in" expression, e.g. `<version key> in <quoted list of PEP 440 versions>`.
+    VersionIn(MarkerValueVersion),
+    /// A string marker comparison, e.g. `sys_platform == '...'`.
+    String(MarkerValueString),
+    /// An extra expression, e.g. `extra == '...'`.
+    Extra,
+}
+
 /// The operator for an extra expression, either '==' or '!='.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum ExtraOperator {
@@ -562,6 +576,16 @@ impl MarkerExpression {
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Option<Self>, Pep508Error> {
         MarkerExpression::parse_reporter(s, &mut TracingReporter)
+    }
+
+    /// Return the kind of this marker expression.
+    pub(crate) fn kind(&self) -> MarkerExpressionKind {
+        match self {
+            MarkerExpression::Version { key, .. } => MarkerExpressionKind::Version(*key),
+            MarkerExpression::VersionIn { key, .. } => MarkerExpressionKind::VersionIn(*key),
+            MarkerExpression::String { key, .. } => MarkerExpressionKind::String(*key),
+            MarkerExpression::Extra { .. } => MarkerExpressionKind::Extra,
+        }
     }
 }
 
@@ -691,13 +715,11 @@ impl MarkerTree {
     }
 
     /// Combine this marker tree with the one given via a conjunction.
-    #[allow(clippy::needless_pass_by_value)]
     pub fn and(&mut self, tree: MarkerTree) {
         self.0 = INTERNER.lock().and(self.0, tree.0);
     }
 
     /// Combine this marker tree with the one given via a disjunction.
-    #[allow(clippy::needless_pass_by_value)]
     pub fn or(&mut self, tree: MarkerTree) {
         self.0 = INTERNER.lock().or(self.0, tree.0);
     }
@@ -707,7 +729,6 @@ impl MarkerTree {
     ///
     /// If the marker set is always `true`, then it can be said that `self`
     /// implies `consequent`.
-    #[allow(clippy::needless_pass_by_value)]
     pub fn implies(&mut self, consequent: MarkerTree) {
         // This could probably be optimized, but is clearly
         // correct, since logical implication is `-P or Q`.
@@ -1014,7 +1035,6 @@ impl MarkerTree {
     /// results of that simplification. (If `requires-python` changes, then one
     /// should reconstitute all relevant markers from the source data.)
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
     pub fn simplify_python_versions(
         self,
         lower: Bound<&Version>,
@@ -1035,7 +1055,6 @@ impl MarkerTree {
     /// `python_full_version <= '3.10'`, this would result in a marker of
     /// `python_full_version >= '3.8' and python_full_version <= '3.10'`.
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
     pub fn complexify_python_versions(
         self,
         lower: Bound<&Version>,
@@ -2353,7 +2372,7 @@ mod test {
 
         assert_simplifies(
             "((extra == 'a' or extra == 'b') and extra == 'c') or extra == 'b'",
-            "(extra == 'a' and extra == 'c') or extra == 'b'",
+            "extra == 'b' or (extra == 'a' and extra == 'c')",
         );
 
         // post-normalization filtering
@@ -2575,13 +2594,13 @@ mod test {
                 or (implementation_name != 'pypy' and sys_platform == 'win32')
                 or (sys_platform == 'win32' and os_name != 'nt')
                 or (sys_platform != 'win32' and os_name == 'nt')",
-            "(os_name != 'nt' and sys_platform == 'win32') \
-                or (implementation_name != 'pypy' and os_name == 'nt') \
-                or (implementation_name == 'pypy' and os_name != 'nt') \
+            "(implementation_name == 'pypy' and sys_platform != 'win32') \
+                or (implementation_name != 'pypy' and sys_platform == 'win32') \
+                or (os_name != 'nt' and sys_platform == 'win32') \
                 or (os_name == 'nt' and sys_platform != 'win32')",
         );
 
-        // This is another case we cannot simplify fully, depending on the variable order.
+        // This is a case we can simplify fully, but it's dependent on the variable order.
         // The expression is equivalent to `sys_platform == 'x' or (os_name == 'Linux' and platform_system == 'win32')`.
         assert_simplifies(
             "(os_name == 'Linux' and platform_system == 'win32')
@@ -2590,14 +2609,14 @@ mod test {
                 or (os_name != 'Linux' and platform_system == 'win32' and sys_platform == 'x')
                 or (os_name == 'Linux' and platform_system != 'win32' and sys_platform == 'x')
                 or (os_name != 'Linux' and platform_system != 'win32' and sys_platform == 'x')",
-            "(os_name != 'Linux' and sys_platform == 'x') or (platform_system != 'win32' and sys_platform == 'x') or (os_name == 'Linux' and platform_system == 'win32')",
+            "(os_name == 'Linux' and platform_system == 'win32') or sys_platform == 'x'",
         );
 
         assert_simplifies("python_version > '3.7'", "python_full_version >= '3.8'");
 
         assert_simplifies(
             "(python_version <= '3.7' and os_name == 'Linux') or python_version > '3.7'",
-            "os_name == 'Linux' or python_full_version >= '3.8'",
+            "python_full_version >= '3.8' or os_name == 'Linux'",
         );
 
         // Again, the extra `<3.7` and `>=3.9` expressions cannot be seen as redundant due to them being interdependent.
@@ -2606,34 +2625,31 @@ mod test {
             "(os_name == 'Linux' and sys_platform == 'win32') \
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.7') \
                 or (os_name != 'Linux' and sys_platform == 'win32' and python_version == '3.8')",
-            "(python_full_version < '3.7' and os_name == 'Linux' and sys_platform == 'win32') \
-                or (python_full_version >= '3.9' and os_name == 'Linux' and sys_platform == 'win32') \
-                or (python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32')",
+            "(python_full_version >= '3.7' and python_full_version < '3.9' and sys_platform == 'win32') or (os_name == 'Linux' and sys_platform == 'win32')",
         );
 
         assert_simplifies(
             "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
-            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
+            "os_name == 'nt' and sys_platform == 'win32'",
         );
 
         assert_simplifies(
-            "(sys_platform == 'darwin' or sys_platform == 'win32')
-                and ((implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
-            "(implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
+            "(sys_platform == 'darwin' or sys_platform == 'win32') and ((implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
+            "os_name == 'nt' and sys_platform == 'win32'",
         );
 
         assert_simplifies(
             "(sys_platform == 'darwin' or sys_platform == 'win32')
                 and ((platform_version != '1' and os_name == 'nt' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32'))",
-            "(os_name == 'nt' and platform_version != '1' and sys_platform == 'darwin') or (os_name == 'nt' and sys_platform == 'win32')",
+            "os_name == 'nt' and sys_platform == 'win32'",
         );
 
         assert_simplifies(
             "(os_name == 'nt' and sys_platform == 'win32') \
                 or (os_name != 'nt' and platform_version == '1' and (sys_platform == 'win32' or sys_platform == 'win64'))",
-            "(platform_version == '1' and sys_platform == 'win32') \
-                or (os_name != 'nt' and platform_version == '1' and sys_platform == 'win64') \
-                or (os_name == 'nt' and sys_platform == 'win32')",
+            "(os_name != 'nt' and platform_version == '1' and sys_platform == 'win64') \
+                or (os_name == 'nt' and sys_platform == 'win32') \
+                or (platform_version == '1' and sys_platform == 'win32')",
         );
 
         assert_simplifies(

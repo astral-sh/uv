@@ -44,6 +44,7 @@
 //! a [`NodeId`], which represents a potentially complemented reference to a [`Node`] in the interner,
 //! or a terminal `true`/`false` node. Interning allows the reduction rule that isomorphic nodes are
 //! merged to be applied globally.
+
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Bound;
@@ -60,8 +61,9 @@ use crate::marker::lowering::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
 use crate::marker::MarkerValueExtra;
-use crate::ExtraOperator;
-use crate::{MarkerExpression, MarkerOperator, MarkerValueVersion};
+use crate::{
+    ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
+};
 
 /// The global node interner.
 pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);
@@ -93,6 +95,9 @@ struct InternerState {
     /// A cache for `AND` operations between two nodes.
     /// Note that `OR` is implemented in terms of `AND`.
     cache: FxHashMap<(NodeId, NodeId), NodeId>,
+
+    /// The [`NodeId`] for the disjunction of known, mutually incompatible markers.
+    exclusions: Option<NodeId>,
 }
 
 impl InternerShared {
@@ -295,14 +300,14 @@ impl InternerGuard<'_> {
         self.create_node(var, children)
     }
 
-    // Returns a decision node representing the disjunction of two nodes.
-    pub(crate) fn or(&mut self, x: NodeId, y: NodeId) -> NodeId {
+    /// Returns a decision node representing the disjunction of two nodes.
+    pub(crate) fn or(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
         // We take advantage of cheap negation here and implement OR in terms
         // of it's De Morgan complement.
-        self.and(x.not(), y.not()).not()
+        self.and(xi.not(), yi.not()).not()
     }
 
-    // Returns a decision node representing the conjunction of two nodes.
+    /// Returns a decision node representing the conjunction of two nodes.
     pub(crate) fn and(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
         if xi.is_true() {
             return yi;
@@ -328,6 +333,14 @@ impl InternerGuard<'_> {
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
 
+        // Determine whether the conjunction _could_ contain a conflict.
+        //
+        // As an optimization, we only have to perform this check at the top-level, since these
+        // variables are given higher priority in the tree. In other words, if they're present, they
+        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
+        // children.
+        let conflicts = x.var.is_conflicting_variable() && y.var.is_conflicting_variable();
+
         // Perform Shannon Expansion of the higher order variable.
         let (func, children) = match x.var.cmp(&y.var) {
             // X is higher order than Y, apply Y to every child of X.
@@ -349,6 +362,18 @@ impl InternerGuard<'_> {
 
         // Create the output node.
         let node = self.create_node(func, children);
+
+        // If the node includes known incompatibilities, map it to `false`.
+        let node = if conflicts {
+            let exclusions = self.exclusions();
+            if self.disjointness(node, exclusions.not()) {
+                NodeId::FALSE
+            } else {
+                node
+            }
+        } else {
+            node
+        };
 
         // Memoize the result of this operation.
         //
@@ -380,17 +405,73 @@ impl InternerGuard<'_> {
         }
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
+
+        // Determine whether the conjunction _could_ contain a conflict.
+        //
+        // As an optimization, we only have to perform this check at the top-level, since these
+        // variables are given higher priority in the tree. In other words, if they're present, they
+        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
+        // children.
+        if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
+            return self.and(xi, yi).is_false();
+        }
+
+        // Perform Shannon Expansion of the higher order variable.
         match x.var.cmp(&y.var) {
             // X is higher order than Y, Y must be disjoint with every child of X.
             Ordering::Less => x
                 .children
                 .nodes()
-                .all(|x| self.is_disjoint(x.negate(xi), yi)),
+                .all(|x| self.disjointness(x.negate(xi), yi)),
             // Y is higher order than X, X must be disjoint with every child of Y.
             Ordering::Greater => y
                 .children
                 .nodes()
-                .all(|y| self.is_disjoint(y.negate(yi), xi)),
+                .all(|y| self.disjointness(y.negate(yi), xi)),
+            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
+        }
+    }
+
+    /// Returns `true` if there is no environment in which both marker trees can apply,
+    /// i.e., their conjunction is always `false`.
+    fn disjointness(&mut self, xi: NodeId, yi: NodeId) -> bool {
+        // NOTE(charlie): This is equivalent to `is_disjoint`, with the exception that it doesn't
+        // perform the mutually-incompatible marker check. If it did, we'd create an infinite loop,
+        // since `is_disjoint` calls `and` (when relevant variables are present) which then calls
+        // `disjointness`.
+
+        // `false` is disjoint with any marker.
+        if xi.is_false() || yi.is_false() {
+            return true;
+        }
+        // `true` is not disjoint with any marker except `false`.
+        if xi.is_true() || yi.is_true() {
+            return false;
+        }
+        // `X` and `X` are not disjoint.
+        if xi == yi {
+            return false;
+        }
+        // `X` and `not X` are disjoint by definition.
+        if xi.not() == yi {
+            return true;
+        }
+
+        let (x, y) = (self.shared.node(xi), self.shared.node(yi));
+
+        // Perform Shannon Expansion of the higher order variable.
+        match x.var.cmp(&y.var) {
+            // X is higher order than Y, Y must be disjoint with every child of X.
+            Ordering::Less => x
+                .children
+                .nodes()
+                .all(|x| self.disjointness(x.negate(xi), yi)),
+            // Y is higher order than X, X must be disjoint with every child of Y.
+            Ordering::Greater => y
+                .children
+                .nodes()
+                .all(|y| self.disjointness(y.negate(yi), xi)),
             // X and Y represent the same variable, their merged edges must be unsatisifiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
@@ -667,6 +748,245 @@ impl InternerGuard<'_> {
         self.create_node(node.var.clone(), Edges::Version { edges: new })
             .negate(i)
     }
+
+    /// The disjunction of known incompatible conditions.
+    ///
+    /// For example, while the marker specification and grammar do not _forbid_ it, we know that
+    /// both `sys_platform == 'win32'` and `platform_system == 'Darwin'` will never true at the
+    /// same time.
+    ///
+    /// This method thus encodes assumptions about the environment that are not guaranteed by the
+    /// PEP 508 specification alone.
+    fn exclusions(&mut self) -> NodeId {
+        /// Perform a disjunction operation between two nodes.
+        ///
+        /// This is equivalent to [`InternerGuard::or`], with the exception that it does not
+        /// incorporate knowledge from outside the marker algebra.
+        fn disjunction(guard: &mut InternerGuard<'_>, xi: NodeId, yi: NodeId) -> NodeId {
+            // We take advantage of cheap negation here and implement OR in terms
+            // of it's De Morgan complement.
+            conjunction(guard, xi.not(), yi.not()).not()
+        }
+
+        /// Perform a conjunction operation between two nodes.
+        ///
+        /// This is equivalent to [`InternerGuard::and`], with the exception that it does not
+        /// incorporate knowledge from outside the marker algebra.
+        fn conjunction(guard: &mut InternerGuard<'_>, xi: NodeId, yi: NodeId) -> NodeId {
+            if xi.is_true() {
+                return yi;
+            }
+            if yi.is_true() {
+                return xi;
+            }
+            if xi == yi {
+                return xi;
+            }
+            if xi.is_false() || yi.is_false() {
+                return NodeId::FALSE;
+            }
+            // `X and not X` is `false` by definition.
+            if xi.not() == yi {
+                return NodeId::FALSE;
+            }
+
+            let (x, y) = (guard.shared.node(xi), guard.shared.node(yi));
+
+            // Perform Shannon Expansion of the higher order variable.
+            let (func, children) = match x.var.cmp(&y.var) {
+                // X is higher order than Y, apply Y to every child of X.
+                Ordering::Less => {
+                    let children = x.children.map(xi, |node| conjunction(guard, node, yi));
+                    (x.var.clone(), children)
+                }
+                // Y is higher order than X, apply X to every child of Y.
+                Ordering::Greater => {
+                    let children = y.children.map(yi, |node| conjunction(guard, node, xi));
+                    (y.var.clone(), children)
+                }
+                // X and Y represent the same variable, merge their children.
+                Ordering::Equal => {
+                    let children = x
+                        .children
+                        .apply(xi, &y.children, yi, |x, y| conjunction(guard, x, y));
+                    (x.var.clone(), children)
+                }
+            };
+
+            // Create the output node.
+            guard.create_node(func, children)
+        }
+
+        if let Some(exclusions) = self.state.exclusions {
+            return exclusions;
+        }
+        let mut tree = NodeId::FALSE;
+        for (a, b) in [
+            // sys_platform == 'darwin' and platform_system == 'Windows'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Windows".to_string(),
+                },
+            ),
+            // sys_platform == 'darwin' and platform_system == 'Linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Linux".to_string(),
+                },
+            ),
+            // sys_platform == 'win32' and platform_system == 'Darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Darwin".to_string(),
+                },
+            ),
+            // sys_platform == 'win32' and platform_system == 'Linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Linux".to_string(),
+                },
+            ),
+            // sys_platform == 'linux' and platform_system == 'Darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "linux".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Darwin".to_string(),
+                },
+            ),
+            // sys_platform == 'linux' and platform_system == 'Windows'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "linux".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Windows".to_string(),
+                },
+            ),
+            // os_name == 'nt' and sys_platform == 'darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                },
+            ),
+            // os_name == 'nt' and sys_platform == 'linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "linux".to_string(),
+                },
+            ),
+            // os_name == 'posix' and sys_platform == 'win32'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "posix".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                },
+            ),
+            // os_name == 'nt' and platform_system == 'Darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Darwin".to_string(),
+                },
+            ),
+            // os_name == 'nt' and platform_system == 'Linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Linux".to_string(),
+                },
+            ),
+            // os_name == 'posix' and platform_system == 'Windows'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "posix".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Windows".to_string(),
+                },
+            ),
+        ] {
+            let a = self.expression(a);
+            let b = self.expression(b);
+            let a_and_b = conjunction(self, a, b);
+            tree = disjunction(self, tree, a_and_b);
+        }
+        self.state.exclusions = Some(tree);
+        tree
+    }
 }
 
 /// A unique variable for a decision node.
@@ -681,13 +1001,13 @@ impl InternerGuard<'_> {
 /// impact.
 #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) enum Variable {
+    /// A string marker, such as `os_name`.
+    String(CanonicalMarkerValueString),
     /// A version marker, such as `python_version`.
     ///
     /// This is the highest order variable as it typically contains the most complex
     /// ranges, allowing us to merge ranges at the top-level.
     Version(CanonicalMarkerValueVersion),
-    /// A string marker, such as `os_name`.
-    String(CanonicalMarkerValueString),
     /// A variable representing a `<key> in <value>` expression for a particular
     /// string marker and value.
     In {
@@ -705,6 +1025,20 @@ pub(crate) enum Variable {
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     Extra(CanonicalMarkerValueExtra),
+}
+
+impl Variable {
+    /// Returns `true` if the variable is known to be involved in _at least_ one conflicting
+    /// marker pair.
+    ///
+    /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
+    /// never be true at the same time.
+    fn is_conflicting_variable(&self) -> bool {
+        let Variable::String(marker) = self else {
+            return false;
+        };
+        marker.is_conflicting()
+    }
 }
 
 /// A decision node in an Algebraic Decision Diagram.
@@ -1072,8 +1406,8 @@ impl Edges {
                     low: right_low,
                 },
             ) => {
-                interner.is_disjoint(high.negate(parent), right_high.negate(right_parent))
-                    && interner.is_disjoint(low.negate(parent), right_low.negate(right_parent))
+                interner.disjointness(high.negate(parent), right_high.negate(right_parent))
+                    && interner.disjointness(low.negate(parent), right_low.negate(right_parent))
             }
             _ => unreachable!("cannot merge two `Edges` of different types"),
         }
@@ -1100,7 +1434,7 @@ impl Edges {
                 }
 
                 // Ensure the intersection is disjoint.
-                if !interner.is_disjoint(
+                if !interner.disjointness(
                     left_child.negate(left_parent),
                     right_child.negate(right_parent),
                 ) {
