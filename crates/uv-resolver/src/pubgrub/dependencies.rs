@@ -99,13 +99,6 @@ impl PubGrubDependency {
                 } = requirement;
                 match &*package {
                     PubGrubPackageInner::Package { name, .. } => {
-                        // Detect self-dependencies.
-                        if dev.is_none() {
-                            if source_name.is_some_and(|source_name| source_name == name) {
-                                warn!("{name} has a dependency on itself");
-                                return None;
-                            }
-                        }
 
                         Some(PubGrubDependency {
                             package: package.clone(),
@@ -114,13 +107,6 @@ impl PubGrubDependency {
                         })
                     }
                     PubGrubPackageInner::Marker { name, .. } => {
-                        // Detect self-dependencies.
-                        if dev.is_none() {
-                            if source_name.is_some_and(|source_name| source_name == name) {
-                                return None;
-                            }
-                        }
-
                         Some(PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),

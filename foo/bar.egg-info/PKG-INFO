@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: bar
+Version: 0.0.0
+Summary: Add your description here
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: anyio==4.7.0
