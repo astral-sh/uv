@@ -2453,7 +2453,6 @@ impl ForkState {
                         extra: ref dependency_extra,
                         dev: ref dependency_dev,
                         marker: ref dependency_marker,
-                        ..
                     } => {
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
@@ -2478,7 +2477,6 @@ impl ForkState {
                     PubGrubPackageInner::Marker {
                         name: ref dependency_name,
                         marker: ref dependency_marker,
-                        ..
                     } => {
                         let to_url = self.fork_urls.get(dependency_name);
                         let to_index = self.fork_indexes.get(dependency_name);
@@ -2504,7 +2502,6 @@ impl ForkState {
                         name: ref dependency_name,
                         extra: ref dependency_extra,
                         marker: ref dependency_marker,
-                        ..
                     } => {
                         // Insert an edge from the dependent package to the extra package.
                         let to_url = self.fork_urls.get(dependency_name);
@@ -2551,7 +2548,6 @@ impl ForkState {
                         name: ref dependency_name,
                         dev: ref dependency_dev,
                         marker: ref dependency_marker,
-                        ..
                     } => {
                         // Add an edge from the dependent package to the dev package, but _not_ the
                         // base package.

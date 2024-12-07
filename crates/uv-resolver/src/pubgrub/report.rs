@@ -133,6 +133,16 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
+
+                if package == dependency {
+                    if let Some(member) = self.format_workspace_member(package) {
+                        return format!(
+                            "{member} depends on itself at an incompatible version ({})",
+                            PackageRange::dependency(package, &dependency_set, None)
+                        );
+                    }
+                }
+
                 if let Some(root) = self.format_root_requires(package) {
                     return format!(
                         "{root} {}",
@@ -407,6 +417,24 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
+    /// Return whether the given package is the root package.
+    fn is_root(package: &PubGrubPackage) -> bool {
+        matches!(&**package, PubGrubPackageInner::Root(_))
+    }
+
+    /// Return whether the given package is a workspace member.
+    fn is_single_project_workspace_member(&self, package: &PubGrubPackage) -> bool {
+        match &**package {
+            // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
+            PubGrubPackageInner::Package {
+                name, extra, dev, ..
+            } if self.workspace_members.contains(name) => {
+                self.is_single_project_workspace() && extra.is_none() && dev.is_none()
+            }
+            _ => false,
+        }
+    }
+
     /// Create a [`PackageRange::compatibility`] display with this formatter attached.
     fn compatible_range<'a>(
         &'a self,
@@ -466,6 +494,18 @@ impl PubGrubReportFormatter<'_> {
                         .depends_on(dependency1.package, &dependency_set1)
                         .and(dependency2.package, &dependency_set2),
                 )
+            }
+            (.., External::FromDependencyOf(package, _, dependency, _))
+                if Self::is_root(package)
+                    && self.is_single_project_workspace_member(dependency) =>
+            {
+                self.format_external(external1)
+            }
+            (External::FromDependencyOf(package, _, dependency, _), ..)
+                if Self::is_root(package)
+                    && self.is_single_project_workspace_member(dependency) =>
+            {
+                self.format_external(external2)
             }
             _ => {
                 let external1 = self.format_external(external1);

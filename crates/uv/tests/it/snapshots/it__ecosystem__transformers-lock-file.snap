@@ -4450,6 +4450,9 @@ wheels = [
 name = "tensorflow-macos"
 version = "2.15.1"
 source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tensorflow-macos", marker = "platform_machine == 'arm64' and platform_system == 'Darwin'" },
+]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/c8/b90dc41b1eefc2894801a120cf268b1f25440981fcf966fb055febce8348/tensorflow_macos-2.15.1-cp310-cp310-macosx_12_0_arm64.whl", hash = "sha256:b8f01d7615fe4ff3b15a12f84471bd5344fed187543c4a091da3ddca51b6dc26", size = 2158 },
     { url = "https://files.pythonhosted.org/packages/bc/11/b73387ad260614ec43c313a630d14fe5522455084abc207fce864aaa3d73/tensorflow_macos-2.15.1-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:58fca6399665f19e599c591c421672d9bc8b705409d43ececd0931d1d3bc6a7e", size = 2159 },
