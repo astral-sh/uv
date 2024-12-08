@@ -3,7 +3,6 @@ use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
-use std::slice;
 use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
@@ -164,6 +163,8 @@ impl<'env> InstallTarget<'env> {
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
+        let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
+        let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
 
         let root = petgraph.add_node(Node::Root);
 
@@ -191,10 +192,12 @@ impl<'env> InstallTarget<'env> {
             petgraph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
             if dev.prod() {
-                // Push its dependencies on the queue.
+                // Push its dependencies on the queue and track
+                // activated extras.
                 queue.push_back((dist, None));
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
                     queue.push_back((dist, Some(extra)));
+                    activated_extras.push((&dist.id.name, extra));
                 }
             }
 
@@ -211,9 +214,10 @@ impl<'env> InstallTarget<'env> {
                 })
                 .flatten()
             {
-                if !dep.complexified_marker.evaluate(marker_env, &[]) {
+                if !dep.complexified_marker.evaluate_no_extras(marker_env) {
                     continue;
                 }
+                activated_groups.push((&dist.id.name, group));
 
                 let dep_dist = self.lock().find_by_id(&dep.package_id);
 
@@ -254,9 +258,6 @@ impl<'env> InstallTarget<'env> {
                     // a specific marker environment and set of extras/groups.
                     // So at this point, we know the extras/groups have been
                     // satisfied, so we can safely drop the conflict marker.
-                    //
-                    // FIXME: Make the above true. We aren't actually checking
-                    // the conflict marker yet.
                     Edge::Dev(group.clone(), dep.complexified_marker.pep508()),
                 );
 
@@ -355,10 +356,11 @@ impl<'env> InstallTarget<'env> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
-                if !dep
-                    .complexified_marker
-                    .evaluate(marker_env, extra.map(slice::from_ref).unwrap_or_default())
-                {
+                if !dep.complexified_marker.evaluate(
+                    marker_env,
+                    &activated_extras,
+                    &activated_groups,
+                ) {
                     continue;
                 }
 

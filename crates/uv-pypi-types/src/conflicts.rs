@@ -24,7 +24,7 @@ impl Conflicts {
     }
 
     /// Returns an iterator over all sets of conflicting sets.
-    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictSet> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictSet> + Clone + '_ {
         self.0.iter()
     }
 
@@ -75,7 +75,7 @@ impl ConflictSet {
     }
 
     /// Returns an iterator over all conflicting items.
-    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + Clone + '_ {
         self.0.iter()
     }
 
