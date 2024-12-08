@@ -99,6 +99,9 @@ walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+self-replace = { workspace = true }
+
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }
 assert_fs = { version = "1.1.2" }
