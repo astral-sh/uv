@@ -1,15 +1,15 @@
-use itertools::Either;
-use rustc_hash::{FxHashMap, FxHashSet};
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
+
+use itertools::Either;
+use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_pep508::{VerbatimUrl, VerbatimUrlError};
+use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
 
 use crate::{Index, Verbatim};
 
@@ -114,10 +114,23 @@ impl FromStr for IndexUrl {
     type Err = IndexUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url = if Path::new(s).exists() {
-            VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
-        } else {
-            VerbatimUrl::parse_url(s)?
+        let url = match split_scheme(s) {
+            Some((scheme, ..)) => {
+                match Scheme::parse(scheme) {
+                    Some(_) => {
+                        // Ex) `https://pypi.org/simple`
+                        VerbatimUrl::parse_url(s)?
+                    }
+                    None => {
+                        // Ex) `C:\Users\user\index`
+                        VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
+                    }
+                }
+            }
+            None => {
+                // Ex) `/Users/user/index`
+                VerbatimUrl::from_absolute_path(std::path::absolute(s)?)?
+            }
         };
         Ok(Self::from(url.with_given(s)))
     }
