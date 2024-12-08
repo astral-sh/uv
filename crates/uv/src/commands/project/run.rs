@@ -1168,9 +1168,9 @@ fn can_skip_ephemeral(
 pub(crate) enum RunCommand {
     Resolved(ResolvedRunCommand),
     /// The execution behavior depends on the virtual environment
-    /// so the resolution is delayed until then. 
+    /// so the resolution is delayed until then.
     Unresolved(UnresolvedRunCommand),
-} 
+}
 
 #[derive(Debug)]
 pub(crate) enum ResolvedRunCommand {
@@ -1201,7 +1201,7 @@ pub(crate) enum ResolvedRunCommand {
 #[derive(Debug)]
 pub(crate) struct UnresolvedRunCommand {
     target: OsString,
-    args: Vec<OsString>
+    args: Vec<OsString>,
 }
 
 impl ResolvedRunCommand {
@@ -1355,7 +1355,7 @@ impl RunCommand {
     fn display_executable(&self) -> Cow<'_, str> {
         match self {
             Self::Resolved(command) => command.display_executable(),
-            Self::Unresolved(_command) => Cow::Borrowed("unknown")
+            Self::Unresolved(_command) => Cow::Borrowed("unknown"),
         }
     }
 
@@ -1364,8 +1364,8 @@ impl RunCommand {
         match self {
             Self::Resolved(command) => command.as_command(interpreter),
             Self::Unresolved(command) => {
-                // Determine whether the command should be executed as a 
-                // script, package, or external command, in that order of preference. 
+                // Determine whether the command should be executed as a
+                // script, package, or external command, in that order of preference.
                 let UnresolvedRunCommand { target, args } = command;
                 let target_path = PathBuf::from(target);
                 let metadata = target_path.metadata();
@@ -1447,14 +1447,23 @@ impl RunCommand {
                     writer.write_all(&chunk?)?;
                 }
 
-                return Ok(Self::Resolved(ResolvedRunCommand::PythonRemote(file, args.to_vec())));
+                return Ok(Self::Resolved(ResolvedRunCommand::PythonRemote(
+                    file,
+                    args.to_vec(),
+                )));
             }
         }
 
         if module {
-            return Ok(Self::Resolved(ResolvedRunCommand::PythonModule(target.clone(), args.to_vec())));
+            return Ok(Self::Resolved(ResolvedRunCommand::PythonModule(
+                target.clone(),
+                args.to_vec(),
+            )));
         } else if script {
-            return Ok(Self::Resolved(ResolvedRunCommand::PythonScript(target.clone().into(), args.to_vec())));
+            return Ok(Self::Resolved(ResolvedRunCommand::PythonScript(
+                target.clone().into(),
+                args.to_vec(),
+            )));
         }
 
         let metadata = target_path.metadata();
@@ -1471,18 +1480,27 @@ impl RunCommand {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyc"))
             && is_file
         {
-            Ok(Self::Resolved(ResolvedRunCommand::PythonScript(target_path, args.to_vec())))
+            Ok(Self::Resolved(ResolvedRunCommand::PythonScript(
+                target_path,
+                args.to_vec(),
+            )))
         } else if cfg!(windows)
             && target_path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
             && is_file
         {
-            Ok(Self::Resolved(ResolvedRunCommand::PythonGuiScript(target_path, args.to_vec())))
+            Ok(Self::Resolved(ResolvedRunCommand::PythonGuiScript(
+                target_path,
+                args.to_vec(),
+            )))
         } else if is_file && is_python_zipapp(&target_path) {
-            Ok(Self::Resolved(ResolvedRunCommand::PythonZipapp(target_path, args.to_vec())))
+            Ok(Self::Resolved(ResolvedRunCommand::PythonZipapp(
+                target_path,
+                args.to_vec(),
+            )))
         } else {
-            Ok(Self::Unresolved(UnresolvedRunCommand{
+            Ok(Self::Unresolved(UnresolvedRunCommand {
                 target: target.clone(),
                 args: args.to_vec(),
             }))

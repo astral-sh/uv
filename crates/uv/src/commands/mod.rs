@@ -26,7 +26,7 @@ pub(crate) use project::export::export;
 pub(crate) use project::init::{init, InitKind, InitProjectKind};
 pub(crate) use project::lock::lock;
 pub(crate) use project::remove::remove;
-pub(crate) use project::run::{run, RunCommand, ResolvedRunCommand};
+pub(crate) use project::run::{run, ResolvedRunCommand, RunCommand};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
 pub(crate) use publish::publish;
