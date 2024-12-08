@@ -4169,7 +4169,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to read `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
       ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
 
           Expected:

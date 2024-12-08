@@ -18738,8 +18738,9 @@ fn lock_derivation_chain_prod() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `wsgiref==0.1.2`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -18759,6 +18760,7 @@ fn lock_derivation_chain_prod() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref==0.1.2`
     "###);
 
@@ -18796,8 +18798,9 @@ fn lock_derivation_chain_extra() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `wsgiref==0.1.2`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -18817,6 +18820,7 @@ fn lock_derivation_chain_extra() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref>=0.1`
     "###);
 
@@ -18856,8 +18860,9 @@ fn lock_derivation_chain_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `wsgiref==0.1.2`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -18877,6 +18882,7 @@ fn lock_derivation_chain_group() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
     "###);
 
@@ -18927,8 +18933,9 @@ fn lock_derivation_chain_extended() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `wsgiref==0.1.2`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `wsgiref==0.1.2`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -18948,6 +18955,7 @@ fn lock_derivation_chain_extended() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `child` (v0.1.0) which depends on `wsgiref>=0.1, <0.2`
     "###);
 
