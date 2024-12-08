@@ -1567,7 +1567,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return requirements;
         }
 
-        // Check if there are recursive self inclusions and we need to go into the expensive branch.
+        // Check if there are recursive self inclusions; if so, we need to go into the expensive
+        // branch.
         if !requirements
             .iter()
             .any(|req| name == Some(&req.name) && !req.extras.is_empty())
@@ -1624,8 +1625,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
+        // Retain any self-constraints for that extra, e.g., if `project[foo]` includes
+        // `project[bar]>1.0`, as a dependency, we need to propagate `project>1.0`, in addition to
+        // transitively expanding `project[bar]`.
+        let mut self_constraints = vec![];
+        for req in &requirements {
+            if name == Some(&req.name) && !req.source.is_empty() {
+                self_constraints.push(Requirement {
+                    name: req.name.clone(),
+                    extras: vec![],
+                    groups: req.groups.clone(),
+                    source: req.source.clone(),
+                    origin: req.origin.clone(),
+                    marker: req.marker,
+                });
+            }
+        }
+
         // Drop all the self-requirements now that we flattened them out.
-        requirements.retain(|req| name != Some(&req.name));
+        requirements.retain(|req| name != Some(&req.name) || req.extras.is_empty());
+        requirements.extend(self_constraints.into_iter().map(Cow::Owned));
 
         requirements
     }

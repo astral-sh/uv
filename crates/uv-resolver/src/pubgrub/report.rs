@@ -1328,7 +1328,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::DependsOnItself { package } => {
                 write!(
                     f,
-                    "{}{} The package `{}` depends on itself. This is likely a mistake. Consider removing the dependency.",
+                    "{}{} The package `{}` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
