@@ -2298,6 +2298,11 @@ fn parse_version_specifiers_request(
     if specifiers.is_empty() {
         return Err(Error::InvalidVersionRequest(s.to_string()));
     }
+    if let [specifier] = specifiers.iter().as_slice() {
+        if specifier.operator() == &uv_pep440::Operator::Equal {
+            return VersionRequest::from_str(&specifier.version().to_string());
+        }
+    }
     Ok(VersionRequest::Range(specifiers, variant))
 }
 
