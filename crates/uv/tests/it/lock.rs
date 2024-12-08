@@ -9738,7 +9738,7 @@ fn lock_transitive_extra() -> Result<()> {
 }
 
 /// If a source is provided via `tool.uv.sources` _and_ a URL is provided in `project.dependencies`,
-/// we raise an error.
+/// we accept the source in `tool.uv.sources`, unless `--no-sources` is provided.
 #[test]
 fn lock_mismatched_sources() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -9760,15 +9760,87 @@ fn lock_mismatched_sources() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `uv-public-pypackage`
-      ╰─▶ Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
+    Resolved 2 packages in [TIME]
     "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
+
+        [[package]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
+        );
+    });
+
+    // If we run with `--no-sources`, we should use the URL provided in `project.dependencies`.
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.2" }]
+
+        [[package]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+        "###
+        );
+    });
 
     Ok(())
 }
