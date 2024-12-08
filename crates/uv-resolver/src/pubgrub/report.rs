@@ -133,6 +133,16 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
+
+                if package == dependency {
+                    if let Some(member) = self.format_workspace_member(package) {
+                        return format!(
+                            "{member} depends on itself at an incompatible version ({})",
+                            PackageRange::dependency(package, &dependency_set, None)
+                        );
+                    }
+                }
+
                 if let Some(root) = self.format_root_requires(package) {
                     return format!(
                         "{root} {}",
@@ -407,6 +417,24 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
+    /// Return whether the given package is the root package.
+    fn is_root(package: &PubGrubPackage) -> bool {
+        matches!(&**package, PubGrubPackageInner::Root(_))
+    }
+
+    /// Return whether the given package is a workspace member.
+    fn is_single_project_workspace_member(&self, package: &PubGrubPackage) -> bool {
+        match &**package {
+            // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
+            PubGrubPackageInner::Package {
+                name, extra, dev, ..
+            } if self.workspace_members.contains(name) => {
+                self.is_single_project_workspace() && extra.is_none() && dev.is_none()
+            }
+            _ => false,
+        }
+    }
+
     /// Create a [`PackageRange::compatibility`] display with this formatter attached.
     fn compatible_range<'a>(
         &'a self,
@@ -466,6 +494,18 @@ impl PubGrubReportFormatter<'_> {
                         .depends_on(dependency1.package, &dependency_set1)
                         .and(dependency2.package, &dependency_set2),
                 )
+            }
+            (.., External::FromDependencyOf(package, _, dependency, _))
+                if Self::is_root(package)
+                    && self.is_single_project_workspace_member(dependency) =>
+            {
+                self.format_external(external1)
+            }
+            (External::FromDependencyOf(package, _, dependency, _), ..)
+                if Self::is_root(package)
+                    && self.is_single_project_workspace_member(dependency) =>
+            {
+                self.format_external(external2)
             }
             _ => {
                 let external1 = self.format_external(external1);
@@ -568,6 +608,16 @@ impl PubGrubReportFormatter<'_> {
                             package: package.clone(),
                             dependency: dependency.clone(),
                             workspace: self.is_workspace() && !self.is_single_project_workspace(),
+                        });
+                    }
+
+                    if package_name == dependency_name
+                        && (dependency.extra().is_none() || package.extra() == dependency.extra())
+                        && (dependency.dev().is_none() || dependency.dev() == package.dev())
+                        && workspace_members.contains(package_name)
+                    {
+                        output_hints.insert(PubGrubHint::DependsOnItself {
+                            package: package.clone(),
                         });
                     }
                 }
@@ -899,6 +949,8 @@ pub(crate) enum PubGrubHint {
         dependency: PubGrubPackage,
         workspace: bool,
     },
+    /// A package depends on itself at an incompatible version.
+    DependsOnItself { package: PubGrubPackage },
     /// A package was available on an index, but not at the correct version, and at least one
     /// subsequent index was not queried. As such, a compatible version may be available on an
     /// one of the remaining indexes.
@@ -962,6 +1014,9 @@ enum PubGrubHintCore {
         package: PubGrubPackage,
         dependency: PubGrubPackage,
         workspace: bool,
+    },
+    DependsOnItself {
+        package: PubGrubPackage,
     },
     UncheckedIndex {
         package: PubGrubPackage,
@@ -1027,6 +1082,7 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 dependency,
                 workspace,
             },
+            PubGrubHint::DependsOnItself { package } => Self::DependsOnItself { package },
             PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
             PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
             PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
@@ -1267,6 +1323,15 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package.cyan(),
                     dependency.cyan(),
+                )
+            }
+            Self::DependsOnItself { package } => {
+                write!(
+                    f,
+                    "{}{} The package `{}` depends on itself. This is likely a mistake. Consider removing the dependency.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
                 )
             }
             Self::UncheckedIndex {

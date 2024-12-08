@@ -2,7 +2,6 @@ use std::iter;
 
 use either::Either;
 use pubgrub::Ranges;
-use tracing::warn;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -91,42 +90,23 @@ impl PubGrubDependency {
 
         // Add the package, plus any extra variants.
         iter.map(|(extra, group)| PubGrubRequirement::from_requirement(requirement, extra, group))
-            .filter_map(move |requirement| {
+            .map(move |requirement| {
                 let PubGrubRequirement {
                     package,
                     version,
                     url,
                 } = requirement;
                 match &*package {
-                    PubGrubPackageInner::Package { name, .. } => {
-                        // Detect self-dependencies.
-                        if dev.is_none() {
-                            if source_name.is_some_and(|source_name| source_name == name) {
-                                warn!("{name} has a dependency on itself");
-                                return None;
-                            }
-                        }
-
-                        Some(PubGrubDependency {
-                            package: package.clone(),
-                            version: version.clone(),
-                            url,
-                        })
-                    }
-                    PubGrubPackageInner::Marker { name, .. } => {
-                        // Detect self-dependencies.
-                        if dev.is_none() {
-                            if source_name.is_some_and(|source_name| source_name == name) {
-                                return None;
-                            }
-                        }
-
-                        Some(PubGrubDependency {
-                            package: package.clone(),
-                            version: version.clone(),
-                            url,
-                        })
-                    }
+                    PubGrubPackageInner::Package { .. } => PubGrubDependency {
+                        package: package.clone(),
+                        version: version.clone(),
+                        url,
+                    },
+                    PubGrubPackageInner::Marker { .. } => PubGrubDependency {
+                        package: package.clone(),
+                        version: version.clone(),
+                        url,
+                    },
                     PubGrubPackageInner::Extra { name, .. } => {
                         // Detect self-dependencies.
                         if dev.is_none() {
@@ -135,11 +115,11 @@ impl PubGrubDependency {
                                 "extras not flattened for {name}"
                             );
                         }
-                        Some(PubGrubDependency {
+                        PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
                             url,
-                        })
+                        }
                     }
                     PubGrubPackageInner::Dev { name, .. } => {
                         // Detect self-dependencies.
@@ -149,11 +129,11 @@ impl PubGrubDependency {
                                 "group not flattened for {name}"
                             );
                         }
-                        Some(PubGrubDependency {
+                        PubGrubDependency {
                             package: package.clone(),
                             version: version.clone(),
                             url,
-                        })
+                        }
                     }
                     PubGrubPackageInner::Root(_) => unreachable!("root package in dependencies"),
                     PubGrubPackageInner::Python(_) => {
