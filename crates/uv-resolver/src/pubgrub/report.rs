@@ -134,11 +134,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
 
-                if package == dependency {
+                if package.name_no_root() == dependency.name_no_root() {
                     if let Some(member) = self.format_workspace_member(package) {
                         return format!(
                             "{member} depends on itself at an incompatible version ({})",
-                            PackageRange::dependency(package, &dependency_set, None)
+                            PackageRange::dependency(dependency, &dependency_set, None)
                         );
                     }
                 }
