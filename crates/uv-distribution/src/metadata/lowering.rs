@@ -185,9 +185,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = git_source(
                                 &git,
                                 subdirectory.map(PathBuf::from),
@@ -203,9 +200,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = url_source(url, subdirectory.map(PathBuf::from))?;
                             (source, marker)
                         }
@@ -215,9 +209,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = path_source(
                                 PathBuf::from(path),
                                 git_member,
@@ -265,7 +256,7 @@ impl LoweredRequirement {
                                 index.into_url(),
                                 conflict,
                                 lower_bound,
-                            )?;
+                            );
                             (source, marker)
                         }
                         Source::Workspace {
@@ -275,9 +266,6 @@ impl LoweredRequirement {
                         } => {
                             if !is_workspace {
                                 return Err(LoweringError::WorkspaceFalse);
-                            }
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
                             }
                             let member = workspace
                                 .packages()
@@ -433,9 +421,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = git_source(
                                 &git,
                                 subdirectory.map(PathBuf::from),
@@ -451,9 +436,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = url_source(url, subdirectory.map(PathBuf::from))?;
                             (source, marker)
                         }
@@ -463,9 +445,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = path_source(
                                 PathBuf::from(path),
                                 None,
@@ -497,7 +476,7 @@ impl LoweredRequirement {
                                 index.into_url(),
                                 conflict,
                                 lower_bound,
-                            )?;
+                            );
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
@@ -550,8 +529,6 @@ pub enum LoweringError {
     InvalidUrl(#[from] url::ParseError),
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
-    #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
-    ConflictingUrls,
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
     #[error("`workspace = false` is not yet supported")]
@@ -658,7 +635,7 @@ fn registry_source(
     index: Url,
     conflict: Option<ConflictItem>,
     bounds: LowerBound,
-) -> Result<RequirementSource, LoweringError> {
+) -> RequirementSource {
     match &requirement.version_or_url {
         None => {
             if matches!(bounds, LowerBound::Warn) {
@@ -667,18 +644,30 @@ fn registry_source(
                     requirement.name
                 );
             }
-            Ok(RequirementSource::Registry {
+            RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: Some(index),
                 conflict,
-            })
+            }
         }
-        Some(VersionOrUrl::VersionSpecifier(version)) => Ok(RequirementSource::Registry {
+        Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
             specifier: version.clone(),
             index: Some(index),
             conflict,
-        }),
-        Some(VersionOrUrl::Url(_)) => Err(LoweringError::ConflictingUrls),
+        },
+        Some(VersionOrUrl::Url(_)) => {
+            if matches!(bounds, LowerBound::Warn) {
+                warn_user_once!(
+                    "Missing version constraint (e.g., a lower bound) for `{}` due to use of a URL specifier",
+                    requirement.name
+                );
+            }
+            RequirementSource::Registry {
+                specifier: VersionSpecifiers::empty(),
+                index: Some(index),
+                conflict,
+            }
+        }
     }
 }
 
