@@ -141,6 +141,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: Some(command),
             module,
             script,
+            gui_script,
             ..
         }) = &mut **command
         {
@@ -150,6 +151,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     command,
                     *module,
                     *script,
+                    *gui_script,
                     settings.connectivity,
                     settings.native_tls,
                     &settings.allow_insecure_host,
