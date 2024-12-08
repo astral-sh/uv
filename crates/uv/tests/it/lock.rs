@@ -19457,7 +19457,7 @@ fn lock_self_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `project` depends on itself. This is likely a mistake. Consider removing the dependency.
+          hint: The package `project` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
     "###);
 
     Ok(())
@@ -19566,10 +19566,9 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
 }
 
 #[test]
-fn lock_self_extra_to_extra_incompatible() -> Result<()> {
+fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // TODO(charlie): This should fail, but currently succeeds.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -19585,52 +19584,50 @@ fn lock_self_extra_to_extra_incompatible() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
     "###);
 
-    let lock = context.read("uv.lock");
+    Ok(())
+}
 
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            lock, @r###"
-        version = 1
-        requires-python = ">=3.12"
+#[test]
+fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
+    let context = TestContext::new("3.12");
 
-        [options]
-        exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[package]]
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "typing-extensions" },
-        ]
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
 
-        [package.metadata]
-        requires-dist = [
-            { name = "project", extras = ["foo"], marker = "extra == 'foo'", specifier = "==0.2.0" },
-            { name = "typing-extensions" },
-        ]
+        [project.optional-dependencies]
+        foo = ["project[bar]==0.2.0"]
+        bar = ["iniconfig"]
+        "#,
+    )?;
 
-        [[package]]
-        name = "typing-extensions"
-        version = "4.10.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
-        ]
-        "###
-        );
-    });
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
+    "###);
 
     Ok(())
 }
@@ -19764,7 +19761,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `project[foo]` depends on itself. This is likely a mistake. Consider removing the dependency.
+          hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
     "###);
 
     Ok(())
@@ -19893,7 +19890,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because only project{sys_platform == 'win32'}<=0.1 is available and your project depends on project{sys_platform == 'win32'}>0.1, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `project` depends on itself. This is likely a mistake. Consider removing the dependency.
+          hint: The package `project` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
     "###);
 
     Ok(())
