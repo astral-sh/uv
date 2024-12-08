@@ -226,6 +226,11 @@ for more details.
 
 Don't upload a file if it already exists on the index. The value is the URL of the index.
 
+### `UV_PUBLISH_INDEX`
+
+Equivalent to the `--index` command-line argument in `uv publish`. If
+set, uv the index with this name in the configuration for publishing.
+
 ### `UV_PUBLISH_PASSWORD`
 
 Equivalent to the `--password` command-line argument in `uv publish`. If

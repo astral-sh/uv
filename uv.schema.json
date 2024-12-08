@@ -685,6 +685,14 @@
             }
           ]
         },
+        "publish-url": {
+          "description": "The URL of the upload endpoint.\n\nWhen using `uv publish --index <name>`, this URL is used for publishing.\n\nA configuration for the default index PyPI would look as follows:\n\n```toml [[tool.uv.index]] name = \"pypi\" url = \"https://pypi.org/simple\" publish-url = \"https://upload.pypi.org/legacy/\" ```",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
         "url": {
           "description": "The URL of the index.\n\nExpects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.",
           "allOf": [
