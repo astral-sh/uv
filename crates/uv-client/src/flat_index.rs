@@ -243,8 +243,12 @@ impl<'a> FlatIndexClient<'a> {
         path: &Path,
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
+        // The path context is provided by the caller.
+        #[allow(clippy::disallowed_methods)]
+        let entries = std::fs::read_dir(path)?;
+
         let mut dists = Vec::new();
-        for entry in fs_err::read_dir(path)? {
+        for entry in entries {
             let entry = entry?;
             let metadata = entry.metadata()?;
 

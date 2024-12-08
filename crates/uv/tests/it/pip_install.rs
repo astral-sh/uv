@@ -80,6 +80,41 @@ fn missing_pyproject_toml() {
 }
 
 #[test]
+fn missing_find_links() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("flask")?;
+
+    let error = regex::escape("The system cannot find the path specified. (os error 3)");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(std::iter::once((
+            error.as_str(),
+            "No such file or directory (os error 2)",
+        )))
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--find-links")
+        .arg("./missing")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `--find-links` directory: [TEMP_DIR]/missing
+      Caused by: No such file or directory (os error 2)
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn invalid_pyproject_toml_syntax() -> Result<()> {
     let context = TestContext::new("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
