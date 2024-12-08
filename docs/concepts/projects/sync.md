@@ -27,6 +27,14 @@ To avoid updating the environment during `uv run` invocations, use the `--no-syn
 To assert the lockfile matches the project metadata, use the `--locked` flag. If the lockfile is not
 up-to-date, an error will be raised instead of updating the lockfile.
 
+You can also check if the lockfile is up-to-date by passing the `--check` flag to `uv lock`:
+
+```console
+$ uv lock --check
+```
+
+This is equivalent to the `--locked` flag for other commands.
+
 ### Upgrading locked package versions
 
 By default, uv will prefer the locked versions of packages when running `uv sync` and `uv lock`.

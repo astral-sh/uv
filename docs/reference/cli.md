@@ -1790,6 +1790,18 @@ uv lock [OPTIONS]
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
+</dd><dt><code>--check</code></dt><dd><p>Check if the lockfile is up-to-date.</p>
+
+<p>Asserts that the <code>uv.lock</code> would remain unchanged after a resolution. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
+
+<p>Equivalent to <code>--locked</code>.</p>
+
+<p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt><code>--check-exists</code></dt><dd><p>Assert that a <code>uv.lock</code> exists without checking if it is up-to-date.</p>
+
+<p>Equivalent to <code>--frozen</code>.</p>
+
+<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
 </dd><dt><code>--color</code> <i>color-choice</i></dt><dd><p>Control colors in output</p>
 
 <p>[default: auto]</p>
@@ -1845,9 +1857,6 @@ uv lock [OPTIONS]
 <p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
 
 <p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
-</dd><dt><code>--frozen</code></dt><dd><p>Assert that a <code>uv.lock</code> exists, without updating it</p>
-
-<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -1910,11 +1919,6 @@ uv lock [OPTIONS]
 
 <li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
 </ul>
-</dd><dt><code>--locked</code></dt><dd><p>Assert that the <code>uv.lock</code> will remain unchanged.</p>
-
-<p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
-
-<p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>

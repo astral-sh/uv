@@ -990,8 +990,8 @@ impl LockSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: LockArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let LockArgs {
-            locked,
-            frozen,
+            check,
+            check_exists,
             dry_run,
             resolver,
             build,
@@ -1005,8 +1005,8 @@ impl LockSettings {
             .unwrap_or_default();
 
         Self {
-            locked,
-            frozen,
+            locked: check,
+            frozen: check_exists,
             dry_run,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
