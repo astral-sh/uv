@@ -1166,6 +1166,14 @@ fn can_skip_ephemeral(
 
 #[derive(Debug)]
 pub(crate) enum RunCommand {
+    Resolved(ResolvedRunCommand),
+    /// The execution behavior depends on the virtual environment
+    /// so the resolution is delayed until then. 
+    Unresolved(UnresolvedRunCommand),
+} 
+
+#[derive(Debug)]
+pub(crate) enum ResolvedRunCommand {
     /// Execute `python`.
     Python(Vec<OsString>),
     /// Execute a `python` script.
@@ -1190,7 +1198,13 @@ pub(crate) enum RunCommand {
     Empty,
 }
 
-impl RunCommand {
+#[derive(Debug)]
+pub(crate) struct UnresolvedRunCommand {
+    target: OsString,
+    args: Vec<OsString>
+}
+
+impl ResolvedRunCommand {
     /// Return the name of the target executable, for display purposes.
     fn display_executable(&self) -> Cow<'_, str> {
         match self {
@@ -1283,7 +1297,7 @@ impl RunCommand {
     }
 }
 
-impl std::fmt::Display for RunCommand {
+impl std::fmt::Display for ResolvedRunCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Python(args) => {
@@ -1337,6 +1351,52 @@ impl std::fmt::Display for RunCommand {
 }
 
 impl RunCommand {
+    /// Return the name of the target executable, for display purposes.
+    fn display_executable(&self) -> Cow<'_, str> {
+        match self {
+            Self::Resolved(command) => command.display_executable(),
+            Self::Unresolved(_command) => Cow::Borrowed("unknown")
+        }
+    }
+
+    /// Convert a [`RunCommand`] into a [`Command`].
+    fn as_command(&self, interpreter: &Interpreter) -> Command {
+        match self {
+            Self::Resolved(command) => command.as_command(interpreter),
+            Self::Unresolved(command) => {
+                // Determine whether the command should be executed as a 
+                // script, package, or external command, in that order of preference. 
+                let UnresolvedRunCommand { target, args } = command;
+                let target_path = PathBuf::from(target);
+                let metadata = target_path.metadata();
+                let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
+
+                let scripts_dir = interpreter.virtualenv().scripts.clone();
+                let resolved_command = if scripts_dir.join(&target_path).is_file() {
+                    ResolvedRunCommand::PythonScript(scripts_dir.join(&target_path), args.clone())
+                } else if is_dir && target_path.join("__main__.py").is_file() {
+                    ResolvedRunCommand::PythonPackage(target_path, args.clone())
+                } else {
+                    ResolvedRunCommand::External(target.clone(), args.clone())
+                };
+                resolved_command.as_command(interpreter)
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for RunCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Resolved(command) => command.fmt(f),
+            Self::Unresolved(command) => {
+                write!(f, "uv run {:?} {:?}", command.target, command.args)
+            }
+        }
+    }
+}
+
+impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
     pub(crate) async fn from_args(
         command: &ExternalCommand,
@@ -1348,7 +1408,7 @@ impl RunCommand {
     ) -> anyhow::Result<Self> {
         let (target, args) = command.split();
         let Some(target) = target else {
-            return Ok(Self::Empty);
+            return Ok(Self::Resolved(ResolvedRunCommand::Empty));
         };
 
         let target_path = PathBuf::from(target);
@@ -1387,48 +1447,45 @@ impl RunCommand {
                     writer.write_all(&chunk?)?;
                 }
 
-                return Ok(Self::PythonRemote(file, args.to_vec()));
+                return Ok(Self::Resolved(ResolvedRunCommand::PythonRemote(file, args.to_vec())));
             }
         }
 
         if module {
-            return Ok(Self::PythonModule(target.clone(), args.to_vec()));
+            return Ok(Self::Resolved(ResolvedRunCommand::PythonModule(target.clone(), args.to_vec())));
         } else if script {
-            return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
+            return Ok(Self::Resolved(ResolvedRunCommand::PythonScript(target.clone().into(), args.to_vec())));
         }
 
         let metadata = target_path.metadata();
         let is_file = metadata.as_ref().map_or(false, std::fs::Metadata::is_file);
-        let is_dir = metadata.as_ref().map_or(false, std::fs::Metadata::is_dir);
 
         if target.eq_ignore_ascii_case("-") {
             let mut buf = Vec::with_capacity(1024);
             std::io::stdin().read_to_end(&mut buf)?;
-            Ok(Self::PythonStdin(buf))
+            Ok(Self::Resolved(ResolvedRunCommand::PythonStdin(buf)))
         } else if target.eq_ignore_ascii_case("python") {
-            Ok(Self::Python(args.to_vec()))
+            Ok(Self::Resolved(ResolvedRunCommand::Python(args.to_vec())))
         } else if target_path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyc"))
             && is_file
         {
-            Ok(Self::PythonScript(target_path, args.to_vec()))
+            Ok(Self::Resolved(ResolvedRunCommand::PythonScript(target_path, args.to_vec())))
         } else if cfg!(windows)
             && target_path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
             && is_file
         {
-            Ok(Self::PythonGuiScript(target_path, args.to_vec()))
-        } else if is_dir && target_path.join("__main__.py").is_file() {
-            Ok(Self::PythonPackage(target_path, args.to_vec()))
+            Ok(Self::Resolved(ResolvedRunCommand::PythonGuiScript(target_path, args.to_vec())))
         } else if is_file && is_python_zipapp(&target_path) {
-            Ok(Self::PythonZipapp(target_path, args.to_vec()))
+            Ok(Self::Resolved(ResolvedRunCommand::PythonZipapp(target_path, args.to_vec())))
         } else {
-            Ok(Self::External(
-                target.clone(),
-                args.iter().map(std::clone::Clone::clone).collect(),
-            ))
+            Ok(Self::Unresolved(UnresolvedRunCommand{
+                target: target.clone(),
+                args: args.to_vec(),
+            }))
         }
     }
 }

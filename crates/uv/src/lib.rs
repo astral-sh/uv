@@ -32,7 +32,7 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
-use crate::commands::{ExitStatus, RunCommand, ToolRunCommand};
+use crate::commands::{ExitStatus, RunCommand, ResolvedRunCommand, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -166,14 +166,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     let script = if let Commands::Project(command) = &*cli.command {
         if let ProjectCommand::Run(uv_cli::RunArgs { .. }) = &**command {
             match run_command.as_ref() {
-                Some(
-                    RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
-                ) => Pep723Script::read(&script).await?.map(Pep723Item::Script),
-                Some(RunCommand::PythonRemote(script, _)) => {
-                    Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
-                }
-                Some(RunCommand::PythonStdin(contents)) => {
-                    Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin)
+                Some(RunCommand::Resolved(command)) => {
+                    match command {
+                        ResolvedRunCommand::PythonScript(script, _) | ResolvedRunCommand::PythonGuiScript(script, _) => {
+                            Pep723Script::read(&script).await?.map(Pep723Item::Script)
+                        }
+                        ResolvedRunCommand::PythonRemote(script, _) => {
+                            Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
+                        }
+                        ResolvedRunCommand::PythonStdin(contents) => {
+                            Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin)
+                        }
+                        _ => None,
+                    }
                 }
                 _ => None,
             }
