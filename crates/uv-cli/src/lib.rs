@@ -296,6 +296,23 @@ pub enum ColorChoice {
     Never,
 }
 
+impl ColorChoice {
+    /// Combine self (higher priority) with an [`anstream::ColorChoice`] (lower priority).
+    ///
+    /// This method allows prioritizing the user choice, while using the inferred choice for a
+    /// stream as default.
+    pub fn and_colorchoice(self, next: anstream::ColorChoice) -> Self {
+        match self {
+            Self::Auto => match next {
+                anstream::ColorChoice::Auto => Self::Auto,
+                anstream::ColorChoice::Always | anstream::ColorChoice::AlwaysAnsi => Self::Always,
+                anstream::ColorChoice::Never => Self::Never,
+            },
+            Self::Always | Self::Never => self,
+        }
+    }
+}
+
 impl From<ColorChoice> for anstream::ColorChoice {
     fn from(value: ColorChoice) -> Self {
         match value {

@@ -1,7 +1,6 @@
 use std::fmt;
 use std::str::FromStr;
 
-use anstream::ColorChoice;
 use anyhow::Context;
 use jiff::Timestamp;
 use owo_colors::OwoColorize;
@@ -19,6 +18,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 use tracing_tree::time::Uptime;
 use tracing_tree::HierarchicalLayer;
+
+use uv_cli::ColorChoice;
 #[cfg(feature = "tracing-durations-export")]
 use uv_static::EnvVars;
 
@@ -117,6 +118,7 @@ where
 pub(crate) fn setup_logging(
     level: Level,
     durations: impl Layer<Registry> + Send + Sync,
+    color: ColorChoice,
 ) -> anyhow::Result<()> {
     let default_directive = match level {
         Level::Default => {
@@ -140,6 +142,11 @@ pub(crate) fn setup_logging(
         .from_env()
         .context("Invalid RUST_LOG directives")?;
 
+    let ansi = match color.and_colorchoice(anstream::Stderr::choice(&std::io::stderr())) {
+        ColorChoice::Always => true,
+        ColorChoice::Never => false,
+        ColorChoice::Auto => unreachable!("anstream can't return auto as choice"),
+    };
     match level {
         Level::Default | Level::Verbose => {
             // Regardless of the tracing level, show messages without any adornment.
@@ -148,12 +155,7 @@ pub(crate) fn setup_logging(
                 display_level: true,
                 show_spans: false,
             };
-            let ansi = match anstream::Stderr::choice(&std::io::stderr()) {
-                ColorChoice::Always | ColorChoice::AlwaysAnsi => true,
-                ColorChoice::Never => false,
-                // We just asked anstream for a choice, that can't be auto
-                ColorChoice::Auto => unreachable!(),
-            };
+
             tracing_subscriber::registry()
                 .with(durations_layer)
                 .with(
@@ -174,6 +176,7 @@ pub(crate) fn setup_logging(
                         .with_targets(true)
                         .with_timer(Uptime::default())
                         .with_writer(std::io::stderr)
+                        .with_ansi(ansi)
                         .with_filter(filter),
                 )
                 .init();
