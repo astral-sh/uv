@@ -81,7 +81,7 @@ impl<'env> TreeDisplay<'env> {
             if dev.prod() {
                 for dependency in &package.dependencies {
                     if markers.is_some_and(|markers| {
-                        !dependency.complexified_marker.evaluate(markers, &[])
+                        !dependency.complexified_marker.evaluate_no_extras(markers)
                     }) {
                         continue;
                     }
@@ -108,7 +108,7 @@ impl<'env> TreeDisplay<'env> {
                 for (extra, dependencies) in &package.optional_dependencies {
                     for dependency in dependencies {
                         if markers.is_some_and(|markers| {
-                            !dependency.complexified_marker.evaluate(markers, &[])
+                            !dependency.complexified_marker.evaluate_no_extras(markers)
                         }) {
                             continue;
                         }
@@ -137,7 +137,7 @@ impl<'env> TreeDisplay<'env> {
                 if dev.contains(group) {
                     for dependency in dependencies {
                         if markers.is_some_and(|markers| {
-                            !dependency.complexified_marker.evaluate(markers, &[])
+                            !dependency.complexified_marker.evaluate_no_extras(markers)
                         }) {
                             continue;
                         }

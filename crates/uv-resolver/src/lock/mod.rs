@@ -19,7 +19,7 @@ pub use crate::lock::target::InstallTarget;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::universal_marker::UniversalMarker;
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionMode,
     ResolverOutput,
@@ -63,21 +63,21 @@ static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
         "platform_system == 'Linux' and os_name == 'posix' and sys_platform == 'linux'",
     )
     .unwrap();
-    UniversalMarker::new(pep508, MarkerTree::TRUE)
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static WINDOWS_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str(
         "platform_system == 'Windows' and os_name == 'nt' and sys_platform == 'win32'",
     )
     .unwrap();
-    UniversalMarker::new(pep508, MarkerTree::TRUE)
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str(
         "platform_system == 'Darwin' and os_name == 'posix' and sys_platform == 'darwin'",
     )
     .unwrap();
-    UniversalMarker::new(pep508, MarkerTree::TRUE)
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -149,7 +149,7 @@ impl Lock {
                 resolution
                     .fork_markers
                     .iter()
-                    .filter(|fork_markers| !fork_markers.is_disjoint(&dist.marker))
+                    .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
                     .copied()
                     .collect()
             } else {
@@ -296,16 +296,16 @@ impl Lock {
                     tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
                 })
             }) {
-                !graph.graph[node_index].marker().is_disjoint(&LINUX_MARKERS)
+                !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
             } else if platform_tags
                 .iter()
                 .all(|tag| windows_tags.contains(&&**tag))
             {
                 !graph.graph[node_index]
                     .marker()
-                    .is_disjoint(&WINDOWS_MARKERS)
+                    .is_disjoint(*WINDOWS_MARKERS)
             } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
-                !graph.graph[node_index].marker().is_disjoint(&MAC_MARKERS)
+                !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
             } else {
                 true
             }
@@ -860,7 +860,7 @@ impl Lock {
                     || dist
                         .fork_markers
                         .iter()
-                        .any(|marker| marker.evaluate(marker_env, &[]))
+                        .any(|marker| marker.evaluate_no_extras(marker_env))
                 {
                     if found_dist.is_some() {
                         return Err(format!("found multiple packages matching `{name}`"));
@@ -1449,7 +1449,9 @@ impl TryFrom<LockWire> for Lock {
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             // TODO(ag): Consider whether this should also deserialize a conflict marker.
             // We currently aren't serializing. Dropping it completely is likely to be wrong.
-            .map(|complexified_marker| UniversalMarker::new(complexified_marker, MarkerTree::TRUE))
+            .map(|complexified_marker| {
+                UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
+            })
             .collect();
         let lock = Lock::new(
             wire.version,
@@ -2251,7 +2253,7 @@ impl PackageWire {
                 // TODO(ag): Consider whether this should also deserialize a conflict marker.
                 // We currently aren't serializing. Dropping it completely is likely to be wrong.
                 .map(|complexified_marker| {
-                    UniversalMarker::new(complexified_marker, MarkerTree::TRUE)
+                    UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
                 })
                 .collect(),
             dependencies: unwire_deps(self.dependencies)?,
@@ -3541,7 +3543,7 @@ impl Dependency {
         complexified_marker: UniversalMarker,
     ) -> Dependency {
         let simplified_marker =
-            SimplifiedMarkerTree::new(requires_python, complexified_marker.pep508());
+            SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
         Dependency {
             package_id,
             extra,
@@ -3621,7 +3623,6 @@ struct DependencyWire {
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
     marker: SimplifiedMarkerTree,
-    // FIXME: Add support for representing conflict markers.
 }
 
 impl DependencyWire {
@@ -3635,8 +3636,7 @@ impl DependencyWire {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             simplified_marker: self.marker,
-            // FIXME: Support reading conflict markers.
-            complexified_marker: UniversalMarker::new(complexified_marker, MarkerTree::TRUE),
+            complexified_marker: UniversalMarker::from_combined(complexified_marker),
         })
     }
 }
