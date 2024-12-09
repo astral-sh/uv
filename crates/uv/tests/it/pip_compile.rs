@@ -6703,8 +6703,6 @@ fn index_url_in_requirements() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio<4, we can conclude that your requirements are unsatisfiable.
-
-          hint: An index URL (https://download.pytorch.org/whl) could not be queried due to a lack of valid authentication credentials (403 Forbidden).
     "###
     );
 
