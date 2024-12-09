@@ -339,7 +339,12 @@ fn python_executables_from_installed<'a>(
             // Skip interpreter probing if we already know the version doesn't match.
             let version_filter = move |entry: &WindowsPython| {
                 if let Some(found) = &entry.version {
-                    version.matches_version(found)
+                    // Some distributions emit the patch version (example: `SysVersion: 3.9`)
+                    if found.string.chars().filter(|c| *c == '.').count() == 1 {
+                        version.matches_major_minor(found.major(), found.minor())
+                    } else {
+                        version.matches_version(found)
+                    }
                 } else {
                     true
                 }
@@ -2004,7 +2009,7 @@ impl VersionRequest {
     /// Check if a version is compatible with the request.
     ///
     /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfull the request.
+    /// avoid querying interpreters if it's clear it cannot fulfill the request.
     pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
             Self::Any | Self::Default => true,
@@ -2027,7 +2032,7 @@ impl VersionRequest {
     /// Check if major and minor version segments are compatible with the request.
     ///
     /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfull the request.
+    /// avoid querying interpreters if it's clear it cannot fulfill the request.
     fn matches_major_minor(&self, major: u8, minor: u8) -> bool {
         match self {
             Self::Any | Self::Default => true,
@@ -2051,7 +2056,7 @@ impl VersionRequest {
     /// request.
     ///
     /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfull the request.
+    /// avoid querying interpreters if it's clear it cannot fulfill the request.
     pub(crate) fn matches_major_minor_patch_prerelease(
         &self,
         major: u8,
