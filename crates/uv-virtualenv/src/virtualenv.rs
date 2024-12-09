@@ -1,14 +1,15 @@
 //! Create a virtual environment.
 
+use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use fs_err as fs;
 use fs_err::File;
 use itertools::Itertools;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_fs::{cachedir, Simplified, CWD};
 use uv_pypi_types::Scheme;
@@ -69,17 +70,27 @@ pub(crate) fn create(
         // location, we need to fully resolve it to the actual Python executable; however, if the
         // entire standalone interpreter is symlinked, then we can use the symlinked path.
         //
-        // We detect the first case (an _interpreter_ that is symlinked, as opposed to an
-        // _installation_ that is symlinked) by checking whether executable path starts with the
-        // prefix.
-        if base_executable.starts_with(interpreter.sys_base_prefix()) {
-            std::path::absolute(base_executable)?
-        } else {
-            uv_fs::canonicalize_executable(base_executable)?
+        // We emulate CPython's `getpath.py` to ensure that the base executable results in a valid
+        // Python prefix when converted into the `home` key for `pyvenv.cfg`.
+        match find_base_python(
+            base_executable,
+            interpreter.python_major(),
+            interpreter.python_minor(),
+        ) {
+            Ok(path) => path,
+            Err(err) => {
+                warn!("Failed to find base Python executable: {err}");
+                uv_fs::canonicalize_executable(base_executable)?
+            }
         }
     } else {
         std::path::absolute(base_executable)?
     };
+
+    debug!(
+        "Using base executable for virtual environment: {}",
+        base_python.display()
+    );
 
     // Validate the existing location.
     match location.metadata() {
@@ -614,4 +625,83 @@ fn copy_launcher_windows(
     }
 
     Err(Error::NotFound(base_python.user_display().to_string()))
+}
+
+/// Find the Python executable that should be considered the "base" for a virtual environment.
+///
+/// Assumes that the provided executable is that of a standalone Python interpreter.
+///
+/// The strategy here mimics that of `getpath.py`: we search up the ancestor path to determine
+/// whether a given executable will convert into a valid Python prefix; if not, we resolve the
+/// symlink and try again.
+///
+/// This ensures that:
+///
+/// 1. We avoid using symlinks to arbitrary locations as the base Python executable. For example,
+///    if a user symlinks a Python _executable_ to `/Users/user/foo`, we want to avoid using
+///    `/Users/user` as `home`, since it's not a Python installation, and so the relevant libraries
+///    and headers won't be found when it's used as the executable directory.
+///    See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L367-L400>
+///
+/// 2. We use the "first" resolved symlink that _is_ a valid Python prefix, and thereby preserve
+///    symlinks. For example, if a user symlinks a Python _installation_ to `/Users/user/foo`, such
+///    that `/Users/user/foo/bin/python` is the resulting executable, we want to use `/Users/user/foo`
+///    as `home`, rather than resolving to the symlink target. Concretely, this allows users to
+///    symlink patch versions (like `cpython-3.12.6-macos-aarch64-none`) to minor version aliases
+///    (like `cpython-3.12-macos-aarch64-none`) and preserve those aliases in the resulting virtual
+///    environments.
+///
+/// See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L591-L594>
+fn find_base_python(executable: &Path, major: u8, minor: u8) -> Result<PathBuf, io::Error> {
+    /// Determining whether `dir` is a valid Python prefix by searching for a "landmark".
+    ///
+    /// See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L183>
+    fn is_prefix(dir: &Path, major: u8, minor: u8) -> bool {
+        if cfg!(windows) {
+            dir.join("Lib").join("os.py").is_file()
+        } else {
+            dir.join("lib")
+                .join(format!("python{major}.{minor}"))
+                .join("os.py")
+                .is_file()
+        }
+    }
+
+    let mut executable = Cow::Borrowed(executable);
+
+    loop {
+        debug!(
+            "Assessing Python executable as base candidate: {}",
+            executable.display()
+        );
+
+        // Determine whether this executable will produce a valid `home` for a virtual environment.
+        for prefix in executable.ancestors() {
+            if is_prefix(prefix, major, minor) {
+                return Ok(executable.into_owned());
+            }
+        }
+
+        // If not, resolve the symlink.
+        let resolved = fs_err::read_link(&executable)?;
+
+        // If the symlink is relative, resolve it relative to the executable.
+        let resolved = if resolved.is_relative() {
+            if let Some(parent) = executable.parent() {
+                parent.join(resolved)
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Symlink has no parent directory",
+                ));
+            }
+        } else {
+            resolved
+        };
+
+        // Normalize the resolved path.
+        let resolved = uv_fs::normalize_absolute_path(&resolved)?;
+
+        executable = Cow::Owned(resolved);
+    }
 }
