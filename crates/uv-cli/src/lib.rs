@@ -301,6 +301,7 @@ impl ColorChoice {
     ///
     /// This method allows prioritizing the user choice, while using the inferred choice for a
     /// stream as default.
+    #[must_use]
     pub fn and_colorchoice(self, next: anstream::ColorChoice) -> Self {
         match self {
             Self::Auto => match next {
