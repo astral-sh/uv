@@ -38,6 +38,14 @@ fn run() -> std::io::Result<ExitStatus> {
         .chain(std::env::args_os().skip(1))
         .collect::<Vec<_>>();
 
+    // If we are sure the uv binary does not exist, display a clearer error message
+    if matches!(uv.try_exists(), Ok(false)) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Could not find the `uv` binary at: {}", uv.display()),
+        ));
+    }
+
     let mut cmd = Command::new(uv);
     cmd.args(&args);
     match exec_spawn(&mut cmd)? {}
