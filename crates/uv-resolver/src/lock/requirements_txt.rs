@@ -19,7 +19,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
 use crate::graph_ops::marker_reachability;
-use crate::lock::{LockErrorKind, Package, PackageId, Source};
+use crate::lock::{Package, PackageId, Source};
 use crate::universal_marker::UniversalMarker;
 use crate::{InstallTarget, LockError};
 
@@ -41,9 +41,6 @@ impl<'lock> RequirementsTxtExport<'lock> {
         hashes: bool,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
-        if !target.lock().conflicts().is_empty() {
-            return Err(LockErrorKind::ConflictsNotAllowedInRequirementsTxt.into());
-        }
         let size_guess = target.lock().packages.len();
         let mut petgraph = Graph::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);

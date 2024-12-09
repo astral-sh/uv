@@ -4143,11 +4143,6 @@ enum LockErrorKind {
         #[source]
         err: DependencyGroupError,
     },
-    /// An error that occurs when trying to export a `uv.lock` with
-    /// conflicting extras/groups specified to `requirements.txt`.
-    /// (Because `requirements.txt` cannot encode them.)
-    #[error("Cannot represent `uv.lock` with conflicting extras or groups as `requirements.txt`")]
-    ConflictsNotAllowedInRequirementsTxt,
 }
 
 /// An error that occurs when a source string could not be parsed.
