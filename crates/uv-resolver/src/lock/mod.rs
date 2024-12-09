@@ -629,7 +629,9 @@ impl Lock {
                     })
                     .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
             );
-            doc.insert("resolution-markers", value(fork_markers));
+            if !fork_markers.is_empty() {
+                doc.insert("resolution-markers", value(fork_markers));
+            }
         }
 
         if !self.supported_environments.is_empty() {
@@ -1973,7 +1975,7 @@ impl Package {
         self.id.to_toml(None, &mut table);
 
         if !self.fork_markers.is_empty() {
-            let wheels = each_element_on_its_line_array(
+            let fork_markers = each_element_on_its_line_array(
                 self.fork_markers
                     .iter()
                     // TODO(ag): Consider whether `resolution-markers` should actually
@@ -1983,7 +1985,9 @@ impl Package {
                     .map(|marker| SimplifiedMarkerTree::new(requires_python, marker.pep508()))
                     .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
             );
-            table.insert("resolution-markers", value(wheels));
+            if !fork_markers.is_empty() {
+                table.insert("resolution-markers", value(fork_markers));
+            }
         }
 
         if !self.dependencies.is_empty() {
