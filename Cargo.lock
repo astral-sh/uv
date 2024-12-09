@@ -2416,7 +2416,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b7cafe60d6cf8e62e1b9b2ea516a089c008945bb5a275416789e7db0bc199dc"
 dependencies = [
  "memchr",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "ucd-trie",
 ]
 
@@ -2679,7 +2679,7 @@ dependencies = [
  "log",
  "priority-queue",
  "rustc-hash",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "version-ranges",
 ]
 
@@ -2696,7 +2696,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tracing",
 ]
@@ -2715,7 +2715,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tinyvec",
  "tracing",
  "web-time",
@@ -3841,11 +3841,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.5"
+version = "2.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "643caef17e3128658ff44d85923ef2d28af81bb71e0d67bbfe1d76f19a73e053"
+checksum = "8fec2a1820ebd077e2b90c4df007bebf344cd394098a13c563957d0afc83ea47"
 dependencies = [
- "thiserror-impl 2.0.5",
+ "thiserror-impl 2.0.6",
 ]
 
 [[package]]
@@ -3861,9 +3861,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.5"
+version = "2.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "995d0bbc9995d1f19d28b7215a9352b0fc3cd3a2d2ec95c2cadc485cdedbcdde"
+checksum = "d65750cab40f4ff1929fb1ba509e9914eb756131cef4210da8d5d700d26f6312"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4438,7 +4438,7 @@ dependencies = [
  "tar",
  "tempfile",
  "textwrap",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "toml",
  "tracing",
@@ -4561,7 +4561,7 @@ dependencies = [
  "spdx",
  "tar",
  "tempfile",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "toml",
  "tracing",
  "uv-distribution-filename",
@@ -4594,7 +4594,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "toml_edit",
  "tracing",
@@ -4643,7 +4643,7 @@ dependencies = [
  "globwalk",
  "schemars",
  "serde",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "toml",
  "tracing",
 ]
@@ -4711,7 +4711,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sys-info",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tl",
  "tokio",
  "tokio-util",
@@ -4750,7 +4750,7 @@ dependencies = [
  "serde",
  "serde-untagged",
  "serde_json",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tracing",
  "url",
  "uv-auth",
@@ -4868,7 +4868,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "tempfile",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tokio-util",
  "tracing",
@@ -4903,7 +4903,7 @@ dependencies = [
  "insta",
  "rkyv",
  "serde",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "url",
  "uv-normalize",
  "uv-pep440",
@@ -4925,7 +4925,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tracing",
  "url",
  "urlencoding",
@@ -4957,7 +4957,7 @@ dependencies = [
  "reqwest",
  "rustc-hash",
  "sha2",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5002,7 +5002,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "serde",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tracing",
  "url",
@@ -5023,7 +5023,7 @@ dependencies = [
  "regex",
  "regex-automata 0.4.9",
  "tempfile",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tracing",
  "walkdir",
 ]
@@ -5053,7 +5053,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tracing",
  "uv-cache-info",
  "uv-distribution-filename",
@@ -5081,7 +5081,7 @@ dependencies = [
  "rustc-hash",
  "same-file",
  "tempfile",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tracing",
  "url",
@@ -5122,7 +5122,7 @@ dependencies = [
  "async_zip",
  "fs-err 3.0.0",
  "futures",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tokio-util",
  "uv-distribution-filename",
@@ -5183,7 +5183,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tracing",
  "tracing-test",
  "unicode-width 0.1.14",
@@ -5216,7 +5216,7 @@ dependencies = [
  "insta",
  "rustc-hash",
  "serde",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
 ]
 
 [[package]]
@@ -5237,7 +5237,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5270,7 +5270,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde-untagged",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "toml",
  "toml_edit",
  "tracing",
@@ -5311,7 +5311,7 @@ dependencies = [
  "temp-env",
  "tempfile",
  "test-log",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5350,7 +5350,7 @@ dependencies = [
  "futures",
  "rustc-hash",
  "serde",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "toml",
  "tracing",
  "url",
@@ -5388,7 +5388,7 @@ dependencies = [
  "reqwest-middleware",
  "tempfile",
  "test-case",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tracing",
  "unscanny",
@@ -5425,7 +5425,7 @@ dependencies = [
  "schemars",
  "serde",
  "textwrap",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "tokio-stream",
  "toml",
@@ -5463,7 +5463,7 @@ dependencies = [
  "indoc",
  "memchr",
  "serde",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "toml",
  "uv-pep440",
  "uv-pep508",
@@ -5484,7 +5484,7 @@ dependencies = [
  "schemars",
  "serde",
  "textwrap",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "toml",
  "tracing",
  "url",
@@ -5540,7 +5540,7 @@ dependencies = [
  "fs-err 3.0.0",
  "pathdiff",
  "serde",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "toml",
  "toml_edit",
  "tracing",
@@ -5567,7 +5567,7 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "fs-err 3.0.0",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "uv-fs",
  "which",
  "zip",
@@ -5579,7 +5579,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "rustc-hash",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "url",
  "uv-cache",
  "uv-configuration",
@@ -5605,7 +5605,7 @@ dependencies = [
  "fs-err 3.0.0",
  "itertools 0.13.0",
  "pathdiff",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tracing",
  "uv-fs",
  "uv-platform-tags",
@@ -5641,7 +5641,7 @@ dependencies = [
  "schemars",
  "serde",
  "tempfile",
- "thiserror 2.0.5",
+ "thiserror 2.0.6",
  "tokio",
  "toml",
  "toml_edit",
