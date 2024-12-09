@@ -14017,8 +14017,6 @@ fn lock_default_index() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: An index URL (https://download.pytorch.org/whl/cu121) could not be queried due to a lack of valid authentication credentials (403 Forbidden).
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
