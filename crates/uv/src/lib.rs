@@ -219,6 +219,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             2.. => logging::Level::ExtraVerbose,
         },
         duration_layer,
+        globals.color,
     )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
