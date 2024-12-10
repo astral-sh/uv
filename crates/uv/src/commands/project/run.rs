@@ -1404,10 +1404,7 @@ impl RunCommand {
         } else if script {
             return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
         } else if gui_script {
-            if cfg!(windows) {
-                return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
-            }
-            anyhow::bail!("`--gui-script` is only supported on Windows. Did you mean `--script`?");
+            return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
         }
 
         let metadata = target_path.metadata();
