@@ -2702,7 +2702,7 @@ pub struct RunArgs {
     /// Run a Python module.
     ///
     /// Equivalent to `python -m <module>`.
-    #[arg(short, long, conflicts_with = "script")]
+    #[arg(short, long, conflicts_with_all = ["script", "gui_script"])]
     pub module: bool,
 
     /// Only include the development dependency group.
@@ -2801,8 +2801,15 @@ pub struct RunArgs {
     ///
     /// Using `--script` will attempt to parse the path as a PEP 723 script,
     /// irrespective of its extension.
-    #[arg(long, short, conflicts_with = "module")]
+    #[arg(long, short, conflicts_with_all = ["module", "gui_script"])]
     pub script: bool,
+
+    /// Run the given path as a Python GUI script.
+    ///
+    /// Using `--gui-script` will attempt to parse the path as a PEP 723 script and run it with pythonw.exe,
+    /// irrespective of its extension. Only available on Windows.
+    #[arg(long, conflicts_with_all = ["script", "module"])]
+    pub gui_script: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,

@@ -1344,10 +1344,12 @@ impl std::fmt::Display for RunCommand {
 
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub(crate) async fn from_args(
         command: &ExternalCommand,
         module: bool,
         script: bool,
+        gui_script: bool,
         connectivity: Connectivity,
         native_tls: bool,
         allow_insecure_host: &[TrustedHost],
@@ -1401,6 +1403,11 @@ impl RunCommand {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
         } else if script {
             return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
+        } else if gui_script {
+            if cfg!(windows) {
+                return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
+            }
+            anyhow::bail!("`--gui-script` is only supported on Windows. Did you mean `--script`?");
         }
 
         let metadata = target_path.metadata();

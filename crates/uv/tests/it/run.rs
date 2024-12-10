@@ -2894,6 +2894,68 @@ fn run_script_explicit_directory() -> Result<()> {
 }
 
 #[test]
+#[cfg(windows)]
+fn run_gui_script_explicit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+        import sys
+        import os
+
+        executable = os.path.basename(sys.executable).lower()
+        if not executable.startswith("pythonw"):
+            print(f"Error: Expected pythonw.exe but got: {executable}", file=sys.stderr)
+            sys.exit(1)
+        
+        print(f"Using executable: {executable}", file=sys.stderr)
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `script`
+    Resolved in [TIME]
+    Audited in [TIME]
+    Using executable: pythonw.exe
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn run_gui_script_not_supported() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+        print("Hello")
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--gui-script` is only supported on Windows. Did you mean `--script`?
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn run_remote_pep723_script() {
     let context = TestContext::new("3.12").with_filtered_python_names();
     let mut filters = context.filters();

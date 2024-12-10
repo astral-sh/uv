@@ -296,6 +296,7 @@ impl RunSettings {
             only_dev,
             no_editable,
             script: _,
+            gui_script: _,
             command: _,
             with,
             with_editable,
