@@ -4351,7 +4351,11 @@ uv python list [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-platforms</code></dt><dd><p>List Python downloads for all platforms.</p>
+<dl class="cli-reference"><dt><code>--all-arches</code></dt><dd><p>List Python downloads for all architectures.</p>
+
+<p>By default, only downloads for the current architecture are shown.</p>
+
+</dd><dt><code>--all-platforms</code></dt><dd><p>List Python downloads for all platforms.</p>
 
 <p>By default, only downloads for the current platform are shown.</p>
 

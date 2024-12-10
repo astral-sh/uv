@@ -25,11 +25,12 @@ enum Kind {
 }
 
 /// List available Python installations.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
     kinds: PythonListKinds,
     all_versions: bool,
     all_platforms: bool,
+    all_arches: bool,
     show_urls: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -49,6 +50,8 @@ pub(crate) async fn list(
                 if python_downloads.is_automatic() {
                     Some(if all_platforms {
                         PythonDownloadRequest::default()
+                    } else if all_arches {
+                        PythonDownloadRequest::from_env()?.with_any_arch()
                     } else {
                         PythonDownloadRequest::from_env()?
                     })
