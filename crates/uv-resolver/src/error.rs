@@ -24,7 +24,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
-    IncompletePackage, ResolverEnvironment, UnavailablePackage, UnavailableReason,
+    MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
 use crate::Options;
 
@@ -145,7 +145,7 @@ pub struct NoSolutionError {
     index_locations: IndexLocations,
     index_capabilities: IndexCapabilities,
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
-    incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+    incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
     fork_urls: ForkUrls,
     env: ResolverEnvironment,
     workspace_members: BTreeSet<PackageName>,
@@ -163,7 +163,7 @@ impl NoSolutionError {
         index_locations: IndexLocations,
         index_capabilities: IndexCapabilities,
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         fork_urls: ForkUrls,
         env: ResolverEnvironment,
         workspace_members: BTreeSet<PackageName>,
