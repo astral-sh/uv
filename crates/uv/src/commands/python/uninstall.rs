@@ -19,7 +19,6 @@ use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
-use std::path::Path;
 
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(
