@@ -617,7 +617,8 @@ impl PubGrubReportFormatter<'_> {
                         && workspace_members.contains(package_name)
                     {
                         output_hints.insert(PubGrubHint::DependsOnItself {
-                            package: package.clone(),
+                            package: package_name.clone(),
+                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
                         });
                     }
                 }
@@ -956,9 +957,12 @@ pub(crate) enum PubGrubHint {
         workspace: bool,
     },
     /// A package depends on itself at an incompatible version.
-    DependsOnItself { package: PubGrubPackage },
+    DependsOnItself {
+        package: PackageName,
+        workspace: bool,
+    },
     /// A package was available on an index, but not at the correct version, and at least one
-    /// subsequent index was not queried. As such, a compatible version may be available on an
+    /// subsequent index was not queried. As such, a compatible version may be available on
     /// one of the remaining indexes.
     UncheckedIndex {
         package: PubGrubPackage,
@@ -1022,7 +1026,8 @@ enum PubGrubHintCore {
         workspace: bool,
     },
     DependsOnItself {
-        package: PubGrubPackage,
+        package: PackageName,
+        workspace: bool,
     },
     UncheckedIndex {
         package: PubGrubPackage,
@@ -1088,7 +1093,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 dependency,
                 workspace,
             },
-            PubGrubHint::DependsOnItself { package } => Self::DependsOnItself { package },
+            PubGrubHint::DependsOnItself { package, workspace } => {
+                Self::DependsOnItself { package, workspace }
+            }
             PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
             PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
             PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
@@ -1331,12 +1338,19 @@ impl std::fmt::Display for PubGrubHint {
                     dependency.cyan(),
                 )
             }
-            Self::DependsOnItself { package } => {
+            Self::DependsOnItself { package, workspace } => {
+                let project = if *workspace {
+                    "workspace member"
+                } else {
+                    "project"
+                };
                 write!(
                     f,
-                    "{}{} The package `{}` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.",
+                    "{}{} The {project} `{}` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `{}`, consider renaming the {project} `{}` to avoid creating a conflict.",
                     "hint".bold().cyan(),
                     ":".bold(),
+                    package.cyan(),
+                    package.cyan(),
                     package.cyan(),
                 )
             }
