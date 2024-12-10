@@ -101,8 +101,6 @@ fn extra_basic() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "extra1" },
             { package = "project", extra = "extra2" },
@@ -134,8 +132,6 @@ fn extra_basic() -> Result<()> {
         name = "sortedcontainers"
         version = "2.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
@@ -145,8 +141,6 @@ fn extra_basic() -> Result<()> {
         name = "sortedcontainers"
         version = "2.4.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
@@ -309,8 +303,6 @@ fn extra_basic_three_extras() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "extra1" },
             { package = "project", extra = "extra2" },
@@ -347,8 +339,6 @@ fn extra_basic_three_extras() -> Result<()> {
         name = "sortedcontainers"
         version = "2.2.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/83/c9/466c0f9b42a0563366bb7c39906d9c6673315f81516f55e3a23a99f52234/sortedcontainers-2.2.0.tar.gz", hash = "sha256:331f5b7acb6bdfaf0b0646f5f86c087e414c9ae9d85e2076ad2eacb17ec2f4ff", size = 30402 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/0c/75/4f79725a6ad966f1985d96c5aeda0b27d00c23afa14e8566efcdee1380ad/sortedcontainers-2.2.0-py2.py3-none-any.whl", hash = "sha256:f0694fbe8d090fab0fbabbfecad04756fbbb35dc3c0f89e0f6965396fe815d25", size = 29386 },
@@ -358,8 +348,6 @@ fn extra_basic_three_extras() -> Result<()> {
         name = "sortedcontainers"
         version = "2.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
@@ -369,8 +357,6 @@ fn extra_basic_three_extras() -> Result<()> {
         name = "sortedcontainers"
         version = "2.4.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
@@ -824,8 +810,6 @@ fn extra_multiple_independent() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "extra1" },
             { package = "project", extra = "extra2" },
@@ -841,8 +825,6 @@ fn extra_multiple_independent() -> Result<()> {
         name = "anyio"
         version = "4.1.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -856,8 +838,6 @@ fn extra_multiple_independent() -> Result<()> {
         name = "anyio"
         version = "4.2.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -916,8 +896,6 @@ fn extra_multiple_independent() -> Result<()> {
         name = "sortedcontainers"
         version = "2.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
@@ -927,8 +905,6 @@ fn extra_multiple_independent() -> Result<()> {
         name = "sortedcontainers"
         version = "2.4.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
@@ -986,8 +962,6 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "extra1" },
             { package = "project", extra = "extra2" },
@@ -1019,8 +993,6 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         name = "sortedcontainers"
         version = "2.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
@@ -1030,8 +1002,6 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
         name = "sortedcontainers"
         version = "2.4.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
@@ -1499,8 +1469,6 @@ fn group_basic() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", group = "group1" },
             { package = "project", group = "group2" },
@@ -1532,8 +1500,6 @@ fn group_basic() -> Result<()> {
         name = "sortedcontainers"
         version = "2.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
@@ -1543,8 +1509,6 @@ fn group_basic() -> Result<()> {
         name = "sortedcontainers"
         version = "2.4.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
@@ -1665,8 +1629,6 @@ fn group_default() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", group = "group1" },
             { package = "project", group = "group2" },
@@ -1698,8 +1660,6 @@ fn group_default() -> Result<()> {
         name = "sortedcontainers"
         version = "2.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
@@ -1709,8 +1669,6 @@ fn group_default() -> Result<()> {
         name = "sortedcontainers"
         version = "2.4.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
@@ -1891,8 +1849,6 @@ fn mixed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", group = "group1" },
             { package = "project", extra = "extra1" },
@@ -1926,8 +1882,6 @@ fn mixed() -> Result<()> {
         name = "sortedcontainers"
         version = "2.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479 },
@@ -1937,8 +1891,6 @@ fn mixed() -> Result<()> {
         name = "sortedcontainers"
         version = "2.4.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
@@ -2067,8 +2019,6 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "cu118" },
             { package = "project", extra = "cu124" },
@@ -2081,8 +2031,6 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         name = "jinja2"
         version = "3.1.2"
         source = { registry = "https://download.pytorch.org/whl/cu118" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2094,8 +2042,6 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2218,8 +2164,6 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", group = "cu118" },
             { package = "project", group = "cu124" },
@@ -2232,8 +2176,6 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         name = "jinja2"
         version = "3.1.2"
         source = { registry = "https://download.pytorch.org/whl/cu118" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2245,8 +2187,6 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2369,8 +2309,6 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "cu118" },
             { package = "project", extra = "cu124" },
@@ -2392,8 +2330,6 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         name = "jinja2"
         version = "3.1.2"
         source = { registry = "https://download.pytorch.org/whl/cu118" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2410,8 +2346,6 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2584,8 +2518,6 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -2860,8 +2792,6 @@ fn shared_optional_dependency_extra1() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
@@ -2888,8 +2818,6 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -2899,8 +2827,6 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -3004,8 +2930,6 @@ fn shared_optional_dependency_group1() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", group = "foo" },
             { package = "project", group = "bar" },
@@ -3032,8 +2956,6 @@ fn shared_optional_dependency_group1() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -3043,8 +2965,6 @@ fn shared_optional_dependency_group1() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -3150,8 +3070,6 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "foo" },
             { package = "project", group = "bar" },
@@ -3178,8 +3096,6 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -3189,8 +3105,6 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -3302,8 +3216,6 @@ fn shared_optional_dependency_extra2() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = "==3.11.*"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
@@ -3330,8 +3242,6 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -3341,8 +3251,6 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -3450,8 +3358,6 @@ fn shared_optional_dependency_group2() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = "==3.11.*"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", group = "foo" },
             { package = "project", group = "bar" },
@@ -3478,8 +3384,6 @@ fn shared_optional_dependency_group2() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -3489,8 +3393,6 @@ fn shared_optional_dependency_group2() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -3604,8 +3506,6 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = "==3.11.*"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "foo" },
             { package = "project", group = "bar" },
@@ -3632,8 +3532,6 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -3643,8 +3541,6 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -3752,8 +3648,6 @@ fn shared_dependency_extra() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
@@ -3780,8 +3674,6 @@ fn shared_dependency_extra() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -3791,8 +3683,6 @@ fn shared_dependency_extra() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -3931,8 +3821,6 @@ fn shared_dependency_group() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", group = "foo" },
             { package = "project", group = "bar" },
@@ -3959,8 +3847,6 @@ fn shared_dependency_group() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -3970,8 +3856,6 @@ fn shared_dependency_group() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -4112,8 +3996,6 @@ fn shared_dependency_mixed() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "foo" },
             { package = "project", group = "bar" },
@@ -4140,8 +4022,6 @@ fn shared_dependency_mixed() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -4151,8 +4031,6 @@ fn shared_dependency_mixed() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -4329,8 +4207,6 @@ conflicts = [
             lock, @r###"
         version = 1
         requires-python = "==3.11.*"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "x1" },
             { package = "proxy1", extra = "x2" },
@@ -4365,8 +4241,6 @@ conflicts = [
         name = "idna"
         version = "3.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/8b/e1/43beb3d38dba6cb420cefa297822eac205a277ab43e5ba5d5c46faf96438/idna-3.4.tar.gz", hash = "sha256:814f528e8dead7d329833b91c5faa87d60bf71824cd12a7530b5526063d02cb4", size = 183077 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/fc/34/3030de6f1370931b9dbb4dad48f6ab1015ab1d32447850b9fc94e60097be/idna-3.4-py3-none-any.whl", hash = "sha256:90b77e79eaa3eba6de819a0c442c0b4ceefc341a7a2ab77d7562bf49f425c5c2", size = 61538 },
@@ -4376,8 +4250,6 @@ conflicts = [
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -4387,8 +4259,6 @@ conflicts = [
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -4525,8 +4395,6 @@ fn jinja_no_conflict_markers1() -> Result<()> {
             lock, @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "project", extra = "cu118" },
             { package = "project", extra = "cu124" },
@@ -4548,8 +4416,6 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         name = "jinja2"
         version = "3.1.2"
         source = { registry = "https://download.pytorch.org/whl/cu118" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -4566,8 +4432,6 @@ fn jinja_no_conflict_markers1() -> Result<()> {
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -4738,8 +4602,6 @@ fn jinja_no_conflict_markers2() -> Result<()> {
         name = "jinja2"
         version = "3.1.3"
         source = { registry = "https://download.pytorch.org/whl/cu124" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "markupsafe" },
         ]
@@ -4849,8 +4711,6 @@ fn collision_extra() -> Result<()> {
             @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "pkg", extra = "foo" },
             { package = "pkg", extra = "bar" },
@@ -4877,8 +4737,6 @@ fn collision_extra() -> Result<()> {
         name = "idna"
         version = "3.5"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
@@ -4888,8 +4746,6 @@ fn collision_extra() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
@@ -5082,8 +4938,6 @@ fn extra_inferences() -> Result<()> {
             @r###"
         version = 1
         requires-python = ">=3.12"
-        resolution-markers = [
-        ]
         conflicts = [[
             { package = "pkg", extra = "x1" },
             { package = "pkg", extra = "x2" },
@@ -5194,8 +5048,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow"
         version = "2.5.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "alembic" },
             { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" } },
@@ -5266,8 +5118,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow"
         version = "2.6.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "alembic" },
             { name = "apache-airflow-providers-common-sql", version = "1.11.1", source = { registry = "https://pypi.org/simple" } },
@@ -5342,8 +5192,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-common-sql"
         version = "1.8.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
             { name = "sqlparse" },
@@ -5357,8 +5205,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-common-sql"
         version = "1.11.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apache-airflow", version = "2.6.0", source = { registry = "https://pypi.org/simple" } },
             { name = "more-itertools" },
@@ -5373,8 +5219,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-ftp"
         version = "3.6.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
         ]
@@ -5387,8 +5231,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-ftp"
         version = "3.7.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apache-airflow", version = "2.6.0", source = { registry = "https://pypi.org/simple" } },
         ]
@@ -5401,8 +5243,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-http"
         version = "4.7.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "aiohttp" },
             { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
@@ -5419,8 +5259,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-http"
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "aiohttp" },
             { name = "apache-airflow", version = "2.6.0", source = { registry = "https://pypi.org/simple" } },
@@ -5437,8 +5275,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-imap"
         version = "3.4.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
         ]
@@ -5451,8 +5287,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-imap"
         version = "3.5.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apache-airflow", version = "2.6.0", source = { registry = "https://pypi.org/simple" } },
         ]
@@ -5465,8 +5299,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-sqlite"
         version = "3.5.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
             { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" } },
@@ -5480,8 +5312,6 @@ fn extra_inferences() -> Result<()> {
         name = "apache-airflow-providers-sqlite"
         version = "3.7.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apache-airflow", version = "2.6.0", source = { registry = "https://pypi.org/simple" } },
             { name = "apache-airflow-providers-common-sql", version = "1.11.1", source = { registry = "https://pypi.org/simple" } },
@@ -5495,8 +5325,6 @@ fn extra_inferences() -> Result<()> {
         name = "apispec"
         version = "3.3.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/1f/41/55fcfb7f5e8ac178a32875f55dfd0f5568c3cd1022724d34d0434e32b47b/apispec-3.3.2.tar.gz", hash = "sha256:d23ebd5b71e541e031b02a19db10b5e6d5ef8452c552833e3e1afc836b40b1ad", size = 67794 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/35/a2/80a82b22296c942a5298bb760e8e21c86ace3342de840ff3df8938af4272/apispec-3.3.2-py2.py3-none-any.whl", hash = "sha256:a1df9ec6b2cd0edf45039ef025abd7f0660808fa2edf737d3ba1cf5ef1a4625b", size = 27146 },
@@ -5511,8 +5339,6 @@ fn extra_inferences() -> Result<()> {
         name = "apispec"
         version = "5.2.2"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         sdist = { url = "https://files.pythonhosted.org/packages/39/bb/2910f46ecba16334c19e4f02906b1fdb0e69f9c3fd9a21afcf86c45ba89e/apispec-5.2.2.tar.gz", hash = "sha256:6ea6542e1ebffe9fd95ba01ef3f51351eac6c200a974562c7473059b9cd20aa7", size = 75729 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7b/bf/8ab9b532c9a22e9cc4920ed7436fde5f207807346564b95d9782f1e2aa5e/apispec-5.2.2-py3-none-any.whl", hash = "sha256:f5f0d6b452c3e4a0e0922dce8815fac89dc4dbc758acef21fb9e01584d6602a5", size = 29618 },
@@ -5848,8 +5674,6 @@ fn extra_inferences() -> Result<()> {
         name = "flask-appbuilder"
         version = "4.1.4"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apispec", version = "3.3.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"] },
             { name = "click" },
@@ -5881,8 +5705,6 @@ fn extra_inferences() -> Result<()> {
         name = "flask-appbuilder"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-        ]
         dependencies = [
             { name = "apispec", version = "5.2.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"] },
             { name = "click" },
