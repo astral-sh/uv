@@ -107,13 +107,14 @@ impl ManagedPythonInstallations {
     }
 
     /// Prefer, in order:
-    /// 1. The specific Python directory directly passed to the `install_dir` argument
-    /// 2. The specific Python directory specified with the `UV_PYTHON_INSTALL_DIR` environment variable
-    /// 3. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`
-    /// 4. A directory in the local data directory, e.g., `./.uv/python`
+    ///
+    /// 1. The specific Python directory passed via the `install_dir` argument.
+    /// 2. The specific Python directory specified with the `UV_PYTHON_INSTALL_DIR` environment variable.
+    /// 3. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`.
+    /// 4. A directory in the local data directory, e.g., `./.uv/python`.
     pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
-        if install_dir.is_some() {
-            Ok(Self::from_path(install_dir.unwrap()))
+        if let Some(install_dir) = install_dir {
+            Ok(Self::from_path(install_dir))
         } else if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
             Ok(Self::from_path(install_dir))
         } else {

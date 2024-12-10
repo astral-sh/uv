@@ -450,7 +450,7 @@ fn help_subcommand() {
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r##"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -484,9 +484,10 @@ fn help_subsubcommand() {
 
     Options:
       -i, --install-dir <INSTALL_DIR>
-              The directory where Python will be installed
+              The directory to store the Python installation in
               
               [env: UV_PYTHON_INSTALL_DIR=]
+
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations.
               
@@ -677,7 +678,7 @@ fn help_subsubcommand() {
 
 
     ----- stderr -----
-    "##);
+    "###);
 }
 
 #[test]
@@ -751,7 +752,7 @@ fn help_flag_subcommand() {
 fn help_flag_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r#"
+    uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -763,7 +764,7 @@ fn help_flag_subsubcommand() {
       [TARGETS]...  The Python version(s) to install
 
     Options:
-      -i, --install-dir <INSTALL_DIR>  The directory where Python will be installed [env:
+      -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:
                                        UV_PYTHON_INSTALL_DIR=]
           --mirror <MIRROR>            Set the URL to use as the source for downloading Python
                                        installations [env: UV_PYTHON_INSTALL_MIRROR=]
@@ -815,7 +816,7 @@ fn help_flag_subsubcommand() {
               Display the uv version
 
     ----- stderr -----
-    "#);
+    "###);
 }
 
 #[test]

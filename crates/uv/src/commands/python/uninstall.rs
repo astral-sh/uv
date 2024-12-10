@@ -31,7 +31,8 @@ pub(crate) async fn uninstall(
 ) -> Result<ExitStatus> {
     // need to convert install_dir to Option<PathBuf> to match the function signature
     let installations =
-        ManagedPythonInstallations::from_settings(install_dir.map(|p| p.to_path_buf()))?.init()?;
+        ManagedPythonInstallations::from_settings(install_dir.map(std::path::Path::to_path_buf))?
+            .init()?;
 
     let _lock = installations.lock().await?;
 

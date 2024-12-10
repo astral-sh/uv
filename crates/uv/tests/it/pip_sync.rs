@@ -56,18 +56,14 @@ fn missing_venv() -> Result<()> {
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r#"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at /home/dan/.venv
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + anyio==4.3.0
-    "#);
+    error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
+    "###);
 
     assert!(predicates::path::missing().eval(&context.venv));
 
