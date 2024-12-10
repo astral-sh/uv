@@ -25,6 +25,7 @@ use crate::managed::ManagedPythonInstallations;
 use crate::microsoft_store::find_microsoft_store_pythons;
 #[cfg(windows)]
 use crate::py_launcher::{registry_pythons, WindowsPython};
+use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable, CondaEnvironmentKind,
@@ -729,10 +730,27 @@ impl Error {
                     false
                 }
                 InterpreterError::NotFound(path) => {
-                    trace!("Skipping missing interpreter at {}", path.display());
-                    false
+                    // If the interpreter is from an active, valid virtual environment, we should
+                    // fail because it's broken
+                    if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
+                        .then(|| {
+                            path.parent()
+                                .and_then(Path::parent)
+                                .map(|path| path.join("pyvenv.cfg").try_exists())
+                        })
+                        .flatten()
+                    {
+                        true
+                    } else {
+                        trace!("Skipping missing interpreter at {}", path.display());
+                        false
+                    }
                 }
             },
+            Error::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
+                trace!("Skipping broken virtualenv at {}", path.display());
+                false
+            }
             _ => true,
         }
     }
