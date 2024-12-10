@@ -23,16 +23,13 @@ use std::path::Path;
 
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(
-    install_dir: Option<&Path>,
+    install_dir: Option<PathBuf>,
     targets: Vec<String>,
     all: bool,
 
     printer: Printer,
 ) -> Result<ExitStatus> {
-    // need to convert install_dir to Option<PathBuf> to match the function signature
-    let installations =
-        ManagedPythonInstallations::from_settings(install_dir.map(std::path::Path::to_path_buf))?
-            .init()?;
+    let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
 
     let _lock = installations.lock().await?;
 
