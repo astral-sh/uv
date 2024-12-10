@@ -6,7 +6,7 @@ use indoc::indoc;
 use uv_python::platform::{Arch, Os};
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, venv_bin_path, TestContext};
 
 #[test]
 fn python_find() {
@@ -580,7 +580,7 @@ fn python_find_venv_invalid() {
     "###);
 
     // If the binaries are missing from a virtual environment, we fail
-    fs_err::remove_dir_all(context.venv.join("bin")).unwrap();
+    fs_err::remove_dir_all(venv_bin_path(&context.venv)).unwrap();
 
     uv_snapshot!(context.filters(), context.python_find(), @r###"
     success: false
