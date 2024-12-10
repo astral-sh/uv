@@ -8130,7 +8130,7 @@ uv publish [OPTIONS] [FILES]...
 
 With these settings, the following two calls are equivalent:</code></pre>
 
-<p>May also be set with the <code>UV_PUBLISH_INDEx</code> environment variable.</p>
+<p>May also be set with the <code>UV_PUBLISH_INDEX</code> environment variable.</p>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
