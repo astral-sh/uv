@@ -2895,7 +2895,7 @@ fn run_script_explicit_directory() -> Result<()> {
 
 #[test]
 #[cfg(windows)]
-fn run_gui_script_explicit() -> Result<()> {
+fn run_gui_script_explicit_windows() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let test_script = context.temp_dir.child("script");
@@ -2932,7 +2932,7 @@ fn run_gui_script_explicit() -> Result<()> {
 
 #[test]
 #[cfg(not(windows))]
-fn run_gui_script_not_supported() -> Result<()> {
+fn run_gui_script_explicit_unix() -> Result<()> {
     let context = TestContext::new("3.12");
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -2940,16 +2940,23 @@ fn run_gui_script_not_supported() -> Result<()> {
         # requires-python = ">=3.11"
         # dependencies = []
         # ///
-        print("Hello")
+        import sys
+        import os
+
+        executable = os.path.basename(sys.executable).lower()
+        print(f"Using executable: {executable}", file=sys.stderr)
     "#})?;
 
     uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: `--gui-script` is only supported on Windows. Did you mean `--script`?
+    Reading inline script metadata from `script`
+    Resolved in [TIME]
+    Audited in [TIME]
+    Using executable: python3
     "###);
 
     Ok(())
