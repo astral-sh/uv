@@ -1173,7 +1173,7 @@ pub(crate) enum RunCommand {
     /// Search `sys.path` for the named module and execute its contents as the `__main__` module.
     /// Equivalent to `python -m module`.
     PythonModule(OsString, Vec<OsString>),
-    /// Execute a `pythonw` script (Windows only).
+    /// Execute a `pythonw` GUI script.
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
     PythonPackage(PathBuf, Vec<OsString>),
@@ -1201,7 +1201,13 @@ impl RunCommand {
             | Self::PythonRemote(..)
             | Self::Empty => Cow::Borrowed("python"),
             Self::PythonModule(..) => Cow::Borrowed("python -m"),
-            Self::PythonGuiScript(..) => Cow::Borrowed("pythonw"),
+            Self::PythonGuiScript(..) => {
+                if cfg!(windows) {
+                    Cow::Borrowed("pythonw")
+                } else {
+                    Cow::Borrowed("python")
+                }
+            }
             Self::PythonStdin(_) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
         }
@@ -1413,10 +1419,9 @@ impl RunCommand {
             && is_file
         {
             Ok(Self::PythonScript(target_path, args.to_vec()))
-        } else if cfg!(windows)
-            && target_path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
+        } else if target_path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
             && is_file
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))
