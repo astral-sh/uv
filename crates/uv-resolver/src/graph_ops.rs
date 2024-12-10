@@ -115,6 +115,14 @@ pub(crate) fn simplify_conflict_markers(
         included: bool,
     }
 
+    // Do nothing if there are no declared conflicts. Without any declared
+    // conflicts, we know we have no conflict markers and thus nothing to
+    // simplify by determining which extras are activated at different points
+    // in the dependency graph.
+    if conflicts.is_empty() {
+        return;
+    }
+
     // The set of activated extras and groups for each node. The ROOT nodes
     // don't have any extras/groups activated.
     let mut activated: FxHashMap<NodeIndex, Vec<FxHashSet<ConflictItem>>> = FxHashMap::default();
@@ -153,10 +161,30 @@ pub(crate) fn simplify_conflict_markers(
         }
         let sets = activated.get(&parent_index).cloned().unwrap_or_default();
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
+            let mut change = false;
             for set in sets.clone() {
-                activated.entry(child_edge.target()).or_default().push(set);
+                let existing = activated.entry(child_edge.target()).or_default();
+                // This is doing a linear scan for testing membership, which
+                // is non-ideal. But it's not actually clear that there's a
+                // strictly better alternative without a real workload being
+                // slow because of this. Namely, we are checking whether the
+                // _set_ being inserted is equivalent to an existing set. So
+                // instead of, say, `Vec<FxHashSet<ConflictItem>>`, we could
+                // have `BTreeSet<BTreeSet<ConflictItem>>`. But this in turn
+                // makes mutating the elements in each set (done above) more
+                // difficult and likely require more allocations.
+                //
+                // So if this does result in a perf slowdown on some real
+                // work-load, I think the first step would be to re-examine
+                // whether we're doing more work than we need to be doing. If
+                // we aren't, then we might want a more purpose-built data
+                // structure for this.
+                if !existing.contains(&set) {
+                    existing.push(set);
+                    change = true;
+                }
             }
-            if seen.insert(child_edge.target()) {
+            if seen.insert(child_edge.target()) || change {
                 queue.push(child_edge.target());
             }
         }
