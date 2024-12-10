@@ -251,26 +251,30 @@ impl PythonDownloadRequest {
 
     /// Whether this request is satisfied by the key of an existing installation.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
-        if let Some(arch) = &self.arch {
-            if key.arch != *arch {
-                return false;
-            }
-        }
         if let Some(os) = &self.os {
             if key.os != *os {
                 return false;
             }
         }
+
+        if let Some(arch) = &self.arch {
+            if !arch.is_compatible(key.arch) {
+                return false;
+            }
+        }
+
         if let Some(libc) = &self.libc {
             if key.libc != *libc {
                 return false;
             }
         }
+
         if let Some(implementation) = &self.implementation {
             if key.implementation != LenientImplementationName::from(*implementation) {
                 return false;
             }
         }
+
         // If we don't allow pre-releases, don't match a key with a pre-release tag
         if !self.allows_prereleases() && key.prerelease.is_some() {
             return false;

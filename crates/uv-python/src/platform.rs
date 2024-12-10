@@ -17,7 +17,11 @@ pub enum Error {
     UnsupportedVariant(String, String),
 }
 
-/// Architecture variants, e.g., with support for different instruction sets
+/// Architecture variants supplementing the [`target_lexicon::Architecture`].
+///
+/// Currently these are only used for `x86_64` microarchitecture levels.
+///
+/// See the specification at <https://gitlab.com/x86-psABIs/x86-64-ABI>
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub enum ArchVariant {
     /// Targets 64-bit Intel/AMD CPUs newer than Nehalem (2008).
@@ -99,7 +103,83 @@ impl Arch {
     pub fn from_env() -> Self {
         Self {
             family: target_lexicon::HOST.architecture,
+            variant: ArchVariant::from_env(),
+        }
+    }
+
+    /// Is the current architecture compatible with `other`?
+    ///
+    /// `other` can be a compatible microarchitecture with worse performance characteristics.
+    pub(crate) fn is_compatible(self, other: Self) -> bool {
+        self.family == other.family
+            && ((self.variant.is_none() && other.variant.is_none())
+                || self
+                    .variant
+                    .is_some_and(|variant| variant.is_compatible(other.variant)))
+    }
+
+    #[must_use]
+    pub fn without_variant(self) -> Self {
+        Self {
+            family: self.family,
             variant: None,
+        }
+    }
+}
+
+impl ArchVariant {
+    /// Only Linux `x86_64` variants are published upstream at this time.
+    #[cfg(all(unix, target_arch = "x86_64"))]
+    pub fn from_env() -> Option<Self> {
+        if is_x86_feature_detected!("avx512f")
+            && is_x86_feature_detected!("avx512bw")
+            && is_x86_feature_detected!("avx512cd")
+            && is_x86_feature_detected!("avx512dq")
+            && is_x86_feature_detected!("avx512vl")
+        {
+            Some(Self::V4)
+        } else if is_x86_feature_detected!("avx")
+            && is_x86_feature_detected!("avx2")
+            && is_x86_feature_detected!("bmi1")
+            && is_x86_feature_detected!("bmi2")
+            && is_x86_feature_detected!("f16c")
+            && is_x86_feature_detected!("fma")
+            && is_x86_feature_detected!("lzcnt")
+            && is_x86_feature_detected!("movbe")
+        {
+            Some(Self::V3)
+        } else if is_x86_feature_detected!("cmpxchg16b")
+            && is_x86_feature_detected!("popcnt")
+            && is_x86_feature_detected!("sse3")
+            && is_x86_feature_detected!("sse4.1")
+            && is_x86_feature_detected!("sse4.2")
+            && is_x86_feature_detected!("ssse3")
+        {
+            Some(Self::V2)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(all(unix, target_arch = "x86_64")))]
+    pub fn from_env() -> Option<Self> {
+        None
+    }
+
+    /// Is the current variant compatible with `other`?
+    ///
+    /// `other` can be a compatible variant with lower priority, however, it must be a subset of
+    /// `self`.
+    pub(crate) fn is_compatible(self, other: Option<Self>) -> bool {
+        let Some(other) = other else {
+            // `None` can be used on any architecture
+            return true;
+        };
+        match self {
+            Self::V2 => matches!(other, Self::V2),
+            Self::V3 => matches!(other, Self::V2 | Self::V3),
+            // If on V4, any variant can be used.
+            Self::V4 => true,
         }
     }
 }

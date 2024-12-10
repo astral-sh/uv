@@ -237,16 +237,15 @@ impl ManagedPythonInstallations {
     pub fn find_matching_current_platform(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
-        let platform_key = platform_key_from_env()?;
+        let os = Os::from_env();
+        let arch = Arch::from_env();
+        let libc = Libc::from_env()?;
 
         let iter = ManagedPythonInstallations::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
-                installation
-                    .path
-                    .file_name()
-                    .map(OsStr::to_string_lossy)
-                    .is_some_and(|filename| filename.ends_with(&platform_key))
+                let key = installation.key();
+                key.os == os && arch.is_compatible(key.arch) && key.libc == libc
             });
 
         Ok(iter)
@@ -583,14 +582,6 @@ impl ManagedPythonInstallation {
         // Do not upgrade if the patch versions are the same
         self.key.patch != other.key.patch
     }
-}
-
-/// Generate a platform portion of a key from the environment.
-fn platform_key_from_env() -> Result<String, Error> {
-    let os = Os::from_env();
-    let arch = Arch::from_env();
-    let libc = Libc::from_env()?;
-    Ok(format!("{os}-{arch}-{libc}").to_lowercase())
 }
 
 impl fmt::Display for ManagedPythonInstallation {
