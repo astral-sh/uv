@@ -34,6 +34,16 @@ pub enum VersionsResponse {
 pub enum MetadataResponse {
     /// The wheel metadata was found and parsed successfully.
     Found(ArchiveMetadata),
+    /// A non-fatal error.
+    Unavailable(MetadataUnavailable),
+    /// The distribution could not be built or downloaded, a fatal error.
+    Error(Box<Dist>, Arc<uv_distribution::Error>),
+}
+
+#[derive(Debug)]
+pub enum MetadataUnavailable {
+    /// The wheel metadata was not found in the cache and the network is not available.
+    Offline,
     /// The wheel metadata was not found.
     MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
@@ -42,13 +52,9 @@ pub enum MetadataResponse {
     InconsistentMetadata(Box<uv_distribution::Error>),
     /// The wheel has an invalid structure.
     InvalidStructure(Box<uv_metadata::Error>),
-    /// The wheel metadata was not found in the cache and the network is not available.
-    Offline,
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers, Version),
-    /// The distribution could not be built or downloaded.
-    Error(Box<Dist>, Arc<uv_distribution::Error>),
 }
 
 pub trait ResolverProvider {
@@ -189,29 +195,37 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => match client.into_kind() {
-                    uv_client::ErrorKind::Offline(_) => Ok(MetadataResponse::Offline),
-                    uv_client::ErrorKind::MetadataParseError(_, _, err) => {
-                        Ok(MetadataResponse::InvalidMetadata(err))
+                    uv_client::ErrorKind::Offline(_) => {
+                        Ok(MetadataResponse::Unavailable(MetadataUnavailable::Offline))
                     }
-                    uv_client::ErrorKind::Metadata(_, err) => {
-                        Ok(MetadataResponse::InvalidStructure(Box::new(err)))
-                    }
+                    uv_client::ErrorKind::MetadataParseError(_, _, err) => Ok(
+                        MetadataResponse::Unavailable(MetadataUnavailable::InvalidMetadata(err)),
+                    ),
+                    uv_client::ErrorKind::Metadata(_, err) => Ok(MetadataResponse::Unavailable(
+                        MetadataUnavailable::InvalidStructure(Box::new(err)),
+                    )),
                     kind => Err(uv_client::Error::from(kind).into()),
                 },
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {
-                    Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
+                    Ok(MetadataResponse::Unavailable(
+                        MetadataUnavailable::InconsistentMetadata(Box::new(err)),
+                    ))
                 }
                 uv_distribution::Error::WheelMetadataNameMismatch { .. } => {
-                    Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
+                    Ok(MetadataResponse::Unavailable(
+                        MetadataUnavailable::InconsistentMetadata(Box::new(err)),
+                    ))
                 }
-                uv_distribution::Error::Metadata(err) => {
-                    Ok(MetadataResponse::InvalidMetadata(Box::new(err)))
-                }
-                uv_distribution::Error::WheelMetadata(_, err) => {
-                    Ok(MetadataResponse::InvalidStructure(err))
-                }
+                uv_distribution::Error::Metadata(err) => Ok(MetadataResponse::Unavailable(
+                    MetadataUnavailable::InvalidMetadata(Box::new(err)),
+                )),
+                uv_distribution::Error::WheelMetadata(_, err) => Ok(MetadataResponse::Unavailable(
+                    MetadataUnavailable::InvalidStructure(err),
+                )),
                 uv_distribution::Error::RequiresPython(requires_python, version) => {
-                    Ok(MetadataResponse::RequiresPython(requires_python, version))
+                    Ok(MetadataResponse::Unavailable(
+                        MetadataUnavailable::RequiresPython(requires_python, version),
+                    ))
                 }
                 err => Ok(MetadataResponse::Error(
                     Box::new(dist.clone()),
