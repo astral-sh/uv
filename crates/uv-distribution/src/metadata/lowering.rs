@@ -12,7 +12,7 @@ use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
 use uv_pypi_types::{
     ConflictItem, ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl,
 };
@@ -200,7 +200,8 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            let source = url_source(url, subdirectory.map(PathBuf::from))?;
+                            let source =
+                                url_source(&requirement, url, subdirectory.map(PathBuf::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -436,7 +437,8 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            let source = url_source(url, subdirectory.map(PathBuf::from))?;
+                            let source =
+                                url_source(&requirement, url, subdirectory.map(PathBuf::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -531,6 +533,8 @@ pub enum LoweringError {
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
+    #[error("`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)")]
+    MissingGitSource(PackageName, Url),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
     #[error("Editable must refer to a local directory, not a file: `{0}`")]
@@ -605,7 +609,11 @@ fn git_source(
 }
 
 /// Convert a URL source into a [`RequirementSource`].
-fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSource, LoweringError> {
+fn url_source(
+    requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
+    url: Url,
+    subdirectory: Option<PathBuf>,
+) -> Result<RequirementSource, LoweringError> {
     let mut verbatim_url = url.clone();
     if verbatim_url.fragment().is_some() {
         return Err(LoweringError::ForbiddenFragment(url));
@@ -617,8 +625,18 @@ fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSour
         verbatim_url.set_fragment(Some(subdirectory));
     }
 
-    let ext = DistExtension::from_path(url.path())
-        .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
+    let ext = match DistExtension::from_path(url.path()) {
+        Ok(ext) => ext,
+        Err(..) if looks_like_git_repository(&url) => {
+            return Err(LoweringError::MissingGitSource(
+                requirement.name.clone(),
+                url.clone(),
+            ))
+        }
+        Err(err) => {
+            return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err).into());
+        }
+    };
 
     let verbatim_url = VerbatimUrl::from_url(verbatim_url);
     Ok(RequirementSource::Url {

@@ -42,7 +42,8 @@ pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use uv_pep440;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 pub use verbatim_url::{
-    expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,
+    expand_env_vars, looks_like_git_repository, split_scheme, strip_host, Scheme, VerbatimUrl,
+    VerbatimUrlError,
 };
 
 mod cursor;
