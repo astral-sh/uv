@@ -563,14 +563,18 @@ fn python_find_unsupported_version() {
 
 #[test]
 fn python_find_venv_invalid() {
-    let context: TestContext = TestContext::new("3.12");
+    let context: TestContext = TestContext::new("3.12")
+        // Enable additional filters for Windows compatibility
+        .with_filtered_exe_suffix()
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
 
     // We find the virtual environment
     uv_snapshot!(context.filters(), context.python_find(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
-    [VENV]/bin/python3
+    [VENV]/[BIN]/python
 
     ----- stderr -----
     "###);
@@ -584,8 +588,8 @@ fn python_find_venv_invalid() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
-      Caused by: Python interpreter not found at `[VENV]/bin/python3`
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
     "###);
 
     // Unless the virtual environment is not active
