@@ -47,7 +47,10 @@ impl InstallRequest {
         // Make sure the request is a valid download request and fill platform information
         let download_request = PythonDownloadRequest::from_request(&request)
             .ok_or_else(|| {
-                anyhow::anyhow!("Cannot download managed Python for request: {request}")
+                anyhow::anyhow!(
+                    "`{}` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions",
+                    request.to_canonical_string()
+                )
             })?
             .fill()?;
 
