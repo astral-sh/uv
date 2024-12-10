@@ -26,7 +26,7 @@ use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
-use uv_distribution_filename::{SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{EggInfoFilename, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
     PathSourceUrl, SourceDist, SourceUrl,
@@ -1973,10 +1973,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(metadata) => {
                 debug!("Found static `pyproject.toml` for: {source}");
 
-                // Validate the metadata.
-                validate_metadata(source, &metadata)?;
-
-                return Ok(Some(metadata));
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `pyproject.toml` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
             }
             Err(
                 err @ (Error::MissingPyprojectToml
@@ -2003,10 +2011,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(metadata) => {
                 debug!("Found static `PKG-INFO` for: {source}");
 
-                // Validate the metadata.
-                validate_metadata(source, &metadata)?;
-
-                return Ok(Some(metadata));
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `PKG-INFO` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
             }
             Err(
                 err @ (Error::MissingPkgInfo
@@ -2023,14 +2039,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Attempt to read static metadata from the `egg-info` directory.
-        match read_egg_info(source_root, subdirectory).await {
+        match read_egg_info(source_root, subdirectory, source.name(), source.version()).await {
             Ok(metadata) => {
                 debug!("Found static `egg-info` for: {source}");
 
-                // Validate the metadata.
-                validate_metadata(source, &metadata)?;
-
-                return Ok(Some(metadata));
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `egg-info` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
             }
             Err(
                 err @ (Error::MissingEggInfo
@@ -2292,8 +2316,14 @@ impl LocalRevisionPointer {
 async fn read_egg_info(
     source_tree: &Path,
     subdirectory: Option<&Path>,
+    name: Option<&PackageName>,
+    version: Option<&Version>,
 ) -> Result<ResolutionMetadata, Error> {
-    fn find_egg_info(source_tree: &Path) -> std::io::Result<Option<PathBuf>> {
+    fn find_egg_info(
+        source_tree: &Path,
+        name: Option<&PackageName>,
+        version: Option<&Version>,
+    ) -> std::io::Result<Option<PathBuf>> {
         for entry in fs_err::read_dir(source_tree)? {
             let entry = entry?;
             let ty = entry.file_type()?;
@@ -2303,6 +2333,27 @@ async fn read_egg_info(
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("egg-info"))
                 {
+                    let Some(file_stem) = path.file_stem() else {
+                        continue;
+                    };
+                    let Some(file_stem) = file_stem.to_str() else {
+                        continue;
+                    };
+                    let Ok(file_name) = EggInfoFilename::parse(file_stem) else {
+                        continue;
+                    };
+                    if let Some(name) = name {
+                        debug!("Skipping `{file_stem}.egg-info` due to name mismatch (expected: `{name}`)");
+                        if file_name.name != *name {
+                            continue;
+                        }
+                    }
+                    if let Some(version) = version {
+                        if file_name.version.as_ref().is_some_and(|v| v != version) {
+                            debug!("Skipping `{file_stem}.egg-info` due to version mismatch (expected: `{version}`)");
+                            continue;
+                        }
+                    }
                     return Ok(Some(path));
                 }
             }
@@ -2316,7 +2367,7 @@ async fn read_egg_info(
     };
 
     // Locate the `egg-info` directory.
-    let egg_info = match find_egg_info(directory.as_ref()) {
+    let egg_info = match find_egg_info(directory.as_ref(), name, version) {
         Ok(Some(path)) => path,
         Ok(None) => return Err(Error::MissingEggInfo),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
