@@ -145,6 +145,12 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
+    pub fn with_any_arch(mut self) -> Self {
+        self.arch = None;
+        self
+    }
+
+    #[must_use]
     pub fn with_os(mut self, os: Os) -> Self {
         self.os = Some(os);
         self

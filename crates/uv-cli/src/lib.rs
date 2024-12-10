@@ -4222,6 +4222,12 @@ pub struct PythonListArgs {
     #[arg(long)]
     pub all_platforms: bool,
 
+    /// List Python downloads for all architectures.
+    ///
+    /// By default, only downloads for the current architecture are shown.
+    #[arg(long, alias = "all_architectures")]
+    pub all_arches: bool,
+
     /// Only show installed Python versions, exclude available downloads.
     ///
     /// By default, available downloads for the current platform are shown.

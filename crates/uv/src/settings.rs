@@ -715,6 +715,7 @@ pub(crate) enum PythonListKinds {
 pub(crate) struct PythonListSettings {
     pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
+    pub(crate) all_arches: bool,
     pub(crate) all_versions: bool,
     pub(crate) show_urls: bool,
 }
@@ -726,6 +727,7 @@ impl PythonListSettings {
         let PythonListArgs {
             all_versions,
             all_platforms,
+            all_arches,
             only_installed,
             only_downloads,
             show_urls,
@@ -742,6 +744,7 @@ impl PythonListSettings {
         Self {
             kinds,
             all_platforms,
+            all_arches,
             all_versions,
             show_urls,
         }
