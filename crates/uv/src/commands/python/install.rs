@@ -180,7 +180,7 @@ pub(crate) async fn install(
     // Read the existing installations, lock the directory for the duration
     let installations = ManagedPythonInstallations::from_settings()?.init()?;
     let installations_dir = installations.root();
-    let cache_dir = installations.cache();
+    let scratch_dir = installations.scratch();
     let _lock = installations.lock().await?;
     let existing_installations: Vec<_> = installations
         .find_all()?
@@ -259,7 +259,7 @@ pub(crate) async fn install(
                     .fetch_with_retry(
                         &client,
                         installations_dir,
-                        &cache_dir,
+                        &scratch_dir,
                         reinstall,
                         python_install_mirror.as_deref(),
                         pypy_install_mirror.as_deref(),
