@@ -140,7 +140,7 @@ impl EnvVars {
 
     /// Equivalent to the `--index` command-line argument in `uv publish`. If
     /// set, uv the index with this name in the configuration for publishing.
-    pub const UV_PUBLISH_INDEX: &'static str = "UV_PUBLISH_INDEx";
+    pub const UV_PUBLISH_INDEX: &'static str = "UV_PUBLISH_INDEX";
 
     /// Equivalent to the `--username` command-line argument in `uv publish`. If
     /// set, uv will use this username for publishing.
