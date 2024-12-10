@@ -135,10 +135,7 @@ Ok(
                         simplified_marker: SimplifiedMarkerTree(
                             true,
                         ),
-                        complexified_marker: UniversalMarker {
-                            pep508_marker: python_full_version >= '3.12',
-                            conflict_marker: true,
-                        },
+                        complexified_marker: python_full_version >= '3.12',
                     },
                 ],
                 optional_dependencies: {},

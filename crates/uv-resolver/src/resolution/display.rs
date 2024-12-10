@@ -66,7 +66,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         for fork_marker in &underlying.fork_markers {
             assert!(
                 fork_marker.conflict().is_true(),
-                "found fork marker {fork_marker} with non-trivial conflicting marker, \
+                "found fork marker {fork_marker:?} with non-trivial conflicting marker, \
                  cannot display resolver output with conflicts in requirements.txt format",
             );
         }
