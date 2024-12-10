@@ -393,6 +393,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
+
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
         let cache_shard = if config_settings.is_empty() {
@@ -495,6 +505,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
+
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
 
         // If the metadata is static, return it.
         if let Some(metadata) =
@@ -1303,6 +1323,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?;
 
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = resource.subdirectory {
+            if !fetch.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    resource.url.to_url(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -1390,6 +1420,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?;
 
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = resource.subdirectory {
+            if !fetch.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    resource.url.to_url(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -1438,12 +1478,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
                 .filter(|metadata| metadata.matches(source.name(), source.version()))
             {
-                let path = if let Some(subdirectory) = resource.subdirectory {
-                    Cow::Owned(fetch.path().join(subdirectory))
-                } else {
-                    Cow::Borrowed(fetch.path())
-                };
-
                 let git_member = GitWorkspaceMember {
                     fetch_root: fetch.path(),
                     git_source: resource,

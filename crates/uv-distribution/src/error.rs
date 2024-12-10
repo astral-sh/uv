@@ -92,6 +92,8 @@ pub enum Error {
     MissingEggInfo,
     #[error("The source distribution is missing a `requires.txt` file")]
     MissingRequiresTxt,
+    #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
+    MissingSubdirectory(Url, PathBuf),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("Failed to extract metadata from `requires.txt`")]
