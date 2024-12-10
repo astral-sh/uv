@@ -137,7 +137,7 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
-        let cache_dir = installations.cache();
+        let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
         let download = ManagedPythonDownload::from_request(&request)?;
@@ -148,7 +148,7 @@ impl PythonInstallation {
             .fetch_with_retry(
                 &client,
                 installations_dir,
-                &cache_dir,
+                &scratch_dir,
                 false,
                 python_install_mirror,
                 pypy_install_mirror,
