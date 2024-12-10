@@ -13,10 +13,29 @@ pub enum Error {
     UnknownArch(String),
     #[error("Unknown libc environment: {0}")]
     UnknownLibc(String),
+    #[error("Unsupported variant `{0}` for architecture `{1}`")]
+    UnsupportedVariant(String, String),
+}
+
+/// Architecture variants, e.g., with support for different instruction sets
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+pub enum ArchVariant {
+    /// Targets 64-bit Intel/AMD CPUs newer than Nehalem (2008).
+    /// Includes SSE3, SSE4 and other post-2003 CPU instructions.
+    V2,
+    /// Targets 64-bit Intel/AMD CPUs newer than Haswell (2013) and Excavator (2015).
+    /// Includes AVX, AVX2, MOVBE and other newer CPU instructions.
+    V3,
+    /// Targets 64-bit Intel/AMD CPUs with AVX-512 instructions (post-2017 Intel CPUs).
+    /// Many post-2017 Intel CPUs do not support AVX-512.
+    V4,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
-pub struct Arch(pub(crate) target_lexicon::Architecture);
+pub struct Arch {
+    pub(crate) family: target_lexicon::Architecture,
+    pub(crate) variant: Option<ArchVariant>,
+}
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Os(pub(crate) target_lexicon::OperatingSystem);
@@ -78,7 +97,10 @@ impl Os {
 
 impl Arch {
     pub fn from_env() -> Self {
-        Self(target_lexicon::HOST.architecture)
+        Self {
+            family: target_lexicon::HOST.architecture,
+            variant: None,
+        }
     }
 }
 
@@ -102,12 +124,16 @@ impl Display for Os {
 
 impl Display for Arch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &**self {
+        match self.family {
             target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686) => {
-                write!(f, "x86")
+                write!(f, "x86")?;
             }
-            inner => write!(f, "{inner}"),
+            inner => write!(f, "{inner}")?,
         }
+        if let Some(variant) = self.variant {
+            write!(f, "_{variant}")?;
+        }
+        Ok(())
     }
 }
 
@@ -131,25 +157,69 @@ impl FromStr for Arch {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let inner = match s {
-            // Allow users to specify "x86" as a shorthand for the "i686" variant, they should not need
-            // to specify the exact architecture and this variant is what we have downloads for.
-            "x86" => target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
-            _ => target_lexicon::Architecture::from_str(s)
-                .map_err(|()| Error::UnknownArch(s.to_string()))?,
-        };
-        if matches!(inner, target_lexicon::Architecture::Unknown) {
-            return Err(Error::UnknownArch(s.to_string()));
+        fn parse_family(s: &str) -> Result<target_lexicon::Architecture, Error> {
+            let inner = match s {
+                // Allow users to specify "x86" as a shorthand for the "i686" variant, they should not need
+                // to specify the exact architecture and this variant is what we have downloads for.
+                "x86" => {
+                    target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686)
+                }
+                _ => target_lexicon::Architecture::from_str(s)
+                    .map_err(|()| Error::UnknownArch(s.to_string()))?,
+            };
+            if matches!(inner, target_lexicon::Architecture::Unknown) {
+                return Err(Error::UnknownArch(s.to_string()));
+            }
+            Ok(inner)
         }
-        Ok(Self(inner))
+
+        // First check for a variant
+        if let Some((Ok(family), Ok(variant))) = s
+            .rsplit_once('_')
+            .map(|(family, variant)| (parse_family(family), ArchVariant::from_str(variant)))
+        {
+            // We only support variants for `x86_64` right now
+            if !matches!(family, target_lexicon::Architecture::X86_64) {
+                return Err(Error::UnsupportedVariant(
+                    variant.to_string(),
+                    family.to_string(),
+                ));
+            }
+            return Ok(Self {
+                family,
+                variant: Some(variant),
+            });
+        }
+
+        let family = parse_family(s)?;
+
+        Ok(Self {
+            family,
+            variant: None,
+        })
     }
 }
 
-impl Deref for Arch {
-    type Target = target_lexicon::Architecture;
+impl FromStr for ArchVariant {
+    type Err = ();
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "v2" => Ok(Self::V2),
+            "v3" => Ok(Self::V3),
+            "v4" => Ok(Self::V4),
+            _ => Err(()),
+        }
+    }
+}
+
+impl Display for ArchVariant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::V2 => write!(f, "v2"),
+            Self::V3 => write!(f, "v3"),
+            Self::V4 => write!(f, "v4"),
+        }
     }
 }
 
@@ -164,25 +234,48 @@ impl Deref for Os {
 impl From<&uv_platform_tags::Arch> for Arch {
     fn from(value: &uv_platform_tags::Arch) -> Self {
         match value {
-            uv_platform_tags::Arch::Aarch64 => Self(target_lexicon::Architecture::Aarch64(
-                target_lexicon::Aarch64Architecture::Aarch64,
-            )),
-            uv_platform_tags::Arch::Armv6L => Self(target_lexicon::Architecture::Arm(
-                target_lexicon::ArmArchitecture::Armv6,
-            )),
-            uv_platform_tags::Arch::Armv7L => Self(target_lexicon::Architecture::Arm(
-                target_lexicon::ArmArchitecture::Armv7,
-            )),
-            uv_platform_tags::Arch::S390X => Self(target_lexicon::Architecture::S390x),
-            uv_platform_tags::Arch::Powerpc64 => Self(target_lexicon::Architecture::Powerpc64),
-            uv_platform_tags::Arch::Powerpc64Le => Self(target_lexicon::Architecture::Powerpc64le),
-            uv_platform_tags::Arch::X86 => Self(target_lexicon::Architecture::X86_32(
-                target_lexicon::X86_32Architecture::I686,
-            )),
-            uv_platform_tags::Arch::X86_64 => Self(target_lexicon::Architecture::X86_64),
-            uv_platform_tags::Arch::Riscv64 => Self(target_lexicon::Architecture::Riscv64(
-                target_lexicon::Riscv64Architecture::Riscv64,
-            )),
+            uv_platform_tags::Arch::Aarch64 => Self {
+                family: target_lexicon::Architecture::Aarch64(
+                    target_lexicon::Aarch64Architecture::Aarch64,
+                ),
+                variant: None,
+            },
+            uv_platform_tags::Arch::Armv6L => Self {
+                family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv6),
+                variant: None,
+            },
+            uv_platform_tags::Arch::Armv7L => Self {
+                family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
+                variant: None,
+            },
+            uv_platform_tags::Arch::S390X => Self {
+                family: target_lexicon::Architecture::S390x,
+                variant: None,
+            },
+            uv_platform_tags::Arch::Powerpc64 => Self {
+                family: target_lexicon::Architecture::Powerpc64,
+                variant: None,
+            },
+            uv_platform_tags::Arch::Powerpc64Le => Self {
+                family: target_lexicon::Architecture::Powerpc64le,
+                variant: None,
+            },
+            uv_platform_tags::Arch::X86 => Self {
+                family: target_lexicon::Architecture::X86_32(
+                    target_lexicon::X86_32Architecture::I686,
+                ),
+                variant: None,
+            },
+            uv_platform_tags::Arch::X86_64 => Self {
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            uv_platform_tags::Arch::Riscv64 => Self {
+                family: target_lexicon::Architecture::Riscv64(
+                    target_lexicon::Riscv64Architecture::Riscv64,
+                ),
+                variant: None,
+            },
         }
     }
 }

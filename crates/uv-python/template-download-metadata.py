@@ -62,17 +62,23 @@ def prepare_variant(variant: str | None) -> str | None:
             raise ValueError(f"Unknown variant: {variant}")
 
 
-def prepare_arch(arch: str) -> str:
-    match arch:
+def prepare_arch(arch: dict) -> tuple[str, str]:
+    match arch["family"]:
         # Special constructors
         case "i686":
-            return "X86_32(target_lexicon::X86_32Architecture::I686)"
+            family = "X86_32(target_lexicon::X86_32Architecture::I686)"
         case "aarch64":
-            return "Aarch64(target_lexicon::Aarch64Architecture::Aarch64)"
+            family = "Aarch64(target_lexicon::Aarch64Architecture::Aarch64)"
         case "armv7":
-            return "Arm(target_lexicon::ArmArchitecture::Armv7)"
-        case _:
-            return arch.capitalize()
+            family = "Arm(target_lexicon::ArmArchitecture::Armv7)"
+        case value:
+            family = value.capitalize()
+    variant = (
+        f"Some(ArchVariant::{arch['variant'].capitalize()})"
+        if arch["variant"]
+        else "None"
+    )
+    return family, variant
 
 
 def prepare_prerelease(prerelease: str) -> str:
@@ -86,7 +92,7 @@ def prepare_prerelease(prerelease: str) -> str:
 
 def prepare_value(value: dict) -> dict:
     value["os"] = value["os"].title()
-    value["arch"] = prepare_arch(value["arch"])
+    value["arch_family"], value["arch_variant"] = prepare_arch(value["arch"])
     value["name"] = prepare_name(value["name"])
     value["libc"] = prepare_libc(value["libc"])
     value["prerelease"] = prepare_prerelease(value["prerelease"])
