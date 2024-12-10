@@ -4225,8 +4225,20 @@ pub struct PythonListArgs {
     /// Only show installed Python versions, exclude available downloads.
     ///
     /// By default, available downloads for the current platform are shown.
-    #[arg(long)]
+    #[arg(long, conflicts_with("only_downloads"))]
     pub only_installed: bool,
+
+    /// Only show Python downloads, exclude installed distributions.
+    ///
+    /// By default, available downloads for the current platform are shown.
+    #[arg(long, conflicts_with("only_installed"))]
+    pub only_downloads: bool,
+
+    /// Show the URLs of available Python downloads.
+    ///
+    /// By default, these display as `<download available>`.
+    #[arg(long)]
+    pub show_urls: bool,
 }
 
 #[derive(Args)]
