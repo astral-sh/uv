@@ -17,6 +17,7 @@ on:
       # When we change project metadata, we want to ensure that the maturin builds still work.
       - pyproject.toml
       - Cargo.toml
+      - Cargo.lock
       # And when we change this workflow itself...
       - .github/workflows/build-binaries.yml
 
