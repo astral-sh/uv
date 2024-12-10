@@ -1160,11 +1160,16 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     //   `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe`
     let mut components = path.components().rev();
 
-    // Ex) `python.exe` or `python3.exe`
+    // Ex) `python.exe`, `python3.exe`, `python3.12.exe`, etc.
     if !components
         .next()
         .and_then(|component| component.as_os_str().to_str())
-        .is_some_and(|component| component == "python.exe" || component == "python3.exe")
+        .is_some_and(|component| {
+            component.starts_with("python")
+                && std::path::Path::new(component)
+                    .extension()
+                    .map_or(false, |ext| ext.eq_ignore_ascii_case("exe"))
+        })
     {
         return false;
     }
