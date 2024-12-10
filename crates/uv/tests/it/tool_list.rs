@@ -305,3 +305,82 @@ fn tool_list_show_version_specifiers() {
     ----- stderr -----
     "#);
 }
+
+#[test]
+fn tool_list_outdated() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install an outdated version of `black`.
+    context
+        .tool_install()
+        .arg("black<24.3.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+    // Install the latest version of `flask`.
+    context
+        .tool_install()
+        .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_list().arg("--outdated")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 (latest: v24.3.0)
+    - black
+    - blackd
+
+    ----- stderr -----
+    "#);
+
+    // with version specifiers
+    uv_snapshot!(context.filters(), context.tool_list().arg("--outdated").arg("--show-version-specifiers")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: <24.3.0] (latest: v24.3.0)
+    - black
+    - blackd
+
+    ----- stderr -----
+    "#);
+
+    // with paths
+    uv_snapshot!(context.filters(), context.tool_list().arg("--outdated").arg("--show-paths")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 (latest: v24.3.0) ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+
+    ----- stderr -----
+    "#);
+
+    // with specifiers and paths
+    uv_snapshot!(context.filters(), context.tool_list().arg("--outdated").arg("--show-version-specifiers").arg("--show-paths")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: <24.3.0] (latest: v24.3.0) ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+
+    ----- stderr -----
+    "#);
+}
