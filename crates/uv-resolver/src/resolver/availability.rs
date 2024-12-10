@@ -24,8 +24,8 @@ impl Display for UnavailableReason {
 /// The package version is unavailable and cannot be used. Unlike [`PackageUnavailable`], this
 /// applies to a single version of the package.
 ///
-/// Most variant are from [`MetadataResponse`] without the error source (since we don't format
-/// the source).
+/// Most variant are from [`MetadataResponse`] without the error source, since we don't format
+/// the source and we want to merge unavailable messages across versions.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum UnavailableVersion {
     /// Version is incompatible because it has no usable distributions

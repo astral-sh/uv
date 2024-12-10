@@ -10,6 +10,7 @@ use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::flat_index::FlatIndex;
+use crate::resolver::UnavailablePackage;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 use crate::{ExcludeNewer, RequiresPython};
@@ -55,6 +56,27 @@ pub enum MetadataUnavailable {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers, Version),
+}
+
+impl MetadataUnavailable {
+    pub(crate) fn to_unavailable_package(&self) -> UnavailablePackage {
+        match self {
+            MetadataUnavailable::Offline => UnavailablePackage::Offline,
+            MetadataUnavailable::MissingMetadata => UnavailablePackage::MissingMetadata,
+            MetadataUnavailable::InvalidMetadata(err) => {
+                UnavailablePackage::InvalidMetadata(err.to_string())
+            }
+            MetadataUnavailable::InconsistentMetadata(err) => {
+                UnavailablePackage::InvalidMetadata(err.to_string())
+            }
+            MetadataUnavailable::InvalidStructure(err) => {
+                UnavailablePackage::InvalidStructure(err.to_string())
+            }
+            MetadataUnavailable::RequiresPython(..) => {
+                unreachable!("`requires-python` is only known upfront for registry distributions")
+            }
+        }
+    }
 }
 
 pub trait ResolverProvider {

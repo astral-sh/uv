@@ -922,27 +922,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let metadata = match &*response {
             MetadataResponse::Found(archive) => &archive.metadata,
             MetadataResponse::Unavailable(reason) => {
-                let unavailable_reason = match reason {
-                    MetadataUnavailable::Offline => UnavailablePackage::Offline,
-                    MetadataUnavailable::MissingMetadata => UnavailablePackage::MissingMetadata,
-                    MetadataUnavailable::InvalidMetadata(err) => {
-                        UnavailablePackage::InvalidMetadata(err.to_string())
-                    }
-                    MetadataUnavailable::InconsistentMetadata(err) => {
-                        UnavailablePackage::InvalidMetadata(err.to_string())
-                    }
-                    MetadataUnavailable::InvalidStructure(err) => {
-                        UnavailablePackage::InvalidStructure(err.to_string())
-                    }
-                    MetadataUnavailable::RequiresPython(..) => {
-                        unreachable!(
-                            "`requires-python` is only known upfront for registry distributions"
-                        )
-                    }
-                };
-
                 self.unavailable_packages
-                    .insert(name.clone(), unavailable_reason);
+                    .insert(name.clone(), reason.to_unavailable_package());
                 return Ok(None);
             }
             MetadataResponse::Error(dist, err) => {
