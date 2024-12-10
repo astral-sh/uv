@@ -466,8 +466,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .boxed_local()
             .await?;
 
-        // Validate that the metadata is consistent with the distribution.
-
         Ok(metadata)
     }
 
