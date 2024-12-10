@@ -118,6 +118,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -272,6 +273,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -427,6 +429,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -614,6 +617,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -906,6 +910,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1085,6 +1090,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -1113,6 +1119,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1271,6 +1278,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -1299,6 +1307,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -1327,6 +1336,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -1507,6 +1517,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 no_index: true,
@@ -1826,6 +1837,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -1854,6 +1866,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -2008,6 +2021,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -2036,6 +2050,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -3089,6 +3104,7 @@ fn resolve_both() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -3366,6 +3382,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4058,6 +4075,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -4086,6 +4104,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4242,6 +4261,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -4270,6 +4290,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4432,6 +4453,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -4460,6 +4482,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4617,6 +4640,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -4645,6 +4669,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4809,6 +4834,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -4837,6 +4863,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
@@ -4994,6 +5021,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        publish_url: None,
                     },
                     Index {
                         name: None,
@@ -5022,6 +5050,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        publish_url: None,
                     },
                 ],
                 flat_index: [],
