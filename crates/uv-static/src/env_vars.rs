@@ -138,6 +138,10 @@ impl EnvVars {
     /// will use this token (with the username `__token__`) for publishing.
     pub const UV_PUBLISH_TOKEN: &'static str = "UV_PUBLISH_TOKEN";
 
+    /// Equivalent to the `--index` command-line argument in `uv publish`. If
+    /// set, uv the index with this name in the configuration for publishing.
+    pub const UV_PUBLISH_INDEX: &'static str = "UV_PUBLISH_INDEX";
+
     /// Equivalent to the `--username` command-line argument in `uv publish`. If
     /// set, uv will use this username for publishing.
     pub const UV_PUBLISH_USERNAME: &'static str = "UV_PUBLISH_USERNAME";

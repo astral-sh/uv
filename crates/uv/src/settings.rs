@@ -2854,12 +2854,16 @@ pub(crate) struct PublishSettings {
     pub(crate) files: Vec<String>,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
+    pub(crate) index: Option<String>,
 
     // Both CLI and configuration.
     pub(crate) publish_url: Url,
     pub(crate) trusted_publishing: TrustedPublishing,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) check_url: Option<IndexUrl>,
+
+    // Configuration only
+    pub(crate) index_locations: IndexLocations,
 }
 
 impl PublishSettings {
@@ -2877,7 +2881,11 @@ impl PublishSettings {
             check_url,
         } = publish;
         let ResolverInstallerOptions {
-            keyring_provider, ..
+            keyring_provider,
+            index,
+            extra_index_url,
+            index_url,
+            ..
         } = top_level;
 
         // Tokens are encoded in the same way as username/password
@@ -2903,6 +2911,17 @@ impl PublishSettings {
                 .combine(keyring_provider)
                 .unwrap_or_default(),
             check_url: args.check_url.combine(check_url),
+            index: args.index,
+            index_locations: IndexLocations::new(
+                index
+                    .into_iter()
+                    .flatten()
+                    .chain(extra_index_url.into_iter().flatten().map(Index::from))
+                    .chain(index_url.into_iter().map(Index::from))
+                    .collect(),
+                Vec::new(),
+                false,
+            ),
         }
     }
 }

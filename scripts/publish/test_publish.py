@@ -104,6 +104,17 @@ class TargetConfiguration:
     project_name: str
     publish_url: str
     index_url: str
+    index: str | None = None
+
+    def index_declaration(self) -> str | None:
+        if not self.index:
+            return None
+        return (
+            "[[tool.uv.index]]\n"
+            + f'name = "{self.index}"\n'
+            + f'url = "{self.index_url}"\n'
+            + f'publish-url = "{self.publish_url}"\n'
+        )
 
 
 # Map CLI target name to package name and index url.
@@ -114,6 +125,7 @@ local_targets: dict[str, TargetConfiguration] = {
         "astral-test-token",
         TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
+        "test-pypi",
     ),
     "pypi-password-env": TargetConfiguration(
         "astral-test-password",
@@ -209,10 +221,12 @@ def get_filenames(url: str, client: httpx.Client) -> list[str]:
 
 
 def build_project_at_version(
-    project_name: str, version: Version, uv: Path, modified: bool = False
+    target: str, version: Version, uv: Path, modified: bool = False
 ) -> Path:
     """Build a source dist and a wheel with the project name and an unclaimed
     version."""
+    project_name = all_targets[target].project_name
+
     if modified:
         dir_name = f"{project_name}-modified"
     else:
@@ -225,7 +239,7 @@ def build_project_at_version(
         [uv, "init", "-p", PYTHON_VERSION, "--lib", "--name", project_name, dir_name],
         cwd=cwd,
     )
-    project_root.joinpath("pyproject.toml").write_text(
+    toml = (
         "[project]\n"
         + f'name = "{project_name}"\n'
         # Set to an unclaimed version
@@ -233,6 +247,10 @@ def build_project_at_version(
         # Add all supported metadata
         + PYPROJECT_TAIL
     )
+    if index_declaration := all_targets[target].index_declaration():
+        toml += index_declaration
+
+    project_root.joinpath("pyproject.toml").write_text(toml)
     shutil.copy(
         cwd.parent.parent.joinpath("LICENSE-APACHE"),
         cwd.joinpath(dir_name).joinpath("LICENSE-APACHE"),
@@ -320,7 +338,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     # The distributions are build to the dist directory of the project.
     previous_version = get_latest_version(project_name, client)
     version = get_new_version(previous_version)
-    project_dir = build_project_at_version(project_name, version, uv)
+    project_dir = build_project_at_version(target, version, uv)
 
     # Upload configuration
     publish_url = all_targets[target].publish_url
@@ -358,17 +376,28 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
                 f"---\n{output}\n---"
             )
 
-    print(f"\n=== 3. Publishing {project_name} {version} again with check URL ===")
+    mode = "index" if all_targets[target].index else "check URL"
+    print(f"\n=== 3. Publishing {project_name} {version} again with {mode} ===")
     wait_for_index(index_url, project_name, version, uv)
-    args = [
-        uv,
-        "publish",
-        "--publish-url",
-        publish_url,
-        "--check-url",
-        index_url,
-        *extra_args,
-    ]
+    # Test twine-style and index-style uploads for different packages.
+    if index := all_targets[target].index:
+        args = [
+            uv,
+            "publish",
+            "--index",
+            index,
+            *extra_args,
+        ]
+    else:
+        args = [
+            uv,
+            "publish",
+            "--publish-url",
+            publish_url,
+            "--check-url",
+            index_url,
+            *extra_args,
+        ]
     output = run(
         args, cwd=project_dir, env=env, text=True, check=True, stderr=PIPE
     ).stderr
@@ -385,9 +414,7 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
 
     # Build a different source dist and wheel at the same version, so the upload fails
     del project_dir
-    modified_project_dir = build_project_at_version(
-        project_name, version, uv, modified=True
-    )
+    modified_project_dir = build_project_at_version(target, version, uv, modified=True)
 
     print(
         f"\n=== 4. Publishing modified {project_name} {version} "
