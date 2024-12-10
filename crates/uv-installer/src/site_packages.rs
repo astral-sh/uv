@@ -215,7 +215,7 @@ impl SitePackages {
 
                 // Determine the dependencies for the given package.
                 let Ok(metadata) = distribution.metadata() else {
-                    diagnostics.push(SitePackagesDiagnostic::IncompletePackage {
+                    diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
                         package: package.clone(),
                         path: distribution.path().to_owned(),
                     });
@@ -405,7 +405,7 @@ impl IntoIterator for SitePackages {
 
 #[derive(Debug)]
 pub enum SitePackagesDiagnostic {
-    IncompletePackage {
+    MetadataUnavailable {
         /// The package that is missing metadata.
         package: PackageName,
         /// The path to the package.
@@ -445,7 +445,7 @@ impl Diagnostic for SitePackagesDiagnostic {
     /// Convert the diagnostic into a user-facing message.
     fn message(&self) -> String {
         match self {
-            Self::IncompletePackage { package, path } => format!(
+            Self::MetadataUnavailable { package, path } => format!(
                 "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.", path.display(),
             ),
             Self::IncompatiblePythonVersion {
@@ -482,7 +482,7 @@ impl Diagnostic for SitePackagesDiagnostic {
     /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
     fn includes(&self, name: &PackageName) -> bool {
         match self {
-            Self::IncompletePackage { package, .. } => name == package,
+            Self::MetadataUnavailable { package, .. } => name == package,
             Self::IncompatiblePythonVersion { package, .. } => name == package,
             Self::MissingDependency { package, .. } => name == package,
             Self::IncompatibleDependency {

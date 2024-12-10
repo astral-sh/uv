@@ -55,7 +55,7 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
-    IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
@@ -64,10 +64,10 @@ pub use crate::resolver::environment::ResolverEnvironment;
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
+pub(crate) use provider::MetadataUnavailable;
 
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
-use crate::resolver::provider::MetadataUnavailable;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
@@ -119,7 +119,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     /// Incompatibilities for packages that are entirely unavailable.
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: DashMap<PackageName, DashMap<Version, IncompletePackage>>,
+    incomplete_packages: DashMap<PackageName, DashMap<Version, MetadataUnavailable>>,
     /// The options that were used to configure this resolver.
     options: Options,
     /// The reporter to use for this resolver.
@@ -1292,34 +1292,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Unavailable(err) => {
-                        let (incomplete_reason, unavailable_reason) = match err {
-                            MetadataUnavailable::Offline => {
-                                (IncompletePackage::Offline, UnavailableVersion::Offline)
+                        let unavailable_reason = match err {
+                            MetadataUnavailable::Offline => UnavailableVersion::Offline,
+                            MetadataUnavailable::MissingMetadata => {
+                                UnavailableVersion::MissingMetadata
                             }
-                            MetadataUnavailable::MissingMetadata => (
-                                IncompletePackage::MissingMetadata,
-                                UnavailableVersion::MissingMetadata,
-                            ),
                             MetadataUnavailable::InvalidMetadata(err) => {
                                 warn!("Unable to extract metadata for {name}: {err}");
-                                (
-                                    IncompletePackage::InvalidMetadata(err.to_string()),
-                                    UnavailableVersion::InvalidMetadata,
-                                )
+                                UnavailableVersion::InvalidMetadata
                             }
                             MetadataUnavailable::InconsistentMetadata(err) => {
                                 warn!("Unable to extract metadata for {name}: {err}");
-                                (
-                                    IncompletePackage::InconsistentMetadata(err.to_string()),
-                                    UnavailableVersion::InconsistentMetadata,
-                                )
+                                UnavailableVersion::InconsistentMetadata
                             }
                             MetadataUnavailable::InvalidStructure(err) => {
                                 warn!("Unable to extract metadata for {name}: {err}");
-                                (
-                                    IncompletePackage::InvalidStructure(err.to_string()),
-                                    UnavailableVersion::InvalidStructure,
-                                )
+                                UnavailableVersion::InvalidStructure
                             }
                             MetadataUnavailable::RequiresPython(
                                 requires_python,
@@ -1332,19 +1320,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         python_version.clone()
                                     )
                                 );
-                                (
-                                    IncompletePackage::RequiresPython(
-                                        requires_python.clone(),
-                                        python_version.clone(),
-                                    ),
-                                    UnavailableVersion::RequiresPython(requires_python.clone()),
-                                )
+                                UnavailableVersion::RequiresPython(requires_python.clone())
                             }
                         };
                         self.incomplete_packages
                             .entry(name.clone())
                             .or_default()
-                            .insert(version.clone(), incomplete_reason);
+                            .insert(version.clone(), err.clone());
                         return Ok(Dependencies::Unavailable(unavailable_reason));
                     }
                     MetadataResponse::Error(dist, err) => {

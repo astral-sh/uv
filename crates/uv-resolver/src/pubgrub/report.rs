@@ -18,7 +18,7 @@ use crate::error::ErrorTree;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
-use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
+use crate::resolver::{MetadataUnavailable, UnavailablePackage, UnavailableReason};
 use crate::{Flexibility, Options, RequiresPython, ResolverEnvironment};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
@@ -548,7 +548,7 @@ impl PubGrubReportFormatter<'_> {
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         workspace_members: &BTreeSet<PackageName>,
@@ -679,7 +679,7 @@ impl PubGrubReportFormatter<'_> {
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let no_find_links = index_locations.flat_indexes().peekable().peek().is_none();
@@ -720,37 +720,37 @@ impl PubGrubReportFormatter<'_> {
             for (version, incomplete) in versions.iter().rev() {
                 if set.contains(version) {
                     match incomplete {
-                        IncompletePackage::Offline => {
+                        MetadataUnavailable::Offline => {
                             hints.insert(PubGrubHint::Offline);
                         }
-                        IncompletePackage::MissingMetadata => {
+                        MetadataUnavailable::MissingMetadata => {
                             hints.insert(PubGrubHint::MissingVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
                             });
                         }
-                        IncompletePackage::InvalidMetadata(reason) => {
+                        MetadataUnavailable::InvalidMetadata(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                reason: reason.to_string(),
                             });
                         }
-                        IncompletePackage::InconsistentMetadata(reason) => {
+                        MetadataUnavailable::InconsistentMetadata(reason) => {
                             hints.insert(PubGrubHint::InconsistentVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                reason: reason.to_string(),
                             });
                         }
-                        IncompletePackage::InvalidStructure(reason) => {
+                        MetadataUnavailable::InvalidStructure(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionStructure {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.clone(),
+                                reason: reason.to_string(),
                             });
                         }
-                        IncompletePackage::RequiresPython(requires_python, python_version) => {
+                        MetadataUnavailable::RequiresPython(requires_python, python_version) => {
                             hints.insert(PubGrubHint::IncompatibleBuildRequirement {
                                 package: package.clone(),
                                 version: version.clone(),

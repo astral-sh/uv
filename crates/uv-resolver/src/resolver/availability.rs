@@ -21,7 +21,7 @@ impl Display for UnavailableReason {
     }
 }
 
-/// The package version is unavailable and cannot be used. Unlike [`PackageUnavailable`], this
+/// The package version is unavailable and cannot be used. Unlike [`MetadataUnavailable`], this
 /// applies to a single version of the package.
 ///
 /// Most variant are from [`MetadataResponse`] without the error source, since we don't format
@@ -136,24 +136,6 @@ impl Display for UnavailablePackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.message())
     }
-}
-
-/// The package is unavailable at specific versions.
-#[derive(Debug, Clone)]
-pub(crate) enum IncompletePackage {
-    /// Network requests were disabled (i.e., `--offline`), and the wheel metadata was not found in the cache.
-    Offline,
-    /// The wheel metadata was not found.
-    MissingMetadata,
-    /// The wheel metadata was found, but could not be parsed.
-    InvalidMetadata(String),
-    /// The wheel metadata was found, but the metadata was inconsistent.
-    InconsistentMetadata(String),
-    /// The wheel has an invalid structure.
-    InvalidStructure(String),
-    /// The source distribution has a `requires-python` requirement that is not met by the installed
-    /// Python version (and static metadata is not available).
-    RequiresPython(VersionSpecifiers, Version),
 }
 
 #[derive(Debug, Clone)]
