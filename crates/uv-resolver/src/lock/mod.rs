@@ -618,16 +618,8 @@ impl Lock {
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                self.fork_markers
-                    .iter()
-                    .map(|marker| {
-                        // TODO(ag): Consider whether `resolution-markers` should actually
-                        // include conflicting marker info. In which case, we should serialize
-                        // the entire `UniversalMarker` (taking care to still make the PEP 508
-                        // simplified).
-                        SimplifiedMarkerTree::new(&self.requires_python, marker.pep508())
-                    })
-                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
+                deduplicated_simplified_pep508_markers(&self.fork_markers, &self.requires_python)
+                    .into_iter(),
             );
             if !fork_markers.is_empty() {
                 doc.insert("resolution-markers", value(fork_markers));
@@ -1976,14 +1968,8 @@ impl Package {
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                self.fork_markers
-                    .iter()
-                    // TODO(ag): Consider whether `resolution-markers` should actually
-                    // include conflicting marker info. In which case, we should serialize
-                    // the entire `UniversalMarker` (taking care to still make the PEP 508
-                    // simplified).
-                    .map(|marker| SimplifiedMarkerTree::new(requires_python, marker.pep508()))
-                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
+                deduplicated_simplified_pep508_markers(&self.fork_markers, requires_python)
+                    .into_iter(),
             );
             if !fork_markers.is_empty() {
                 table.insert("resolution-markers", value(fork_markers));
@@ -4212,6 +4198,46 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
     // The line break between the last element's comma and the closing square bracket.
     array.set_trailing("\n");
     array
+}
+
+/// Returns the simplified string-ified version of each marker given.
+///
+/// If a marker is a duplicate of a previous marker or is always true after
+/// simplification, then it is omitted from the `Vec` returned. (And indeed,
+/// the `Vec` returned may be empty.)
+fn deduplicated_simplified_pep508_markers(
+    markers: &[UniversalMarker],
+    requires_python: &RequiresPython,
+) -> Vec<String> {
+    // NOTE(ag): It's possible that `resolution-markers` should actually
+    // include conflicting marker info. In which case, we should serialize
+    // the entire `UniversalMarker` (taking care to still make the PEP 508
+    // simplified). At present, we don't include that info. And as a result,
+    // this can lead to duplicate markers, since each represents a fork with
+    // the same PEP 508 marker but a different conflict marker. We strip the
+    // conflict marker, which can leave duplicate PEP 508 markers.
+    //
+    // So if we did include the conflict marker, then we wouldn't need to do
+    // deduplication.
+    //
+    // Why don't we include conflict markers though? At present, it's just
+    // not clear that they are necessary. So by the principle of being
+    // conservative, we don't write them. In particular, I believe the original
+    // reason for `resolution-markers` is to prevent non-deterministic locking.
+    // But it's not clear that that can occur for conflict markers.
+    let mut simplified = vec![];
+    // Deduplicate without changing order.
+    let mut seen = FxHashSet::default();
+    for marker in markers {
+        let simplified_marker = SimplifiedMarkerTree::new(requires_python, marker.pep508());
+        let Some(simplified_string) = simplified_marker.try_to_string() else {
+            continue;
+        };
+        if seen.insert(simplified_string.clone()) {
+            simplified.push(simplified_string);
+        }
+    }
+    simplified
 }
 
 #[cfg(test)]

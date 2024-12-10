@@ -6902,3 +6902,155 @@ fn extra_inferences() -> Result<()> {
 
     Ok(())
 }
+
+/// This is a regression test[1] for repeated resolution markers in the
+/// lock file.
+///
+/// Before this test was fixed, the `resolution-markers` in the lock file
+/// below looked like this:
+///
+/// ```text
+/// resolution-markers = [
+///     "sys_platform != 'linux'",
+///     "sys_platform == 'linux'",
+///     "sys_platform != 'linux'",
+///     "sys_platform == 'linux'",
+/// ]
+/// ```
+///
+/// [1]: <https://github.com/astral-sh/uv/issues/9296>
+#[test]
+fn deduplicate_resolution_markers() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        x1 = [
+          "idna==3.5 ; sys_platform != 'linux'",
+          "idna==3.6 ; sys_platform == 'linux'",
+        ]
+        x2 = [
+          "markupsafe==2.0.0 ; sys_platform != 'linux'",
+          "markupsafe==2.1.0 ; sys_platform == 'linux'",
+        ]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { extra = "x1" },
+            { extra = "x2" },
+          ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r###"
+        version = 1
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'linux'",
+            "sys_platform == 'linux'",
+        ]
+        conflicts = [[
+            { package = "pkg", extra = "x1" },
+            { package = "pkg", extra = "x2" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "idna"
+        version = "3.5"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/9b/c4/db3e4b22ebc18ee797dae8e14b5db68e5826ae6337334c276f1cb4ff84fb/idna-3.5.tar.gz", hash = "sha256:27009fe2735bf8723353582d48575b23c533cc2c2de7b5a68908d91b5eb18d08", size = 64640 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ea/65/9c7a31be86861d43da3d4f8661f677b38120320540773a04979ad6fa9ecd/idna-3.5-py3-none-any.whl", hash = "sha256:79b8f0ac92d2351be5f6122356c9a592c96d81c9a79e4b488bf2a6a15f88057a", size = 61566 },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+        ]
+
+        [[package]]
+        name = "markupsafe"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/67/6a/5b3ed5c122e20c33d2562df06faf895a6b91b0a6b96a4626440ffe1d5c8e/MarkupSafe-2.0.0.tar.gz", hash = "sha256:4fae0677f712ee090721d8b17f412f1cbceefbf0dc180fe91bab3232f38b4527", size = 18466 }
+
+        [[package]]
+        name = "markupsafe"
+        version = "2.1.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/62/0f/52c009332fdadd484e898dc8f2acca0663c1031b3517070fd34ad9c1b64e/MarkupSafe-2.1.0.tar.gz", hash = "sha256:80beaf63ddfbc64a0452b841d8036ca0611e049650e20afcb882f5d3c266d65f", size = 18546 }
+
+        [[package]]
+        name = "pkg"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        x1 = [
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+        ]
+        x2 = [
+            { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+            { name = "markupsafe", version = "2.1.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "idna", marker = "sys_platform == 'linux' and extra == 'x1'", specifier = "==3.6" },
+            { name = "idna", marker = "sys_platform != 'linux' and extra == 'x1'", specifier = "==3.5" },
+            { name = "markupsafe", marker = "sys_platform == 'linux' and extra == 'x2'", specifier = "==2.1.0" },
+            { name = "markupsafe", marker = "sys_platform != 'linux' and extra == 'x2'", specifier = "==2.0.0" },
+        ]
+        "###
+        );
+    });
+
+    Ok(())
+}
