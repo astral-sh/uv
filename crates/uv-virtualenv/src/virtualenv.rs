@@ -86,6 +86,8 @@ pub(crate) fn create(
                 if allow_existing {
                     debug!("Allowing existing directory");
                 } else if location.join("pyvenv.cfg").is_file() {
+                    // TODO(charlie): On Windows, if the current executable is in the directory,
+                    // we need to use `safe_delete`.
                     debug!("Removing existing directory");
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
