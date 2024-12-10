@@ -839,3 +839,40 @@ fn python_install_unknown() {
     error: `./foo` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions
     "###);
 }
+
+#[cfg(unix)]
+#[test]
+fn python_install_preview_broken_link() {
+    use assert_fs::prelude::PathCreateDir;
+    use fs_err::os::unix::fs::symlink;
+
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix();
+
+    let bin_python = context.temp_dir.child("bin").child("python3.13");
+
+    // Create a broken symlink
+    context.temp_dir.child("bin").create_dir_all().unwrap();
+    symlink(context.temp_dir.join("does-not-exist"), &bin_python).unwrap();
+
+    // Install
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.1 in [TIME]
+     + cpython-3.13.1-[PLATFORM] (python3.13)
+    "###);
+
+    // We should replace the broken symlink
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        insta::assert_snapshot!(
+            read_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.13.1-[PLATFORM]/bin/python3.13"
+        );
+    });
+}

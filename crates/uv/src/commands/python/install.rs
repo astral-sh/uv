@@ -358,32 +358,50 @@ pub(crate) async fn install(
                         target.simplified_display()
                     );
 
+                    // Check if the existing link is valid
+                    let valid_link = target
+                        .read_link()
+                        .and_then(|target| target.try_exists())
+                        .inspect_err(|err| debug!("Failed to inspect executable with error: {err}"))
+                        .unwrap_or(true);
+
                     // Figure out what installation it references, if any
-                    let existing = find_matching_bin_link(
-                        installations
-                            .iter()
-                            .copied()
-                            .chain(existing_installations.iter()),
-                        &target,
-                    );
+                    let existing = valid_link
+                        .then(|| {
+                            find_matching_bin_link(
+                                installations
+                                    .iter()
+                                    .copied()
+                                    .chain(existing_installations.iter()),
+                                &target,
+                            )
+                        })
+                        .flatten();
 
                     match existing {
                         None => {
                             // There's an existing executable we don't manage, require `--force`
-                            if !force {
-                                errors.push((
-                                    installation.key(),
-                                    anyhow::anyhow!(
-                                        "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                        to.simplified_display()
-                                    ),
-                                ));
-                                continue;
+                            if valid_link {
+                                if !force {
+                                    errors.push((
+                                        installation.key(),
+                                        anyhow::anyhow!(
+                                            "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                                            to.simplified_display()
+                                        ),
+                                    ));
+                                    continue;
+                                }
+                                debug!(
+                                    "Replacing existing executable at `{}` due to `--force`",
+                                    target.simplified_display()
+                                );
+                            } else {
+                                debug!(
+                                    "Replacing broken symlink at `{}`",
+                                    target.simplified_display()
+                                );
                             }
-                            debug!(
-                                "Replacing existing executable at `{}` due to `--force`",
-                                target.simplified_display()
-                            );
                         }
                         Some(existing) if existing == *installation => {
                             // The existing link points to the same installation, so we're done unless
