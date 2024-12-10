@@ -10,8 +10,8 @@ use uv_client::WrappedReqwestError;
 use uv_distribution_filename::WheelFilenameError;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_pep440::Version;
-use uv_pypi_types::{HashDigest, ParsedUrlError};
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pypi_types::{HashAlgorithm, HashDigest, ParsedUrlError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -53,17 +53,29 @@ pub enum Error {
     // Build error
     #[error(transparent)]
     Build(anyhow::Error),
-    #[error("Failed to build editable: `{0}`")]
-    BuildEditable(String, #[source] anyhow::Error),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
-    NameMismatch {
+    WheelMetadataNameMismatch {
         given: PackageName,
         metadata: PackageName,
     },
     #[error("Package metadata version `{metadata}` does not match given version `{given}`")]
-    VersionMismatch { given: Version, metadata: Version },
+    WheelMetadataVersionMismatch { given: Version, metadata: Version },
+    #[error(
+        "Package metadata name `{metadata}` does not match `{filename}` from the wheel filename"
+    )]
+    WheelFilenameNameMismatch {
+        filename: PackageName,
+        metadata: PackageName,
+    },
+    #[error(
+        "Package metadata version `{metadata}` does not match `{filename}` from the wheel filename"
+    )]
+    WheelFilenameVersionMismatch {
+        filename: Version,
+        metadata: Version,
+    },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
     #[error("Failed to read metadata: `{}`", _0.user_display())]
@@ -80,6 +92,8 @@ pub enum Error {
     MissingEggInfo,
     #[error("The source distribution is missing a `requires.txt` file")]
     MissingRequiresTxt,
+    #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
+    MissingSubdirectory(Url, PathBuf),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("Failed to extract metadata from `requires.txt`")]
@@ -94,8 +108,10 @@ pub enum Error {
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
     NotFound(Url),
-    #[error("Attempted to re-extract the source distribution for `{0}`, but the hashes didn't match. Run `{}` to clear the cache.", "uv cache clean".green())]
-    CacheHeal(String),
+    #[error("Attempted to re-extract the source distribution for `{}`, but the {} hash didn't match. Run `{}` to clear the cache.", _0, _1, "uv cache clean".green())]
+    CacheHeal(String, HashAlgorithm),
+    #[error("The source distribution requires Python {0}, but {1} is installed")]
+    RequiresPython(VersionSpecifiers, Version),
 
     /// A generic request middleware error happened while making a request.
     /// Refer to the error message for more details.

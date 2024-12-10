@@ -21,16 +21,16 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, iter};
-use tempfile::{tempdir_in, TempDir};
+use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, Instrument};
 
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, LowerBound, SourceStrategy};
-use uv_distribution::RequiresDist;
+use uv_distribution::BuildRequires;
 use uv_distribution_types::{IndexLocations, Resolution};
-use uv_fs::{rename_with_retry, PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
@@ -251,7 +251,7 @@ impl SourceBuild {
         interpreter: &Interpreter,
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        version_id: Option<String>,
+        version_id: Option<&str>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
         config_settings: ConfigSettings,
@@ -261,7 +261,7 @@ impl SourceBuild {
         level: BuildOutput,
         concurrent_builds: usize,
     ) -> Result<Self, Error> {
-        let temp_dir = build_context.cache().environment()?;
+        let temp_dir = build_context.cache().venv_dir()?;
 
         let source_tree = if let Some(subdir) = subdirectory {
             source.join(subdir)
@@ -376,7 +376,7 @@ impl SourceBuild {
                 build_context,
                 package_name.as_ref(),
                 package_version.as_ref(),
-                version_id.as_deref(),
+                version_id,
                 locations,
                 source_strategy,
                 build_kind,
@@ -401,7 +401,7 @@ impl SourceBuild {
             metadata_directory: None,
             package_name,
             package_version,
-            version_id,
+            version_id: version_id.map(ToString::to_string),
             environment_variables,
             modified_path,
             runner,
@@ -464,15 +464,12 @@ impl SourceBuild {
                                 .map(|project| &project.name)
                                 .or(package_name)
                             {
-                                // TODO(charlie): Add a type to lower requirements without providing
-                                // empty extras.
-                                let requires_dist = uv_pypi_types::RequiresDist {
-                                    name: name.clone(),
+                                let build_requires = uv_pypi_types::BuildRequires {
+                                    name: Some(name.clone()),
                                     requires_dist: build_system.requires,
-                                    provides_extras: vec![],
                                 };
-                                let requires_dist = RequiresDist::from_project_maybe_workspace(
-                                    requires_dist,
+                                let build_requires = BuildRequires::from_project_maybe_workspace(
+                                    build_requires,
                                     install_path,
                                     locations,
                                     source_strategy,
@@ -480,7 +477,7 @@ impl SourceBuild {
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
-                                requires_dist.requires_dist
+                                build_requires.requires_dist
                             } else {
                                 build_system
                                     .requires
@@ -655,16 +652,7 @@ impl SourceBuild {
     pub async fn build(&self, wheel_dir: &Path) -> Result<String, Error> {
         // The build scripts run with the extracted root as cwd, so they need the absolute path.
         let wheel_dir = std::path::absolute(wheel_dir)?;
-
-        // Prevent clashes from two uv processes building distributions in parallel.
-        let tmp_dir = tempdir_in(&wheel_dir)?;
-        let filename = self
-            .pep517_build(tmp_dir.path(), &self.pep517_backend)
-            .await?;
-
-        let from = tmp_dir.path().join(&filename);
-        let to = wheel_dir.join(&filename);
-        rename_with_retry(from, to).await?;
+        let filename = self.pep517_build(&wheel_dir, &self.pep517_backend).await?;
         Ok(filename)
     }
 
@@ -916,27 +904,20 @@ async fn create_pep517_build_environment(
     // If necessary, lower the requirements.
     let extra_requires = match source_strategy {
         SourceStrategy::Enabled => {
-            if let Some(package_name) = package_name {
-                // TODO(charlie): Add a type to lower requirements without providing
-                // empty extras.
-                let requires_dist = uv_pypi_types::RequiresDist {
-                    name: package_name.clone(),
-                    requires_dist: extra_requires,
-                    provides_extras: vec![],
-                };
-                let requires_dist = RequiresDist::from_project_maybe_workspace(
-                    requires_dist,
-                    install_path,
-                    locations,
-                    source_strategy,
-                    LowerBound::Allow,
-                )
-                .await
-                .map_err(Error::Lowering)?;
-                requires_dist.requires_dist
-            } else {
-                extra_requires.into_iter().map(Requirement::from).collect()
-            }
+            let build_requires = uv_pypi_types::BuildRequires {
+                name: package_name.cloned(),
+                requires_dist: extra_requires,
+            };
+            let build_requires = BuildRequires::from_project_maybe_workspace(
+                build_requires,
+                install_path,
+                locations,
+                source_strategy,
+                LowerBound::Allow,
+            )
+            .await
+            .map_err(Error::Lowering)?;
+            build_requires.requires_dist
         }
         SourceStrategy::Disabled => extra_requires.into_iter().map(Requirement::from).collect(),
     };

@@ -33,7 +33,12 @@ fn workspaces_dir() -> PathBuf {
 #[test]
 fn test_albatross_in_examples_bird_feeder() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-in-example")
         .join("examples")
         .join("bird-feeder");
@@ -48,7 +53,7 @@ fn test_albatross_in_examples_bird_feeder() {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-in-example/examples/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-in-example/examples/bird-feeder)
      + idna==3.6
      + sniffio==1.3.1
     "###
@@ -71,7 +76,12 @@ fn test_albatross_in_examples_bird_feeder() {
 #[test]
 fn test_albatross_in_examples() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir().join("albatross-in-example");
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-in-example");
 
     uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
     success: true
@@ -82,7 +92,7 @@ fn test_albatross_in_examples() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-in-example)
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-in-example)
      + tqdm==4.66.2
     "###
     );
@@ -104,7 +114,12 @@ fn test_albatross_in_examples() {
 #[test]
 fn test_albatross_just_project() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir().join("albatross-just-project");
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-just-project");
 
     uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
     success: true
@@ -115,7 +130,7 @@ fn test_albatross_just_project() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-just-project)
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-just-project)
      + tqdm==4.66.2
     "###
     );
@@ -137,7 +152,12 @@ fn test_albatross_just_project() {
 #[test]
 fn test_albatross_project_in_excluded() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-project-in-excluded")
         .join("excluded")
         .join("bird-feeder");
@@ -152,7 +172,7 @@ fn test_albatross_project_in_excluded() {
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/excluded/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/excluded/bird-feeder)
      + idna==3.6
      + sniffio==1.3.1
     "###
@@ -171,7 +191,7 @@ fn test_albatross_project_in_excluded() {
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
 
-    let current_dir = workspaces_dir()
+    let current_dir = workspace
         .join("albatross-project-in-excluded")
         .join("packages")
         .join("seeds");
@@ -184,7 +204,7 @@ fn test_albatross_project_in_excluded() {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-project-in-excluded/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds)
     "###
     );
 }
@@ -192,7 +212,12 @@ fn test_albatross_project_in_excluded() {
 #[test]
 fn test_albatross_root_workspace() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir().join("albatross-root-workspace");
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-root-workspace");
 
     uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
     success: true
@@ -203,11 +228,11 @@ fn test_albatross_root_workspace() {
     Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
-     + albatross==0.1.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace)
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace)
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
      + tqdm==4.66.2
     "###
@@ -230,7 +255,12 @@ fn test_albatross_root_workspace() {
 #[test]
 fn test_albatross_root_workspace_bird_feeder() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-root-workspace")
         .join("packages")
         .join("bird-feeder");
@@ -245,9 +275,9 @@ fn test_albatross_root_workspace_bird_feeder() {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
     "###
     );
@@ -269,7 +299,12 @@ fn test_albatross_root_workspace_bird_feeder() {
 #[test]
 fn test_albatross_root_workspace_albatross() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-root-workspace")
         .join("packages")
         .join("bird-feeder");
@@ -284,9 +319,9 @@ fn test_albatross_root_workspace_albatross() {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-root-workspace/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
     "###
     );
@@ -308,7 +343,12 @@ fn test_albatross_root_workspace_albatross() {
 #[test]
 fn test_albatross_virtual_workspace() {
     let context = TestContext::new("3.12");
-    let current_dir = workspaces_dir()
+    let workspace = context.temp_dir.child("workspace");
+
+    // Copy into the temporary directory
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace
         .join("albatross-virtual-workspace")
         .join("packages")
         .join("bird-feeder");
@@ -323,9 +363,9 @@ fn test_albatross_virtual_workspace() {
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-virtual-workspace/packages/bird-feeder)
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/bird-feeder)
      + idna==3.6
-     + seeds==1.0.0 (from file://[WORKSPACE]/scripts/workspaces/albatross-virtual-workspace/packages/seeds)
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/seeds)
      + sniffio==1.3.1
     "###
     );
@@ -668,21 +708,21 @@ fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
 }
 
 /// Extract just the sources from the lockfile, to test path resolution.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 struct SourceLock {
     package: Vec<Package>,
 }
 
 impl SourceLock {
-    fn sources(self) -> BTreeMap<String, toml::Value> {
+    fn sources(&self) -> BTreeMap<String, toml::Value> {
         self.package
-            .into_iter()
-            .map(|package| (package.name, package.source))
+            .iter()
+            .map(|package| (package.name.clone(), package.source.clone()))
             .collect()
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 struct Package {
     name: String,
     source: toml::Value,
@@ -1584,9 +1624,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because bar depends on bar:dev and bar:dev depends on anyio==4.2.0, we can conclude that bar depends on anyio==4.2.0.
-          And because foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
-          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+      ╰─▶ Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
+          And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
 
@@ -1650,14 +1689,14 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
     // TODO(zanieb): This error message is bad?
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: Failed to build: `foo @ file://[TEMP_DIR]/workspace/packages/foo`
-      Caused by: Failed to parse entry for: `anyio`
-      Caused by: Package is not included as workspace package in `tool.uv.workspace`
+      × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
+      ├─▶ Failed to parse entry: `anyio`
+      ╰─▶ `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
     "###
     );
 
@@ -1718,6 +1757,148 @@ fn test_path_hopping() -> Result<()> {
       }
     }
     "###);
+
+    Ok(())
+}
+
+/// `c` is a package in a git workspace, and it has a workspace dependency to `d`. Check that we
+/// are correctly resolving `d` to a git dependency with a subdirectory and not relative to the
+/// checkout directory.
+#[test]
+fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["c"]
+
+        [tool.uv.sources]
+        c = { git = "https://github.com/astral-sh/workspace-virtual-root-test", subdirectory = "packages/c", rev = "fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }
+    "#
+    )?;
+
+    context.lock().assert().success();
+
+    let lock1: SourceLock =
+        toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock1.sources(), @r###"
+    {
+      "a": {
+        "virtual": "."
+      },
+      "anyio": {
+        "registry": "https://pypi.org/simple"
+      },
+      "c": {
+        "git": "https://github.com/astral-sh/workspace-virtual-root-test?subdirectory=packages%2Fc&rev=fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#fac39c8d4c5d0ef32744e2bb309bbe34a759fd46"
+      },
+      "d": {
+        "git": "https://github.com/astral-sh/workspace-virtual-root-test?subdirectory=packages%2Fd&rev=fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#fac39c8d4c5d0ef32744e2bb309bbe34a759fd46"
+      },
+      "idna": {
+        "registry": "https://pypi.org/simple"
+      },
+      "sniffio": {
+        "registry": "https://pypi.org/simple"
+      }
+    }
+    "###);
+
+    // Check that we don't report a conflict here either.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["c", "d"]
+
+        [tool.uv.sources]
+        c = { git = "https://github.com/astral-sh/workspace-virtual-root-test", subdirectory = "packages/c", rev = "fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }
+        d = { git = "https://github.com/astral-sh/workspace-virtual-root-test", subdirectory = "packages/d", rev = "fac39c8d4c5d0ef32744e2bb309bbe34a759fd46" }
+    "#
+    )?;
+
+    context.lock().assert().success();
+
+    let lock2: SourceLock =
+        toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+
+    assert_eq!(lock1, lock2, "sources changed");
+
+    Ok(())
+}
+
+/// `workspace-member-in-subdir` is a package in a git workspace, and it has a workspace dependency
+/// to `uv-git-workspace-in-root`. Check that we are correctly resolving `uv-git-workspace-in-root`
+/// to a git dependency without a subdirectory and not relative to the checkout directory.
+#[test]
+fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "git-with-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "workspace-member-in-subdir",
+        ]
+
+        [tool.uv.sources]
+        workspace-member-in-subdir = { git = "https://github.com/astral-sh/workspace-in-root-test", subdirectory = "workspace-member-in-subdir", rev = "d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+    "#
+    )?;
+
+    context.lock().assert().success();
+
+    let lock1: SourceLock =
+        toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+    assert_json_snapshot!(lock1.sources(), @r###"
+    {
+      "git-with-root": {
+        "virtual": "."
+      },
+      "uv-git-workspace-in-root": {
+        "git": "https://github.com/astral-sh/workspace-in-root-test?rev=d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68"
+      },
+      "workspace-member-in-subdir": {
+        "git": "https://github.com/astral-sh/workspace-in-root-test?subdirectory=workspace-member-in-subdir&rev=d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68#d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68"
+      }
+    }
+    "###);
+
+    // Check that we don't report a conflict here either
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "git-with-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "workspace-member-in-subdir",
+            "uv-git-workspace-in-root",
+        ]
+
+        [tool.uv.sources]
+        workspace-member-in-subdir = { git = "https://github.com/astral-sh/workspace-in-root-test", subdirectory = "workspace-member-in-subdir", rev = "d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+        uv-git-workspace-in-root = { git = "https://github.com/astral-sh/workspace-in-root-test", rev = "d3ab48d2338296d47e28dbb2fb327c5e2ac4ac68" }
+    "#
+    )?;
+
+    context.lock().assert().success();
+    let lock2: SourceLock =
+        toml::from_str(&fs_err::read_to_string(context.temp_dir.child("uv.lock"))?)?;
+
+    assert_eq!(lock1, lock2, "sources changed");
 
     Ok(())
 }

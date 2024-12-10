@@ -1381,11 +1381,9 @@ fn unix_timestamp_to_rfc2822(seconds: u64) -> Option<String> {
     use jiff::fmt::rfc2822::DateTimePrinter;
 
     unix_timestamp_to_datetime(seconds).and_then(|timestamp| {
-        let mut buf = String::new();
         DateTimePrinter::new()
-            .print_timestamp(&timestamp, &mut buf)
-            .ok()?;
-        Some(buf)
+            .timestamp_to_rfc9110_string(&timestamp)
+            .ok()
     })
 }
 

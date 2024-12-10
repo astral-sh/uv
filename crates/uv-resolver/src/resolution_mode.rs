@@ -1,8 +1,5 @@
-use rustc_hash::FxHashSet;
-
-use uv_normalize::PackageName;
-
-use crate::{DependencyMode, Manifest, ResolverMarkers};
+use crate::resolver::{ForkMap, ForkSet};
+use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -39,25 +36,26 @@ pub(crate) enum ResolutionStrategy {
     Lowest,
     /// Resolve the lowest compatible version of any direct dependencies, and the highest
     /// compatible version of any transitive dependencies.
-    LowestDirect(FxHashSet<PackageName>),
+    LowestDirect(ForkSet),
 }
 
 impl ResolutionStrategy {
     pub(crate) fn from_mode(
         mode: ResolutionMode,
         manifest: &Manifest,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         dependencies: DependencyMode,
     ) -> Self {
         match mode {
             ResolutionMode::Highest => Self::Highest,
             ResolutionMode::Lowest => Self::Lowest,
-            ResolutionMode::LowestDirect => Self::LowestDirect(
-                manifest
-                    .user_requirements(markers, dependencies)
-                    .map(|requirement| requirement.name.clone())
-                    .collect(),
-            ),
+            ResolutionMode::LowestDirect => {
+                let mut first_party = ForkMap::default();
+                for requirement in manifest.user_requirements(env, dependencies) {
+                    first_party.add(&requirement, ());
+                }
+                Self::LowestDirect(first_party)
+            }
         }
     }
 }

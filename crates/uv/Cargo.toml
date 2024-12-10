@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.4.22"
+version = "0.5.7"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 uv-auth = { workspace = true }
 uv-build-backend = { workspace = true }
+uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
@@ -48,6 +49,7 @@ uv-settings = { workspace = true, features = ["schemars"] }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
 uv-tool = { workspace = true }
+uv-trampoline-builder = { workspace = true }
 uv-types = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-version = { workspace = true }
@@ -63,20 +65,21 @@ axoupdater = { workspace = true, features = [
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
+dotenvy = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
-indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
-rayon = { workspace = true }
+petgraph = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -91,25 +94,32 @@ tracing-subscriber = { workspace = true, features = ["json"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+version-ranges = { workspace = true }
+walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }
 assert_fs = { version = "1.1.2" }
-base64 = { version = "0.22.1" }
+base64 = { workspace = true }
 byteorder = { version = "1.5.0" }
 etcetera = { workspace = true }
 filetime = { version = "0.2.25" }
+flate2 = { workspace = true, default-features = false }
 ignore = { version = "0.4.23" }
-indoc = { version = "2.0.5" }
+indoc = { workspace = true }
 insta = { version = "1.40.0", features = ["filters", "json"] }
 predicates = { version = "3.1.2" }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 similar = { version = "2.6.0" }
+tar = { workspace = true }
 tempfile = { workspace = true }
 zip = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = [
@@ -119,7 +129,7 @@ ignored = [
 ]
 
 [features]
-default = ["python", "pypi", "git", "performance"]
+default = ["python", "python-managed", "pypi", "git", "performance", "crates-io"]
 # Use better memory allocators, etc. — also turns-on self-update.
 performance = [
     "performance-memory-allocator",
@@ -133,9 +143,13 @@ performance-flate2-backend = ["dep:uv-performance-flate2-backend"]
 python = []
 # Introduces a dependency on a local Python installation with specific patch versions.
 python-patch = []
+# Introduces a dependency on managed Python installations.
+python-managed = []
 # Introduces a dependency on PyPI.
 pypi = []
 # Introduces a dependency on Git.
 git = []
+# Introduces a dependency on crates.io.
+crates-io = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]

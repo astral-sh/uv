@@ -13,9 +13,12 @@ license.workspace = true
 doctest = false
 
 [dependencies]
+uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
+uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
 uv-pypi-types = { workspace = true }
@@ -35,7 +38,6 @@ reqwest-retry = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true , features = ["io"] }

@@ -563,7 +563,9 @@ impl VersionMapLazy {
         // Check if the wheel is compatible with the `requires-python` (i.e., the Python ABI tag
         // is not less than the `requires-python` minimum version).
         if !self.requires_python.matches_wheel_tag(filename) {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(IncompatibleTag::Abi));
+            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                IncompatibleTag::AbiPythonVersion,
+            ));
         }
 
         // Break ties with the build tag.

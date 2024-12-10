@@ -1,11 +1,13 @@
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::convert;
+use std::sync::LazyLock;
 use tokio::sync::oneshot;
 use tracing::instrument;
 use uv_install_wheel::{linker::LinkMode, Layout};
 
 use uv_cache::Cache;
+use uv_configuration::RAYON_INITIALIZE;
 use uv_distribution_types::CachedDist;
 use uv_python::PythonEnvironment;
 
@@ -15,6 +17,7 @@ pub struct Installer<'a> {
     cache: Option<&'a Cache>,
     reporter: Option<Box<dyn Reporter>>,
     installer_name: Option<String>,
+    installer_metadata: bool,
 }
 
 impl<'a> Installer<'a> {
@@ -26,6 +29,7 @@ impl<'a> Installer<'a> {
             cache: None,
             reporter: None,
             installer_name: Some("uv".to_string()),
+            installer_metadata: true,
         }
     }
 
@@ -62,6 +66,15 @@ impl<'a> Installer<'a> {
         }
     }
 
+    /// Set the whether to link Uv specific files in dist-info
+    #[must_use]
+    pub fn with_installer_metadata(self, installer_metadata: bool) -> Self {
+        Self {
+            installer_metadata,
+            ..self
+        }
+    }
+
     /// Install a set of wheels into a Python virtual environment.
     #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
     pub async fn install(self, wheels: Vec<CachedDist>) -> Result<Vec<CachedDist>> {
@@ -71,6 +84,7 @@ impl<'a> Installer<'a> {
             link_mode,
             reporter,
             installer_name,
+            installer_metadata,
         } = self;
 
         if cache.is_some_and(Cache::is_temporary) {
@@ -85,6 +99,8 @@ impl<'a> Installer<'a> {
 
         let layout = venv.interpreter().layout();
         let relocatable = venv.relocatable();
+        // Initialize the threadpool with the user settings.
+        LazyLock::force(&RAYON_INITIALIZE);
         rayon::spawn(move || {
             let result = install(
                 wheels,
@@ -93,6 +109,7 @@ impl<'a> Installer<'a> {
                 link_mode,
                 reporter,
                 relocatable,
+                installer_metadata,
             );
 
             // This may fail if the main task was cancelled.
@@ -122,6 +139,7 @@ impl<'a> Installer<'a> {
             self.link_mode,
             self.reporter,
             self.venv.relocatable(),
+            self.installer_metadata,
         )
     }
 }
@@ -135,7 +153,10 @@ fn install(
     link_mode: LinkMode,
     reporter: Option<Box<dyn Reporter>>,
     relocatable: bool,
+    installer_metadata: bool,
 ) -> Result<Vec<CachedDist>> {
+    // Initialize the threadpool with the user settings.
+    LazyLock::force(&RAYON_INITIALIZE);
     let locks = uv_install_wheel::linker::Locks::default();
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::linker::install_wheel(
@@ -155,6 +176,7 @@ fn install(
                 Some(wheel.cache_info())
             },
             installer_name.as_deref(),
+            installer_metadata,
             link_mode,
             &locks,
         )

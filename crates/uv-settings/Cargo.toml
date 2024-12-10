@@ -32,7 +32,7 @@ uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true }
-dirs-sys = { workspace = true }
+etcetera = { workspace = true }
 fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
@@ -44,3 +44,7 @@ url = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["uv-options-metadata", "clap"]
+
+[dev-dependencies]
+assert_fs = { version = "1.1.2" }
+indoc = { workspace = true }

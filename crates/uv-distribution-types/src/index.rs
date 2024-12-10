@@ -1,8 +1,11 @@
 use std::str::FromStr;
+
 use thiserror::Error;
 use url::Url;
+
 use uv_auth::Credentials;
 
+use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
 use crate::{IndexUrl, IndexUrlError};
 
@@ -22,7 +25,7 @@ pub struct Index {
     /// [tool.uv.sources]
     /// torch = { index = "pytorch" }
     /// ```
-    pub name: Option<String>,
+    pub name: Option<IndexName>,
     /// The URL of the index.
     ///
     /// Expects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.
@@ -137,8 +140,8 @@ impl Index {
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
     pub fn credentials(&self) -> Option<Credentials> {
         // If the index is named, and credentials are provided via the environment, prefer those.
-        if let Some(name) = self.name.as_deref() {
-            if let Some(credentials) = Credentials::from_env(name) {
+        if let Some(name) = self.name.as_ref() {
+            if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
                 return Some(credentials);
             }
         }
@@ -154,14 +157,11 @@ impl FromStr for Index {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Determine whether the source is prefixed with a name, as in `name=https://pypi.org/simple`.
         if let Some((name, url)) = s.split_once('=') {
-            if name.is_empty() {
-                return Err(IndexSourceError::EmptyName);
-            }
-
-            if name.chars().all(char::is_alphanumeric) {
+            if !name.chars().any(|c| c == ':') {
+                let name = IndexName::from_str(name)?;
                 let url = IndexUrl::from_str(url)?;
                 return Ok(Self {
-                    name: Some(name.to_string()),
+                    name: Some(name),
                     url,
                     explicit: false,
                     default: false,
@@ -187,6 +187,8 @@ impl FromStr for Index {
 pub enum IndexSourceError {
     #[error(transparent)]
     Url(#[from] IndexUrlError),
+    #[error(transparent)]
+    IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
 }

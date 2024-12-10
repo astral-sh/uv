@@ -36,6 +36,20 @@ default = true
 The default index is always treated as lowest priority, regardless of its position in the list of
 indexes.
 
+Index names may only contain alphanumeric characters, dashes, underscores, and periods, and must be
+valid ASCII.
+
+When providing an index on the command line (with `--index` or `--default-index`) or through an
+environment variable (`UV_INDEX` or `UV_DEFAULT_INDEX`), names are optional but can be included
+using the `<name>=<url>` syntax, as in:
+
+```shell
+# On the command line.
+$ uv lock --index pytorch=https://download.pytorch.org/whl/cpu
+# Via an environment variable.
+$ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
+```
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
@@ -56,20 +70,20 @@ disambiguated by environment markers:
 
 ```toml title="pyproject.toml"
 [project]
-dependencies = ["pytorch"]
+dependencies = ["torch"]
 
 [tool.uv.sources]
-pytorch = [
-  { index = "torch-cu118", marker = "sys_platform == 'darwin'"},
-  { index = "torch-cu124", marker = "sys_platform != 'darwin'"},
+torch = [
+  { index = "pytorch-cu118", marker = "sys_platform == 'darwin'"},
+  { index = "pytorch-cu124", marker = "sys_platform != 'darwin'"},
 ]
 
 [[tool.uv.index]]
-name = "torch-cu118"
+name = "pytorch-cu118"
 url = "https://download.pytorch.org/whl/cu118"
 
 [[tool.uv.index]]
-name = "torch-cu124"
+name = "pytorch-cu124"
 url = "https://download.pytorch.org/whl/cu124"
 ```
 
@@ -90,6 +104,10 @@ explicit = true
 Named indexes referenced via `tool.uv.sources` must be defined within the project's `pyproject.toml`
 file; indexes provided via the command-line, environment variables, or user-level configuration will
 not be recognized.
+
+If an index is marked as both `default = true` and `explicit = true`, it will be treated as an
+explicit index (i.e., only usable via `tool.uv.sources`) while also removing PyPI as the default
+index.
 
 ## Searching across multiple indexes
 
@@ -125,21 +143,22 @@ password (or access token).
 To authenticate with a provide index, either provide credentials via environment variables or embed
 them in the URL.
 
-For example, given an index named `internal` that requires a username (`public`) and password
+For example, given an index named `internal-proxy` that requires a username (`public`) and password
 (`koala`), define the index (without credentials) in your `pyproject.toml`:
 
 ```toml
 [[tool.uv.index]]
-name = "internal"
+name = "internal-proxy"
 url = "https://example.com/simple"
 ```
 
-From there, you can set the `UV_INDEX_INTERNAL_USERNAME` and `UV_INDEX_INTERNAL_PASSWORD`
-environment variables, where `INTERNAL` is the uppercase version of the index name:
+From there, you can set the `UV_INDEX_INTERNAL_PROXY_USERNAME` and
+`UV_INDEX_INTERNAL_PROXY_PASSWORD` environment variables, where `INTERNAL_PROXY` is the uppercase
+version of the index name, with non-alphanumeric characters replaced by underscores:
 
 ```sh
-export UV_INDEX_INTERNAL_USERNAME=public
-export UV_INDEX_INTERNAL_PASSWORD=koala
+export UV_INDEX_INTERNAL_PROXY_USERNAME=public
+export UV_INDEX_INTERNAL_PROXY_PASSWORD=koala
 ```
 
 By providing credentials via environment variables, you can avoid storing sensitive information in
@@ -150,7 +169,7 @@ Alternatively, credentials can be embedded directly in the index definition:
 ```toml
 [[tool.uv.index]]
 name = "internal"
-url = "https://public:koala@https://pypi-proxy.corp.dev/simple"
+url = "https://public:koala@pypi-proxy.corp.dev/simple"
 ```
 
 For security purposes, credentials are _never_ stored in the `uv.lock` file; as such, uv _must_ have

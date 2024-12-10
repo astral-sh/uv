@@ -10,28 +10,38 @@ uv provides a standalone installer to download and install uv:
 
 === "macOS and Linux"
 
+    Use `curl` to download the script and execute it with `sh`:
+
     ```console
     $ curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
+    If your system doesn't have `curl`, you can use `wget`:
+
+    ```console
+    $ wget -qO- https://astral.sh/uv/install.sh | sh
+    ```
+
+    Request a specific version by including it in the URL:
+
+    ```console
+    $ curl -LsSf https://astral.sh/uv/0.5.7/install.sh | sh
+    ```
+
 === "Windows"
+
+    Use `irm` to download the script and execute it with `iex`:
 
     ```console
     $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
-Request a specific version by including it in the URL:
+    Changing the [execution policy](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.4#powershell-execution-policies) allows running a script from the internet.
 
-=== "macOS and Linux"
-
-    ```console
-    $ curl -LsSf https://astral.sh/uv/0.4.6/install.sh | sh
-    ```
-
-=== "Windows"
+    Request a specific version by including it in the URL:
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.4.6/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.7/install.ps1 | iex"
     ```
 
 !!! tip
@@ -52,45 +62,8 @@ Request a specific version by including it in the URL:
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-#### Configuring installation
-
-By default, uv is installed to `~/.cargo/bin`. To change the installation path, use
-`UV_INSTALL_DIR`:
-
-=== "macOS and Linux"
-
-    ```console
-    $ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/custom/path" sh
-    ```
-
-=== "Windows"
-
-    ```powershell
-    $env:UV_INSTALL_DIR = "C:\Custom\Path" powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-    ```
-
-The installer will also update your shell profiles to ensure the uv binary is on your `PATH`. To
-disable this behavior, use `INSTALLER_NO_MODIFY_PATH`. For example:
-
-```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh
-```
-
-Using environment variables is recommended because they are consistent across platforms. However,
-options can be passed directly to the install script. For example, to see the available options:
-
-```console
-$ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help
-```
-
-In ephemeral environments like CI, use `UV_UNMANAGED_INSTALL` to install uv to a specific path while
-preventing the installer from modifying shell profiles or environment variables:
-
-```console
-$ curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/custom/path" sh
-```
-
-The use of `UV_UNMANAGED_INSTALL` will also disable self-updates (via `uv self update`).
+See the documentation on [installer configuration](../configuration/installer.md) for details on
+customizing your uv installation.
 
 ### PyPI
 
@@ -222,14 +195,14 @@ If you need to remove uv from your system, just remove the `uv` and `uvx` binari
 === "macOS and Linux"
 
     ```console
-    $ rm ~/.cargo/bin/uv ~/.cargo/bin/uvx
+    $ rm ~/.local/bin/uv ~/.local/bin/uvx
     ```
 
 === "Windows"
 
     ```powershell
-    $ rm $HOME\.cargo\bin\uv.exe
-    $ rm $HOME\.cargo\bin\uvx.exe
+    $ rm $HOME\.local\bin\uv.exe
+    $ rm $HOME\.local\bin\uvx.exe
     ```
 
 !!! tip
@@ -241,6 +214,12 @@ If you need to remove uv from your system, just remove the `uv` and `uvx` binari
     $ rm -r "$(uv python dir)"
     $ rm -r "$(uv tool dir)"
     ```
+
+!!! note
+
+    Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
+    uninstall. Upgrading from an older version will not automatically remove the binaries from
+    `~/.cargo/bin`.
 
 ## Next steps
 

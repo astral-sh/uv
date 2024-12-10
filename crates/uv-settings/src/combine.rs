@@ -1,5 +1,6 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+
 use url::Url;
 
 use uv_configuration::{
@@ -7,7 +8,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_install_wheel::linker::LinkMode;
-use uv_pypi_types::SupportedEnvironments;
+use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
@@ -89,6 +90,7 @@ impl_combine_or!(PythonVersion);
 impl_combine_or!(ResolutionMode);
 impl_combine_or!(String);
 impl_combine_or!(SupportedEnvironments);
+impl_combine_or!(SchemaConflicts);
 impl_combine_or!(TargetTriple);
 impl_combine_or!(TrustedPublishing);
 impl_combine_or!(Url);
@@ -120,6 +122,12 @@ impl Combine for Option<ConfigSettings> {
 }
 
 impl Combine for serde::de::IgnoredAny {
+    fn combine(self, _other: Self) -> Self {
+        self
+    }
+}
+
+impl Combine for Option<serde::de::IgnoredAny> {
     fn combine(self, _other: Self) -> Self {
         self
     }

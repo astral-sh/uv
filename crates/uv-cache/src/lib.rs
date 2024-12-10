@@ -19,6 +19,7 @@ use uv_pypi_types::ResolutionMetadata;
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
+use crate::removal::Remover;
 pub use crate::removal::{rm_rf, Removal};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
@@ -187,8 +188,14 @@ impl Cache {
         self.bucket(CacheBucket::Archive).join(id)
     }
 
-    /// Create an ephemeral Python environment in the cache.
-    pub fn environment(&self) -> io::Result<tempfile::TempDir> {
+    /// Create a temporary directory to be used as a Python virtual environment.
+    pub fn venv_dir(&self) -> io::Result<tempfile::TempDir> {
+        fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
+        tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
+    }
+
+    /// Create a temporary directory to be used for executing PEP 517 source distribution builds.
+    pub fn build_dir(&self) -> io::Result<tempfile::TempDir> {
         fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
         tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
     }
@@ -320,8 +327,8 @@ impl Cache {
     }
 
     /// Clear the cache, removing all entries.
-    pub fn clear(&self) -> Result<Removal, io::Error> {
-        rm_rf(&self.root)
+    pub fn clear(&self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
+        Remover::new(reporter).rm_rf(&self.root)
     }
 
     /// Remove a package from the cache.
@@ -515,6 +522,14 @@ impl Cache {
 
         Ok(summary)
     }
+}
+
+pub trait CleanReporter: Send + Sync {
+    /// Called after one file or directory is removed.
+    fn on_clean(&self);
+
+    /// Called after all files and directories are removed.
+    fn on_complete(&self);
 }
 
 /// The different kinds of data in the cache are stored in different bucket, which in our case
@@ -764,16 +779,18 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            Self::SourceDistributions => "sdists-v4",
-            Self::FlatIndex => "flat-index-v1",
-            Self::Git => "git-v0",
-            Self::Interpreter => "interpreter-v2",
-            // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_clean.rs.
-            Self::Simple => "simple-v13",
             // Note that when bumping this, you'll also need to bump it
             // in crates/uv/tests/cache_prune.rs.
-            Self::Wheels => "wheels-v2",
+            Self::SourceDistributions => "sdists-v6",
+            Self::FlatIndex => "flat-index-v2",
+            Self::Git => "git-v0",
+            Self::Interpreter => "interpreter-v3",
+            // Note that when bumping this, you'll also need to bump it
+            // in crates/uv/tests/cache_clean.rs.
+            Self::Simple => "simple-v14",
+            // Note that when bumping this, you'll also need to bump it
+            // in crates/uv/tests/cache_prune.rs.
+            Self::Wheels => "wheels-v3",
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v1",

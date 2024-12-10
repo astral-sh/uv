@@ -64,6 +64,11 @@ impl<T: AsRef<Path>> Simplified for T {
             return path.display();
         }
 
+        if path.as_os_str() == "" {
+            // Avoid printing an empty string for the current directory
+            return Path::new(".").display();
+        }
+
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
         let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
@@ -84,6 +89,11 @@ impl<T: AsRef<Path>> Simplified for T {
         let path = path
             .strip_prefix(base.as_ref())
             .unwrap_or_else(|_| path.strip_prefix(CWD.simplified()).unwrap_or(path));
+
+        if path.as_os_str() == "" {
+            // Avoid printing an empty string for the current directory
+            return Path::new(".").display();
+        }
 
         path.display()
     }
@@ -189,7 +199,33 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     Ok(ret)
 }
 
-/// Normalize a path, removing things like `.` and `..`.
+/// Normalize a [`Path`], removing things like `.` and `..`.
+pub fn normalize_path(path: &Path) -> Cow<Path> {
+    // Fast path: if the path is already normalized, return it as-is.
+    if path.components().all(|component| match component {
+        Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
+        Component::ParentDir | Component::CurDir => false,
+    }) {
+        Cow::Borrowed(path)
+    } else {
+        Cow::Owned(normalized(path))
+    }
+}
+
+/// Normalize a [`PathBuf`], removing things like `.` and `..`.
+pub fn normalize_path_buf(path: PathBuf) -> PathBuf {
+    // Fast path: if the path is already normalized, return it as-is.
+    if path.components().all(|component| match component {
+        Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
+        Component::ParentDir | Component::CurDir => false,
+    }) {
+        path
+    } else {
+        normalized(&path)
+    }
+}
+
+/// Normalize a [`Path`].
 ///
 /// Unlike [`normalize_absolute_path`], this works with relative paths and does never error.
 ///
@@ -206,8 +242,7 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 /// Out: `workspace-git-path-dep-test/packages/d`
 ///
 /// In: `./a/../../b`
-/// Out: `../b`
-pub fn normalize_path(path: &Path) -> PathBuf {
+fn normalized(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
@@ -262,13 +297,16 @@ pub fn relative_to(
     path: impl AsRef<Path>,
     base: impl AsRef<Path>,
 ) -> Result<PathBuf, std::io::Error> {
+    // Normalize both paths, to avoid intermediate `..` components.
+    let path = normalize_path(path.as_ref());
+    let base = normalize_path(base.as_ref());
+
     // Find the longest common prefix, and also return the path stripped from that prefix
     let (stripped, common_prefix) = base
-        .as_ref()
         .ancestors()
         .find_map(|ancestor| {
             // Simplifying removes the UNC path prefix on windows.
-            dunce::simplified(path.as_ref())
+            dunce::simplified(&path)
                 .strip_prefix(dunce::simplified(ancestor))
                 .ok()
                 .map(|stripped| (stripped, ancestor))
@@ -278,14 +316,14 @@ pub fn relative_to(
                 std::io::ErrorKind::Other,
                 format!(
                     "Trivial strip failed: {} vs. {}",
-                    path.as_ref().simplified_display(),
-                    base.as_ref().simplified_display()
+                    path.simplified_display(),
+                    base.simplified_display()
                 ),
             )
         })?;
 
     // go as many levels up as required
-    let levels_up = base.as_ref().components().count() - common_prefix.components().count();
+    let levels_up = base.components().count() - common_prefix.components().count();
     let up = std::iter::repeat("..").take(levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))
@@ -397,4 +435,108 @@ impl<'de> serde::de::Deserialize<'de> for PortablePathBuf {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_url() {
+        if cfg!(windows) {
+            assert_eq!(
+                normalize_url_path("/C:/Users/ferris/wheel-0.42.0.tar.gz"),
+                "C:\\Users\\ferris\\wheel-0.42.0.tar.gz"
+            );
+        } else {
+            assert_eq!(
+                normalize_url_path("/C:/Users/ferris/wheel-0.42.0.tar.gz"),
+                "/C:/Users/ferris/wheel-0.42.0.tar.gz"
+            );
+        }
+
+        if cfg!(windows) {
+            assert_eq!(
+                normalize_url_path("./ferris/wheel-0.42.0.tar.gz"),
+                ".\\ferris\\wheel-0.42.0.tar.gz"
+            );
+        } else {
+            assert_eq!(
+                normalize_url_path("./ferris/wheel-0.42.0.tar.gz"),
+                "./ferris/wheel-0.42.0.tar.gz"
+            );
+        }
+
+        if cfg!(windows) {
+            assert_eq!(
+                normalize_url_path("./wheel%20cache/wheel-0.42.0.tar.gz"),
+                ".\\wheel cache\\wheel-0.42.0.tar.gz"
+            );
+        } else {
+            assert_eq!(
+                normalize_url_path("./wheel%20cache/wheel-0.42.0.tar.gz"),
+                "./wheel cache/wheel-0.42.0.tar.gz"
+            );
+        }
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        let path = Path::new("/a/b/../c/./d");
+        let normalized = normalize_absolute_path(path).unwrap();
+        assert_eq!(normalized, Path::new("/a/c/d"));
+
+        let path = Path::new("/a/../c/./d");
+        let normalized = normalize_absolute_path(path).unwrap();
+        assert_eq!(normalized, Path::new("/c/d"));
+
+        // This should be an error.
+        let path = Path::new("/a/../../c/./d");
+        let err = normalize_absolute_path(path).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_relative_to() {
+        assert_eq!(
+            relative_to(
+                Path::new("/home/ferris/carcinization/lib/python/site-packages/foo/__init__.py"),
+                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
+            )
+            .unwrap(),
+            Path::new("foo/__init__.py")
+        );
+        assert_eq!(
+            relative_to(
+                Path::new("/home/ferris/carcinization/lib/marker.txt"),
+                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
+            )
+            .unwrap(),
+            Path::new("../../marker.txt")
+        );
+        assert_eq!(
+            relative_to(
+                Path::new("/home/ferris/carcinization/bin/foo_launcher"),
+                Path::new("/home/ferris/carcinization/lib/python/site-packages"),
+            )
+            .unwrap(),
+            Path::new("../../../bin/foo_launcher")
+        );
+    }
+
+    #[test]
+    fn test_normalize_relative() {
+        let cases = [
+            (
+                "../../workspace-git-path-dep-test/packages/c/../../packages/d",
+                "../../workspace-git-path-dep-test/packages/d",
+            ),
+            (
+                "workspace-git-path-dep-test/packages/c/../../packages/d",
+                "workspace-git-path-dep-test/packages/d",
+            ),
+            ("./a/../../b", "../b"),
+            ("/usr/../../foo", "/../foo"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(normalize_path(Path::new(input)), Path::new(expected));
+        }
+    }
+}

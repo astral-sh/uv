@@ -5,6 +5,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::env::VarError;
+use std::ffi::OsString;
 use std::fmt::Display;
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -13,14 +14,16 @@ use uv_static::EnvVars;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
-    #[error(transparent)]
-    Var(#[from] VarError),
+    #[error("Environment variable {0} not set, is the `id-token: write` permission missing?")]
+    MissingEnvVar(&'static str),
+    #[error("Environment variable {0} is not valid UTF-8: `{1:?}`")]
+    InvalidEnvVar(&'static str, OsString),
     #[error(transparent)]
     Url(#[from] url::ParseError),
-    #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
-    #[error(transparent)]
-    ReqwestMiddleware(#[from] reqwest_middleware::Error),
+    #[error("Failed to fetch: `{0}`")]
+    Reqwest(Url, #[source] reqwest::Error),
+    #[error("Failed to fetch: `{0}`")]
+    ReqwestMiddleware(Url, #[source] reqwest_middleware::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(
@@ -29,15 +32,18 @@ pub enum TrustedPublishingError {
     Pypi(StatusCode, String),
 }
 
+impl TrustedPublishingError {
+    fn from_var_err(env_var: &'static str, err: VarError) -> Self {
+        match err {
+            VarError::NotPresent => Self::MissingEnvVar(env_var),
+            VarError::NotUnicode(os_string) => Self::InvalidEnvVar(env_var, os_string),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(transparent)]
 pub struct TrustedPublishingToken(String);
-
-impl From<TrustedPublishingToken> for String {
-    fn from(token: TrustedPublishingToken) -> Self {
-        token.0
-    }
-}
 
 impl Display for TrustedPublishingToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -75,7 +81,10 @@ pub(crate) async fn get_token(
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // If this fails, we can skip the audience request.
-    let oidc_token_request_token = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN)?;
+    let oidc_token_request_token =
+        env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN).map_err(|err| {
+            TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_TOKEN, err)
+        })?;
 
     // Request 1: Get the audience
     let audience = get_audience(registry, client).await?;
@@ -105,8 +114,17 @@ async fn get_audience(
     // (RFC 3986).
     let audience_url = Url::parse(&format!("https://{}/_/oidc/audience", registry.authority()))?;
     debug!("Querying the trusted publishing audience from {audience_url}");
-    let response = client.get(audience_url).send().await?;
-    let audience = response.error_for_status()?.json::<Audience>().await?;
+    let response = client
+        .get(audience_url.clone())
+        .send()
+        .await
+        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err))?;
+    let audience = response
+        .error_for_status()
+        .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?
+        .json::<Audience>()
+        .await
+        .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?;
     trace!("The audience is `{}`", &audience.audience);
     Ok(audience.audience)
 }
@@ -116,18 +134,27 @@ async fn get_oidc_token(
     oidc_token_request_token: &str,
     client: &ClientWithMiddleware,
 ) -> Result<String, TrustedPublishingError> {
-    let mut oidc_token_url = Url::parse(&env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL)?)?;
+    let oidc_token_url = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|err| {
+        TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL, err)
+    })?;
+    let mut oidc_token_url = Url::parse(&oidc_token_url)?;
     oidc_token_url
         .query_pairs_mut()
         .append_pair("audience", audience);
     debug!("Querying the trusted publishing OIDC token from {oidc_token_url}");
     let authorization = format!("bearer {oidc_token_request_token}");
     let response = client
-        .get(oidc_token_url)
+        .get(oidc_token_url.clone())
         .header(header::AUTHORIZATION, authorization)
         .send()
-        .await?;
-    let oidc_token: OidcToken = response.error_for_status()?.json().await?;
+        .await
+        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(oidc_token_url.clone(), err))?;
+    let oidc_token: OidcToken = response
+        .error_for_status()
+        .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?
+        .json()
+        .await
+        .map_err(|err| TrustedPublishingError::Reqwest(oidc_token_url.clone(), err))?;
     Ok(oidc_token.value)
 }
 
@@ -145,14 +172,18 @@ async fn get_publish_token(
         token: oidc_token.to_string(),
     };
     let response = client
-        .post(mint_token_url)
+        .post(mint_token_url.clone())
         .body(serde_json::to_vec(&mint_token_payload)?)
         .send()
-        .await?;
+        .await
+        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(mint_token_url.clone(), err))?;
 
     // reqwest's implementation of `.json()` also goes through `.bytes()`
     let status = response.status();
-    let body = response.bytes().await?;
+    let body = response
+        .bytes()
+        .await
+        .map_err(|err| TrustedPublishingError::Reqwest(mint_token_url.clone(), err))?;
 
     if status.is_success() {
         let publish_token: PublishToken = serde_json::from_slice(&body)?;

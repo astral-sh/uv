@@ -1,19 +1,23 @@
-use crate::pep639_glob::parse_pep639_glob;
 use crate::Error;
 use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use tracing::debug;
+use tracing::{debug, trace};
 use uv_fs::Simplified;
+use uv_globfilter::{parse_portable_glob, GlobDirFilter};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
-use uv_pubgrub::PubGrubSpecifier;
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
-use uv_warnings::warn_user_once;
+use version_ranges::Ranges;
+use walkdir::WalkDir;
+
+/// By default, we ignore generated python files.
+pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -47,6 +51,41 @@ pub enum ValidationError {
     InvalidSpdx(String, #[source] spdx::error::ParseError),
 }
 
+/// Check if the build backend is matching the currently running uv version.
+pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
+    let pyproject_toml: PyProjectToml =
+        match fs_err::read_to_string(source_tree.join("pyproject.toml"))
+            .map_err(|err| err.to_string())
+            .and_then(|pyproject_toml| {
+                toml::from_str(&pyproject_toml).map_err(|err| err.to_string())
+            }) {
+            Ok(pyproject_toml) => pyproject_toml,
+            Err(err) => {
+                debug!(
+                    "Not using uv build backend direct build of {name}, no pyproject.toml: {err}"
+                );
+                return false;
+            }
+        };
+    match pyproject_toml
+        .check_build_system(uv_version::version())
+        .as_slice()
+    {
+        // No warnings -> match
+        [] => true,
+        // Any warning -> no match
+        [first, others @ ..] => {
+            debug!(
+                "Not using uv build backend direct build of {name}, pyproject.toml does not match: {first}"
+            );
+            for other in others {
+                trace!("Further uv build backend direct build of {name} mismatch: {other}");
+            }
+            false
+        }
+    }
+}
+
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(
@@ -54,9 +93,11 @@ pub enum ValidationError {
     expecting = "The project table needs to follow \
     https://packaging.python.org/en/latest/guides/writing-pyproject-toml"
 )]
-pub(crate) struct PyProjectToml {
+pub struct PyProjectToml {
     /// Project metadata
     project: Project,
+    /// uv-specific configuration
+    tool: Option<Tool>,
     /// Build-related data
     build_system: BuildSystem,
 }
@@ -74,7 +115,19 @@ impl PyProjectToml {
         Ok(toml::from_str(contents)?)
     }
 
-    /// Warn if the `[build-system]` table looks suspicious.
+    pub(crate) fn readme(&self) -> Option<&Readme> {
+        self.project.readme.as_ref()
+    }
+
+    pub(crate) fn license_files(&self) -> Option<&[String]> {
+        self.project.license_files.as_deref()
+    }
+
+    pub(crate) fn settings(&self) -> Option<&BuildBackendSettings> {
+        self.tool.as_ref()?.uv.as_ref()?.build_backend.as_ref()
+    }
+
+    /// Returns user-facing warnings if the `[build-system]` table looks suspicious.
     ///
     /// Example of a valid table:
     ///
@@ -83,16 +136,13 @@ impl PyProjectToml {
     /// requires = ["uv>=0.4.15,<5"]
     /// build-backend = "uv"
     /// ```
-    ///
-    /// Returns whether all checks passed.
-    pub(crate) fn check_build_system(&self, uv_version: &str) -> bool {
-        let mut passed = true;
+    pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
+        let mut warnings = Vec::new();
         if self.build_system.build_backend.as_deref() != Some("uv") {
-            warn_user_once!(
+            warnings.push(format!(
                 r#"The value for `build_system.build-backend` should be `"uv"`, not `"{}"`"#,
                 self.build_system.build_backend.clone().unwrap_or_default()
-            );
-            passed = false;
+            ));
         }
 
         let uv_version =
@@ -108,12 +158,12 @@ impl PyProjectToml {
         };
 
         let [uv_requirement] = &self.build_system.requires.as_slice() else {
-            warn_user_once!("{}", expected());
-            return false;
+            warnings.push(expected());
+            return warnings;
         };
         if uv_requirement.name.as_str() != "uv" {
-            warn_user_once!("{}", expected());
-            return false;
+            warnings.push(expected());
+            return warnings;
         }
         let bounded = match &uv_requirement.version_or_url {
             None => false,
@@ -129,30 +179,28 @@ impl PyProjectToml {
                 // the existing immutable source distributions on pypi.
                 if !specifier.contains(&uv_version) {
                     // This is allowed to happen when testing prereleases, but we should still warn.
-                    warn_user_once!(
+                    warnings.push(format!(
                         r#"`build_system.requires = ["{uv_requirement}"]` does not contain the
                         current uv version {uv_version}"#,
-                    );
-                    passed = false;
+                    ));
                 }
-                PubGrubSpecifier::from_pep440_specifiers(specifier)
-                    .ok()
-                    .and_then(|specifier| Some(specifier.bounding_range()?.1 != Bound::Unbounded))
+                Ranges::from(specifier.clone())
+                    .bounding_range()
+                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
                     .unwrap_or(false)
             }
         };
 
         if !bounded {
-            warn_user_once!(
-                r#"`build_system.requires = ["{uv_requirement}"]` is missing an
-                upper bound on the uv version such as `<{next_breaking}`.
-                Without bounding the uv version, the source distribution will break
-                when a future, breaking version of uv is released."#,
-            );
-            passed = false;
+            warnings.push(format!(
+                "`build_system.requires = [\"{uv_requirement}\"]` is missing an \
+                upper bound on the uv version such as `<{next_breaking}`. \
+                Without bounding the uv version, the source distribution will break \
+                when a future, breaking version of uv is released.",
+            ));
         }
 
-        passed
+        warnings
     }
 
     /// Validate and convert a `pyproject.toml` to core metadata.
@@ -312,27 +360,55 @@ impl PyProjectToml {
                 };
 
                 let mut license_files = Vec::new();
+                let mut license_globs_parsed = Vec::new();
                 for license_glob in license_globs {
-                    let pep639_glob = parse_pep639_glob(license_glob)
-                        .map_err(|err| Error::Pep639Glob(license_glob.to_string(), err))?;
-                    let absolute_glob = PathBuf::from(glob::Pattern::escape(
-                        root.simplified().to_string_lossy().as_ref(),
-                    ))
-                    .join(pep639_glob.to_string())
-                    .to_string_lossy()
-                    .to_string();
-                    for license_file in glob::glob(&absolute_glob)
-                        .map_err(|err| Error::Pattern(absolute_glob.to_string(), err))?
-                    {
-                        let license_file = license_file
-                            .map_err(Error::Glob)?
-                            .to_string_lossy()
-                            .to_string();
-                        if !license_files.contains(&license_file) {
-                            license_files.push(license_file);
-                        }
-                    }
+                    let pep639_glob =
+                        parse_portable_glob(license_glob).map_err(|err| Error::PortableGlob {
+                            field: license_glob.to_string(),
+                            source: err,
+                        })?;
+                    license_globs_parsed.push(pep639_glob);
                 }
+                let license_globs =
+                    GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
+                        Error::GlobSetTooLarge {
+                            field: "tool.uv.build-backend.source-include".to_string(),
+                            source: err,
+                        }
+                    })?;
+
+                for entry in WalkDir::new(root).into_iter().filter_entry(|entry| {
+                    license_globs.match_directory(
+                        entry
+                            .path()
+                            .strip_prefix(root)
+                            .expect("walkdir starts with root"),
+                    )
+                }) {
+                    let entry = entry.map_err(|err| Error::WalkDir {
+                        root: root.to_path_buf(),
+                        err,
+                    })?;
+                    let relative = entry
+                        .path()
+                        .strip_prefix(root)
+                        .expect("walkdir starts with root");
+                    if !license_globs.match_path(relative) {
+                        trace!("Not a license files match: `{}`", relative.user_display());
+                        continue;
+                    }
+                    if !entry.file_type().is_file() {
+                        trace!(
+                            "Not a file in license files match: `{}`",
+                            relative.user_display()
+                        );
+                        continue;
+                    }
+
+                    debug!("License files match: `{}`", relative.user_display());
+                    license_files.push(relative.portable_display().to_string());
+                }
+
                 // The glob order may be unstable
                 license_files.sort();
 
@@ -563,7 +639,7 @@ struct Project {
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#readme>.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged, rename_all = "kebab-case")]
-enum Readme {
+pub(crate) enum Readme {
     /// Relative path to the README.
     String(PathBuf),
     /// Relative path to the README.
@@ -580,11 +656,22 @@ enum Readme {
     },
 }
 
+impl Readme {
+    /// If the readme is a file, return the path to the file.
+    pub(crate) fn path(&self) -> Option<&Path> {
+        match self {
+            Readme::String(path) => Some(path),
+            Readme::File { file, .. } => Some(file),
+            Readme::Text { .. } => None,
+        }
+    }
+}
+
 /// The optional `project.license` key in a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#license>.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
-enum License {
+pub(crate) enum License {
     /// An SPDX Expression.
     ///
     /// From the provisional PEP 639.
@@ -605,14 +692,19 @@ enum License {
 /// The entry is derived from the email format of `John Doe <john.doe@example.net>`. You need to
 /// provide at least name or email.
 #[derive(Deserialize, Debug, Clone)]
-#[serde(untagged, expecting = "a table with 'name' and/or 'email' keys")]
-enum Contact {
+// deny_unknown_fields prevents using the name field when the email is not a string.
+#[serde(
+    untagged,
+    deny_unknown_fields,
+    expecting = "a table with 'name' and/or 'email' keys"
+)]
+pub(crate) enum Contact {
+    /// TODO(konsti): RFC 822 validation.
+    NameEmail { name: String, email: String },
     /// TODO(konsti): RFC 822 validation.
     Name { name: String },
     /// TODO(konsti): RFC 822 validation.
     Email { email: String },
-    /// TODO(konsti): RFC 822 validation.
-    NameEmail { name: String, email: String },
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
@@ -627,5 +719,580 @@ struct BuildSystem {
     backend_path: Option<Vec<String>>,
 }
 
+/// The `tool` section as specified in PEP 517.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct Tool {
+    /// uv-specific configuration
+    uv: Option<ToolUv>,
+}
+
+/// The `tool.uv` section with build configuration.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct ToolUv {
+    /// Configuration for building source distributions and wheels with the uv build backend
+    build_backend: Option<BuildBackendSettings>,
+}
+
+/// To select which files to include in the source distribution, we first add the includes, then
+/// remove the excludes from that.
+///
+/// ## Include and exclude configuration
+///
+/// When building the source distribution, the following files and directories are included:
+/// * `pyproject.toml`
+/// * The module under `tool.uv.build-backend.module-root`, by default
+///   `src/<project_name_with_underscores>/**`.
+/// * `project.license-files` and `project.readme`.
+/// * All directories under `tool.uv.build-backend.data`.
+/// * All patterns from `tool.uv.build-backend.source-include`.
+///
+/// From these, we remove the `tool.uv.build-backend.source-exclude` matches.
+///
+/// When building the wheel, the following files and directories are included:
+/// * The module under `tool.uv.build-backend.module-root`, by default
+///   `src/<project_name_with_underscores>/**`.
+/// * `project.license-files` and `project.readme`, as part of the project metadata.
+/// * Each directory under `tool.uv.build-backend.data`, as data directories.
+///
+/// From these, we remove the `tool.uv.build-backend.source-exclude` and
+/// `tool.uv.build-backend.wheel-exclude` matches. The source dist excludes are applied to avoid
+/// source tree -> wheel source including more files than
+/// source tree -> source distribution -> wheel.
+///
+/// There are no specific wheel includes. There must only be one top level module, and all data
+/// files must either be under the module root or in a data directory. Most packages store small
+/// data in the module root alongside the source code.
+///
+/// ## Include and exclude syntax
+///
+/// Includes are anchored, which means that `pyproject.toml` includes only
+/// `<project root>/pyproject.toml`. Use for example `assets/**/sample.csv` to include for all
+/// `sample.csv` files in `<project root>/assets` or any child directory. To recursively include
+/// all files under a directory, use a `/**` suffix, e.g. `src/**`. For performance and
+/// reproducibility, avoid unanchored matches such as `**/sample.csv`.
+///
+/// Excludes are not anchored, which means that `__pycache__` excludes all directories named
+/// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
+/// `/dist` will exclude only `<project root>/dist`.
+///
+/// The glob syntax is the reduced portable glob from
+/// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
+#[derive(Deserialize, Debug, Clone)]
+#[serde(default, rename_all = "kebab-case")]
+pub(crate) struct BuildBackendSettings {
+    /// The directory that contains the module directory, usually `src`, or an empty path when
+    /// using the flat layout over the src layout.
+    pub(crate) module_root: PathBuf,
+
+    /// Glob expressions which files and directories to additionally include in the source
+    /// distribution.
+    ///
+    /// `pyproject.toml` and the contents of the module directory are always included.
+    ///
+    /// The glob syntax is the reduced portable glob from
+    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
+    pub(crate) source_include: Vec<String>,
+
+    /// If set to `false`, the default excludes aren't applied.
+    ///
+    /// Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
+    pub(crate) default_excludes: bool,
+
+    /// Glob expressions which files and directories to exclude from the source distribution.
+    pub(crate) source_exclude: Vec<String>,
+
+    /// Glob expressions which files and directories to exclude from the wheel.
+    pub(crate) wheel_exclude: Vec<String>,
+
+    /// Data includes for wheels.
+    ///
+    /// The directories included here are also included in the source distribution. They are copied
+    /// to the right wheel subdirectory on build.
+    pub(crate) data: WheelDataIncludes,
+}
+
+impl Default for BuildBackendSettings {
+    fn default() -> Self {
+        Self {
+            module_root: PathBuf::from("src"),
+            source_include: Vec::new(),
+            default_excludes: true,
+            source_exclude: Vec::new(),
+            wheel_exclude: Vec::new(),
+            data: WheelDataIncludes::default(),
+        }
+    }
+}
+
+/// Data includes for wheels.
+///
+/// Each entry is a directory, whose contents are copied to the matching directory in the wheel in
+/// `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this data
+/// is moved to its target location, as defined by
+/// <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>:
+/// - `data`: Installed over the virtualenv environment root. Warning: This may override existing
+///   files!
+/// - `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
+///   `<venv>\Scripts` on Windows. This directory is added to PATH when the virtual environment is
+///   activated or when using `uv run`, so this data type can be used to install additional
+///   binaries. Consider using `project.scripts` instead for starting Python code.
+/// - `headers`: Installed to the include directory, where compilers building Python packages with
+///   this package as built requirement will search for header files.
+/// - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended to
+///   uses these two options.
+#[derive(Default, Deserialize, Debug, Clone)]
+// `deny_unknown_fields` to catch typos such as `header` vs `headers`.
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub(crate) struct WheelDataIncludes {
+    purelib: Option<String>,
+    platlib: Option<String>,
+    headers: Option<String>,
+    scripts: Option<String>,
+    data: Option<String>,
+}
+
+impl WheelDataIncludes {
+    /// Yield all data directories name and corresponding paths.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&'static str, &str)> {
+        [
+            ("purelib", self.purelib.as_deref()),
+            ("platlib", self.platlib.as_deref()),
+            ("headers", self.headers.as_deref()),
+            ("scripts", self.scripts.as_deref()),
+            ("data", self.data.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(name, value)| Some((name, value?)))
+    }
+}
+
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    use indoc::{formatdoc, indoc};
+    use insta::assert_snapshot;
+    use std::iter;
+    use tempfile::TempDir;
+
+    fn extend_project(payload: &str) -> String {
+        formatdoc! {r#"
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+            {payload}
+
+            [build-system]
+            requires = ["uv>=0.4.15,<5"]
+            build-backend = "uv"
+        "#
+        }
+    }
+
+    fn format_err(err: impl std::error::Error) -> String {
+        let mut formatted = err.to_string();
+        for source in iter::successors(err.source(), |&err| err.source()) {
+            formatted += &format!("\n  Caused by: {source}");
+        }
+        formatted
+    }
+
+    #[test]
+    fn valid() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("Readme.md"),
+            indoc! {r"
+            # Foo
+
+            This is the foo library.
+        "},
+        )
+        .unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("License.txt"),
+            indoc! {r#"
+                THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        "#},
+        )
+        .unwrap();
+
+        let contents = indoc! {r#"
+            # See https://github.com/pypa/sampleproject/blob/main/pyproject.toml for another example
+
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+            description = "A Python package"
+            readme = "Readme.md"
+            requires_python = ">=3.12"
+            license = { file = "License.txt" }
+            authors = [{ name = "Ferris the crab", email = "ferris@rustacean.net" }]
+            maintainers = [{ name = "Konsti", email = "konstin@mailbox.org" }]
+            keywords = ["demo", "example", "package"]
+            classifiers = [
+                "Development Status :: 6 - Mature",
+                "License :: OSI Approved :: MIT License",
+                # https://github.com/pypa/trove-classifiers/issues/17
+                "License :: OSI Approved :: Apache Software License",
+                "Programming Language :: Python",
+            ]
+            dependencies = ["flask>=3,<4", "sqlalchemy[asyncio]>=2.0.35,<3"]
+            # We don't support dynamic fields, the default empty array is the only allowed value.
+            dynamic = []
+
+            [project.optional-dependencies]
+            postgres = ["psycopg>=3.2.2,<4"]
+            mysql = ["pymysql>=1.1.1,<2"]
+
+            [project.urls]
+            "Homepage" = "https://github.com/astral-sh/uv"
+            "Repository" = "https://astral.sh"
+
+            [project.scripts]
+            foo = "foo.cli:__main__"
+
+            [project.gui-scripts]
+            foo-gui = "foo.gui"
+
+            [project.entry-points.bar_group]
+            foo-bar = "foo:bar"
+
+            [build-system]
+            requires = ["uv>=0.4.15,<5"]
+            build-backend = "uv"
+        "#
+        };
+
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @r###"
+    Metadata-Version: 2.3
+    Name: hello-world
+    Version: 0.1.0
+    Summary: A Python package
+    Keywords: demo,example,package
+    Author: Ferris the crab
+    Author-email: Ferris the crab <ferris@rustacean.net>
+    License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+             INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+             PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+             HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+             CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+             OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+    Classifier: Development Status :: 6 - Mature
+    Classifier: License :: OSI Approved :: MIT License
+    Classifier: License :: OSI Approved :: Apache Software License
+    Classifier: Programming Language :: Python
+    Requires-Dist: flask>=3,<4
+    Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
+    Maintainer: Konsti
+    Maintainer-email: Konsti <konstin@mailbox.org>
+    Project-URL: Homepage, https://github.com/astral-sh/uv
+    Project-URL: Repository, https://astral.sh
+    Provides-Extra: mysql
+    Provides-Extra: postgres
+    Description-Content-Type: text/markdown
+
+    # Foo
+
+    This is the foo library.
+    "###);
+
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        [console_scripts]
+        foo = foo.cli:__main__
+
+        [gui_scripts]
+        foo-gui = foo.gui
+
+        [bar_group]
+        foo-bar = foo:bar
+
+        "###);
+    }
+
+    #[test]
+    fn build_system_valid() {
+        let contents = extend_project("");
+        let pyproject_toml = PyProjectToml::parse(&contents).unwrap();
+        assert_snapshot!(
+            pyproject_toml.check_build_system("1.0.0+test").join("\n"),
+            @""
+        );
+    }
+
+    #[test]
+    fn build_system_no_bound() {
+        let contents = indoc! {r#"
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["uv"]
+            build-backend = "uv"
+        "#};
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        assert_snapshot!(
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @r###"`build_system.requires = ["uv"]` is missing an upper bound on the uv version such as `<0.5`. Without bounding the uv version, the source distribution will break when a future, breaking version of uv is released."###
+        );
+    }
+
+    #[test]
+    fn build_system_multiple_packages() {
+        let contents = indoc! {r#"
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["uv>=0.4.15,<5", "wheel"]
+            build-backend = "uv"
+        "#};
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        assert_snapshot!(
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @"Expected a single uv requirement in `build-system.requires`, found ``"
+        );
+    }
+
+    #[test]
+    fn build_system_no_requires_uv() {
+        let contents = indoc! {r#"
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["setuptools"]
+            build-backend = "uv"
+        "#};
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        assert_snapshot!(
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @"Expected a single uv requirement in `build-system.requires`, found ``"
+        );
+    }
+
+    #[test]
+    fn build_system_not_uv() {
+        let contents = indoc! {r#"
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+
+            [build-system]
+            requires = ["uv>=0.4.15,<5"]
+            build-backend = "setuptools"
+        "#};
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        assert_snapshot!(
+            pyproject_toml.check_build_system("0.4.15+test").join("\n"),
+            @r###"The value for `build_system.build-backend` should be `"uv"`, not `"setuptools"`"###
+        );
+    }
+
+    #[test]
+    fn minimal() {
+        let contents = extend_project("");
+
+        let metadata = PyProjectToml::parse(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        Metadata-Version: 2.3
+        Name: hello-world
+        Version: 0.1.0
+        "###);
+    }
+
+    #[test]
+    fn invalid_readme_spec() {
+        let contents = extend_project(indoc! {r#"
+            readme = { path = "Readme.md" }
+        "#
+        });
+
+        let err = PyProjectToml::parse(&contents).unwrap_err();
+        assert_snapshot!(format_err(err), @r###"
+        Invalid pyproject.toml
+          Caused by: TOML parse error at line 4, column 10
+          |
+        4 | readme = { path = "Readme.md" }
+          |          ^^^^^^^^^^^^^^^^^^^^^^
+        data did not match any variant of untagged enum Readme
+        "###);
+    }
+
+    #[test]
+    fn missing_readme() {
+        let contents = extend_project(indoc! {r#"
+            readme = "Readme.md"
+        "#
+        });
+
+        let err = PyProjectToml::parse(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .unwrap_err();
+        // Strip away OS specific part.
+        let err = err
+            .to_string()
+            .replace('\\', "/")
+            .split_once(':')
+            .unwrap()
+            .0
+            .to_string();
+        assert_snapshot!(err, @"failed to open file `/do/not/read/Readme.md`");
+    }
+
+    #[test]
+    fn multiline_description() {
+        let contents = extend_project(indoc! {r#"
+            description = "Hi :)\nThis is my project"
+        "#
+        });
+
+        let err = PyProjectToml::parse(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r###"
+        Invalid pyproject.toml
+          Caused by: `project.description` must be a single line
+        "###);
+    }
+
+    #[test]
+    fn mixed_licenses() {
+        let contents = extend_project(indoc! {r#"
+            license-files = ["licenses/*"]
+            license =  { text = "MIT" }
+        "#
+        });
+
+        let err = PyProjectToml::parse(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r###"
+        Invalid pyproject.toml
+          Caused by: When `project.license-files` is defined, `project.license` must be an SPDX expression string
+        "###);
+    }
+
+    #[test]
+    fn valid_license() {
+        let contents = extend_project(indoc! {r#"
+            license = "MIT OR Apache-2.0"
+        "#
+        });
+        let metadata = PyProjectToml::parse(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .unwrap();
+        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        Metadata-Version: 2.4
+        Name: hello-world
+        Version: 0.1.0
+        License-Expression: MIT OR Apache-2.0
+        "###);
+    }
+
+    #[test]
+    fn invalid_license() {
+        let contents = extend_project(indoc! {r#"
+            license = "MIT XOR Apache-2"
+        "#
+        });
+        let err = PyProjectToml::parse(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .unwrap_err();
+        // TODO(konsti): We mess up the indentation in the error.
+        assert_snapshot!(format_err(err), @r###"
+        Invalid pyproject.toml
+          Caused by: `project.license` is not a valid SPDX expression: `MIT XOR Apache-2`
+          Caused by: MIT XOR Apache-2
+            ^^^ unknown term
+        "###);
+    }
+
+    #[test]
+    fn dynamic() {
+        let contents = extend_project(indoc! {r#"
+            dynamic = ["dependencies"]
+        "#
+        });
+
+        let err = PyProjectToml::parse(&contents)
+            .unwrap()
+            .to_metadata(Path::new("/do/not/read"))
+            .unwrap_err();
+        assert_snapshot!(format_err(err), @r###"
+        Invalid pyproject.toml
+          Caused by: Dynamic metadata is not supported
+        "###);
+    }
+
+    fn script_error(contents: &str) -> String {
+        let err = PyProjectToml::parse(contents)
+            .unwrap()
+            .to_entry_points()
+            .unwrap_err();
+        format_err(err)
+    }
+
+    #[test]
+    fn invalid_entry_point_group() {
+        let contents = extend_project(indoc! {r#"
+            [project.entry-points."a@b"]
+            foo = "bar"
+        "#
+        });
+        assert_snapshot!(script_error(&contents), @"Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `a@b`");
+    }
+
+    #[test]
+    fn invalid_entry_point_name() {
+        let contents = extend_project(indoc! {r#"
+            [project.scripts]
+            "a@b" = "bar"
+        "#
+        });
+        assert_snapshot!(script_error(&contents), @"Entrypoint names must consist of letters, numbers, dots and dashes; invalid name: `a@b`");
+    }
+
+    #[test]
+    fn invalid_entry_point_conflict_scripts() {
+        let contents = extend_project(indoc! {r#"
+            [project.entry-points.console_scripts]
+            foo = "bar"
+        "#
+        });
+        assert_snapshot!(script_error(&contents), @"Use `project.scripts` instead of `project.entry-points.console_scripts`");
+    }
+
+    #[test]
+    fn invalid_entry_point_conflict_gui_scripts() {
+        let contents = extend_project(indoc! {r#"
+            [project.entry-points.gui_scripts]
+            foo = "bar"
+        "#
+        });
+        assert_snapshot!(script_error(&contents), @"Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`");
+    }
+}

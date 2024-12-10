@@ -6,7 +6,7 @@ use uv_distribution_types::Verbatim;
 use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 
-use crate::resolver::ResolverMarkers;
+use crate::resolver::ResolverEnvironment;
 use crate::ResolveError;
 
 /// See [`crate::resolver::ForkState`].
@@ -29,7 +29,7 @@ impl ForkUrls {
         &mut self,
         package_name: &PackageName,
         url: &VerbatimParsedUrl,
-        fork_markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
     ) -> Result<(), ResolveError> {
         match self.0.entry(package_name.clone()) {
             Entry::Occupied(previous) => {
@@ -39,22 +39,11 @@ impl ForkUrls {
                         url.verbatim.verbatim().to_string(),
                     ];
                     conflicting_url.sort();
-                    return match fork_markers {
-                        ResolverMarkers::Universal { .. }
-                        | ResolverMarkers::SpecificEnvironment(_) => {
-                            Err(ResolveError::ConflictingUrlsUniversal(
-                                package_name.clone(),
-                                conflicting_url,
-                            ))
-                        }
-                        ResolverMarkers::Fork(fork_markers) => {
-                            Err(ResolveError::ConflictingUrlsFork {
-                                package_name: package_name.clone(),
-                                urls: conflicting_url,
-                                fork_markers: fork_markers.clone(),
-                            })
-                        }
-                    };
+                    return Err(ResolveError::ConflictingUrls {
+                        package_name: package_name.clone(),
+                        urls: conflicting_url,
+                        env: env.clone(),
+                    });
                 }
             }
             Entry::Vacant(vacant) => {

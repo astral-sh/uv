@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::IndexStrategy;
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::ErrorTree;
@@ -19,7 +19,7 @@ use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
-use crate::{Flexibility, Options, RequiresPython, ResolverMarkers};
+use crate::{Flexibility, Options, RequiresPython, ResolverEnvironment};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 
@@ -133,6 +133,16 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
                 let package_set = self.simplify_set(package_set, package);
                 let dependency_set = self.simplify_set(dependency_set, dependency);
+
+                if package.name_no_root() == dependency.name_no_root() {
+                    if let Some(member) = self.format_workspace_member(package) {
+                        return format!(
+                            "{member} depends on itself at an incompatible version ({})",
+                            PackageRange::dependency(dependency, &dependency_set, None)
+                        );
+                    }
+                }
+
                 if let Some(root) = self.format_root_requires(package) {
                     return format!(
                         "{root} {}",
@@ -362,7 +372,7 @@ impl PubGrubReportFormatter<'_> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
                 if self.is_single_project_workspace() {
-                    return Some("your projects's requirements".to_string());
+                    return Some("your project's requirements".to_string());
                 }
                 return Some("your workspace's requirements".to_string());
             }
@@ -404,6 +414,24 @@ impl PubGrubReportFormatter<'_> {
                 Some(format!("{package}"))
             }
             _ => None,
+        }
+    }
+
+    /// Return whether the given package is the root package.
+    fn is_root(package: &PubGrubPackage) -> bool {
+        matches!(&**package, PubGrubPackageInner::Root(_))
+    }
+
+    /// Return whether the given package is a workspace member.
+    fn is_single_project_workspace_member(&self, package: &PubGrubPackage) -> bool {
+        match &**package {
+            // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
+            PubGrubPackageInner::Package {
+                name, extra, dev, ..
+            } if self.workspace_members.contains(name) => {
+                self.is_single_project_workspace() && extra.is_none() && dev.is_none()
+            }
+            _ => false,
         }
     }
 
@@ -467,6 +495,18 @@ impl PubGrubReportFormatter<'_> {
                         .and(dependency2.package, &dependency_set2),
                 )
             }
+            (.., External::FromDependencyOf(package, _, dependency, _))
+                if Self::is_root(package)
+                    && self.is_single_project_workspace_member(dependency) =>
+            {
+                self.format_external(external1)
+            }
+            (External::FromDependencyOf(package, _, dependency, _), ..)
+                if Self::is_root(package)
+                    && self.is_single_project_workspace_member(dependency) =>
+            {
+                self.format_external(external2)
+            }
             _ => {
                 let external1 = self.format_external(external1);
                 let external2 = self.format_external(external2);
@@ -510,7 +550,7 @@ impl PubGrubReportFormatter<'_> {
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         workspace_members: &BTreeSet<PackageName>,
         options: Options,
         output_hints: &mut IndexSet<PubGrubHint>,
@@ -528,7 +568,7 @@ impl PubGrubReportFormatter<'_> {
                                 name,
                                 set,
                                 selector,
-                                markers,
+                                env,
                                 output_hints,
                             );
                         }
@@ -570,6 +610,17 @@ impl PubGrubReportFormatter<'_> {
                             workspace: self.is_workspace() && !self.is_single_project_workspace(),
                         });
                     }
+
+                    if package_name == dependency_name
+                        && (dependency.extra().is_none() || package.extra() == dependency.extra())
+                        && (dependency.dev().is_none() || dependency.dev() == package.dev())
+                        && workspace_members.contains(package_name)
+                    {
+                        output_hints.insert(PubGrubHint::DependsOnItself {
+                            package: package_name.clone(),
+                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
+                        });
+                    }
                 }
                 // Check for no versions due to `Requires-Python`.
                 if matches!(
@@ -596,7 +647,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
-                    markers,
+                    env,
                     workspace_members,
                     options,
                     output_hints,
@@ -610,7 +661,7 @@ impl PubGrubReportFormatter<'_> {
                     unavailable_packages,
                     incomplete_packages,
                     fork_urls,
-                    markers,
+                    env,
                     workspace_members,
                     options,
                     output_hints,
@@ -699,6 +750,14 @@ impl PubGrubReportFormatter<'_> {
                                 reason: reason.clone(),
                             });
                         }
+                        IncompletePackage::RequiresPython(requires_python, python_version) => {
+                            hints.insert(PubGrubHint::IncompatibleBuildRequirement {
+                                package: package.clone(),
+                                version: version.clone(),
+                                requires_python: requires_python.clone(),
+                                python_version: python_version.clone(),
+                            });
+                        }
                     }
                     break;
                 }
@@ -728,13 +787,19 @@ impl PubGrubReportFormatter<'_> {
         }
 
         // Add hints due to an index returning an unauthorized response.
-        for index in index_locations.indexes() {
+        for index in index_locations.allowed_indexes() {
             if index_capabilities.unauthorized(&index.url) {
                 hints.insert(PubGrubHint::UnauthorizedIndex {
                     index: index.url.clone(),
                 });
             }
             if index_capabilities.forbidden(&index.url) {
+                // If the index is a PyTorch index (e.g., `https://download.pytorch.org/whl/cu118`),
+                // avoid noting the lack of credentials. PyTorch returns a 403 (Forbidden) status
+                // code for any package that does not exist.
+                if index.url.url().host_str() == Some("download.pytorch.org") {
+                    continue;
+                }
                 hints.insert(PubGrubHint::ForbiddenIndex {
                     index: index.url.clone(),
                 });
@@ -748,7 +813,7 @@ impl PubGrubReportFormatter<'_> {
         name: &PackageName,
         set: &Range<Version>,
         selector: &CandidateSelector,
-        markers: &ResolverMarkers,
+        env: &ResolverEnvironment,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let any_prerelease = set.iter().any(|(start, end)| {
@@ -767,7 +832,7 @@ impl PubGrubReportFormatter<'_> {
 
         if any_prerelease {
             // A pre-release marker appeared in the version requirements.
-            if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
+            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseRequested {
                     package: package.clone(),
                     range: self.simplify_set(set, package).into_owned(),
@@ -785,7 +850,7 @@ impl PubGrubReportFormatter<'_> {
             })
         {
             // There are pre-release versions available for the package.
-            if selector.prerelease_strategy().allows(name, markers) != AllowPrerelease::Yes {
+            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseAvailable {
                     package: package.clone(),
                     version: version.clone(),
@@ -862,6 +927,17 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         reason: String,
     },
+    /// The source distribution has a `requires-python` requirement that is not met by the installed
+    /// Python version (and static metadata is not available).
+    IncompatibleBuildRequirement {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+        // excluded from `PartialEq` and `Hash`
+        requires_python: VersionSpecifiers,
+        // excluded from `PartialEq` and `Hash`
+        python_version: Version,
+    },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
         source: PythonRequirementSource,
@@ -880,8 +956,13 @@ pub(crate) enum PubGrubHint {
         dependency: PubGrubPackage,
         workspace: bool,
     },
+    /// A package depends on itself at an incompatible version.
+    DependsOnItself {
+        package: PackageName,
+        workspace: bool,
+    },
     /// A package was available on an index, but not at the correct version, and at least one
-    /// subsequent index was not queried. As such, a compatible version may be available on an
+    /// subsequent index was not queried. As such, a compatible version may be available on
     /// one of the remaining indexes.
     UncheckedIndex {
         package: PubGrubPackage,
@@ -932,6 +1013,9 @@ enum PubGrubHintCore {
     InvalidVersionStructure {
         package: PubGrubPackage,
     },
+    IncompatibleBuildRequirement {
+        package: PubGrubPackage,
+    },
     RequiresPython {
         source: PythonRequirementSource,
         requires_python: RequiresPython,
@@ -939,6 +1023,10 @@ enum PubGrubHintCore {
     DependsOnWorkspacePackage {
         package: PubGrubPackage,
         dependency: PubGrubPackage,
+        workspace: bool,
+    },
+    DependsOnItself {
+        package: PackageName,
         workspace: bool,
     },
     UncheckedIndex {
@@ -985,6 +1073,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::InvalidVersionStructure { package, .. } => {
                 Self::InvalidVersionStructure { package }
             }
+            PubGrubHint::IncompatibleBuildRequirement { package, .. } => {
+                Self::IncompatibleBuildRequirement { package }
+            }
             PubGrubHint::RequiresPython {
                 source,
                 requires_python,
@@ -1002,6 +1093,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 dependency,
                 workspace,
             },
+            PubGrubHint::DependsOnItself { package, workspace } => {
+                Self::DependsOnItself { package, workspace }
+            }
             PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
             PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
             PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
@@ -1032,22 +1126,22 @@ impl std::fmt::Display for PubGrubHint {
             Self::PrereleaseAvailable { package, version } => {
                 write!(
                     f,
-                    "{}{} Pre-releases are available for {} in the requested range (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
+                    "{}{} Pre-releases are available for `{}` in the requested range (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
-                    version.bold(),
+                    package.cyan(),
+                    version.cyan(),
                     "--prerelease=allow".green(),
                 )
             }
             Self::PrereleaseRequested { package, range } => {
                 write!(
                     f,
-                    "{}{} {} was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
+                    "{}{} `{}` was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
-                    PackageRange::compatibility(package, range, None).bold(),
+                    package.cyan(),
+                    PackageRange::compatibility(package, range, None).cyan(),
                     "--prerelease=allow".green(),
                 )
             }
@@ -1071,7 +1165,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::MissingPackageMetadata { package } => {
                 write!(
                     f,
-                    "{}{} Metadata for {} could not be found, as the wheel is missing a `METADATA` file",
+                    "{}{} Metadata for `{}` could not be found, as the wheel is missing a `METADATA` file",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.bold()
@@ -1080,31 +1174,31 @@ impl std::fmt::Display for PubGrubHint {
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
-                    "{}{} Metadata for {} could not be parsed:\n{}",
+                    "{}{} Metadata for `{}` could not be parsed:\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
+                    package.cyan(),
                     textwrap::indent(reason, "  ")
                 )
             }
             Self::InvalidPackageStructure { package, reason } => {
                 write!(
                     f,
-                    "{}{} The structure of {} was invalid:\n{}",
+                    "{}{} The structure of `{}` was invalid:\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
+                    package.cyan(),
                     textwrap::indent(reason, "  ")
                 )
             }
             Self::MissingVersionMetadata { package, version } => {
                 write!(
                     f,
-                    "{}{} Metadata for {}=={} could not be found, as the wheel is missing a `METADATA` file",
+                    "{}{} Metadata for `{}` ({}) could not be found, as the wheel is missing a `METADATA` file",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
-                    version.bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
                 )
             }
             Self::InvalidVersionMetadata {
@@ -1114,11 +1208,11 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} Metadata for {}=={} could not be parsed:\n{}",
+                    "{}{} Metadata for `{}` ({}) could not be parsed:\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
-                    version.bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
                     textwrap::indent(reason, "  ")
                 )
             }
@@ -1129,11 +1223,11 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The structure of {}=={} was invalid:\n{}",
+                    "{}{} The structure of `{}` ({}) was invalid:\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
-                    version.bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
                     textwrap::indent(reason, "  ")
                 )
             }
@@ -1144,11 +1238,11 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} Metadata for {}=={} was inconsistent:\n{}",
+                    "{}{} Metadata for `{}` ({}) was inconsistent:\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
-                    version.bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
                     textwrap::indent(reason, "  ")
                 )
             }
@@ -1164,10 +1258,10 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The `requires-python` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `requires-python` value (like {}).",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    requires_python.bold(),
-                    PackageRange::compatibility(package, package_set, None).bold(),
-                    package_requires_python.bold(),
-                    package_requires_python.bold(),
+                    requires_python.cyan(),
+                    PackageRange::compatibility(package, package_set, None).cyan(),
+                    package_requires_python.cyan(),
+                    package_requires_python.cyan(),
                 )
             }
             Self::RequiresPython {
@@ -1182,9 +1276,26 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The `--python-version` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a higher `--python-version` value.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    requires_python.bold(),
-                    PackageRange::compatibility(package, package_set, None).bold(),
-                    package_requires_python.bold(),
+                    requires_python.cyan(),
+                    PackageRange::compatibility(package, package_set, None).cyan(),
+                    package_requires_python.cyan(),
+                )
+            }
+            Self::IncompatibleBuildRequirement {
+                package,
+                version,
+                requires_python,
+                python_version,
+            } => {
+                write!(
+                    f,
+                    "{}{} The source distribution for `{}` ({}) does not include static metadata. Generating metadata for this package requires Python {}, but Python {} is installed.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
+                    requires_python.cyan(),
+                    python_version.cyan(),
                 )
             }
             Self::RequiresPython {
@@ -1199,8 +1310,8 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    PackageRange::compatibility(package, package_set, None).bold(),
-                    package_requires_python.bold(),
+                    PackageRange::compatibility(package, package_set, None).cyan(),
+                    package_requires_python.cyan(),
                 )
             }
             Self::DependsOnWorkspacePackage {
@@ -1223,8 +1334,24 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
-                    dependency.bold(),
+                    package.cyan(),
+                    dependency.cyan(),
+                )
+            }
+            Self::DependsOnItself { package, workspace } => {
+                let project = if *workspace {
+                    "workspace member"
+                } else {
+                    "project"
+                };
+                write!(
+                    f,
+                    "{}{} The {project} `{}` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `{}`, consider renaming the {project} `{}` to avoid creating a conflict.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    package.cyan(),
+                    package.cyan(),
                 )
             }
             Self::UncheckedIndex {
@@ -1238,7 +1365,7 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    package.bold(),
+                    package.cyan(),
                     found_index.cyan(),
                     PackageRange::compatibility(package, range, None).cyan(),
                     next_index.cyan(),
@@ -1252,7 +1379,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     index.redacted().cyan(),
-                    "401 Unauthorized".bold().red(),
+                    "401 Unauthorized".red(),
                 )
             }
             Self::ForbiddenIndex { index } => {
@@ -1262,7 +1389,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     index.redacted().cyan(),
-                    "403 Forbidden".bold().red(),
+                    "403 Forbidden".red(),
                 )
             }
         }

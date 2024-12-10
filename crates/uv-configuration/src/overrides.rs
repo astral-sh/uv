@@ -63,7 +63,7 @@ impl Overrides {
                 move |override_requirement| {
                     // Add the extra to the override marker.
                     let mut joint_marker = MarkerTree::expression(extra_expression.clone());
-                    joint_marker.and(override_requirement.marker.clone());
+                    joint_marker.and(override_requirement.marker);
                     Cow::Owned(Requirement {
                         marker: joint_marker,
                         ..override_requirement.clone()

@@ -49,6 +49,20 @@ By default, uv will automatically download Python versions if they cannot be fou
 This behavior can be
 [disabled with the `python-downloads` option](#disabling-automatic-python-downloads).
 
+### Python version files
+
+The `.python-version` file can be used to create a default Python version request. uv searches for a
+`.python-version` file in the working directory and each of its parents. Any of the request formats
+described above can be used, though use of a version number is recommended for interopability with
+other tools.
+
+A `.python-version` file can be created in the current directory with the
+[`uv python pin`](../reference/cli.md/#uv-python-pin) command.
+
+Discovery of `.python-version` files can be disabled with `--no-config`.
+
+uv will not search for `.python-version` files beyond project or workspace boundaries.
+
 ## Installing a Python version
 
 uv bundles a list of downloadable CPython and PyPy distributions for macOS, Linux, and Windows.
@@ -91,20 +105,17 @@ $ uv python install pypy
 All of the [Python version request](#requesting-a-version) formats are supported except those that
 are used for requesting local interpreters such as a file path.
 
+By default `uv python install` will verify that a managed Python version is installed or install the
+latest version. If a `.python-version` file is present, uv will install the Python version listed in
+the file. A project that requires multiple Python versions may define a `.python-versions` file. If
+present, uv will install all of the Python versions listed in the file.
+
 ## Project Python versions
 
-By default `uv python install` will verify that a managed Python version is installed or install the
-latest version.
-
-However, a project may include a `.python-version` file specifying a default Python version. If
-present, uv will install the Python version listed in the file.
-
-Alternatively, a project that requires multiple Python versions may also define a `.python-versions`
-file. If present, uv will install all of the Python versions listed in the file. This file takes
-precedence over the `.python-version` file.
-
-uv will also respect Python requirements defined in a `pyproject.toml` file during project command
-invocations.
+uv will respect Python requirements defined in `requires-python` in the `pyproject.toml` file during
+project command invocations. The first Python version that is compatible with the requirement will
+be used, unless a version is otherwise requested, e.g., via a `.python-version` file or the
+`--python` flag.
 
 ## Viewing available Python versions
 

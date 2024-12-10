@@ -73,7 +73,7 @@ $ uv pip install -e .
 To install a project in another directory as an editable package:
 
 ```console
-$ uv pip install -e ruff @ ./project/ruff
+$ uv pip install -e "ruff @ ./project/ruff"
 ```
 
 ## Installing packages from files

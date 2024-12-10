@@ -7,10 +7,10 @@ requirements of the requested packages are compatible.
 
 ## Dependencies
 
-Most projects and packages have dependencies. Dependencies are other packages that are needed in
+Most projects and packages have dependencies. Dependencies are other packages that are necessary in
 order for the current package to work. A package defines its dependencies as _requirements_, roughly
 a combination of a package name and acceptable versions. The dependencies defined by the current
-project are called _direct dependencies_. The requirements added by each dependency of the current
+project are called _direct dependencies_. The dependencies added by each dependency of the current
 project are called _indirect_ or _transitive dependencies_.
 
 !!! note
@@ -34,10 +34,10 @@ To help demonstrate the resolution process, consider the following dependencies:
 In this example, the resolver must find a set of package versions which satisfies the project
 requirements. Since there is only one version of both `foo` and `bar`, those will be used. The
 resolution must also include the transitive dependencies, so a version of `lib` must be chosen.
-`foo 1.0.0` allows all of the available versions of `lib`, but `bar 1.0.0` requires `lib>=2.0.0` so
+`foo 1.0.0` allows all available versions of `lib`, but `bar 1.0.0` requires `lib>=2.0.0` so
 `lib 2.0.0` must be used.
 
-In some resolutions, there is more than one solution. Consider the following dependencies:
+In some resolutions, there may be more than one valid solution. Consider the following dependencies:
 
 <!-- prettier-ignore -->
 - The project depends on `foo` and `bar`.
@@ -49,21 +49,21 @@ In some resolutions, there is more than one solution. Consider the following dep
     - `bar 2.0.0` depends on `lib==1.0.0`
 - `lib` has two versions, 1.0.0 and 2.0.0. Both versions have no dependencies.
 
-In this example, some version of both `foo` and `bar` must be picked, however, determining which
+In this example, some version of both `foo` and `bar` must be selected; however, determining which
 version requires considering the dependencies of each version of `foo` and `bar`. `foo 2.0.0` and
-`bar 2.0.0` cannot be installed together because they conflict on their required version of `lib`,
-so the resolver must select either `foo 1.0.0` or `bar 1.0.0`. Both are valid solutions, and
-different resolution algorithms may give either result.
+`bar 2.0.0` cannot be installed together as they conflict on their required version of `lib`, so the
+resolver must select either `foo 1.0.0` (along with `bar 2.0.0`) or `bar 1.0.0` (along with
+`foo 1.0.0`). Both are valid solutions, and different resolution algorithms may yield either result.
 
 ## Platform markers
 
 Markers allow attaching an expression to requirements that indicate when the dependency should be
-used. For example `bar; python_version<"3.9"` can be used to only require `bar` on Python 3.8 and
-older.
+used. For example `bar ; python_version < "3.9"` indicates that `bar` should only be installed on
+Python 3.8 and earlier.
 
-Markers are used to adjust a package's dependencies depending on the current environment or
-platform. For example, markers can be used to change dependencies based on the operating system, the
-CPU architecture, the Python version, the Python implementation, and more.
+Markers are used to adjust a package's dependencies based on the current environment or platform.
+For example, markers can be used to modify dependencies by operating system, CPU architecture,
+Python version, Python implementation, and more.
 
 !!! note
 
@@ -86,7 +86,7 @@ uv supports both [platform-specific](#platform-specific-resolution) and
 uv's lockfile (`uv.lock`) is created with a universal resolution and is portable across platforms.
 This ensures that dependencies are locked for everyone working on the project, regardless of
 operating system, architecture, and Python version. The uv lockfile is created and modified by
-[project](../concepts/projects.md) commands such as `uv lock`, `uv sync`, and `uv add`.
+[project](../concepts/projects/index.md) commands such as `uv lock`, `uv sync`, and `uv add`.
 
 universal resolution is also available in uv's pip interface, i.e.,
 [`uv pip compile`](../pip/compile.md), with the `--universal` flag. The resulting requirements file
@@ -98,16 +98,20 @@ be used. A universal resolution is often more constrained than a platform-specif
 we need to take the requirements for all markers into account.
 
 During universal resolution, a minimum Python version must be specified. Project commands read the
-minimum required version from `project.requires-python` in the `pyproject.toml`. When using the pip
-interface, provide a value with the `--python-version` option, otherwise the current Python version
-will be treated as a lower bound. For example, `--universal --python-version 3.9` writes a universal
-resolution for Python 3.9 and later.
+minimum required version from `project.requires-python` in the `pyproject.toml`. When using uv's pip
+interface, provide a value with the `--python-version` option; otherwise, the current Python version
+will be treated as a lower bound. For example, `--universal --python-version 3.9` performs a
+universal resolution for Python 3.9 and later.
 
-Setting the minimum Python version is important because all package versions we select have to be
-compatible with the Python version range. For example, a universal resolution of `numpy<2` with
-`--python-version 3.8` resolves to `numpy==1.24.4`, while `--python-version 3.9` resolves to
-`numpy==1.26.4`, as `numpy` releases after 1.26.4 require at Python 3.9+. Note that we only consider
-the lower bound of any Python requirement, upper bounds are always ignored.
+During universal resolution, all selected dependency versions must be compatible with the _entire_
+`requires-python` range declared in the `pyproject.toml`. For example, if a project's
+`requires-python` is `>=3.8`, then uv will not allow _any_ dependency versions that are limited to,
+e.g., Python 3.9 and later, as they are not compatible with Python 3.8, the lower bound of the
+project's supported range. In other words, the project's `requires-python` must be a subset of the
+`requires-python` of all its dependencies.
+
+When evaluating `requires-python` ranges for dependencies, uv only considers lower bounds and
+ignores upper bounds entirely. For example, `>=3.8, <4` is treated as `>=3.8`.
 
 ## Platform-specific resolution
 
@@ -237,9 +241,9 @@ resolved versions, regardless of which packages are overlapping between the two.
 
 ## Dependency overrides
 
-Dependency overrides allow bypassing failing or undesirable resolutions by overriding a package's
-declared dependencies. Overrides are a useful last resort for cases in which you _know_ that a
-dependency is compatible with a certain version of a package, despite the metadata indicating
+Dependency overrides allow bypassing unsuccessful or undesirable resolutions by overriding a
+package's declared dependencies. Overrides are a useful last resort for cases in which you _know_
+that a dependency is compatible with a certain version of a package, despite the metadata indicating
 otherwise.
 
 For example, if a transitive dependency declares the requirement `pydantic>=1.0,<2.0`, but _does_
@@ -302,6 +306,15 @@ For example, you can declare the metadata for `flash-attn`, allowing uv to resol
 the package from source (which itself requires installing `torch`):
 
 ```toml
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["flash-attn"]
+
+[tool.uv.sources]
+flash-attn = { git = "https://github.com/Dao-AILab/flash-attention", tag = "v2.6.3" }
+
 [[tool.uv.dependency-metadata]]
 name = "flash-attn"
 version = "2.6.3"
@@ -312,6 +325,12 @@ Like dependency overrides, `tool.uv.dependency-metadata` can also be used for ca
 package's metadata is incorrect or incomplete, or when a package is not available in the package
 index. While dependency overrides allow overriding the allowed versions of a package globally,
 metadata overrides allow overriding the declared metadata of a _specific package_.
+
+!!! note
+
+    The `version` field in `tool.uv.dependency-metadata` is optional for registry-based
+    dependencies (when omitted, uv will assume the metadata applies to all versions of the package),
+    but _required_ for direct URL dependencies (like Git dependencies).
 
 Entries in the `tool.uv.dependency-metadata` table follow the
 [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) specification,
@@ -336,9 +355,10 @@ code.
 
 Lower bounds are particularly critical when writing a library. It's important to declare the lowest
 version for each dependency that your library works with, and to validate that the bounds are
-correct — testing with [`--resolution lowest` or `resolution lowest-direct`](#resolution-strategy).
-Otherwise, a user may receive an old, incompatible version of one of your library's dependencies and
-the library will fail with an unexpected error.
+correct — testing with
+[`--resolution lowest` or `--resolution lowest-direct`](#resolution-strategy). Otherwise, a user may
+receive an old, incompatible version of one of your library's dependencies and the library will fail
+with an unexpected error.
 
 ## Reproducible resolutions
 
@@ -382,3 +402,21 @@ reading and extracting archives in the following formats:
 
 For more details about the internals of the resolver, see the
 [resolver reference](../reference/resolver-internals.md) documentation.
+
+## Lockfile versioning
+
+The `uv.lock` file uses a versioned schema. The schema version is included in the `version` field of
+the lockfile.
+
+Any given version of uv can read and write lockfiles with the same schema version, but will reject
+lockfiles with a greater schema version. For example, if your uv version supports schema v1,
+`uv lock` will error if it encounters an existing lockfile with schema v2.
+
+uv versions that support schema v2 _may_ be able to read lockfiles with schema v1 if the schema
+update was backwards-compatible. However, this is not guaranteed, and uv may exit with an error if
+it encounters a lockfile with an outdated schema version.
+
+The schema version is considered part of the public API, and so is only bumped in minor releases, as
+a breaking change (see [Versioning](../reference/policies/versioning.md)). As such, all uv patch
+versions within a given minor uv release are guaranteed to have full lockfile compatibility. In
+other words, lockfiles may only be rejected across minor releases.

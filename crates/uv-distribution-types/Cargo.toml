@@ -24,7 +24,7 @@ uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
-uv-pep508 = { workspace = true, features = ["serde"] }
+uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 
@@ -33,6 +33,7 @@ bitflags = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+petgraph = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
@@ -42,3 +43,4 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
+version-ranges = { workspace = true }

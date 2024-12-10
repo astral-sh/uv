@@ -1,45 +1,46 @@
-use crate::requires_python::{LowerBound, RequiresPythonRange, UpperBound};
 use pubgrub::Range;
 use uv_pep440::Version;
-use uv_pep508::{MarkerTree, MarkerTreeKind, MarkerValueVersion};
+use uv_pep508::{CanonicalMarkerValueVersion, MarkerTree, MarkerTreeKind};
+
+use crate::requires_python::{LowerBound, RequiresPythonRange, UpperBound};
 
 /// Returns the bounding Python versions that can satisfy the [`MarkerTree`], if it's constrained.
-pub(crate) fn requires_python(tree: &MarkerTree) -> Option<RequiresPythonRange> {
-    fn collect_python_markers(tree: &MarkerTree, markers: &mut Vec<Range<Version>>) {
+pub(crate) fn requires_python(tree: MarkerTree) -> Option<RequiresPythonRange> {
+    fn collect_python_markers(tree: MarkerTree, markers: &mut Vec<Range<Version>>) {
         match tree.kind() {
             MarkerTreeKind::True | MarkerTreeKind::False => {}
             MarkerTreeKind::Version(marker) => match marker.key() {
-                MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion => {
+                CanonicalMarkerValueVersion::PythonFullVersion => {
                     for (range, tree) in marker.edges() {
                         if !tree.is_false() {
                             markers.push(range.clone());
                         }
                     }
                 }
-                MarkerValueVersion::ImplementationVersion => {
+                CanonicalMarkerValueVersion::ImplementationVersion => {
                     for (_, tree) in marker.edges() {
-                        collect_python_markers(&tree, markers);
+                        collect_python_markers(tree, markers);
                     }
                 }
             },
             MarkerTreeKind::String(marker) => {
                 for (_, tree) in marker.children() {
-                    collect_python_markers(&tree, markers);
+                    collect_python_markers(tree, markers);
                 }
             }
             MarkerTreeKind::In(marker) => {
                 for (_, tree) in marker.children() {
-                    collect_python_markers(&tree, markers);
+                    collect_python_markers(tree, markers);
                 }
             }
             MarkerTreeKind::Contains(marker) => {
                 for (_, tree) in marker.children() {
-                    collect_python_markers(&tree, markers);
+                    collect_python_markers(tree, markers);
                 }
             }
             MarkerTreeKind::Extra(marker) => {
                 for (_, tree) in marker.children() {
-                    collect_python_markers(&tree, markers);
+                    collect_python_markers(tree, markers);
                 }
             }
         }

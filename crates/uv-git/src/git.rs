@@ -22,8 +22,20 @@ use uv_static::EnvVars;
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".ok";
 
+#[derive(Debug, thiserror::Error)]
+pub enum GitError {
+    #[error("Git executable not found. Ensure that Git is installed and available.")]
+    GitNotFound,
+    #[error(transparent)]
+    Other(#[from] which::Error),
+}
 /// A global cache of the result of `which git`.
-pub static GIT: LazyLock<Result<PathBuf, which::Error>> = LazyLock::new(|| which::which("git"));
+pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
+    which::which("git").map_err(|e| match e {
+        which::Error::CannotFindBinaryPath => GitError::GitNotFound,
+        e => GitError::Other(e),
+    })
+});
 
 /// A reference to commit or commit-ish.
 #[derive(
@@ -590,7 +602,7 @@ pub(crate) fn fetch(
     }
 }
 
-/// Attempts to use `git` CLI installed on the system to fetch a repository,.
+/// Attempts to use `git` CLI installed on the system to fetch a repository.
 fn fetch_with_cli(
     repo: &mut GitRepository,
     url: &str,

@@ -57,15 +57,56 @@ pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
     None
 }
 
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub(crate) enum CondaEnvironmentKind {
+    /// The base Conda environment; treated like a system Python environment.
+    Base,
+    /// Any other Conda environment; treated like a virtual environment.
+    Child,
+}
+
+impl CondaEnvironmentKind {
+    /// Whether the given `CONDA_PREFIX` path is the base Conda environment.
+    ///
+    /// When the base environment is used, `CONDA_DEFAULT_ENV` will be set to a name, i.e., `base` or
+    /// `root` which does not match the prefix, e.g. `/usr/local` instead of
+    /// `/usr/local/conda/envs/<name>`.
+    fn from_prefix_path(path: &Path) -> Self {
+        // If we cannot read `CONDA_DEFAULT_ENV`, there's no way to know if the base environment
+        let Ok(default_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
+            return CondaEnvironmentKind::Child;
+        };
+
+        // These are the expected names for the base environment
+        if default_env != "base" && default_env != "root" {
+            return CondaEnvironmentKind::Child;
+        }
+
+        let Some(name) = path.file_name() else {
+            return CondaEnvironmentKind::Child;
+        };
+
+        if name.to_str().is_some_and(|name| name == default_env) {
+            CondaEnvironmentKind::Base
+        } else {
+            CondaEnvironmentKind::Child
+        }
+    }
+}
+
 /// Locate an active conda environment by inspecting environment variables.
 ///
-/// Supports `CONDA_PREFIX`.
-pub(crate) fn conda_prefix_from_env() -> Option<PathBuf> {
-    if let Some(dir) = env::var_os(EnvVars::CONDA_PREFIX).filter(|value| !value.is_empty()) {
-        return Some(PathBuf::from(dir));
-    }
+/// If `base` is true, the active environment must be the base environment or `None` is returned,
+/// and vice-versa.
+pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<PathBuf> {
+    let dir = env::var_os(EnvVars::CONDA_PREFIX).filter(|value| !value.is_empty())?;
+    let path = PathBuf::from(dir);
 
-    None
+    if kind != CondaEnvironmentKind::from_prefix_path(&path) {
+        return None;
+    };
+
+    Some(path)
 }
 
 /// Locate a virtual environment by searching the file system.

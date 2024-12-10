@@ -25,6 +25,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-version = { workspace = true }
+uv-shell = { workspace = true }
 
 fs-err = { workspace = true }
 itertools = { workspace = true }

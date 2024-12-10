@@ -13,6 +13,7 @@ use tracing::debug;
 use uv_fs::{cachedir, Simplified, CWD};
 use uv_pypi_types::Scheme;
 use uv_python::{Interpreter, VirtualEnvironment};
+use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
 
 use crate::{Error, Prompt};
@@ -57,31 +58,20 @@ pub(crate) fn create(
     // considered the "base" for the virtual environment. This is typically the Python executable
     // from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
     // the base Python executable is the Python executable of the interpreter's base interpreter.
-    let base_python = if cfg!(unix) {
-        // On Unix, follow symlinks to resolve the base interpreter, since the Python executable in
-        // a virtual environment is a symlink to the base interpreter.
-        uv_fs::canonicalize_executable(interpreter.sys_executable())?
-    } else if cfg!(windows) {
-        // On Windows, follow `virtualenv`. If we're in a virtual environment, use
-        // `sys._base_executable` if it exists; if not, use `sys.base_prefix`. For example, with
-        // Python installed from the Windows Store, `sys.base_prefix` is slightly "incorrect".
+    let base_python = if cfg!(unix) && interpreter.is_standalone() {
+        // In `python-build-standalone`, a symlinked interpreter will return its own executable path
+        // as `sys._base_executable`. Using the symlinked path as the base Python executable is
+        // incorrect,  since it will cause `home` to point to something that is _not_ a Python
+        // installation.
         //
-        // If we're _not_ in a virtual environment, use the interpreter's executable, since it's
-        // already a "system Python". We canonicalize the path to ensure that it's real and
-        // consistent, though we don't expect any symlinks on Windows.
-        if interpreter.is_virtualenv() {
-            if let Some(base_executable) = interpreter.sys_base_executable() {
-                base_executable.to_path_buf()
-            } else {
-                // Assume `python.exe`, though the exact executable name is never used (below) on
-                // Windows, only its parent directory.
-                interpreter.sys_base_prefix().join("python.exe")
-            }
-        } else {
-            interpreter.sys_executable().to_path_buf()
-        }
+        // Instead, we want to fully resolve the symlink to the actual Python executable.
+        uv_fs::canonicalize_executable(interpreter.sys_executable())?
     } else {
-        unimplemented!("Only Windows and Unix are supported")
+        std::path::absolute(
+            interpreter
+                .sys_base_executable()
+                .unwrap_or(interpreter.sys_executable()),
+        )?
     };
 
     // Validate the existing location.
@@ -298,23 +288,20 @@ pub(crate) fn create(
 
         let virtual_env_dir = match (relocatable, name.to_owned()) {
             (true, "activate") => {
-                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#
+                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#.to_string()
             }
-            (true, "activate.bat") => r"%~dp0..",
+            (true, "activate.bat") => r"%~dp0..".to_string(),
             (true, "activate.fish") => {
-                r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#
+                r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#.to_string()
             }
             // Note:
             // * relocatable activate scripts appear not to be possible in csh and nu shell
             // * `activate.ps1` is already relocatable by default.
-            _ => {
-                // SAFETY: `unwrap` is guaranteed to succeed because `location` is an `Utf8PathBuf`.
-                location.simplified().to_str().unwrap()
-            }
+            _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };
 
         let activator = template
-            .replace("{{ VIRTUAL_ENV_DIR }}", virtual_env_dir)
+            .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
             .replace("{{ BIN_NAME }}", bin_name)
             .replace(
                 "{{ VIRTUAL_PROMPT }}",

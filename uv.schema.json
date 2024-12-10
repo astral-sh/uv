@@ -31,6 +31,17 @@
         "$ref": "#/definitions/CacheKey"
       }
     },
+    "check-url": {
+      "description": "Check an index URL for existing files to skip duplicate uploads.\n\nThis option allows retrying publishing that failed after only some, but not all files have been uploaded, and handles error due to parallel uploads of the same file.\n\nBefore uploading, the index is checked. If the exact same file already exists in the index, the file will not be uploaded. If an error occurred during the upload, the index is checked again, to handle cases where the identical file was uploaded twice in parallel.\n\nThe exact behavior will vary based on the index. When uploading to PyPI, uploading the same file succeeds even without `--check-url`, while most other indexes error.\n\nThe index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IndexUrl"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "compile-bytecode": {
       "description": "Compile Python files to bytecode after installation.\n\nBy default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`); instead, compilation is performed lazily the first time a module is imported. For use-cases in which start time is critical, such as CLI applications and Docker containers, this option can be enabled to trade longer installation times for faster start times.\n\nWhen enabled, uv will process the entire site-packages directory (including packages that are not being modified by the current operation) for consistency. Like pip, it will also ignore errors.",
       "type": [
@@ -76,6 +87,17 @@
         }
       ]
     },
+    "conflicts": {
+      "description": "A list sets of conflicting groups or extras.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SchemaConflicts"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "constraint-dependencies": {
       "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
       "type": [
@@ -84,6 +106,16 @@
       ],
       "items": {
         "type": "string"
+      }
+    },
+    "default-groups": {
+      "description": "The list of `dependency-groups` to install by default.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/GroupName"
       }
     },
     "dependency-metadata": {
@@ -347,6 +379,13 @@
       ],
       "format": "uri"
     },
+    "pypy-install-mirror": {
+      "description": "Mirror URL to use for downloading managed PyPy installations.\n\nBy default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/). This variable can be set to a mirror URL to use a different source for PyPy installations. The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "python-downloads": {
       "description": "Whether to allow Python downloads.",
       "anyOf": [
@@ -356,6 +395,13 @@
         {
           "type": "null"
         }
+      ]
+    },
+    "python-install-mirror": {
+      "description": "Mirror URL for downloading managed Python installations.\n\nBy default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone). This variable can be set to a mirror URL to use a different source for Python installations. The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "type": [
+        "string",
+        "null"
       ]
     },
     "python-preference": {
@@ -398,7 +444,7 @@
       ]
     },
     "sources": {
-      "description": "The sources to use (e.g., workspace members, Git repositories, local paths) when resolving dependencies.",
+      "description": "The sources to use when resolving dependencies.\n\n`tool.uv.sources` enriches the dependency metadata with additional sources, incorporated during development. A dependency source can be a Git repository, a URL, a local path, or an alternative registry.\n\nSee [Dependencies](https://docs.astral.sh/uv/concepts/projects/dependencies/) for more.",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvSources"
@@ -542,6 +588,35 @@
         "$ref": "#/definitions/ConfigSettingValue"
       }
     },
+    "ConflictPackage": {
+      "description": "The actual conflicting data for a package.\n\nThat is, either an extra or a group name.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "Extra"
+          ],
+          "properties": {
+            "Extra": {
+              "$ref": "#/definitions/ExtraName"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Group"
+          ],
+          "properties": {
+            "Group": {
+              "$ref": "#/definitions/GroupName"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "ExcludeNewer": {
       "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",
       "type": "string",
@@ -579,6 +654,10 @@
       },
       "additionalProperties": false
     },
+    "GroupName": {
+      "description": "The normalized name of a dependency group.\n\nSee: - <https://peps.python.org/pep-0735/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
+      "type": "string"
+    },
     "Index": {
       "type": "object",
       "required": [
@@ -597,9 +676,13 @@
         },
         "name": {
           "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexName"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "url": {
@@ -611,6 +694,10 @@
           ]
         }
       }
+    },
+    "IndexName": {
+      "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
+      "type": "string"
     },
     "IndexStrategy": {
       "oneOf": [
@@ -723,16 +810,6 @@
             "null"
           ]
         },
-        "allow-insecure-host": {
-          "description": "Allow insecure connections to host.\n\nExpects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g., `localhost:8080`), or a URL (e.g., `https://localhost`).\n\nWARNING: Hosts included in this list will not be verified against the system's certificate store. Only use `--allow-insecure-host` in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/definitions/TrustedHost"
-          }
-        },
         "annotation-style": {
           "description": "The style of the annotation comments included in the output file, used to indicate the source of each package.",
           "anyOf": [
@@ -833,7 +910,7 @@
           ]
         },
         "extra": {
-          "description": "Include optional dependencies from the extra group name; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
+          "description": "Include optional dependencies from the specified extra; may be provided more than once.\n\nOnly applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.",
           "type": [
             "array",
             "null"
@@ -969,6 +1046,16 @@
           ],
           "items": {
             "$ref": "#/definitions/PackageName"
+          }
+        },
+        "no-extra": {
+          "description": "Exclude the specified optional dependencies if `all-extras` is supplied.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/ExtraName"
           }
         },
         "no-header": {
@@ -1290,6 +1377,43 @@
         }
       ]
     },
+    "SchemaConflictItem": {
+      "description": "Like [`ConflictItem`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "type": "object",
+      "required": [
+        "conflict"
+      ],
+      "properties": {
+        "conflict": {
+          "$ref": "#/definitions/ConflictPackage"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PackageName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SchemaConflictSet": {
+      "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SchemaConflictItem"
+      }
+    },
+    "SchemaConflicts": {
+      "description": "Like [`Conflicts`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.\n\nN.B. `Conflicts` is still used for (de)serialization. Specifically, in the lock file, where the package name is required.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SchemaConflictSet"
+      }
+    },
     "Source": {
       "description": "A `tool.uv.sources` value.",
       "anyOf": [
@@ -1306,10 +1430,30 @@
                 "null"
               ]
             },
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "git": {
               "description": "The repository URL (without the `git+` prefix).",
               "type": "string",
               "format": "uri"
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
@@ -1347,6 +1491,26 @@
             "url"
           ],
           "properties": {
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
@@ -1382,6 +1546,26 @@
                 "null"
               ]
             },
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
@@ -1398,8 +1582,28 @@
             "index"
           ],
           "properties": {
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "index": {
-              "type": "string"
+              "$ref": "#/definitions/IndexName"
             },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
@@ -1414,6 +1618,26 @@
             "workspace"
           ],
           "properties": {
+            "extra": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ExtraName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/GroupName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
@@ -1446,8 +1670,7 @@
       "description": "A subset of the Python Package Metadata 2.3 standard as specified in <https://packaging.python.org/specifications/core-metadata/>.",
       "type": "object",
       "required": [
-        "name",
-        "version"
+        "name"
       ],
       "properties": {
         "name": {
@@ -1476,7 +1699,10 @@
         },
         "version": {
           "description": "PEP 440-style package version, e.g., `1.2.3`",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -1585,6 +1811,69 @@
           ]
         },
         {
+          "description": "An `x86_64` target for the `manylinux_2_32` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_32"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux_2_33` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_33"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux_2_34` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_34"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux_2_35` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_35"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux_2_36` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_36"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux_2_37` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_37"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux_2_38` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_38"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux_2_39` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_39"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux_2_40` platform.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux_2_40"
+          ]
+        },
+        {
           "description": "An ARM64 target for the `manylinux_2_17` platform.",
           "type": "string",
           "enum": [
@@ -1603,6 +1892,69 @@
           "type": "string",
           "enum": [
             "aarch64-manylinux_2_31"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_32` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_32"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_33` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_33"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_34` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_34"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_35` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_35"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_36` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_36"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_37` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_37"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_38` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_38"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_39` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_39"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux_2_40` platform.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux_2_40"
           ]
         }
       ]

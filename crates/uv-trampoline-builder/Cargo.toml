@@ -1,0 +1,36 @@
+[package]
+name = "uv-trampoline-builder"
+version = "0.0.1"
+publish = false
+description = "Builds launchers for `uv-trampoline`"
+
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[features]
+default = ["production"]
+
+# Expect tests to run against production builds of `uv-trampoline` binaries, rather than debug builds
+production = []
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-fs = { workspace = true }
+
+fs-err = {workspace = true }
+thiserror = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { version = "2.0.16" }
+assert_fs = { version = "1.1.2" }
+anyhow = { version = "1.0.89" }
+fs-err = { workspace = true }
+which = { workspace = true }

@@ -52,7 +52,6 @@ use uv_distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecific
 use uv_fs::Simplified;
 use uv_pep508::{expand_env_vars, Pep508Error, RequirementOrigin, VerbatimUrl};
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
-use uv_warnings::warn_user;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
@@ -219,12 +218,6 @@ impl RequirementsTxt {
             file: requirements_txt.to_path_buf(),
             error: err,
         })?;
-        if data == Self::default() {
-            warn_user!(
-                "Requirements file {} does not contain any dependencies",
-                requirements_txt.user_display()
-            );
-        }
 
         Ok(data)
     }
@@ -798,14 +791,21 @@ async fn read_url_to_string(
                 url: path.as_ref().to_owned(),
             })?;
 
-    Ok(client
-        .client()
-        .get(path_utf8)
+    let url = Url::from_str(path_utf8)
+        .map_err(|err| RequirementsTxtParserError::InvalidUrl(path_utf8.to_string(), err))?;
+    let response = client
+        .for_host(&url)
+        .get(url.clone())
         .send()
-        .await?
-        .error_for_status()?
+        .await
+        .map_err(|err| RequirementsTxtParserError::from_reqwest_middleware(url.clone(), err))?;
+    let text = response
+        .error_for_status()
+        .map_err(|err| RequirementsTxtParserError::from_reqwest(url.clone(), err))?
         .text()
-        .await?)
+        .await
+        .map_err(|err| RequirementsTxtParserError::from_reqwest(url.clone(), err))?;
+    Ok(text)
 }
 
 /// Error parsing requirements.txt, wrapper with filename
@@ -889,7 +889,9 @@ pub enum RequirementsTxtParserError {
         url: PathBuf,
     },
     #[cfg(feature = "http")]
-    Reqwest(reqwest_middleware::Error),
+    Reqwest(Url, reqwest_middleware::Error),
+    #[cfg(feature = "http")]
+    InvalidUrl(String, url::ParseError),
 }
 
 impl Display for RequirementsTxtParserError {
@@ -953,8 +955,12 @@ impl Display for RequirementsTxtParserError {
                 )
             }
             #[cfg(feature = "http")]
-            Self::Reqwest(err) => {
-                write!(f, "Error while accessing remote requirements file {err}")
+            Self::Reqwest(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
+            }
+            #[cfg(feature = "http")]
+            Self::InvalidUrl(url, err) => {
+                write!(f, "Not a valid  URL, {err}: `{url}`")
             }
         }
     }
@@ -981,7 +987,9 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::Parser { .. } => None,
             Self::NonUnicodeUrl { .. } => None,
             #[cfg(feature = "http")]
-            Self::Reqwest(err) => err.source(),
+            Self::Reqwest(_, err) => err.source(),
+            #[cfg(feature = "http")]
+            Self::InvalidUrl(_, err) => err.source(),
         }
     }
 }
@@ -1107,12 +1115,12 @@ impl Display for RequirementsTxtFileError {
                 )
             }
             #[cfg(feature = "http")]
-            RequirementsTxtParserError::Reqwest(err) => {
-                write!(
-                    f,
-                    "Error while accessing remote requirements file {}: {err}",
-                    self.file.user_display(),
-                )
+            RequirementsTxtParserError::Reqwest(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
+            }
+            #[cfg(feature = "http")]
+            RequirementsTxtParserError::InvalidUrl(url, err) => {
+                write!(f, "Not a valid URL, {err}: `{url}`")
             }
         }
     }
@@ -1131,16 +1139,13 @@ impl From<io::Error> for RequirementsTxtParserError {
 }
 
 #[cfg(feature = "http")]
-impl From<reqwest::Error> for RequirementsTxtParserError {
-    fn from(err: reqwest::Error) -> Self {
-        Self::Reqwest(reqwest_middleware::Error::Reqwest(err))
+impl RequirementsTxtParserError {
+    fn from_reqwest(url: Url, err: reqwest::Error) -> Self {
+        Self::Reqwest(url, reqwest_middleware::Error::Reqwest(err))
     }
-}
 
-#[cfg(feature = "http")]
-impl From<reqwest_middleware::Error> for RequirementsTxtParserError {
-    fn from(err: reqwest_middleware::Error) -> Self {
-        Self::Reqwest(err)
+    fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
+        Self::Reqwest(url, err)
     }
 }
 
@@ -1394,13 +1399,19 @@ mod test {
         let filters = vec![
             (requirement_txt.as_str(), "<REQUIREMENTS_TXT>"),
             (missing_txt.as_str(), "<MISSING_TXT>"),
+            // Windows translates error messages, for example i get:
+            // "Das System kann den angegebenen Pfad nicht finden. (os error 3)"
+            (
+                r": .* \(os error 2\)",
+                ": The system cannot find the path specified. (os error 2)",
+            ),
         ];
         insta::with_settings!({
             filters => filters,
         }, {
             insta::assert_snapshot!(errors, @r###"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
-            failed to read from file `<MISSING_TXT>`
+            failed to read from file `<MISSING_TXT>`: The system cannot find the path specified. (os error 2)
             "###);
         });
 

@@ -16,3 +16,4 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-macros = { workspace = true }

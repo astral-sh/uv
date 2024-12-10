@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::path::Path;
 
-use anstream::eprint;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
@@ -12,33 +11,35 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, PreviewMode, Reinstall,
+    SourceStrategy, TrustedHost, Upgrade,
 };
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     DependencyMetadata, Index, IndexLocations, NameRequirementSpecification,
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{Requirement, SupportedEnvironments};
+use uv_pep508::RequirementOrigin;
+use uv_pypi_types::{Requirement, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
 use uv_resolver::{
-    FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
-    ResolverManifest, ResolverMarkers, SatisfiesResult,
+    FlatIndex, InMemoryIndex, Lock, LockVersion, Options, OptionsBuilder, PythonRequirement,
+    RequiresPython, ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    VERSION,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
-use crate::commands::project::{
-    find_requires_python, ProjectError, ProjectInterpreter, SharedState,
-};
+use crate::commands::project::{find_requires_python, ProjectError, ProjectInterpreter};
 use crate::commands::reporters::ResolverReporter;
 use crate::commands::{diagnostics, pip, ExitStatus};
 use crate::printer::Printer;
@@ -70,46 +71,68 @@ impl LockResult {
 }
 
 /// Resolve the project requirements into a lockfile.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn lock(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    dry_run: bool,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
 
-    // Find an interpreter for the project
-    let interpreter = ProjectInterpreter::discover(
-        &workspace,
-        python.as_deref().map(PythonRequest::parse),
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
+    // Determine the lock mode.
+    let interpreter;
+    let mode = if frozen {
+        LockMode::Frozen
+    } else {
+        // Find an interpreter for the project
+        interpreter = ProjectInterpreter::discover(
+            &workspace,
+            project_dir,
+            python.as_deref().map(PythonRequest::parse),
+            python_preference,
+            python_downloads,
+            connectivity,
+            native_tls,
+            allow_insecure_host,
+            install_mirrors,
+            no_config,
+            cache,
+            printer,
+        )
+        .await?
+        .into_interpreter();
+
+        if locked {
+            LockMode::Locked(&interpreter)
+        } else if dry_run {
+            LockMode::DryRun(&interpreter)
+        } else {
+            LockMode::Write(&interpreter)
+        }
+    };
 
     // Initialize any shared state.
     let state = SharedState::default();
 
     // Perform the lock operation.
     match do_safe_lock(
-        locked,
-        frozen,
+        mode,
         &workspace,
-        &interpreter,
         settings.as_ref(),
         LowerBound::Warn,
         &state,
@@ -117,46 +140,59 @@ pub(crate) async fn lock(
         connectivity,
         concurrency,
         native_tls,
+        allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {
         Ok(lock) => {
-            if let LockResult::Changed(Some(previous), lock) = &lock {
-                report_upgrades(previous, lock, printer)?;
+            if dry_run {
+                let changed = if let LockResult::Changed(previous, lock) = &lock {
+                    report_upgrades(previous.as_ref(), lock, printer, dry_run)?
+                } else {
+                    false
+                };
+                if !changed {
+                    writeln!(
+                        printer.stderr(),
+                        "{}",
+                        "No lockfile changes detected".bold()
+                    )?;
+                }
+            } else {
+                if let LockResult::Changed(Some(previous), lock) = &lock {
+                    report_upgrades(Some(previous), lock, printer, dry_run)?;
+                }
             }
+
             Ok(ExitStatus::Success)
         }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::NoSolution(err),
-        ))) => {
-            diagnostics::no_solution(&err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::FetchAndBuild(dist, err),
-        ))) => {
-            diagnostics::fetch_and_build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(pip::operations::Error::Resolve(
-            uv_resolver::ResolveError::Build(dist, err),
-        ))) => {
-            diagnostics::build(dist, err);
-            Ok(ExitStatus::Failure)
-        }
-
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) enum LockMode<'env> {
+    /// Write the lockfile to disk.
+    Write(&'env Interpreter),
+    /// Perform a resolution, but don't write the lockfile to disk.
+    DryRun(&'env Interpreter),
+    /// Error if the lockfile is not up-to-date with the project requirements.
+    Locked(&'env Interpreter),
+    /// Use the existing lockfile without performing a resolution.
+    Frozen,
+}
+
 /// Perform a lock operation, respecting the `--locked` and `--frozen` parameters.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_safe_lock(
-    locked: bool,
-    frozen: bool,
+    mode: LockMode<'_>,
     workspace: &Workspace,
-    interpreter: &Interpreter,
     settings: ResolverSettingsRef<'_>,
     bounds: LowerBound,
     state: &SharedState,
@@ -164,71 +200,93 @@ pub(super) async fn do_safe_lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<LockResult, ProjectError> {
-    if frozen {
-        // Read the existing lockfile, but don't attempt to lock the project.
-        let existing = read(workspace)
-            .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)?;
-        Ok(LockResult::Unchanged(existing))
-    } else if locked {
-        // Read the existing lockfile.
-        let existing = read(workspace)
-            .await?
-            .ok_or_else(|| ProjectError::MissingLockfile)?;
-
-        // Perform the lock operation, but don't write the lockfile to disk.
-        let result = do_lock(
-            workspace,
-            interpreter,
-            Some(existing),
-            settings,
-            bounds,
-            state,
-            logger,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
-
-        // If the lockfile changed, return an error.
-        if matches!(result, LockResult::Changed(_, _)) {
-            return Err(ProjectError::LockMismatch);
+    match mode {
+        LockMode::Frozen => {
+            // Read the existing lockfile, but don't attempt to lock the project.
+            let existing = read(workspace)
+                .await?
+                .ok_or_else(|| ProjectError::MissingLockfile)?;
+            Ok(LockResult::Unchanged(existing))
         }
+        LockMode::Locked(interpreter) => {
+            // Read the existing lockfile.
+            let existing = read(workspace)
+                .await?
+                .ok_or_else(|| ProjectError::MissingLockfile)?;
 
-        Ok(result)
-    } else {
-        // Read the existing lockfile.
-        let existing = read(workspace).await?;
+            // Perform the lock operation, but don't write the lockfile to disk.
+            let result = do_lock(
+                workspace,
+                interpreter,
+                Some(existing),
+                settings,
+                bounds,
+                state,
+                logger,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+                preview,
+            )
+            .await?;
 
-        // Perform the lock operation.
-        let result = do_lock(
-            workspace,
-            interpreter,
-            existing,
-            settings,
-            bounds,
-            state,
-            logger,
-            connectivity,
-            concurrency,
-            native_tls,
-            cache,
-            printer,
-        )
-        .await?;
+            // If the lockfile changed, return an error.
+            if matches!(result, LockResult::Changed(_, _)) {
+                return Err(ProjectError::LockMismatch);
+            }
 
-        // If the lockfile changed, write it to disk.
-        if let LockResult::Changed(_, lock) = &result {
-            commit(lock, workspace).await?;
+            Ok(result)
         }
+        LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
+            // Read the existing lockfile.
+            let existing = match read(workspace).await {
+                Ok(Some(existing)) => Some(existing),
+                Ok(None) => None,
+                Err(ProjectError::Lock(err)) => {
+                    warn_user!(
+                        "Failed to read existing lockfile; ignoring locked requirements: {err}"
+                    );
+                    None
+                }
+                Err(err) => return Err(err),
+            };
 
-        Ok(result)
+            // Perform the lock operation.
+            let result = do_lock(
+                workspace,
+                interpreter,
+                existing,
+                settings,
+                bounds,
+                state,
+                logger,
+                connectivity,
+                concurrency,
+                native_tls,
+                allow_insecure_host,
+                cache,
+                printer,
+                preview,
+            )
+            .await?;
+
+            // If the lockfile changed, write it to disk.
+            if !matches!(mode, LockMode::DryRun(_)) {
+                if let LockResult::Changed(_, lock) = &result {
+                    commit(lock, workspace).await?;
+                }
+            }
+
+            Ok(result)
+        }
     }
 }
 
@@ -244,8 +302,10 @@ async fn do_lock(
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
 
@@ -254,7 +314,6 @@ async fn do_lock(
         index_locations,
         index_strategy,
         keyring_provider,
-        allow_insecure_host,
         resolution,
         prerelease,
         dependency_metadata,
@@ -269,11 +328,15 @@ async fn do_lock(
     } = settings;
 
     // Collect the requirements, etc.
-    let requirements = workspace.non_project_requirements().collect::<Vec<_>>();
-    let overrides = workspace.overrides().into_iter().collect::<Vec<_>>();
+    let requirements = workspace.non_project_requirements()?;
+    let overrides = workspace.overrides();
     let constraints = workspace.constraints();
-    let dev = vec![DEV_DEPENDENCIES.clone()];
     let source_trees = vec![];
+
+    // If necessary, lower the overrides and constraints.
+    let requirements = lower(requirements, workspace, index_locations, sources)?;
+    let overrides = lower(overrides, workspace, index_locations, sources)?;
+    let constraints = lower(constraints, workspace, index_locations, sources)?;
 
     // Collect the list of members.
     let members = {
@@ -301,9 +364,9 @@ async fn do_lock(
                 .iter()
                 .zip(environments.as_markers().iter().skip(1))
             {
-                if !lhs.is_disjoint(rhs) {
+                if !lhs.is_disjoint(*rhs) {
                     let mut hint = lhs.negate();
-                    hint.and(rhs.clone());
+                    hint.and(*rhs);
 
                     let lhs = lhs
                         .contents()
@@ -328,7 +391,7 @@ async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    let requires_python = find_requires_python(workspace)?;
+    let requires_python = find_requires_python(workspace);
 
     let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {
@@ -353,6 +416,7 @@ async fn do_lock(
         .map(SupportedEnvironments::as_markers)
         .into_iter()
         .flatten()
+        .copied()
     {
         if requires_python.to_marker_tree().is_disjoint(environment) {
             return if let Some(contents) = environment.contents() {
@@ -433,10 +497,7 @@ async fn do_lock(
         index_locations,
         &flat_index,
         dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_setting,
         build_isolation,
@@ -447,6 +508,7 @@ async fn do_lock(
         bounds,
         sources,
         concurrency,
+        preview,
     );
 
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
@@ -465,11 +527,10 @@ async fn do_lock(
             interpreter,
             &requires_python,
             index_locations,
-            build_options,
             upgrade,
             &options,
             &hasher,
-            &state.index,
+            state.index(),
             &database,
             printer,
         )
@@ -512,13 +573,14 @@ async fn do_lock(
 
             // If an existing lockfile exists, build up a set of preferences.
             let LockedRequirements { preferences, git } = versions_lock
-                .map(|lock| read_lock_requirements(lock, upgrade))
+                .map(|lock| read_lock_requirements(lock, workspace.install_path(), upgrade))
+                .transpose()?
                 .unwrap_or_default();
 
             // Populate the Git resolver.
             for ResolvedRepositoryReference { reference, sha } in git {
                 debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-                state.git.insert(reference, sha);
+                state.git().insert(reference, sha);
             }
 
             // Determine whether we can reuse the existing package forks.
@@ -534,9 +596,20 @@ async fn do_lock(
             // `preferences-dependent-forking` packse scenario). To avoid this, we store the forks in the
             // lockfile. We read those after all the lockfile filters, to allow the forks to change when
             // the environment changed, e.g. the python bound check above can lead to different forking.
-            let resolver_markers = ResolverMarkers::universal(
+            let resolver_env = ResolverEnvironment::universal(
                 forks_lock
-                    .map(|lock| lock.fork_markers().to_vec())
+                    .map(|lock| {
+                        // TODO(ag): Consider whether we should be capturing
+                        // conflicting extras/groups for every fork. If
+                        // we did, then we'd be able to use them here,
+                        // which would in turn flow into construction of
+                        // `ResolverEnvironment`.
+                        lock.fork_markers()
+                            .iter()
+                            .copied()
+                            .map(UniversalMarker::pep508)
+                            .collect()
+                    })
                     .unwrap_or_else(|| {
                         environments
                             .cloned()
@@ -547,11 +620,13 @@ async fn do_lock(
 
             // Resolve the requirements.
             let resolution = pip::operations::resolve(
-                ExtrasResolver::new(&hasher, &state.index, database)
+                ExtrasResolver::new(&hasher, state.index(), database)
                     .with_reporter(ResolverReporter::from(printer))
                     .resolve(workspace.members_requirements())
-                    .await?
+                    .await
+                    .map_err(|err| ProjectError::Operation(err.into()))?
                     .into_iter()
+                    .chain(workspace.group_requirements())
                     .chain(requirements.iter().cloned())
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
@@ -565,7 +640,6 @@ async fn do_lock(
                     .cloned()
                     .map(UnresolvedRequirementSpecification::from)
                     .collect(),
-                dev,
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
                 None,
@@ -577,11 +651,12 @@ async fn do_lock(
                 &Reinstall::default(),
                 upgrade,
                 None,
-                resolver_markers,
+                resolver_env,
                 python_requirement,
+                workspace.conflicts(),
                 &client,
                 &flat_index,
-                &state.index,
+                state.index(),
                 &build_dispatch,
                 concurrency,
                 options,
@@ -606,8 +681,9 @@ async fn do_lock(
             .relative_to(workspace)?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution_graph(&resolution, workspace.install_path())?
+            let lock = Lock::from_resolution(&resolution, workspace.install_path())?
                 .with_manifest(manifest)
+                .with_conflicts(workspace.conflicts())
                 .with_supported_environments(
                     environments
                         .cloned()
@@ -648,7 +724,6 @@ impl ValidatedLock {
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
-        build_options: &BuildOptions,
         upgrade: &Upgrade,
         options: &Options,
         hasher: &HashStrategy,
@@ -741,13 +816,23 @@ impl ValidatedLock {
             .map(SupportedEnvironments::as_markers)
             .unwrap_or_default()
             .iter()
-            .cloned()
+            .copied()
             .map(|marker| lock.simplify_environment(marker))
             .collect::<Vec<_>>();
         if expected != actual {
             debug!(
                 "Ignoring existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
+            );
+            return Ok(Self::Versions(lock));
+        }
+
+        // If the conflicting group config has changed, we have to perform a clean resolution.
+        if &workspace.conflicts() != lock.conflicts() {
+            debug!(
+                "Ignoring existing lockfile due to change in conflicting groups: `{:?}` vs. `{:?}`",
+                workspace.conflicts(),
+                lock.conflicts(),
             );
             return Ok(Self::Versions(lock));
         }
@@ -775,7 +860,6 @@ impl ValidatedLock {
                 overrides,
                 dependency_metadata,
                 indexes,
-                build_options,
                 interpreter.tags()?,
                 hasher,
                 index,
@@ -869,7 +953,7 @@ impl ValidatedLock {
                 );
                 Ok(Self::Preferable(lock))
             }
-            SatisfiesResult::MismatchedDevDependencies(name, version, expected, actual) => {
+            SatisfiesResult::MismatchedDependencyGroups(name, version, expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched dev dependencies for: `{name}=={version}`\n  Expected: {:?}\n  Actual: {:?}",
                     expected, actual
@@ -903,30 +987,73 @@ async fn commit(lock: &Lock, workspace: &Workspace) -> Result<(), ProjectError> 
 /// Returns `Ok(None)` if the lockfile does not exist.
 pub(crate) async fn read(workspace: &Workspace) -> Result<Option<Lock>, ProjectError> {
     match fs_err::tokio::read_to_string(&workspace.install_path().join("uv.lock")).await {
-        Ok(encoded) => match toml::from_str(&encoded) {
-            Ok(lock) => Ok(Some(lock)),
-            Err(err) => {
-                eprint!("Failed to parse lockfile; ignoring locked requirements: {err}");
-                Ok(None)
+        Ok(encoded) => {
+            match toml::from_str::<Lock>(&encoded) {
+                Ok(lock) => {
+                    // If the lockfile uses an unsupported version, raise an error.
+                    if lock.version() != VERSION {
+                        return Err(ProjectError::UnsupportedLockVersion(
+                            VERSION,
+                            lock.version(),
+                        ));
+                    }
+                    Ok(Some(lock))
+                }
+                Err(err) => {
+                    // If we failed to parse the lockfile, determine whether it's a supported
+                    // version.
+                    if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
+                        if lock.version() != VERSION {
+                            return Err(ProjectError::UnparsableLockVersion(
+                                VERSION,
+                                lock.version(),
+                                err,
+                            ));
+                        }
+                    }
+                    Err(ProjectError::UvLockParse(err))
+                }
             }
-        },
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+/// Read the lockfile from the workspace as bytes.
+///
+/// Returns `Ok(None)` if the lockfile does not exist.
+pub(crate) async fn read_bytes(workspace: &Workspace) -> Result<Option<Vec<u8>>, ProjectError> {
+    match fs_err::tokio::read(&workspace.install_path().join("uv.lock")).await {
+        Ok(encoded) => Ok(Some(encoded)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err.into()),
     }
 }
 
 /// Reports on the versions that were upgraded in the new lockfile.
-fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> anyhow::Result<()> {
+///
+/// Returns `true` if any upgrades were reported.
+fn report_upgrades(
+    existing_lock: Option<&Lock>,
+    new_lock: &Lock,
+    printer: Printer,
+    dry_run: bool,
+) -> anyhow::Result<bool> {
     let existing_packages: FxHashMap<&PackageName, BTreeSet<&Version>> =
-        existing_lock.packages().iter().fold(
-            FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
-            |mut acc, package| {
-                acc.entry(package.name())
-                    .or_default()
-                    .insert(package.version());
-                acc
-            },
-        );
+        if let Some(existing_lock) = existing_lock {
+            existing_lock.packages().iter().fold(
+                FxHashMap::with_capacity_and_hasher(existing_lock.packages().len(), FxBuildHasher),
+                |mut acc, package| {
+                    acc.entry(package.name())
+                        .or_default()
+                        .insert(package.version());
+                    acc
+                },
+            )
+        } else {
+            FxHashMap::default()
+        };
 
     let new_distributions: FxHashMap<&PackageName, BTreeSet<&Version>> =
         new_lock.packages().iter().fold(
@@ -939,11 +1066,13 @@ fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> a
             },
         );
 
+    let mut updated = false;
     for name in existing_packages
         .keys()
         .chain(new_distributions.keys())
         .collect::<BTreeSet<_>>()
     {
+        updated = true;
         match (existing_packages.get(name), new_distributions.get(name)) {
             (Some(existing_versions), Some(new_versions)) => {
                 if existing_versions != new_versions {
@@ -960,7 +1089,7 @@ fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> a
                     writeln!(
                         printer.stderr(),
                         "{} {name} {existing_versions} -> {new_versions}",
-                        "Updated".green().bold()
+                        if dry_run { "Update" } else { "Updated" }.green().bold()
                     )?;
                 }
             }
@@ -973,7 +1102,7 @@ fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> a
                 writeln!(
                     printer.stderr(),
                     "{} {name} {existing_versions}",
-                    "Removed".red().bold()
+                    if dry_run { "Remove" } else { "Removed" }.red().bold()
                 )?;
             }
             (None, Some(new_versions)) => {
@@ -985,7 +1114,7 @@ fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> a
                 writeln!(
                     printer.stderr(),
                     "{} {name} {new_versions}",
-                    "Added".green().bold()
+                    if dry_run { "Add" } else { "Added" }.green().bold()
                 )?;
             }
             (None, None) => {
@@ -994,5 +1123,38 @@ fn report_upgrades(existing_lock: &Lock, new_lock: &Lock, printer: Printer) -> a
         }
     }
 
-    Ok(())
+    Ok(updated)
+}
+
+/// Lower a set of requirements, relative to the workspace root.
+fn lower(
+    requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    workspace: &Workspace,
+    locations: &IndexLocations,
+    sources: SourceStrategy,
+) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
+    let name = workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .map(|project| project.name.clone());
+
+    // We model these as `build-requires`, since, like build requirements, it doesn't define extras
+    // or dependency groups.
+    let metadata = uv_distribution::BuildRequires::from_workspace(
+        uv_pypi_types::BuildRequires {
+            name,
+            requires_dist: requirements,
+        },
+        workspace,
+        locations,
+        sources,
+        LowerBound::Warn,
+    )?;
+
+    Ok(metadata
+        .requires_dist
+        .into_iter()
+        .map(|requirement| requirement.with_origin(RequirementOrigin::Workspace))
+        .collect::<Vec<_>>())
 }

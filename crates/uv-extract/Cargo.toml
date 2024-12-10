@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-pypi-types = { workspace = true }
 

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.4.22"
+version = "0.5.7"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -12,7 +12,7 @@ keywords = [
   "uv", "requirements", "packaging"
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
@@ -49,6 +49,7 @@ include = [
     # this one isn't discovered by maturin because it's behind a feature flag
     { path = "crates/uv-performance-memory-allocator/**/*", format = ["sdist", "wheel"] },
     { path = "crates/uv-performance-flate2-backend/**/*", format = ["sdist", "wheel"] },
+    { path = "crates/uv-trampoline/trampolines/*", format = "sdist" }, 
     { path = "LICENSE-APACHE", format = "sdist" },
     { path = "LICENSE-MIT", format = "sdist" },
 ]

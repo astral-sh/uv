@@ -47,14 +47,11 @@ pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
-use uv_distribution_types::{IndexCapabilities, InstalledMetadata};
+use uv_distribution_types::InstalledMetadata;
 use uv_fs::Simplified;
-use uv_git::GitResolver;
 use uv_installer::compile_tree;
 use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
-use uv_resolver::InMemoryIndex;
-use uv_types::InFlight;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
 
@@ -194,19 +191,6 @@ pub(super) fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
     (bytes / 1024_f32.powi(i as i32), UNITS[i])
 }
 
-/// Shared state used during resolution and installation.
-#[derive(Default)]
-pub(crate) struct SharedState {
-    /// The resolved Git references.
-    pub(crate) git: GitResolver,
-    /// The fetched package versions and metadata.
-    pub(crate) index: InMemoryIndex,
-    /// The downloaded distributions.
-    pub(crate) in_flight: InFlight,
-    /// The discovered capabilities for each registry index.
-    pub(crate) capabilities: IndexCapabilities,
-}
-
 /// A multicasting writer that writes to both the standard output and an output file, if present.
 #[allow(clippy::disallowed_types)]
 struct OutputWriter<'a> {
@@ -247,6 +231,10 @@ impl<'a> OutputWriter<'a> {
     /// Commit the buffer to the output file.
     async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
+            if let Some(parent_dir) = output_file.parent() {
+                fs_err::create_dir_all(parent_dir)?;
+            }
+
             // If the output file is an existing symlink, write to the destination instead.
             let output_file = fs_err::read_link(output_file)
                 .map(Cow::Owned)
@@ -255,5 +243,41 @@ impl<'a> OutputWriter<'a> {
             uv_fs::write_atomic(output_file, &stream).await?;
         }
         Ok(())
+    }
+}
+
+/// Given a list of names, return a conjunction of the names (e.g., "Alice, Bob, and Charlie").
+pub(super) fn conjunction(names: Vec<String>) -> String {
+    let mut names = names.into_iter();
+    let first = names.next();
+    let last = names.next_back();
+    match (first, last) {
+        (Some(first), Some(last)) => {
+            let mut result = first;
+            let mut comma = false;
+            for name in names {
+                result.push_str(", ");
+                result.push_str(&name);
+                comma = true;
+            }
+            if comma {
+                result.push_str(", and ");
+            } else {
+                result.push_str(" and ");
+            }
+            result.push_str(&last);
+            result
+        }
+        (Some(first), None) => first,
+        _ => String::new(),
+    }
+}
+
+/// Capitalize the first letter of a string.
+pub(super) fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
     }
 }

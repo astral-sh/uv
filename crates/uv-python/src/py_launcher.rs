@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::debug;
-use windows_registry::{Key, Value, CURRENT_USER, LOCAL_MACHINE};
+use windows_registry::{Key, CURRENT_USER, LOCAL_MACHINE};
 
 /// A Python interpreter found in the Windows registry through PEP 514 or from a known Microsoft
 /// Store path.
@@ -14,15 +14,6 @@ use windows_registry::{Key, Value, CURRENT_USER, LOCAL_MACHINE};
 pub(crate) struct WindowsPython {
     pub(crate) path: PathBuf,
     pub(crate) version: Option<PythonVersion>,
-}
-
-/// Adding `windows_registry::Value::into_string()`.
-fn value_to_string(value: Value) -> Option<String> {
-    match value {
-        Value::String(string) => Some(string),
-        Value::Bytes(bytes) => String::from_utf8(bytes.clone()).ok(),
-        Value::U32(_) | Value::U64(_) | Value::MultiString(_) | Value::Unknown(_) => None,
-    }
 }
 
 /// Find all Pythons registered in the Windows registry following PEP 514.
@@ -72,11 +63,10 @@ pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows_result::E
 
 fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<WindowsPython> {
     // `ExecutablePath` is mandatory for executable Pythons.
-    let Some(executable_path) = tag_key
+    let Ok(executable_path) = tag_key
         .open("InstallPath")
         .and_then(|install_path| install_path.get_value("ExecutablePath"))
-        .ok()
-        .and_then(value_to_string)
+        .and_then(String::try_from)
     else {
         debug!(
             r"Python interpreter in the registry is not executable: `Software\Python\{}\{}",
@@ -88,11 +78,8 @@ fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<Window
     // `SysVersion` is optional.
     let version = tag_key
         .get_value("SysVersion")
+        .and_then(String::try_from)
         .ok()
-        .and_then(|value| match value {
-            Value::String(s) => Some(s),
-            _ => None,
-        })
         .and_then(|s| match PythonVersion::from_str(&s) {
             Ok(version) => Some(version),
             Err(err) => {

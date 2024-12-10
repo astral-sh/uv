@@ -1,4 +1,55 @@
 ## Project metadata
+### [`conflicts`](#conflicts) {: #conflicts }
+
+Conflicting extras or groups may be declared here.
+
+It's useful to declare conflicts when, for example, two or more extras
+have mutually incompatible dependencies. Extra `foo` might depend
+on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
+These extras cannot be activated at the same time. This usually isn't
+a problem for pip-style workflows, but when using projects in uv that
+support with universal resolution, it will try to produce a resolution
+that satisfies both extras simultaneously.
+
+When this happens, resolution will fail, because one cannot install
+both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
+
+To work around this, you may specify `foo` and `bar` as conflicting
+extras (you can do the same with groups). When doing universal
+resolution in project mode, these extras will get their own "forks"
+distinct from one another in order to permit conflicting dependencies.
+In exchange, if one tries to install from the lock file with both
+conflicting extras activated, installation will fail.
+
+**Default value**: `[]`
+
+**Type**: `list[list[dict]]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Require that `package[test1]` and `package[test2]`
+# requirements are resolved in different forks so that they
+# cannot conflict with one another.
+conflicts = [
+    [
+        { extra = "test1" },
+        { extra = "test2" },
+    ]
+]
+
+# Or, to declare conflicting groups:
+conflicts = [
+    [
+        { group = "test1" },
+        { group = "test2" },
+    ]
+]
+```
+
+---
+
 ### [`constraint-dependencies`](#constraint-dependencies) {: #constraint-dependencies }
 
 Constraints to apply when resolving the project's dependencies.
@@ -30,10 +81,34 @@ constraint-dependencies = ["grpcio<1.65"]
 
 ---
 
+### [`default-groups`](#default-groups) {: #default-groups }
+
+The list of `dependency-groups` to install by default.
+
+**Default value**: `["dev"]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+default-groups = ["docs"]
+```
+
+---
+
 ### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
-The project's development dependencies. Development dependencies will be installed by
-default in `uv run` and `uv sync`, but will not appear in the project's published metadata.
+The project's development dependencies.
+
+Development dependencies will be installed by default in `uv run` and `uv sync`, but will
+not appear in the project's published metadata.
+
+Use of this field is not recommend anymore. Instead, use the `dependency-groups.dev` field
+which is a standardized way to declare development dependencies. The contents of
+`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the the
+final requirements of the `dev` dependency group.
 
 **Default value**: `[]`
 
@@ -103,14 +178,14 @@ If an index is marked as `default = true`, it will be moved to the end of the pr
 given the lowest priority when resolving packages. Additionally, marking an index as default will disable the
 PyPI default index.
 
-**Default value**: `"[]"`
+**Default value**: `[]`
 
 **Type**: `dict`
 
 **Example usage**:
 
 ```toml title="pyproject.toml"
-[tool.uv]
+
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cu121"
@@ -198,6 +273,32 @@ package = false
 
 ---
 
+### [`sources`](#sources) {: #sources }
+
+The sources to use when resolving dependencies.
+
+`tool.uv.sources` enriches the dependency metadata with additional sources, incorporated
+during development. A dependency source can be a Git repository, a URL, a local path, or an
+alternative registry.
+
+See [Dependencies](../concepts/projects/dependencies.md) for more.
+
+**Default value**: `{}`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.sources]
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
+pytest =  { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
+pydantic = { path = "/path/to/pydantic", editable = true }
+```
+
+---
+
 ### `workspace`
 
 #### [`exclude`](#workspace_exclude) {: #workspace_exclude }
@@ -272,7 +373,6 @@ bypasses SSL verification and could expose you to MITM attacks.
 === "uv.toml"
 
     ```toml
-    
     allow-insecure-host = ["localhost:8080"]
     ```
 
@@ -300,7 +400,6 @@ Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
 === "uv.toml"
 
     ```toml
-    
     cache-dir = "./.uv_cache"
     ```
 
@@ -353,8 +452,43 @@ globs are interpreted as relative to the project directory.
 === "uv.toml"
 
     ```toml
-    
     cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+    ```
+
+---
+
+### [`check-url`](#check-url) {: #check-url }
+
+Check an index URL for existing files to skip duplicate uploads.
+
+This option allows retrying publishing that failed after only some, but not all files have
+been uploaded, and handles error due to parallel uploads of the same file.
+
+Before uploading, the index is checked. If the exact same file already exists in the index,
+the file will not be uploaded. If an error occurred during the upload, the index is checked
+again, to handle cases where the identical file was uploaded twice in parallel.
+
+The exact behavior will vary based on the index. When uploading to PyPI, uploading the same
+file succeeds even without `--check-url`, while most other indexes error.
+
+The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    check-url = "https://test.pypi.org/simple"
+    ```
+=== "uv.toml"
+
+    ```toml
+    check-url = "https://test.pypi.org/simple"
     ```
 
 ---
@@ -387,7 +521,6 @@ ignore errors.
 === "uv.toml"
 
     ```toml
-    
     compile-bytecode = true
     ```
 
@@ -415,7 +548,6 @@ Defaults to the number of available CPU cores.
 === "uv.toml"
 
     ```toml
-    
     concurrent-builds = 4
     ```
 
@@ -441,7 +573,6 @@ time.
 === "uv.toml"
 
     ```toml
-    
     concurrent-downloads = 4
     ```
 
@@ -468,7 +599,6 @@ Defaults to the number of available CPU cores.
 === "uv.toml"
 
     ```toml
-    
     concurrent-installs = 4
     ```
 
@@ -494,7 +624,6 @@ specified as `KEY=VALUE` pairs.
 === "uv.toml"
 
     ```toml
-    
     config-settings = { editable_mode = "compat" }
     ```
 
@@ -533,7 +662,6 @@ standard, though only the following fields are respected:
 === "uv.toml"
 
     ```toml
-    
     dependency-metadata = [
         { name = "flask", version = "1.0.0", requires-dist = ["werkzeug"], requires-python = ">=3.6" },
     ]
@@ -564,7 +692,6 @@ system's configured time zone.
 === "uv.toml"
 
     ```toml
-    
     exclude-newer = "2006-12-02"
     ```
 
@@ -601,7 +728,6 @@ To control uv's resolution strategy when multiple indexes are present, see
 === "uv.toml"
 
     ```toml
-    
     extra-index-url = ["https://download.pytorch.org/whl/cpu"]
     ```
 
@@ -633,7 +759,6 @@ formats described above.
 === "uv.toml"
 
     ```toml
-    
     find-links = ["https://download.pytorch.org/whl/torch_stable.html"]
     ```
 
@@ -678,7 +803,6 @@ PyPI default index.
 === "pyproject.toml"
 
     ```toml
-    [tool.uv]
     [[tool.uv.index]]
     name = "pytorch"
     url = "https://download.pytorch.org/whl/cu121"
@@ -686,7 +810,6 @@ PyPI default index.
 === "uv.toml"
 
     ```toml
-    
     [[tool.uv.index]]
     name = "pytorch"
     url = "https://download.pytorch.org/whl/cu121"
@@ -722,7 +845,6 @@ same name to an alternate index.
 === "uv.toml"
 
     ```toml
-    
     index-strategy = "unsafe-best-match"
     ```
 
@@ -755,7 +877,6 @@ The index provided by this setting is given lower priority than any indexes spec
 === "uv.toml"
 
     ```toml
-    
     index-url = "https://test.pypi.org/simple"
     ```
 
@@ -783,7 +904,6 @@ use the `keyring` CLI to handle authentication.
 === "uv.toml"
 
     ```toml
-    
     keyring-provider = "subprocess"
     ```
 
@@ -816,7 +936,6 @@ Windows.
 === "uv.toml"
 
     ```toml
-    
     link-mode = "copy"
     ```
 
@@ -849,7 +968,6 @@ included in your system's certificate store.
 === "uv.toml"
 
     ```toml
-    
     native-tls = true
     ```
 
@@ -877,7 +995,6 @@ pre-built wheels to extract package metadata, if available.
 === "uv.toml"
 
     ```toml
-    
     no-binary = true
     ```
 
@@ -902,7 +1019,6 @@ Don't install pre-built wheels for a specific package.
 === "uv.toml"
 
     ```toml
-    
     no-binary-package = ["ruff"]
     ```
 
@@ -931,7 +1047,6 @@ distributions will exit with an error.
 === "uv.toml"
 
     ```toml
-    
     no-build = true
     ```
 
@@ -959,7 +1074,6 @@ are already installed.
 === "uv.toml"
 
     ```toml
-    
     no-build-isolation = true
     ```
 
@@ -974,7 +1088,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -987,7 +1101,6 @@ are already installed.
 === "uv.toml"
 
     ```toml
-    
     no-build-isolation-package = ["package1", "package2"]
     ```
 
@@ -1012,7 +1125,6 @@ Don't build source distributions for a specific package.
 === "uv.toml"
 
     ```toml
-    
     no-build-package = ["ruff"]
     ```
 
@@ -1038,7 +1150,6 @@ duration of the operation.
 === "uv.toml"
 
     ```toml
-    
     no-cache = true
     ```
 
@@ -1064,7 +1175,6 @@ those provided via `--find-links`.
 === "uv.toml"
 
     ```toml
-    
     no-index = true
     ```
 
@@ -1091,7 +1201,6 @@ sources.
 === "uv.toml"
 
     ```toml
-    
     no-sources = true
     ```
 
@@ -1116,7 +1225,6 @@ Disable network access, relying only on locally cached data and locally availabl
 === "uv.toml"
 
     ```toml
-    
     offline = true
     ```
 
@@ -1151,7 +1259,6 @@ declared specifiers (`if-necessary-or-explicit`).
 === "uv.toml"
 
     ```toml
-    
     prerelease = "allow"
     ```
 
@@ -1176,7 +1283,6 @@ Whether to enable experimental, preview features.
 === "uv.toml"
 
     ```toml
-    
     preview = true
     ```
 
@@ -1202,8 +1308,38 @@ The URL for publishing packages to the Python package index (by default:
 === "uv.toml"
 
     ```toml
-    
     publish-url = "https://test.pypi.org/legacy/"
+    ```
+
+---
+
+### [`pypy-install-mirror`](#pypy-install-mirror) {: #pypy-install-mirror }
+
+Mirror URL to use for downloading managed PyPy installations.
+
+By default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/).
+This variable can be set to a mirror URL to use a different source for PyPy installations.
+The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+
+Distributions can be read from a
+local directory by using the `file://` URL scheme.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    pypy-install-mirror = "https://downloads.python.org/pypy"
+    ```
+=== "uv.toml"
+
+    ```toml
+    pypy-install-mirror = "https://downloads.python.org/pypy"
     ```
 
 ---
@@ -1231,8 +1367,37 @@ Whether to allow Python downloads.
 === "uv.toml"
 
     ```toml
-    
     python-downloads = "manual"
+    ```
+
+---
+
+### [`python-install-mirror`](#python-install-mirror) {: #python-install-mirror }
+
+Mirror URL for downloading managed Python installations.
+
+By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
+This variable can be set to a mirror URL to use a different source for Python installations.
+The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+
+Distributions can be read from a local directory by using the `file://` URL scheme.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
+    ```
+=== "uv.toml"
+
+    ```toml
+    python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
     ```
 
 ---
@@ -1262,7 +1427,6 @@ those that are downloaded and installed by uv.
 === "uv.toml"
 
     ```toml
-    
     python-preference = "managed"
     ```
 
@@ -1287,7 +1451,6 @@ Reinstall all packages, regardless of whether they're already installed. Implies
 === "uv.toml"
 
     ```toml
-    
     reinstall = true
     ```
 
@@ -1313,7 +1476,6 @@ Reinstall a specific package, regardless of whether it's already installed. Impl
 === "uv.toml"
 
     ```toml
-    
     reinstall-package = ["ruff"]
     ```
 
@@ -1345,7 +1507,6 @@ By default, uv will use the latest compatible version of each package (`highest`
 === "uv.toml"
 
     ```toml
-    
     resolution = "lowest-direct"
     ```
 
@@ -1374,7 +1535,6 @@ from a fork).
 === "uv.toml"
 
     ```toml
-    
     trusted-publishing = "always"
     ```
 
@@ -1399,7 +1559,6 @@ Allow package upgrades, ignoring pinned versions in any existing output file.
 === "uv.toml"
 
     ```toml
-    
     upgrade = true
     ```
 
@@ -1427,7 +1586,6 @@ Accepts both standalone package names (`ruff`) and version specifiers (`ruff<0.5
 === "uv.toml"
 
     ```toml
-    
     upgrade-package = ["ruff"]
     ```
 
@@ -1491,39 +1649,6 @@ packages.
     ```toml
     [pip]
     allow-empty-requirements = true
-    ```
-
----
-
-#### [`allow-insecure-host`](#pip_allow-insecure-host) {: #pip_allow-insecure-host }
-<span id="allow-insecure-host"></span>
-
-Allow insecure connections to host.
-
-Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
-`localhost:8080`), or a URL (e.g., `https://localhost`).
-
-WARNING: Hosts included in this list will not be verified against the system's certificate
-store. Only use `--allow-insecure-host` in a secure network with verified sources, as it
-bypasses SSL verification and could expose you to MITM attacks.
-
-**Default value**: `[]`
-
-**Type**: `list[str]`
-
-**Example usage**:
-
-=== "pyproject.toml"
-
-    ```toml
-    [tool.uv.pip]
-    allow-insecure-host = ["localhost:8080"]
-    ```
-=== "uv.toml"
-
-    ```toml
-    [pip]
-    allow-insecure-host = ["localhost:8080"]
     ```
 
 ---
@@ -1890,7 +2015,7 @@ system's configured time zone.
 #### [`extra`](#pip_extra) {: #pip_extra }
 <span id="extra"></span>
 
-Include optional dependencies from the extra group name; may be provided more than once.
+Include optional dependencies from the specified extra; may be provided more than once.
 
 Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
 
@@ -2269,7 +2394,7 @@ are already installed.
 
 **Default value**: `[]`
 
-**Type**: `Vec<PackageName>`
+**Type**: `list[str]`
 
 **Example usage**:
 
@@ -2338,6 +2463,34 @@ included in the resolution. Equivalent to pip-compile's `--unsafe-package` optio
     ```toml
     [pip]
     no-emit-package = ["ruff"]
+    ```
+
+---
+
+#### [`no-extra`](#pip_no-extra) {: #pip_no-extra }
+<span id="no-extra"></span>
+
+Exclude the specified optional dependencies if `all-extras` is supplied.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    all-extras = true
+    no-extra = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    all-extras = true
+    no-extra = ["dev", "docs"]
     ```
 
 ---
@@ -3015,7 +3168,7 @@ Unlike `--require-hashes`, `--verify-hashes` does not require that all requireme
 hashes; instead, it will limit itself to verifying the hashes of those requirements that do
 include them.
 
-**Default value**: `false`
+**Default value**: `true`
 
 **Type**: `bool`
 

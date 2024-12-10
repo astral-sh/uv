@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder, Response};
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
@@ -8,9 +8,10 @@ use reqwest_retry::{
 use std::error::Error;
 use std::fmt::Debug;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{env, iter};
-use tracing::debug;
+use tracing::{debug, trace};
 use url::Url;
 use uv_auth::AuthMiddleware;
 use uv_configuration::{KeyringProviderType, TrustedHost};
@@ -54,6 +55,19 @@ pub struct BaseClientBuilder<'a> {
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
     default_timeout: Duration,
+    extra_middleware: Option<ExtraMiddleware>,
+}
+
+/// A list of user-defined middlewares to be applied to the client.
+#[derive(Clone)]
+pub struct ExtraMiddleware(pub Vec<Arc<dyn Middleware>>);
+
+impl Debug for ExtraMiddleware {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExtraMiddleware")
+            .field("0", &format!("{} middlewares", self.0.len()))
+            .finish()
+    }
 }
 
 impl Default for BaseClientBuilder<'_> {
@@ -75,6 +89,7 @@ impl BaseClientBuilder<'_> {
             platform: None,
             auth_integration: AuthIntegration::default(),
             default_timeout: Duration::from_secs(30),
+            extra_middleware: None,
         }
     }
 }
@@ -140,8 +155,19 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
+        self.extra_middleware = Some(middleware);
+        self
+    }
+
     pub fn is_offline(&self) -> bool {
         matches!(self.connectivity, Connectivity::Offline)
+    }
+
+    /// Create a [`RetryPolicy`] for the client.
+    fn retry_policy(&self) -> ExponentialBackoff {
+        ExponentialBackoff::builder().build_with_max_retries(self.retries)
     }
 
     pub fn build(&self) -> BaseClient {
@@ -208,6 +234,7 @@ impl<'a> BaseClientBuilder<'a> {
         BaseClient {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
+            retries: self.retries,
             client,
             raw_client,
             dangerous_client,
@@ -225,6 +252,7 @@ impl<'a> BaseClientBuilder<'a> {
         BaseClient {
             connectivity: self.connectivity,
             allow_insecure_host: self.allow_insecure_host.clone(),
+            retries: self.retries,
             client,
             dangerous_client,
             raw_client: existing.raw_client.clone(),
@@ -286,10 +314,8 @@ impl<'a> BaseClientBuilder<'a> {
                 // Avoid uncloneable errors with a streaming body during publish.
                 if self.retries > 0 {
                     // Initialize the retry strategy.
-                    let retry_policy =
-                        ExponentialBackoff::builder().build_with_max_retries(self.retries);
                     let retry_strategy = RetryTransientMiddleware::new_with_policy_and_strategy(
-                        retry_policy,
+                        self.retry_policy(),
                         UvRetryableStrategy,
                     );
                     client = client.with(retry_strategy);
@@ -310,6 +336,13 @@ impl<'a> BaseClientBuilder<'a> {
                     }
                     AuthIntegration::NoAuthMiddleware => {
                         // The downstream code uses custom auth logic.
+                    }
+                }
+
+                // When supplied add the extra middleware
+                if let Some(extra_middleware) = &self.extra_middleware {
+                    for middleware in &extra_middleware.0 {
+                        client = client.with_arc(middleware.clone());
                     }
                 }
 
@@ -339,6 +372,8 @@ pub struct BaseClient {
     timeout: Duration,
     /// Hosts that are trusted to use the insecure client.
     allow_insecure_host: Vec<TrustedHost>,
+    /// The number of retries to attempt on transient errors.
+    retries: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -350,16 +385,6 @@ enum Security {
 }
 
 impl BaseClient {
-    /// The underlying [`ClientWithMiddleware`] for secure requests.
-    pub fn client(&self) -> ClientWithMiddleware {
-        self.client.clone()
-    }
-
-    /// The underlying [`Client`] without middleware.
-    pub fn raw_client(&self) -> Client {
-        self.raw_client.clone()
-    }
-
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
         if self
@@ -382,6 +407,11 @@ impl BaseClient {
     pub fn connectivity(&self) -> Connectivity {
         self.connectivity
     }
+
+    /// The [`RetryPolicy`] for the client.
+    pub fn retry_policy(&self) -> ExponentialBackoff {
+        ExponentialBackoff::builder().build_with_max_retries(self.retries)
+    }
 }
 
 /// Extends [`DefaultRetryableStrategy`], to log transient request failures and additional retry cases.
@@ -391,7 +421,11 @@ impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
         // Use the default strategy and check for additional transient error cases.
         let retryable = match DefaultRetryableStrategy.handle(res) {
-            None | Some(Retryable::Fatal) if is_extended_transient_error(res) => {
+            None | Some(Retryable::Fatal)
+                if res
+                    .as_ref()
+                    .is_err_and(|err| is_extended_transient_error(err)) =>
+            {
                 Some(Retryable::Transient)
             }
             default => default,
@@ -409,7 +443,7 @@ impl RetryableStrategy for UvRetryableStrategy {
                         .join("\n");
                     debug!(
                         "Transient request failure for {}, retrying: {err}\n{context}",
-                        err.url().map(reqwest::Url::as_str).unwrap_or("unknown URL")
+                        err.url().map(Url::as_str).unwrap_or("unknown URL")
                     );
                 }
             }
@@ -421,16 +455,19 @@ impl RetryableStrategy for UvRetryableStrategy {
 /// Check for additional transient error kinds not supported by the default retry strategy in `reqwest_retry`.
 ///
 /// These cases should be safe to retry with [`Retryable::Transient`].
-fn is_extended_transient_error(res: &Result<Response, reqwest_middleware::Error>) -> bool {
-    // Check for connection reset errors, these are usually `Body` errors which are not retried by default.
-    if let Err(reqwest_middleware::Error::Reqwest(err)) = res {
-        if let Some(io) = find_source::<std::io::Error>(&err) {
-            if io.kind() == std::io::ErrorKind::ConnectionReset
-                || io.kind() == std::io::ErrorKind::UnexpectedEof
-            {
-                return true;
-            }
+pub fn is_extended_transient_error(err: &dyn Error) -> bool {
+    trace!("Attempting to retry error: {err:?}");
+
+    if let Some(io) = find_source::<std::io::Error>(&err) {
+        if io.kind() == std::io::ErrorKind::ConnectionReset
+            || io.kind() == std::io::ErrorKind::UnexpectedEof
+        {
+            trace!("Retrying error: `ConnectionReset` or `UnexpectedEof`");
+            return true;
         }
+        trace!("Cannot retry error: not one of `ConnectionReset` or `UnexpectedEof`");
+    } else {
+        trace!("Cannot retry error: not an IO error");
     }
 
     false
@@ -439,7 +476,7 @@ fn is_extended_transient_error(res: &Result<Response, reqwest_middleware::Error>
 /// Find the first source error of a specific type.
 ///
 /// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
-fn find_source<E: std::error::Error + 'static>(orig: &dyn std::error::Error) -> Option<&E> {
+fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
     let mut cause = orig.source();
     while let Some(err) = cause {
         if let Some(typed) = err.downcast_ref() {
@@ -447,7 +484,5 @@ fn find_source<E: std::error::Error + 'static>(orig: &dyn std::error::Error) -> 
         }
         cause = err.source();
     }
-
-    // else
     None
 }

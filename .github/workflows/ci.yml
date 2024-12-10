@@ -43,6 +43,7 @@ jobs:
               # Generated markdown and JSON files are checked during test runs
               - "docs/reference/cli.md"
               - "docs/reference/settings.md"
+              - "docs/configuration/environment.md"
               - "uv.schema.json"
   lint:
     timeout-minutes: 10
@@ -59,7 +60,7 @@ jobs:
         run: rustup component add rustfmt
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -81,6 +82,9 @@ jobs:
       - name: "Python type check"
         run: uvx mypy
 
+      - name: "Validate project metadata"
+        run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
+
       - name: "Lint shell scripts"
         uses: ludeeus/action-shellcheck@2.0.0
         env:
@@ -95,7 +99,7 @@ jobs:
   cargo-clippy:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     name: "cargo clippy | ubuntu"
     steps:
@@ -108,42 +112,39 @@ jobs:
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-  cargo-clippy-xwin:
-    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
-    timeout-minutes: 20
+  cargo-clippy-windows:
+    timeout-minutes: 15
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on:
+      labels: "windows-latest-xlarge"
     name: "cargo clippy | windows"
     steps:
       - uses: actions/checkout@v4
-      - name: Load xwin cache
-        uses: actions/cache@v4
+
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
+
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: "${{ github.workspace}}/.xwin"
-          key: cargo-xwin-x86_64
-      - name: Load rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: ${{ env.UV_WORKSPACE }}
+
       - name: "Install Rust toolchain"
-        run: rustup target add x86_64-pc-windows-msvc
-      - name: "Install cargo-xwin"
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-xwin
-      - name: Install xwin dependencies
-        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
+        run: rustup component add clippy
+
       - name: "Clippy"
-        run: cargo xwin clippy --target x86_64-pc-windows-msvc --workspace --all-targets --all-features --locked --profile fast-build -- -D warnings
-        env:
-          XWIN_ARCH: "x86_64"
-          XWIN_CACHE_DIR: "${{ github.workspace}}/.xwin"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
   cargo-dev-generate-all:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     name: "cargo dev generate-all"
     steps:
@@ -171,9 +172,9 @@ jobs:
   cargo-test-linux:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
-      labels: "ubuntu-latest-xlarge"
+      labels: "depot-ubuntu-22.04-16"
     name: "cargo test | ubuntu"
     steps:
       - uses: actions/checkout@v4
@@ -185,7 +186,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v4
       - name: "Install required Python versions"
         run: uv python install
 
@@ -217,9 +218,9 @@ jobs:
   cargo-test-macos:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
-      labels: "macos-latest-xlarge"
+      labels: "depot-macos-latest"
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@v4
@@ -231,7 +232,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v4
       - name: "Install required Python versions"
         run: uv python install
 
@@ -256,7 +257,7 @@ jobs:
   cargo-test-windows:
     timeout-minutes: 15
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: "windows-latest-xlarge"
     name: "cargo test | windows"
@@ -282,6 +283,7 @@ jobs:
             3.10
             3.11
             3.12
+            3.13
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -298,14 +300,18 @@ jobs:
 
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
+        env:
+          # Avoid permission errors during concurrent tests
+          # See https://github.com/astral-sh/uv/issues/6940
+          UV_LINK_MODE: copy
         run: |
-          cargo nextest run --no-default-features --features python,pypi --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+          cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
           # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           uv venv -v
@@ -316,7 +322,7 @@ jobs:
         shell: powershell
         env:
           # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           Set-Alias -Name uv -Value ./target/debug/uv
           Set-Alias -Name uvx -Value ./target/debug/uvx
@@ -325,11 +331,10 @@ jobs:
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
-    # Do not set timeout below 15 minutes as uncached xwin Windows SDK download can take 10+ minutes
-    timeout-minutes: 20
+    timeout-minutes: 15
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on: windows-latest-xlarge
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
@@ -338,61 +343,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Load xwin cache
-        uses: actions/cache@v4
-        with:
-          path: "${{ github.workspace }}/.xwin"
-          key: cargo-xwin-${{ matrix.target-arch }}
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
 
-      - uses: rui314/setup-mold@v1
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ${{ github.workspace }}/crates/uv-trampoline
+          workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
 
       - name: "Install Rust toolchain"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
           rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
-      - name: "Install cargo-xwin and cargo-bloat"
+      - name: "Install cargo-bloat"
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-xwin,cargo-bloat
-
-      - name: "Install xwin dependencies"
-        run: sudo apt-get install --no-install-recommends -y lld llvm clang cmake ninja-build
+          tool: cargo-bloat
 
       - name: "Clippy"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        if: matrix.target-arch == 'x86_64'
-        run: cargo xwin clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
-        env:
-          XWIN_ARCH: "x86_64"
-          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
 
       - name: "Bloat Check"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        if: matrix.target-arch == 'x86_64'
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: |
-          cargo xwin bloat --release --target x86_64-pc-windows-msvc | \
-          grep -v -i -E 'core::fmt::write|core::fmt::getcount' | \
-          grep -q -E 'core::fmt|std::panicking|std::backtrace_rs' && exit 1 || exit 0
-        env:
-          XWIN_ARCH: "x86_64"
-          XWIN_CACHE_DIR: "${{ github.workspace }}/.xwin"
+          $output = cargo bloat --release --target x86_64-pc-windows-msvc
+          $filteredOutput = $output | Select-String -Pattern 'core::fmt::write|core::fmt::getcount' -NotMatch
+          $containsPatterns = $filteredOutput | Select-String -Pattern 'core::fmt|std::panicking|std::backtrace_rs'
+
+          if ($containsPatterns) {
+              Exit 1
+          } else {
+              Exit 0
+          }
 
   # Separate jobs for the nightly crate
   windows-trampoline-test:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
     name: "test windows trampoline | ${{ matrix.target-arch }}"
     strategy:
       fail-fast: false
       matrix:
+        # Note, we exclude `aarch64` because it's not supported by the GitHub runner
         target-arch: ["x86_64", "i686"]
     steps:
       - uses: actions/checkout@v4
@@ -404,6 +405,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ github.workspace }}/crates/uv-trampoline
+      - name: "Test committed binaries"
+        working-directory: ${{ github.workspace }}
+        run: |
+          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+          cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
       # Build and copy the new binaries
       - name: "Build"
         working-directory: ${{ github.workspace }}/crates/uv-trampoline
@@ -411,9 +417,11 @@ jobs:
           cargo build --target ${{ matrix.target-arch }}-pc-windows-msvc
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
           cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
-      - name: "Test"
-        working-directory: ${{ github.workspace }}/crates/uv-trampoline
-        run: cargo test --target ${{ matrix.target-arch }}-pc-windows-msvc --test *
+      - name: "Test new binaries"
+        working-directory: ${{ github.workspace }}
+        run: |
+          # We turn off the default "production" test feature since these are debug binaries
+          cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc --no-default-features
 
   typos:
     runs-on: ubuntu-latest
@@ -429,7 +437,7 @@ jobs:
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v4
       - uses: actions/setup-python@v5
       - name: "Add SSH key"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
@@ -447,7 +455,7 @@ jobs:
   build-binary-linux:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: ubuntu-latest-large
     name: "build binary | linux"
@@ -475,7 +483,7 @@ jobs:
   build-binary-macos-aarch64:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: macos-14
     name: "build binary | macos aarch64"
@@ -498,9 +506,9 @@ jobs:
   build-binary-macos-x86_64:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
-      labels: macos-14-large
+      labels: macos-latest-large # Intel runner on GitHub
     name: "build binary | macos x86_64"
     steps:
       - uses: actions/checkout@v4
@@ -521,7 +529,7 @@ jobs:
   build-binary-windows:
     needs: determine_changes
     timeout-minutes: 10
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
       labels: windows-latest-large
     name: "build binary | windows"
@@ -550,6 +558,75 @@ jobs:
           name: uv-windows-${{ github.sha }}
           path: ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
           retention-days: 1
+
+  cargo-build-msrv:
+    name: "cargo build (msrv)"
+    needs: determine_changes
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on:
+      labels: ubuntu-latest-large
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SebRollen/toml-action@v1.2.0
+        id: msrv
+        with:
+          file: "Cargo.toml"
+          field: "workspace.package.rust-version"
+      - name: "Install Rust toolchain"
+        run: rustup default ${{ steps.msrv.outputs.value }}
+      - name: "Install mold"
+        uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +${{ steps.msrv.outputs.value }} build
+      - run: ./target/debug/uv --version
+
+  build-binary-freebsd:
+    needs: determine_changes
+    timeout-minutes: 10
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    runs-on:
+      labels: ubuntu-latest
+    name: "build binary | freebsd"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: "Cross build"
+        run: |
+          # Install cross from `freebsd-firecracker`
+          wget -q -O cross https://github.com/acj/freebsd-firecracker/releases/download/v0.0.10/cross
+          chmod +x cross
+          mv cross /usr/local/bin/cross
+
+          cross build --target x86_64-unknown-freebsd
+
+      - name: Test in Firecracker VM
+        uses: acj/freebsd-firecracker-action@v0.3.0
+        with:
+          verbose: false
+          checkout: false
+          pre-run: |
+            # The exclude `*` prevents examination of directories so we need to
+            # include each parent directory of the binary
+            include_path="$(mktemp)"
+            cat <<EOF > $include_path
+            target
+            target/x86_64-unknown-freebsd
+            target/x86_64-unknown-freebsd/debug
+            target/x86_64-unknown-freebsd/debug/uv
+            EOF
+
+            rsync -r -e "ssh" \
+              --relative \
+              --copy-links \
+              --include-from "$include_path" \
+              --exclude "*" \
+              . firecracker:
+          run-in-vm: |
+            mv target/x86_64-unknown-freebsd/debug/uv uv
+            chmod +x uv
+            ./uv --version
 
   ecosystem-test:
     timeout-minutes: 10
@@ -657,7 +734,7 @@ jobs:
 
       - name: "Install free-threaded Python via uv"
         run: |
-          ./uv python install 3.13t
+          ./uv python install -v 3.13t
           ./uv venv -p 3.13t --python-preference only-managed
 
       - name: "Check version"
@@ -671,6 +748,54 @@ jobs:
       - name: "Check install"
         run: |
           ./uv pip install -v anyio
+
+  integration-test-free-threaded-windows:
+    timeout-minutes: 10
+    needs: build-binary-windows
+    name: "integration test | free-threaded on windows"
+    runs-on: windows-latest
+    env:
+      # Avoid debug build stack overflows.
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-windows-${{ github.sha }}
+
+      - name: "Install free-threaded Python via uv"
+        run: |
+          ./uv python install -v 3.13t
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          & (./uv python find 3.13t) -m venv .venv
+
+      - name: "Check version (stdlib)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -p 3.13t --python-preference only-managed
+
+      - name: "Check version (uv)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/Scripts/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13t python -c ""
 
   integration-test-pypy-linux:
     timeout-minutes: 10
@@ -689,7 +814,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Install PyPy"
-        run: ./uv python install pypy3.9
+        run: ./uv python install -v pypy3.9
 
       - name: "Create a virtual environment"
         run: |
@@ -795,7 +920,7 @@ jobs:
       - name: "Check install"
         env:
           # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -927,7 +1052,7 @@ jobs:
       - name: "Check install"
         env:
           # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -998,7 +1123,7 @@ jobs:
       # Flag that is raised when any code is changed
       code: ${{ steps.changed.outputs.code_any_changed }}
     # Only the main repository is a trusted publisher
-    if: github.repository == 'astral-sh/uv'
+    if: github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1019,11 +1144,12 @@ jobs:
     needs: integration-test-publish-changed
     name: "integration test | uv publish"
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && github.event.pull_request.head.repo.fork != true && (needs.integration-test-publish-changed.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     environment: uv-test-publish
     env:
       # No dbus in GitHub Actions
       PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+      PYTHON_VERSION: 3.12
     permissions:
       # For trusted publishing
       id-token: write
@@ -1034,7 +1160,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -1047,20 +1173,22 @@ jobs:
       - name: "Add password to keyring"
         run: |
           # `keyrings.alt` contains the plaintext keyring
-          ./uv tool install --with keyrings.alt "keyring<25.4.0" # TODO(konsti): Remove upper bound once fix is released
+          ./uv tool install --with keyrings.alt keyring
           echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
         env:
           UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
 
       - name: "Publish test packages"
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
-        run: ./uv run -p 3.12 scripts/publish/test_publish.py --uv ./uv all
+        run: ./uv run -p ${{ env.PYTHON_VERSION }} scripts/publish/test_publish.py --uv ./uv all
         env:
           RUST_LOG: uv=debug,uv_publish=trace
           UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
           UV_TEST_PUBLISH_PASSWORD: ${{ secrets.UV_TEST_PUBLISH_PASSWORD }}
           UV_TEST_PUBLISH_GITLAB_PAT: ${{ secrets.UV_TEST_PUBLISH_GITLAB_PAT }}
           UV_TEST_PUBLISH_CODEBERG_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CODEBERG_TOKEN }}
+          UV_TEST_PUBLISH_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CLOUDSMITH_TOKEN }}
+          UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
 
   cache-test-ubuntu:
     timeout-minutes: 10
@@ -1418,7 +1546,7 @@ jobs:
     runs-on: windows-latest
     env:
       # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1444,7 +1572,7 @@ jobs:
     runs-on: windows-latest
     env:
       # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1471,7 +1599,7 @@ jobs:
     runs-on: windows-latest
     env:
       # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1499,7 +1627,7 @@ jobs:
     runs-on: windows-latest
     env:
       # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1526,9 +1654,23 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: "Install pyenv"
-        uses: "gabrielfalcao/pyenv-action@v18"
-        with:
-          default: 3.9.7
+        run: |
+          # Install pyenv
+          curl https://pyenv.run | bash
+
+          # Set up environment variables for current step
+          export PYENV_ROOT="$HOME/.pyenv"
+          export PATH="$PYENV_ROOT/bin:$PATH"
+          eval "$(pyenv init -)"
+
+          # Install Python 3.9
+          pyenv install 3.9
+          pyenv global 3.9
+
+          # Make environment variables persist across steps
+          echo "PYENV_ROOT=$HOME/.pyenv" >> $GITHUB_ENV
+          echo "$HOME/.pyenv/bin" >> $GITHUB_PATH
+          echo "$HOME/.pyenv/shims" >> $GITHUB_PATH
 
       - name: "Download binary"
         uses: actions/download-artifact@v4
@@ -1620,7 +1762,7 @@ jobs:
         shell: bash -el {0}
         env:
           # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: python ./scripts/check_system_python.py --uv ./uv
 
   system-test-amazonlinux:
@@ -1659,7 +1801,7 @@ jobs:
     runs-on: windows-latest
     env:
       # Avoid debug build stack overflows.
-      UV_STACK_SIZE: 2000000 # 2 megabyte, double the default on windows
+      UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
     steps:
       - uses: actions/checkout@v4
 
@@ -1690,7 +1832,7 @@ jobs:
   benchmarks:
     runs-on: ubuntu-latest
     needs: determine_changes
-    if: ${{ github.repository == 'astral-sh/uv' && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     timeout-minutes: 20
     steps:
       - name: "Checkout Branch"

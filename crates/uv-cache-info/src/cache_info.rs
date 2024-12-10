@@ -18,7 +18,6 @@ pub enum CacheInfoError {
 /// timestamps of relevant files, the current commit of a repository, etc.
 #[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
-#[serde(try_from = "CacheInfoWire")]
 pub struct CacheInfo {
     /// The timestamp of the most recent `ctime` of any relevant files, at the time of the build.
     /// The timestamp will typically be the maximum of the `ctime` values of the `pyproject.toml`,
@@ -197,46 +196,6 @@ impl CacheInfo {
 
     pub fn is_empty(&self) -> bool {
         self.timestamp.is_none() && self.commit.is_none() && self.tags.is_none()
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct TimestampCommit {
-    #[serde(default)]
-    timestamp: Option<Timestamp>,
-    #[serde(default)]
-    commit: Option<Commit>,
-    #[serde(default)]
-    tags: Option<Tags>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(untagged)]
-enum CacheInfoWire {
-    /// For backwards-compatibility, enable deserializing [`CacheInfo`] structs that are solely
-    /// represented by a timestamp.
-    Timestamp(Timestamp),
-    /// A [`CacheInfo`] struct that includes both a timestamp and a commit.
-    TimestampCommit(TimestampCommit),
-}
-
-impl From<CacheInfoWire> for CacheInfo {
-    fn from(wire: CacheInfoWire) -> Self {
-        match wire {
-            CacheInfoWire::Timestamp(timestamp) => Self {
-                timestamp: Some(timestamp),
-                ..Self::default()
-            },
-            CacheInfoWire::TimestampCommit(TimestampCommit {
-                timestamp,
-                commit,
-                tags,
-            }) => Self {
-                timestamp,
-                commit,
-                tags,
-            },
-        }
     }
 }
 

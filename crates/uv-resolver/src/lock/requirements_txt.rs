@@ -6,11 +6,11 @@ use std::path::{Component, Path, PathBuf};
 
 use either::Either;
 use petgraph::visit::IntoNodeReferences;
-use petgraph::{Directed, Graph};
+use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
-use uv_configuration::{DevSpecification, EditableMode, ExtrasSpecification, InstallOptions};
+use uv_configuration::{DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions};
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
 use uv_git::GitReference;
@@ -20,80 +20,110 @@ use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
 
 use crate::graph_ops::marker_reachability;
 use crate::lock::{Package, PackageId, Source};
-use crate::{Lock, LockError};
-
-type LockGraph<'lock> = Graph<&'lock Package, Edge, Directed>;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Node<'lock> {
-    package: &'lock Package,
-    marker: MarkerTree,
-}
+use crate::universal_marker::UniversalMarker;
+use crate::{InstallTarget, LockError};
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
 #[derive(Debug)]
 pub struct RequirementsTxtExport<'lock> {
-    nodes: Vec<Node<'lock>>,
+    nodes: Vec<Requirement<'lock>>,
     hashes: bool,
     editable: EditableMode,
 }
 
 impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
-        lock: &'lock Lock,
-        root_name: &PackageName,
+        target: InstallTarget<'lock>,
+        prune: &[PackageName],
         extras: &ExtrasSpecification,
-        dev: DevSpecification<'_>,
+        dev: &DevGroupsManifest,
         editable: EditableMode,
         hashes: bool,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
-        let size_guess = lock.packages.len();
-        let mut petgraph = LockGraph::with_capacity(size_guess, size_guess);
+        let size_guess = target.lock().packages.len();
+        let mut petgraph = Graph::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
 
+        let root = petgraph.add_node(Node::Root);
+
         // Add the workspace package to the queue.
-        let root = lock
-            .find_by_name(root_name)
-            .expect("found too many packages matching root")
-            .expect("could not find root");
+        for root_name in target.packages() {
+            if prune.contains(root_name) {
+                continue;
+            }
 
-        if dev.prod() {
-            // Add the base package.
-            queue.push_back((root, None));
+            let dist = target
+                .lock()
+                .find_by_name(root_name)
+                .expect("found too many packages matching root")
+                .expect("could not find root");
 
-            // Add any extras.
-            match extras {
-                ExtrasSpecification::None => {}
-                ExtrasSpecification::All => {
-                    for extra in root.optional_dependencies.keys() {
-                        queue.push_back((root, Some(extra)));
-                    }
+            if dev.prod() {
+                // Add the workspace package to the graph.
+                if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
+                    entry.insert(petgraph.add_node(Node::Package(dist)));
                 }
-                ExtrasSpecification::Some(extras) => {
-                    for extra in extras {
-                        queue.push_back((root, Some(extra)));
-                    }
+
+                // Add an edge from the root.
+                let index = inverse[&dist.id];
+                petgraph.add_edge(root, index, UniversalMarker::TRUE);
+
+                // Push its dependencies on the queue.
+                queue.push_back((dist, None));
+                for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                    queue.push_back((dist, Some(extra)));
                 }
             }
 
-            // Add the root package to the graph.
-            inverse.insert(&root.id, petgraph.add_node(root));
-        }
+            // Add any development dependencies.
+            for dep in dist
+                .dependency_groups
+                .iter()
+                .filter_map(|(group, deps)| {
+                    if dev.contains(group) {
+                        Some(deps)
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+            {
+                if prune.contains(&dep.package_id.name) {
+                    continue;
+                }
 
-        // Add any dev dependencies.
-        for group in dev.iter() {
-            for dep in root.dev_dependencies.get(group).into_iter().flatten() {
-                let dep_dist = lock.find_by_id(&dep.package_id);
+                let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(petgraph.add_node(dep_dist));
+                    entry.insert(petgraph.add_node(Node::Package(dep_dist)));
                 }
 
+                // Add an edge from the root. Development dependencies may be installed without
+                // installing the workspace package itself (which can never have markers on it
+                // anyway), so they're directly connected to the root.
+                let dep_index = inverse[&dep.package_id];
+                petgraph.add_edge(
+                    root,
+                    dep_index,
+                    UniversalMarker::new(
+                        dep.simplified_marker.as_simplified_marker_tree(),
+                        // OK because we've verified above that we do not have any
+                        // conflicting extras/groups.
+                        //
+                        // So why use `UniversalMarker`? Because that's what
+                        // `marker_reachability` wants and it (probably) isn't
+                        // worth inventing a new abstraction so that it can accept
+                        // graphs with either `MarkerTree` or `UniversalMarker`.
+                        MarkerTree::TRUE,
+                    ),
+                );
+
+                // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {
                     queue.push_back((dep_dist, None));
                 }
@@ -122,11 +152,15 @@ impl<'lock> RequirementsTxtExport<'lock> {
             };
 
             for dep in deps {
-                let dep_dist = lock.find_by_id(&dep.package_id);
+                if prune.contains(&dep.package_id.name) {
+                    continue;
+                }
+
+                let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
                 if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(petgraph.add_node(dep_dist));
+                    entry.insert(petgraph.add_node(Node::Package(dep_dist)));
                 }
 
                 // Add the edge.
@@ -134,7 +168,12 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 petgraph.add_edge(
                     index,
                     dep_index,
-                    dep.simplified_marker.as_simplified_marker_tree().clone(),
+                    UniversalMarker::new(
+                        dep.simplified_marker.as_simplified_marker_tree(),
+                        // See note above for other `UniversalMarker::new` for
+                        // why this is OK.
+                        MarkerTree::TRUE,
+                    ),
                 );
 
                 // Push its dependencies on the queue.
@@ -152,20 +191,30 @@ impl<'lock> RequirementsTxtExport<'lock> {
         let mut reachability = marker_reachability(&petgraph, &[]);
 
         // Collect all packages.
-        let mut nodes: Vec<Node> = petgraph
+        let mut nodes = petgraph
             .node_references()
-            .filter(|(_index, package)| {
-                install_options.include_package(&package.id.name, Some(root_name), lock.members())
+            .filter_map(|(index, node)| match node {
+                Node::Root => None,
+                Node::Package(package) => Some((index, package)),
             })
-            .map(|(index, package)| Node {
+            .filter(|(_index, package)| {
+                install_options.include_package(
+                    &package.id.name,
+                    target.project_name(),
+                    target.lock().members(),
+                )
+            })
+            .map(|(index, package)| Requirement {
                 package,
-                marker: reachability.remove(&index).unwrap_or_default(),
+                // As above, we've verified that there are no conflicting extras/groups
+                // specified, so it's safe to completely ignore the conflict marker.
+                marker: reachability.remove(&index).unwrap_or_default().pep508(),
             })
             .collect::<Vec<_>>();
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
         nodes.sort_unstable_by(|a, b| {
-            NodeComparator::from(a.package).cmp(&NodeComparator::from(b.package))
+            RequirementComparator::from(a.package).cmp(&RequirementComparator::from(b.package))
         });
 
         Ok(Self {
@@ -179,7 +228,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write out each package.
-        for Node { package, marker } in &self.nodes {
+        for Requirement { package, marker } in &self.nodes {
             match &package.id.source {
                 Source::Registry(_) => {
                     write!(f, "{}=={}", package.id.name, package.id.version)?;
@@ -244,7 +293,8 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
             }
 
             if self.hashes {
-                let hashes = package.hashes();
+                let mut hashes = package.hashes();
+                hashes.sort_unstable();
                 if !hashes.is_empty() {
                     for hash in &hashes {
                         writeln!(f, " \\")?;
@@ -261,17 +311,28 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
     }
 }
 
-/// The edges of the [`LockGraph`].
-type Edge = MarkerTree;
+/// A node in the graph.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Node<'lock> {
+    Root,
+    Package(&'lock Package),
+}
+
+/// A flat requirement, with its associated marker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Requirement<'lock> {
+    package: &'lock Package,
+    marker: MarkerTree,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum NodeComparator<'lock> {
+enum RequirementComparator<'lock> {
     Editable(&'lock Path),
     Path(&'lock Path),
     Package(&'lock PackageId),
 }
 
-impl<'lock> From<&'lock Package> for NodeComparator<'lock> {
+impl<'lock> From<&'lock Package> for RequirementComparator<'lock> {
     fn from(value: &'lock Package) -> Self {
         match &value.id.source {
             Source::Path(path) | Source::Directory(path) => Self::Path(path),

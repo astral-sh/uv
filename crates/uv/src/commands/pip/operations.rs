@@ -27,17 +27,17 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
-use uv_pypi_types::ResolverMarkerEnvironment;
-use uv_python::PythonEnvironment;
+use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
+use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     LookaheadResolver, NamedRequirementsResolver, RequirementsSource, RequirementsSpecification,
     SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, ResolutionGraph, Resolver, ResolverMarkers,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
 };
 use uv_types::{HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
@@ -91,7 +91,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    dev: Vec<GroupName>,
     source_trees: Vec<PathBuf>,
     mut project: Option<PackageName>,
     workspace_members: Option<BTreeSet<PackageName>>,
@@ -102,8 +101,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     tags: Option<&Tags>,
-    markers: ResolverMarkers,
+    resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    conflicts: Conflicts,
     client: &RegistryClient,
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
@@ -112,7 +112,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     options: Options,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
-) -> Result<ResolutionGraph, Error> {
+) -> Result<ResolverOutput, Error> {
     let start = std::time::Instant::now();
 
     // Resolve the requirements from the provided sources.
@@ -238,7 +238,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
-    let preferences = Preferences::from_iter(preferences, &markers);
+    let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
@@ -247,13 +247,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &requirements,
                 &constraints,
                 &overrides,
-                &dev,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(ResolverReporter::from(printer))
-            .resolve(&markers)
+            .resolve(&resolver_env)
             .await?
         }
         DependencyMode::Direct => Vec::new(),
@@ -267,7 +266,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements,
         constraints,
         overrides,
-        dev,
         preferences,
         project,
         workspace_members,
@@ -289,7 +287,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             manifest,
             options,
             &python_requirement,
-            markers,
+            resolver_env,
+            conflicts,
             tags,
             flat_index,
             index,
@@ -397,6 +396,7 @@ pub(crate) async fn install(
     cache: &Cache,
     venv: &PythonEnvironment,
     logger: Box<dyn InstallLogger>,
+    installer_metadata: bool,
     dry_run: bool,
     printer: Printer,
 ) -> Result<Changelog, Error> {
@@ -437,7 +437,12 @@ pub(crate) async fn install(
     };
 
     // Nothing to do.
-    if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
+    if remote.is_empty()
+        && cached.is_empty()
+        && reinstalls.is_empty()
+        && extraneous.is_empty()
+        && !compile
+    {
         logger.on_audit(resolution.len(), start, printer)?;
         return Ok(Changelog::default());
     }
@@ -458,9 +463,8 @@ pub(crate) async fn install(
         .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
 
         let wheels = preparer
-            .prepare(remote.clone(), in_flight)
-            .await
-            .context("Failed to prepare distributions")?;
+            .prepare(remote.clone(), in_flight, resolution)
+            .await?;
 
         logger.on_prepare(wheels.len(), start, printer)?;
 
@@ -514,6 +518,7 @@ pub(crate) async fn install(
         installs = uv_installer::Installer::new(venv)
             .with_link_mode(link_mode)
             .with_cache(cache)
+            .with_installer_metadata(installer_metadata)
             .with_reporter(InstallReporter::from(printer).with_length(installs.len() as u64))
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking
@@ -536,6 +541,63 @@ pub(crate) async fn install(
     Ok(changelog)
 }
 
+/// Display a message about the interpreter that was selected for the operation.
+pub(crate) fn report_interpreter(
+    python: &PythonInstallation,
+    dimmed: bool,
+    printer: Printer,
+) -> Result<(), Error> {
+    let managed = python.source().is_managed();
+    let implementation = python.implementation();
+    let interpreter = python.interpreter();
+
+    if dimmed {
+        if managed {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Using {} {}",
+                    implementation.pretty(),
+                    interpreter.python_version()
+                )
+                .dimmed()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Using {} {} interpreter at: {}",
+                    implementation.pretty(),
+                    interpreter.python_version(),
+                    interpreter.sys_executable().user_display()
+                )
+                .dimmed()
+            )?;
+        }
+    } else {
+        if managed {
+            writeln!(
+                printer.stderr(),
+                "Using {} {}",
+                implementation.pretty(),
+                interpreter.python_version().cyan()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "Using {} {} interpreter at: {}",
+                implementation.pretty(),
+                interpreter.python_version(),
+                interpreter.sys_executable().user_display().cyan()
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Display a message about the target environment for the operation.
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
@@ -543,7 +605,7 @@ pub(crate) fn report_target_environment(
     printer: Printer,
 ) -> Result<(), Error> {
     let message = format!(
-        "Using Python {} environment at {}",
+        "Using Python {} environment at: {}",
         env.interpreter().python_version(),
         env.root().user_display()
     );
@@ -734,8 +796,8 @@ pub(crate) fn diagnose_environment(
     for diagnostic in site_packages.diagnostics(markers)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
-            .packages()
-            .any(|package| diagnostic.includes(package))
+            .distributions()
+            .any(|dist| diagnostic.includes(dist.name()))
         {
             writeln!(
                 printer.stderr(),
@@ -751,6 +813,9 @@ pub(crate) fn diagnose_environment(
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
+    #[error("Failed to prepare distributions")]
+    Prepare(#[from] uv_installer::PrepareError),
+
     #[error(transparent)]
     Resolve(#[from] uv_resolver::ResolveError),
 
@@ -771,7 +836,4 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
-
-    #[error(transparent)]
-    PubGrubSpecifier(#[from] uv_resolver::PubGrubSpecifierError),
 }

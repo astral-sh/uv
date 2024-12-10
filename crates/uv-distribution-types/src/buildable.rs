@@ -4,7 +4,7 @@ use std::path::Path;
 use url::Url;
 use uv_distribution_filename::SourceDistExtension;
 use uv_git::GitUrl;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VerbatimUrl;
 
 use uv_normalize::PackageName;
@@ -36,6 +36,7 @@ impl BuildableSource<'_> {
     pub fn version(&self) -> Option<&Version> {
         match self {
             Self::Dist(SourceDist::Registry(dist)) => Some(&dist.version),
+            Self::Dist(SourceDist::Path(dist)) => dist.version.as_ref(),
             Self::Dist(_) => None,
             Self::Url(_) => None,
         }
@@ -63,6 +64,14 @@ impl BuildableSource<'_> {
             Self::Dist(dist) => matches!(dist, SourceDist::Directory(_)),
             Self::Url(url) => matches!(url, SourceUrl::Directory(_)),
         }
+    }
+
+    /// Return the Python version specifier required by the source, if available.
+    pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
+        let Self::Dist(SourceDist::Registry(dist)) = self else {
+            return None;
+        };
+        dist.file.requires_python.as_ref()
     }
 }
 

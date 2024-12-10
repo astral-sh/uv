@@ -24,28 +24,25 @@ workspace = true
 uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
-uv-pubgrub = { workspace = true }
 
 boxcar = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
-pubgrub = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "rc"] }
-serde_json = { workspace = true, optional = true }
 smallvec = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
 unicode-width = { workspace = true }
 url = { workspace = true, features = ["serde"] }
+version-ranges = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.40.0" }
-log = { version = "0.4.22" }
 serde_json = { version = "1.0.128" }
-testing_logger = { version = "0.1.1" }
+tracing-test = { version = "0.2.5" }
 
 [features]
 tracing = ["dep:tracing", "uv-pep440/tracing"]

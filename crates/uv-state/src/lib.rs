@@ -4,14 +4,13 @@ use std::{
     sync::Arc,
 };
 
-use directories::ProjectDirs;
-use etcetera::BaseStrategy;
 use fs_err as fs;
 use tempfile::{tempdir, TempDir};
 
 /// The main state storage abstraction.
 ///
-/// This is appropriate
+/// This is appropriate for storing persistent data that is not user-facing, such as managed Python
+/// installations or tool environments.
 #[derive(Debug, Clone)]
 pub struct StateStore {
     /// The state storage.
@@ -85,18 +84,12 @@ impl StateStore {
     pub fn from_settings(state_dir: Option<PathBuf>) -> Result<Self, io::Error> {
         if let Some(state_dir) = state_dir {
             StateStore::from_path(state_dir)
-        } else if let Some(data_dir) = ProjectDirs::from("", "", "uv")
-            .map(|dirs| dirs.data_dir().to_path_buf())
-            .filter(|dir| dir.exists())
-        {
+        } else if let Some(data_dir) = uv_dirs::legacy_user_state_dir().filter(|dir| dir.exists()) {
             // If the user has an existing directory at (e.g.) `/Users/user/Library/Application Support/uv`,
             // respect it for backwards compatibility. Otherwise, prefer the XDG strategy, even on
             // macOS.
             StateStore::from_path(data_dir)
-        } else if let Some(data_dir) = etcetera::base_strategy::choose_base_strategy()
-            .ok()
-            .map(|dirs| dirs.data_dir().join("uv"))
-        {
+        } else if let Some(data_dir) = uv_dirs::user_state_dir() {
             StateStore::from_path(data_dir)
         } else {
             StateStore::from_path(".uv")

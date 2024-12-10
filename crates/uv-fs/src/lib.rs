@@ -104,6 +104,27 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
 }
 
+/// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
+///
+/// This does not replace an existing symlink or file at `dst`.
+///
+/// This does not fallback to copying on Unix.
+///
+/// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
+/// instead; it will use a junction on Windows, which is more performant.
+pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        fs_err::copy(src.as_ref(), dst.as_ref())?;
+    }
+    #[cfg(unix)]
+    {
+        fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+    }
+
+    Ok(())
+}
+
 #[cfg(windows)]
 pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     match junction::delete(dunce::simplified(path.as_ref())) {
@@ -195,6 +216,13 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
     Ok(())
 }
 
+fn backoff_file_move() -> backoff::ExponentialBackoff {
+    backoff::ExponentialBackoffBuilder::default()
+        .with_initial_interval(std::time::Duration::from_millis(10))
+        .with_max_elapsed_time(Some(std::time::Duration::from_secs(10)))
+        .build()
+}
+
 /// Rename a file, retrying (on Windows) if it fails due to transient operating system errors.
 #[cfg(feature = "tokio")]
 pub async fn rename_with_retry(
@@ -206,15 +234,11 @@ pub async fn rename_with_retry(
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
         //
-        // See: <https://github.com/astral-sh/uv/issues/1491>
+        // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
         let from = from.as_ref();
         let to = to.as_ref();
 
-        let backoff = backoff::ExponentialBackoffBuilder::default()
-            .with_initial_interval(std::time::Duration::from_millis(10))
-            .with_max_elapsed_time(Some(std::time::Duration::from_secs(10)))
-            .build();
-
+        let backoff = backoff_file_move();
         backoff::future::retry(backoff, || async move {
             match fs_err::rename(from, to) {
                 Ok(()) => Ok(()),
@@ -233,6 +257,115 @@ pub async fn rename_with_retry(
         .await
     } else {
         fs_err::tokio::rename(from, to).await
+    }
+}
+
+/// Rename a file, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+pub fn rename_with_retry_sync(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> Result<(), std::io::Error> {
+    if cfg!(windows) {
+        // On Windows, antivirus software can lock files temporarily, making them inaccessible.
+        // This is most common for DLLs, and the common suggestion is to retry the operation with
+        // some backoff.
+        //
+        // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
+        let from = from.as_ref();
+        let to = to.as_ref();
+
+        let backoff = backoff_file_move();
+        backoff::retry(backoff, || match fs_err::rename(from, to) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                warn!(
+                    "Retrying rename from {} to {} due to transient error: {}",
+                    from.display(),
+                    to.display(),
+                    err
+                );
+                Err(backoff::Error::transient(err))
+            }
+            Err(err) => Err(backoff::Error::permanent(err)),
+        })
+        .map_err(|err| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to rename {} to {}: {}",
+                    from.display(),
+                    to.display(),
+                    err
+                ),
+            )
+        })
+    } else {
+        fs_err::rename(from, to)
+    }
+}
+
+/// Persist a `NamedTempFile`, retrying (on Windows) if it fails due to transient operating system errors, in a synchronous context.
+pub fn persist_with_retry_sync(
+    from: NamedTempFile,
+    to: impl AsRef<Path>,
+) -> Result<(), std::io::Error> {
+    if cfg!(windows) {
+        // On Windows, antivirus software can lock files temporarily, making them inaccessible.
+        // This is most common for DLLs, and the common suggestion is to retry the operation with
+        // some backoff.
+        //
+        // See: <https://github.com/astral-sh/uv/issues/1491> & <https://github.com/astral-sh/uv/issues/9531>
+        let to = to.as_ref();
+
+        // the `NamedTempFile` `persist` method consumes `self`, and returns it back inside the Error in case of `PersistError`
+        // https://docs.rs/tempfile/latest/tempfile/struct.NamedTempFile.html#method.persist
+        // So we will update the `from` optional value in safe and borrow-checker friendly way every retry
+        // Allows us to use the NamedTempFile inside a FnMut closure used for backoff::retry
+        let mut from = Some(from);
+
+        let backoff = backoff_file_move();
+        let persisted = backoff::retry(backoff, move || {
+            if let Some(file) = from.take() {
+                file.persist(to).map_err(|err| {
+                    let error_message = err.to_string();
+                    warn!(
+                        "Retrying to persist temporary file to {}: {}",
+                        to.display(),
+                        error_message
+                    );
+
+                    // Set back the NamedTempFile returned back by the Error
+                    from = Some(err.file);
+
+                    backoff::Error::transient(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "Failed to persist temporary file to {}: {}",
+                            to.display(),
+                            error_message
+                        ),
+                    ))
+                })
+            } else {
+                Err(backoff::Error::permanent(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Failed to retrieve temporary file while trying to persist to {}",
+                        to.display()
+                    ),
+                )))
+            }
+        });
+
+        match persisted {
+            Ok(_) => Ok(()),
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{err:?}"),
+            )),
+        }
+    } else {
+        fs_err::rename(from, to)
     }
 }
 
@@ -421,4 +554,19 @@ impl<Reader: tokio::io::AsyncRead + Unpin, Callback: Fn(usize) + Unpin> tokio::i
                 (self.callback)(buf.filled().len());
             })
     }
+}
+
+/// Recursively copy a directory and its contents.
+pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    fs_err::create_dir_all(&dst)?;
+    for entry in fs_err::read_dir(src.as_ref())? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs_err::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }

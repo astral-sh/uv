@@ -1,7 +1,8 @@
-use crate::common::{copy_dir_all, uv_snapshot, TestContext};
+use crate::common::{uv_snapshot, TestContext};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
+use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
 #[test]
@@ -141,6 +142,7 @@ fn tool_run_at_version() {
     The following executables are provided by `pytest`:
     - py.test
     - pytest
+    Consider using `uv tool run --from pytest <EXECUTABLE_NAME>` instead.
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -202,6 +204,7 @@ fn tool_run_suggest_valid_commands() {
     The following executables are provided by `black`:
     - black
     - blackd
+    Consider using `uv tool run --from black <EXECUTABLE_NAME>` instead.
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1275,7 +1278,7 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Invalid `--with` requirement
+      × Failed to resolve `--with` requirement
       ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
     "###);
 

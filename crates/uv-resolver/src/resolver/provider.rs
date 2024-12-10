@@ -1,9 +1,11 @@
 use std::future::Future;
+use std::sync::Arc;
 
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl};
 use uv_normalize::PackageName;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
@@ -42,6 +44,11 @@ pub enum MetadataResponse {
     InvalidStructure(Box<uv_metadata::Error>),
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
+    /// The source distribution has a `requires-python` requirement that is not met by the installed
+    /// Python version (and static metadata is not available).
+    RequiresPython(VersionSpecifiers, Version),
+    /// The distribution could not be built or downloaded.
+    Error(Box<Dist>, Arc<uv_distribution::Error>),
 }
 
 pub trait ResolverProvider {
@@ -191,10 +198,10 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                     }
                     kind => Err(uv_client::Error::from(kind).into()),
                 },
-                uv_distribution::Error::VersionMismatch { .. } => {
+                uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {
                     Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
                 }
-                uv_distribution::Error::NameMismatch { .. } => {
+                uv_distribution::Error::WheelMetadataNameMismatch { .. } => {
                     Ok(MetadataResponse::InconsistentMetadata(Box::new(err)))
                 }
                 uv_distribution::Error::Metadata(err) => {
@@ -203,7 +210,13 @@ impl<'a, Context: BuildContext> ResolverProvider for DefaultResolverProvider<'a,
                 uv_distribution::Error::WheelMetadata(_, err) => {
                     Ok(MetadataResponse::InvalidStructure(err))
                 }
-                err => Err(err),
+                uv_distribution::Error::RequiresPython(requires_python, version) => {
+                    Ok(MetadataResponse::RequiresPython(requires_python, version))
+                }
+                err => Ok(MetadataResponse::Error(
+                    Box::new(dist.clone()),
+                    Arc::new(err),
+                )),
             },
         }
     }
