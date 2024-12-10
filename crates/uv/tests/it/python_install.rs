@@ -2,7 +2,7 @@ use std::{path::Path, process::Command};
 
 use assert_fs::{
     assert::PathAssert,
-    prelude::{FileTouch, PathChild},
+    prelude::{FileTouch, PathChild, PathCreateDir},
 };
 use predicates::prelude::predicate;
 use uv_fs::Simplified;
@@ -491,7 +491,7 @@ fn python_install_invalid_request() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot download managed Python for request: executable name `foobar`
+    error: `foobar` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions
     "###);
 
     // Request a version we don't have a download for
@@ -811,4 +811,31 @@ fn read_link_path(path: &Path) -> String {
     } else {
         unreachable!()
     }
+}
+
+#[test]
+fn python_install_unknown() {
+    let context: TestContext = TestContext::new_with_versions(&[]);
+
+    // An unknown request
+    uv_snapshot!(context.filters(), context.python_install().arg("foobar"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `foobar` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions
+    "###);
+
+    context.temp_dir.child("foo").create_dir_all().unwrap();
+
+    // A directory
+    uv_snapshot!(context.filters(), context.python_install().arg("./foo"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `./foo` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions
+    "###);
 }
