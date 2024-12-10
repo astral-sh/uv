@@ -19660,7 +19660,7 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
           hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
     "###);
@@ -19694,7 +19694,7 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
           hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
     "###);
@@ -19829,7 +19829,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
           hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
     "###);
@@ -19958,7 +19958,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only project{sys_platform == 'win32'}<=0.1 is available and your project depends on project{sys_platform == 'win32'}>0.1, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because only project{sys_platform == 'win32'}<=0.1 is available and your project depends on itself at an incompatible version (project{sys_platform == 'win32'}>0.1), we can conclude that your project's requirements are unsatisfiable.
 
           hint: The package `project` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
     "###);
