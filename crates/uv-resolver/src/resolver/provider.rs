@@ -40,7 +40,7 @@ pub enum MetadataResponse {
     Error(Box<Dist>, Arc<uv_distribution::Error>),
 }
 
-/// Reason why metadata fetching failed.
+/// Non-fatal metadata fetching error.
 ///
 /// This is also the unavailability reasons for a package, while version unavailability is separate
 /// in [`UnavailableVersion`].
