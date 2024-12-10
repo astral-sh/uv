@@ -135,7 +135,7 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let installations = ManagedPythonInstallations::from_settings()?.init()?;
+        let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;

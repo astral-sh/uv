@@ -107,11 +107,15 @@ impl ManagedPythonInstallations {
     }
 
     /// Prefer, in order:
-    /// 1. The specific Python directory specified by the user, i.e., `UV_PYTHON_INSTALL_DIR`
-    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`
-    /// 3. A directory in the local data directory, e.g., `./.uv/python`
-    pub fn from_settings() -> Result<Self, Error> {
-        if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
+    ///
+    /// 1. The specific Python directory passed via the `install_dir` argument.
+    /// 2. The specific Python directory specified with the `UV_PYTHON_INSTALL_DIR` environment variable.
+    /// 3. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`.
+    /// 4. A directory in the local data directory, e.g., `./.uv/python`.
+    pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
+        if let Some(install_dir) = install_dir {
+            Ok(Self::from_path(install_dir))
+        } else if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
@@ -227,7 +231,7 @@ impl ManagedPythonInstallations {
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
         let platform_key = platform_key_from_env()?;
 
-        let iter = ManagedPythonInstallations::from_settings()?
+        let iter = ManagedPythonInstallations::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
                 installation

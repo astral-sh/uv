@@ -302,7 +302,7 @@ fn python_executables_from_installed<'a>(
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     let from_managed_installations = std::iter::once_with(move || {
-        ManagedPythonInstallations::from_settings()
+        ManagedPythonInstallations::from_settings(None)
             .map_err(Error::from)
             .and_then(|installed_installations| {
                 debug!(

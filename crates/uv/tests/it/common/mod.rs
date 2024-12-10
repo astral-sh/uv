@@ -1075,7 +1075,7 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
 
 /// Get the path to the python interpreter for a specific python version.
 pub fn get_python(version: &PythonVersion) -> PathBuf {
-    ManagedPythonInstallations::from_settings()
+    ManagedPythonInstallations::from_settings(None)
         .map(|installed_pythons| {
             installed_pythons
                 .find_version(version)

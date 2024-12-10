@@ -22,12 +22,14 @@ use crate::printer::Printer;
 
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(
+    install_dir: Option<PathBuf>,
     targets: Vec<String>,
     all: bool,
 
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let installations = ManagedPythonInstallations::from_settings()?.init()?;
+    let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
+
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.

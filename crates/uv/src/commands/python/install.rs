@@ -121,6 +121,7 @@ impl Changelog {
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     project_dir: &Path,
+    install_dir: Option<PathBuf>,
     targets: Vec<String>,
     reinstall: bool,
     force: bool,
@@ -178,7 +179,7 @@ pub(crate) async fn install(
     };
 
     // Read the existing installations, lock the directory for the duration
-    let installations = ManagedPythonInstallations::from_settings()?.init()?;
+    let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
     let installations_dir = installations.root();
     let scratch_dir = installations.scratch();
     let _lock = installations.lock().await?;

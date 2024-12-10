@@ -760,6 +760,7 @@ impl PythonDirSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonInstallSettings {
+    pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
@@ -784,6 +785,7 @@ impl PythonInstallSettings {
         let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
 
         let PythonInstallArgs {
+            install_dir,
             targets,
             reinstall,
             force,
@@ -793,6 +795,7 @@ impl PythonInstallSettings {
         } = args;
 
         Self {
+            install_dir,
             targets,
             reinstall,
             force,
@@ -807,6 +810,7 @@ impl PythonInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonUninstallSettings {
+    pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) all: bool,
 }
@@ -818,9 +822,17 @@ impl PythonUninstallSettings {
         args: PythonUninstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let PythonUninstallArgs { targets, all } = args;
+        let PythonUninstallArgs {
+            install_dir,
+            targets,
+            all,
+        } = args;
 
-        Self { targets, all }
+        Self {
+            install_dir,
+            targets,
+            all,
+        }
     }
 }
 
