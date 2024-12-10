@@ -211,10 +211,18 @@ impl ManagedPythonInstallations {
                 })
             }
         };
-        let cache = self.scratch();
+        let scratch = self.scratch();
         Ok(dirs
             .into_iter()
-            .filter(|path| *path != cache)
+            // Ignore the scratch directory
+            .filter(|path| *path != scratch)
+            // Ignore any `.` prefixed directories
+            .filter(|path| {
+                path.file_name()
+                    .and_then(OsStr::to_str)
+                    .map(|name| !name.starts_with('.'))
+                    .unwrap_or(true)
+            })
             .filter_map(|path| {
                 ManagedPythonInstallation::new(path)
                     .inspect_err(|err| {
