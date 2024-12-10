@@ -4553,7 +4553,11 @@ uv python install [OPTIONS] [TARGETS]...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
-</dd><dt><code>--install-dir</code>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory to store the Python installation in</p>
+</dd><dt><code>--install-dir</code>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory to store the Python installation in.</p>
+
+<p>If provided, <code>UV_PYTHON_INSTALL_DIR</code> will need to be set for subsequent operations for uv to discover the Python installation.</p>
+
+<p>See <code>uv python dir</code> to view the current Python installation directory. Defaults to <code>~/.local/share/uv/python</code>.</p>
 
 <p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
 </dd><dt><code>--mirror</code> <i>mirror</i></dt><dd><p>Set the URL to use as the source for downloading Python installations.</p>
@@ -5117,7 +5121,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
-</dd><dt><code>--install-dir</code>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory where Python is installed</p>
+</dd><dt><code>--install-dir</code>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory where the Python was installed</p>
 
 <p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>

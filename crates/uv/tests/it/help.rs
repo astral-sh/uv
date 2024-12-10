@@ -484,7 +484,13 @@ fn help_subsubcommand() {
 
     Options:
       -i, --install-dir <INSTALL_DIR>
-              The directory to store the Python installation in
+              The directory to store the Python installation in.
+              
+              If provided, `UV_PYTHON_INSTALL_DIR` will need to be set for subsequent operations for uv
+              to discover the Python installation.
+              
+              See `uv python dir` to view the current Python installation directory. Defaults to
+              `~/.local/share/uv/python`.
               
               [env: UV_PYTHON_INSTALL_DIR=]
 
