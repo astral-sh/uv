@@ -8,7 +8,7 @@ use assert_fs::{
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
-
+use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
@@ -169,6 +169,51 @@ fn tool_install() {
         exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
+}
+
+#[test]
+fn tool_install_with_editable() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let anyio_local = context.temp_dir.child("src").child("anyio_local");
+    copy_dir_all(
+        context.workspace_root.join("scripts/packages/anyio_local"),
+        &anyio_local,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-editable")
+        .arg("./src/anyio_local")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0+foo (from file://[TEMP_DIR]/src/anyio_local)
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + iniconfig==2.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    "###);
+
+    Ok(())
 }
 
 #[test]
@@ -946,7 +991,7 @@ fn tool_install_already_installed() {
 
 /// Test installing a tool when its entry point already exists
 #[test]
-fn tool_install_entry_point_exists() {
+fn tool_install_force() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -1095,6 +1140,10 @@ fn tool_install_entry_point_exists() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ black==24.3.0
     Installed 2 executables: black, blackd
     "###);
 
@@ -1413,34 +1462,31 @@ fn tool_install_uninstallable() {
         .arg("pyenv")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r##"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: pyenv==0.0.1
-      Caused by: Build backend failed to build wheel through `build_wheel` (exit status: 1)
+      × Failed to download and build `pyenv==0.0.1`
+      ╰─▶ Build backend failed to build wheel through `build_wheel` (exit status: 1)
 
-    [stdout]
-    running bdist_wheel
-    running build
-    installing to build/bdist.linux-x86_64/wheel
-    running install
+          [stdout]
+          running bdist_wheel
+          running build
+          installing to build/bdist.linux-x86_64/wheel
+          running install
 
-    [stderr]
-    # NOTE #
-    We are sorry, but this package is not installable with pip.
+          [stderr]
+          # NOTE #
+          We are sorry, but this package is not installable with pip.
 
-    Please read the installation instructions at:
+          Please read the installation instructions at:
      
-    https://github.com/pyenv/pyenv#installation
-    #
-
-
-    "##);
+          https://github.com/pyenv/pyenv#installation
+          #
+    "###);
 
     // Ensure the tool environment is not created.
     tool_dir.child("pyenv").assert(predicate::path::missing());
@@ -1928,7 +1974,7 @@ fn tool_install_requirements_txt_arguments() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed 2 executables: black, blackd
+    `black` is already installed
     "###);
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -2394,12 +2440,13 @@ fn tool_install_preserve_environment() {
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
-    And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
+          And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
     "###);
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.
@@ -3066,4 +3113,175 @@ fn tool_install_at_latest_upgrade() {
         exclude-newer = "2024-03-25T00:00:00Z"
         "###);
     });
+}
+
+/// Install a tool with `--constraints`.
+#[test]
+fn tool_install_constraints() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc::indoc! {r"
+        mypy-extensions<1
+        anyio>=3
+    "})?;
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==0.4.4
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        constraints = [
+            { name = "mypy-extensions", specifier = "<1" },
+            { name = "anyio", specifier = ">=3" },
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    // Installing with the same constraints should be a no-op.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `black` is already installed
+    "###);
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(indoc::indoc! {r"
+        platformdirs<4
+    "})?;
+
+    // Installing with revised constraints should reinstall the tool.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - platformdirs==4.2.0
+     + platformdirs==3.11.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    Ok(())
+}
+
+/// Install a tool with `--overrides`.
+#[test]
+fn tool_install_overrides() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str(indoc::indoc! {r"
+        click<8
+        anyio>=3
+    "})?;
+
+    // Install `black`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--overrides")
+        .arg(overrides_txt.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==7.1.2
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [{ name = "black" }]
+        overrides = [
+            { name = "click", specifier = "<8" },
+            { name = "anyio", specifier = ">=3" },
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "###);
+    });
+
+    Ok(())
 }

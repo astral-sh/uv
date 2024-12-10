@@ -56,7 +56,7 @@ embed-manifest = "1.4.0"
 anyhow = { version = "1.0.80" }
 assert_cmd = { version = "2.0.14" }
 assert_fs = { version = "1.1.1" }
-fs-err = { version = "2.11.0" }
-thiserror = { version = "1.0.56" }
-which = { version = "6.0.0" }
+fs-err = { version = "3.0.0" }
+thiserror = { version = "2.0.0" }
+which = { version = "7.0.0" }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }

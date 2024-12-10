@@ -3,8 +3,7 @@ use serde::Deserialize;
 use std::io::BufRead;
 use std::str::FromStr;
 use uv_normalize::ExtraName;
-use uv_pep508::marker::MarkerValueExtra;
-use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, Requirement};
+use uv_pep508::{ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement};
 
 /// `requires.txt` metadata as defined in <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#dependency-metadata>.
 ///
@@ -97,7 +96,7 @@ impl RequiresTxt {
 
             // Add the markers and extra, if necessary.
             requires_dist.push(Requirement {
-                marker: current_marker.clone(),
+                marker: current_marker,
                 ..requirement
             });
         }
@@ -110,4 +109,61 @@ impl RequiresTxt {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_requires_txt() {
+        let s = r"
+Werkzeug>=0.14
+Jinja2>=2.10
+
+[dev]
+pytest>=3
+sphinx
+
+[dotenv]
+python-dotenv
+    ";
+        let meta = RequiresTxt::parse(s.as_bytes()).unwrap();
+        assert_eq!(
+            meta.requires_dist,
+            vec![
+                "Werkzeug>=0.14".parse().unwrap(),
+                "Jinja2>=2.10".parse().unwrap(),
+                "pytest>=3; extra == \"dev\"".parse().unwrap(),
+                "sphinx; extra == \"dev\"".parse().unwrap(),
+                "python-dotenv; extra == \"dotenv\"".parse().unwrap(),
+            ]
+        );
+
+        let s = r"
+Werkzeug>=0.14
+
+[dev:]
+Jinja2>=2.10
+
+[:sys_platform == 'win32']
+pytest>=3
+
+[]
+sphinx
+
+[dotenv:sys_platform == 'darwin']
+python-dotenv
+    ";
+        let meta = RequiresTxt::parse(s.as_bytes()).unwrap();
+        assert_eq!(
+            meta.requires_dist,
+            vec![
+                "Werkzeug>=0.14".parse().unwrap(),
+                "Jinja2>=2.10 ; extra == \"dev\"".parse().unwrap(),
+                "pytest>=3; sys_platform == 'win32'".parse().unwrap(),
+                "sphinx".parse().unwrap(),
+                "python-dotenv; sys_platform == 'darwin' and extra == \"dotenv\""
+                    .parse()
+                    .unwrap(),
+            ]
+        );
+    }
+}

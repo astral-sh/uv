@@ -1,10 +1,13 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use uv_distribution_filename::DistFilename;
 
 use anyhow::Result;
 
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_configuration::{
+    BuildKind, BuildOptions, BuildOutput, ConfigSettings, LowerBound, SourceStrategy,
+};
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist, Resolution,
     SourceDist,
@@ -12,7 +15,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_pypi_types::Requirement;
-use uv_python::PythonEnvironment;
+use uv_python::{Interpreter, PythonEnvironment};
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -54,6 +57,9 @@ use uv_python::PythonEnvironment;
 pub trait BuildContext {
     type SourceDistBuilder: SourceBuildTrait;
 
+    /// Return a reference to the interpreter.
+    fn interpreter(&self) -> &Interpreter;
+
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
 
@@ -75,11 +81,14 @@ pub trait BuildContext {
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
 
+    /// Whether to warn on missing lower bounds.
+    fn bounds(&self) -> LowerBound;
+
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;
 
     /// The index locations being searched.
-    fn index_locations(&self) -> &IndexLocations;
+    fn locations(&self) -> &IndexLocations;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
@@ -106,11 +115,28 @@ pub trait BuildContext {
         &'a self,
         source: &'a Path,
         subdirectory: Option<&'a Path>,
-        version_id: Option<String>,
+        install_path: &'a Path,
+        version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder>> + 'a;
+
+    /// Build by calling directly into the uv build backend without PEP 517, if possible.
+    ///
+    /// Checks if the source tree uses uv as build backend. If not, it returns `Ok(None)`, otherwise
+    /// it builds and returns the name of the built file.
+    ///
+    /// `version_id` is for error reporting only.
+    fn direct_build<'a>(
+        &'a self,
+        source: &'a Path,
+        subdirectory: Option<&'a Path>,
+        output_dir: &'a Path,
+        build_kind: BuildKind,
+        version_id: Option<&'a str>,
+    ) -> impl Future<Output = Result<Option<DistFilename>>> + 'a;
 }
 
 /// A wrapper for `uv_build::SourceBuild` to avoid cyclical crate dependencies.
@@ -130,7 +156,9 @@ pub trait SourceBuildTrait {
     ///
     /// For PEP 517 builds, this calls `build_wheel`.
     ///
-    /// Returns the filename of the built wheel inside the given `wheel_dir`.
+    /// Returns the filename of the built wheel inside the given `wheel_dir`. The filename is a
+    /// string and not a `WheelFilename` because the on disk filename might not be normalized in the
+    /// same way as uv would.
     fn wheel<'a>(&'a self, wheel_dir: &'a Path) -> impl Future<Output = Result<String>> + 'a;
 }
 

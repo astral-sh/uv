@@ -14,8 +14,9 @@ on:
         type: string
   pull_request:
     paths:
-      # When we change pyproject.toml, we want to ensure that the maturin builds still work.
+      # When we change project metadata, we want to ensure that the maturin builds still work.
       - pyproject.toml
+      - Cargo.toml
       # And when we change this workflow itself...
       - .github/workflows/build-binaries.yml
 
@@ -64,7 +65,7 @@ jobs:
 
   macos-x86_64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: macos-13-large
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -154,7 +155,7 @@ jobs:
 
   windows:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: windows-latest
+    runs-on: windows-latest-large
     strategy:
       matrix:
         platform:
@@ -207,7 +208,7 @@ jobs:
 
   linux:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest-4
     strategy:
       matrix:
         target:
@@ -352,10 +353,10 @@ jobs:
             *.tar.gz
             *.sha256
 
-  # Like `linux-arm`, but use `--no-default-features` when building uv.
+  # Like `linux-arm`.
   linux-s390x:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-latest-4
     strategy:
       matrix:
         platform:
@@ -377,7 +378,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --locked --out dist --no-default-features --features self-update
+          args: --release --locked --out dist --features self-update
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
         name: Test wheel
@@ -420,8 +421,7 @@ jobs:
             *.tar.gz
             *.sha256
 
-  # Like `linux-arm`, but use `--no-default-features` when building uv,
-  # and install the `gcc-powerpc64-linux-gnu` package.
+  # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
@@ -452,7 +452,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --locked --out dist --no-default-features --features self-update
+          args: --release --locked --out dist --features self-update
           before-script-linux: |
             if command -v yum &> /dev/null; then
                 yum update -y

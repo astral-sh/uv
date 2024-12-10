@@ -1,19 +1,23 @@
-use std::{collections::BTreeSet, fmt::Write};
-
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::BTreeMap;
+use std::fmt::Write;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
+use uv_dispatch::SharedState;
+use uv_fs::CWD;
 use uv_normalize::PackageName;
+use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
-use uv_settings::{Combine, ResolverInstallerOptions, ToolOptions};
+use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 
 use crate::commands::pip::loggers::{
@@ -24,38 +28,49 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{tool::common::install_executables, ExitStatus, SharedState};
+use crate::commands::{conjunction, tool::common::install_executables, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
-    name: Vec<PackageName>,
+    names: Vec<String>,
     python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
     connectivity: Connectivity,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
+    installer_metadata: bool,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
 
-    // Collect the tools to upgrade.
-    let names: BTreeSet<PackageName> = {
-        if name.is_empty() {
+    // Collect the tools to upgrade, along with any constraints.
+    let names: BTreeMap<PackageName, Vec<Requirement>> = {
+        if names.is_empty() {
             installed_tools
                 .tools()
                 .unwrap_or_default()
                 .into_iter()
-                .map(|(name, _)| name)
+                .map(|(name, _)| (name, Vec::new()))
                 .collect()
         } else {
-            name.into_iter().collect()
+            let mut map = BTreeMap::new();
+            for name in names {
+                let requirement = Requirement::from(uv_pep508::Requirement::parse(&name, &*CWD)?);
+                map.entry(requirement.name.clone())
+                    .or_insert_with(Vec::new)
+                    .push(requirement);
+            }
+            map
         }
     };
 
@@ -67,7 +82,8 @@ pub(crate) async fn upgrade(
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
         .connectivity(connectivity)
-        .native_tls(native_tls);
+        .native_tls(native_tls)
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     let python_request = python.as_deref().map(PythonRequest::parse);
 
@@ -81,6 +97,8 @@ pub(crate) async fn upgrade(
                 &client_builder,
                 cache,
                 Some(&reporter),
+                install_mirrors.python_install_mirror.as_deref(),
+                install_mirrors.pypy_install_mirror.as_deref(),
             )
             .await?
             .into_interpreter(),
@@ -95,22 +113,24 @@ pub(crate) async fn upgrade(
     // Determine whether we applied any upgrades.
     let mut did_upgrade_environment = vec![];
 
-    // Determine whether any tool upgrade failed.
-    let mut failed_upgrade = false;
-
-    for name in &names {
+    let mut errors = Vec::new();
+    for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
         let result = upgrade_tool(
             name,
+            constraints,
             interpreter.as_ref(),
             printer,
             &installed_tools,
             &args,
             cache,
             &filesystem,
+            installer_metadata,
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
+            preview,
         )
         .await;
 
@@ -125,22 +145,31 @@ pub(crate) async fn upgrade(
                 debug!("Upgrading `{name}` was a no-op");
             }
             Err(err) => {
-                // If we have a single tool, return the error directly.
-                if names.len() > 1 {
-                    writeln!(
-                        printer.stderr(),
-                        "Failed to upgrade `{}`: {err}",
-                        name.cyan(),
-                    )?;
-                } else {
-                    writeln!(printer.stderr(), "{err}")?;
-                }
-                failed_upgrade = true;
+                errors.push((name, err));
             }
         }
     }
 
-    if failed_upgrade {
+    if !errors.is_empty() {
+        for (name, err) in errors
+            .into_iter()
+            .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
+        {
+            writeln!(
+                printer.stderr(),
+                "{}: Failed to upgrade {}",
+                "error".red().bold(),
+                name.green()
+            )?;
+            for err in err.chain() {
+                writeln!(
+                    printer.stderr(),
+                    "  {}: {}",
+                    "Caused by".red().bold(),
+                    err.to_string().trim()
+                )?;
+            }
+        }
         return Ok(ExitStatus::Failure);
     }
 
@@ -180,15 +209,19 @@ enum UpgradeOutcome {
 /// Upgrade a specific tool.
 async fn upgrade_tool(
     name: &PackageName,
+    constraints: &[Requirement],
     interpreter: Option<&Interpreter>,
     printer: Printer,
     installed_tools: &InstalledTools,
     args: &ResolverInstallerOptions,
     cache: &Cache,
     filesystem: &ResolverInstallerOptions,
+    installer_metadata: bool,
     connectivity: Connectivity,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
+    preview: PreviewMode,
 ) -> Result<UpgradeOutcome> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
@@ -239,8 +272,16 @@ async fn upgrade_tool(
     let settings = ResolverInstallerSettings::from(options.clone());
 
     // Resolve the requirements.
-    let requirements = existing_tool_receipt.requirements();
-    let spec = RequirementsSpecification::from_requirements(requirements.to_vec());
+    let spec = RequirementsSpecification::from_overrides(
+        existing_tool_receipt.requirements().to_vec(),
+        existing_tool_receipt
+            .constraints()
+            .iter()
+            .chain(constraints)
+            .cloned()
+            .collect(),
+        existing_tool_receipt.overrides().to_vec(),
+    );
 
     // Initialize any shared state.
     let state = SharedState::default();
@@ -252,7 +293,7 @@ async fn upgrade_tool(
     {
         // If we're using a new interpreter, re-create the environment for each tool.
         let resolution = resolve_environment(
-            RequirementsSpecification::from_requirements(requirements.to_vec()).into(),
+            spec.into(),
             interpreter,
             settings.as_ref().into(),
             &state,
@@ -260,8 +301,10 @@ async fn upgrade_tool(
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
+            preview,
         )
         .await?;
 
@@ -273,11 +316,14 @@ async fn upgrade_tool(
             settings.as_ref().into(),
             &state,
             Box::new(DefaultInstallLogger),
+            installer_metadata,
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
+            preview,
         )
         .await?;
 
@@ -296,11 +342,14 @@ async fn upgrade_tool(
             &state,
             Box::new(SummaryResolveLogger),
             Box::new(UpgradeInstallLogger::new(name.clone())),
+            installer_metadata,
             connectivity,
             concurrency,
             native_tls,
+            allow_insecure_host,
             cache,
             printer,
+            preview,
         )
         .await?;
 
@@ -331,37 +380,12 @@ async fn upgrade_tool(
             ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
-            requirements.to_vec(),
+            existing_tool_receipt.requirements().to_vec(),
+            existing_tool_receipt.constraints().to_vec(),
+            existing_tool_receipt.overrides().to_vec(),
             printer,
         )?;
     }
 
     Ok(outcome)
-}
-
-/// Given a list of names, return a conjunction of the names (e.g., "Alice, Bob and Charlie").
-fn conjunction(names: Vec<String>) -> String {
-    let mut names = names.into_iter();
-    let first = names.next();
-    let last = names.next_back();
-    match (first, last) {
-        (Some(first), Some(last)) => {
-            let mut result = first;
-            let mut comma = false;
-            for name in names {
-                result.push_str(", ");
-                result.push_str(&name);
-                comma = true;
-            }
-            if comma {
-                result.push_str(", and ");
-            } else {
-                result.push_str(" and ");
-            }
-            result.push_str(&last);
-            result
-        }
-        (Some(first), None) => first,
-        _ => String::new(),
-    }
 }

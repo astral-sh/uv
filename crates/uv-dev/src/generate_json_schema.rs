@@ -27,14 +27,13 @@ struct CombinedOptions {
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
-    /// Write the generated output to stdout (rather than to `uv.schema.json`).
     #[arg(long, default_value_t, value_enum)]
     pub(crate) mode: Mode,
 }
 
 pub(crate) fn main(args: &Args) -> Result<()> {
-    let schema = schema_for!(CombinedOptions);
-    let schema_string = serde_json::to_string_pretty(&schema).unwrap();
+    // Generate the schema.
+    let schema_string = generate();
     let filename = "uv.schema.json";
     let schema_path = PathBuf::from(ROOT_DIR).join(filename);
 
@@ -80,5 +79,52 @@ pub(crate) fn main(args: &Args) -> Result<()> {
     Ok(())
 }
 
+const REPLACEMENTS: &[(&str, &str)] = &[
+    // Use the fully-resolved URL rather than the relative Markdown path.
+    (
+        "(../concepts/projects/dependencies.md)",
+        "(https://docs.astral.sh/uv/concepts/projects/dependencies/)",
+    ),
+];
+
+/// Generate the JSON schema for the combined options as a string.
+fn generate() -> String {
+    let schema = schema_for!(CombinedOptions);
+    let mut output = serde_json::to_string_pretty(&schema).unwrap();
+
+    for (value, replacement) in REPLACEMENTS {
+        assert_ne!(
+            value, replacement,
+            "`value` and `replacement` must be different, but both are `{value}`"
+        );
+        let before = &output;
+        let after = output.replace(value, replacement);
+        assert_ne!(*before, after, "Could not find `{value}` in the output");
+        output = after;
+    }
+
+    output
+}
+
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::env;
+
+    use anyhow::Result;
+
+    use uv_static::EnvVars;
+
+    use crate::generate_all::Mode;
+
+    use super::{main, Args};
+
+    #[test]
+    fn test_generate_json_schema() -> Result<()> {
+        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
+            Mode::Write
+        } else {
+            Mode::Check
+        };
+        main(&Args { mode })
+    }
+}

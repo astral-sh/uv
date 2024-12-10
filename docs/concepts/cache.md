@@ -21,7 +21,7 @@ If you're running into caching issues, uv includes a few escape hatches:
 
 - To force uv to revalidate cached data for all dependencies, pass `--refresh` to any command (e.g.,
   `uv sync --refresh` or `uv pip install --refresh ...`).
-- To force uv to revalidate cached data for a specific dependency pass `--refresh-dependency` to any
+- To force uv to revalidate cached data for a specific dependency pass `--refresh-package` to any
   command (e.g., `uv sync --refresh-package flask` or `uv pip install --refresh-package flask ...`).
 - To force uv to ignore existing installed versions, pass `--reinstall` to any installation command
   (e.g., `uv sync --reinstall` or `uv pip install --reinstall ...`).
@@ -41,7 +41,15 @@ should be rebuilt whenever the commit hash changes, you can add the following to
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ git = true }]
+cache-keys = [{ git = { commit = true } }]
+```
+
+If your dynamic metadata incorporates information from the set of Git tags, you can expand the cache
+key to include the tags:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ git = { commit = true, tags = true } }]
 ```
 
 Similarly, if a project reads from a `requirements.txt` to populate its dependencies, you can add
@@ -150,16 +158,13 @@ release contains a breaking change to the cache format, uv will not attempt to r
 an incompatible cache bucket.
 
 For example, uv 0.4.13 included a breaking change to the core metadata bucket. As such, the bucket
-version was increased from v12 to v13.
+version was increased from v12 to v13. Within a cache version, changes are guaranteed to be both
+forwards- and backwards-compatible.
 
-Within a cache version, changes are guaranteed to be forwards-compatible, but _not_
-backwards-compatible.
+Since changes in the cache format are accompanied by changes in the cache version, multiple versions
+of uv can safely read and write to the same cache directory. However, if the cache version changed
+between a given pair of uv releases, then those releases may not be able to share the same
+underlying cache entries.
 
-For example, uv 0.4.8 can read cache entries written by uv 0.4.7, but uv 0.4.7 cannot read cache
-entries written by uv 0.4.8. As a result, it's safe to share a cache directory across multiple uv
-versions, as long as those versions are strictly increasing over time, as is common in production
-and development environments.
-
-If you intend to use multiple uv versions on an ongoing basis, we recommend using separate caches
-for each version, as (e.g.) a cache populated by uv 0.4.8 may not be usable by uv 0.4.7, despite the
-cache _versions_ remaining unchanged between the releases.
+For example, it's safe to use a single shared cache for uv 0.4.12 and uv 0.4.13, though the cache
+itself may contain duplicate entries in the core metadata bucket due to the change in cache version.

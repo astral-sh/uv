@@ -43,7 +43,7 @@ Tools are installed into temporary, isolated environments when using `uvx`.
 
 !!! note
 
-    If you are running a tool in a [_project_](../concepts/projects.md) and the tool requires that
+    If you are running a tool in a [_project_](../concepts/projects/index.md) and the tool requires that
     your project is installed, e.g., when using `pytest` or `mypy`, you'll want to use
     [`uv run`](./projects.md#running-commands) instead of `uvx`. Otherwise, the tool will be run in
     a virtual environment that is isolated from your project.
@@ -93,6 +93,20 @@ $ uvx --from 'ruff>0.2.0,<0.3.0' ruff check
 
 Note the `@` syntax cannot be used for anything other than an exact version.
 
+## Requesting extras
+
+The `--from` option can be used to run a tool with extras:
+
+```console
+$ uvx --from 'mypy[faster-cache,reports]' mypy --xml-report mypy_report
+```
+
+This can also be combined with version selection:
+
+```console
+$ uvx --from 'mypy[faster-cache,reports]==1.13.0' mypy --xml-report mypy_report
+```
+
 ## Requesting different sources
 
 The `--from` option can also be used to install from alternative sources.
@@ -101,6 +115,24 @@ For example, to pull from git:
 
 ```console
 $ uvx --from git+https://github.com/httpie/cli httpie
+```
+
+You can also pull the latest commit from a specific named branch:
+
+```console
+$ uvx --from git+https://github.com/httpie/cli@master httpie
+```
+
+Or pull a specific tag:
+
+```console
+$ uvx --from git+https://github.com/httpie/cli@3.2.4 httpie
+```
+
+Or even a specific commit:
+
+```console
+$ uvx --from git+https://github.com/httpie/cli@2843b87 httpie
 ```
 
 ## Commands with plugins

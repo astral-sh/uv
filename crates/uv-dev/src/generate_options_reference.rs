@@ -34,7 +34,6 @@ struct CombinedOptions {
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
-    /// Write the generated output to stdout (rather than to `settings.md`).
     #[arg(long, default_value_t, value_enum)]
     pub(crate) mode: Mode,
 }
@@ -268,7 +267,12 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
         } => {
             output.push_str(&format_code(
                 "pyproject.toml",
-                &format_header(field.scope, parents, ConfigurationFile::PyprojectToml),
+                &format_header(
+                    field.scope,
+                    field.example,
+                    parents,
+                    ConfigurationFile::PyprojectToml,
+                ),
                 field.example,
             ));
         }
@@ -278,12 +282,22 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
         } => {
             output.push_str(&format_tab(
                 "pyproject.toml",
-                &format_header(field.scope, parents, ConfigurationFile::PyprojectToml),
+                &format_header(
+                    field.scope,
+                    field.example,
+                    parents,
+                    ConfigurationFile::PyprojectToml,
+                ),
                 field.example,
             ));
             output.push_str(&format_tab(
                 "uv.toml",
-                &format_header(field.scope, parents, ConfigurationFile::UvToml),
+                &format_header(
+                    field.scope,
+                    field.example,
+                    parents,
+                    ConfigurationFile::UvToml,
+                ),
                 field.example,
             ));
         }
@@ -293,12 +307,20 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
 }
 
 fn format_tab(tab_name: &str, header: &str, content: &str) -> String {
-    format!(
-        "=== \"{}\"\n\n    ```toml\n    {}\n{}\n    ```\n",
-        tab_name,
-        header,
-        textwrap::indent(content, "    ")
-    )
+    if header.is_empty() {
+        format!(
+            "=== \"{}\"\n\n    ```toml\n{}\n    ```\n",
+            tab_name,
+            textwrap::indent(content, "    ")
+        )
+    } else {
+        format!(
+            "=== \"{}\"\n\n    ```toml\n    {}\n{}\n    ```\n",
+            tab_name,
+            header,
+            textwrap::indent(content, "    ")
+        )
+    }
 }
 
 fn format_code(file_name: &str, header: &str, content: &str) -> String {
@@ -308,7 +330,12 @@ fn format_code(file_name: &str, header: &str, content: &str) -> String {
 /// Format the TOML header for the example usage for a given option.
 ///
 /// For example: `[tool.uv.pip]`.
-fn format_header(scope: Option<&str>, parents: &[Set], configuration: ConfigurationFile) -> String {
+fn format_header(
+    scope: Option<&str>,
+    example: &str,
+    parents: &[Set],
+    configuration: ConfigurationFile,
+) -> String {
     let tool_parent = match configuration {
         ConfigurationFile::PyprojectToml => Some("tool.uv"),
         ConfigurationFile::UvToml => None,
@@ -319,6 +346,15 @@ fn format_header(scope: Option<&str>, parents: &[Set], configuration: Configurat
         .chain(parents.iter().filter_map(|parent| parent.name()))
         .chain(scope)
         .join(".");
+
+    // Ex) `[[tool.uv.index]]`
+    if example.starts_with(&format!("[[{header}")) {
+        return String::new();
+    }
+    // Ex) `[tool.uv.sources]`
+    if example.starts_with(&format!("[{header}")) {
+        return String::new();
+    }
 
     if header.is_empty() {
         String::new()
@@ -350,4 +386,24 @@ impl Visit for CollectOptionsVisitor {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::env;
+
+    use anyhow::Result;
+
+    use uv_static::EnvVars;
+
+    use crate::generate_all::Mode;
+
+    use super::{main, Args};
+
+    #[test]
+    fn test_generate_options_reference() -> Result<()> {
+        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
+            Mode::Write
+        } else {
+            Mode::Check
+        };
+        main(&Args { mode })
+    }
+}

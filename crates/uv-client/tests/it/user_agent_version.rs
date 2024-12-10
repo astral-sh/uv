@@ -8,8 +8,9 @@ use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use insta::{assert_json_snapshot, assert_snapshot, with_settings};
+use std::str::FromStr;
 use tokio::net::TcpListener;
-
+use url::Url;
 use uv_cache::Cache;
 use uv_client::LineHaul;
 use uv_client::RegistryClientBuilder;
@@ -53,11 +54,12 @@ async fn test_user_agent_has_version() -> Result<()> {
     let client = RegistryClientBuilder::new(cache).build();
 
     // Send request to our dummy server
+    let url = Url::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()
-        .client()
-        .get(format!("http://{addr}"))
+        .for_host(&url)
+        .get(url)
         .send()
         .await?;
 
@@ -149,11 +151,12 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let client = builder.build();
 
     // Send request to our dummy server
+    let url = Url::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()
-        .client()
-        .get(format!("http://{addr}"))
+        .for_host(&url)
+        .get(url)
         .send()
         .await?;
 

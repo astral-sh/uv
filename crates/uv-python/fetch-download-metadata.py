@@ -50,7 +50,7 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Generator, Iterable, NamedTuple, Self
@@ -120,6 +120,7 @@ class PythonDownload:
     filename: str
     url: str
     sha256: str | None = None
+    build_options: list[str] = field(default_factory=list)
     variant: Variant | None = None
 
     def key(self) -> str:
@@ -173,11 +174,24 @@ class CPythonFinder(Finder):
             (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?\+
             (?P<date>\d+)-
             (?P<triple>[a-z\d_]+-[a-z\d]+(?>-[a-z\d]+)?-[a-z\d]+)-
-            (?>(?P<build_options>.+)-)?
-            (?P<flavor>.+)
+            (?:(?P<build_options>.+)-)?
+            (?P<flavor>[a-z_]+)?
             \.tar\.(?:gz|zst)
         $
-    """
+        """
+    )
+
+    _legacy_filename_re = re.compile(
+        r"""(?x)
+        ^
+            cpython-
+            (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?-
+            (?P<triple>[a-z\d_-]+)-
+            (?P<build_options>(debug|pgo|noopt|lto|pgo\+lto))?-
+            (?P<date>[a-zA-z\d]+)
+            \.tar\.(?:gz|zst)
+        $
+        """
     )
 
     def __init__(self, client: httpx.AsyncClient):
@@ -211,14 +225,15 @@ class CPythonFinder(Finder):
                         download
                     )
 
-        # Collapse CPython variants to a single URL flavor per triple and variant
+        # Collapse CPython variants to a single flavor per triple and variant
         downloads = []
         for version_downloads in downloads_by_version.values():
             selected: dict[
-                tuple[PlatformTriple, Variant | None], tuple[PythonDownload, int]
+                tuple[PlatformTriple, Variant | None],
+                tuple[PythonDownload, tuple[int, int]],
             ] = {}
             for download in version_downloads:
-                priority = self._get_flavor_priority(download.flavor)
+                priority = self._get_priority(download)
                 existing = selected.get((download.triple, download.variant))
                 if existing:
                     existing_download, existing_priority = existing
@@ -294,17 +309,23 @@ class CPythonFinder(Finder):
             return None
         filename = unquote(url.rsplit("/", maxsplit=1)[-1])
 
-        match = self._filename_re.match(filename)
+        match = self._filename_re.match(filename) or self._legacy_filename_re.match(
+            filename
+        )
         if match is None:
             logging.debug("Skipping %s: no regex match", filename)
             return None
 
-        version, _date, triple, build_options, flavor = match.groups()
+        groups = match.groupdict()
+        version = groups["ver"]
+        triple = groups["triple"]
+        build_options = groups.get("build_options")
+        flavor = groups.get("flavor", "full")
 
-        variants = build_options.split("+") if build_options else []
+        build_options = build_options.split("+") if build_options else []
         variant: Variant | None
         for variant in Variant:
-            if variant in variants:
+            if variant in build_options:
                 break
         else:
             variant = None
@@ -322,6 +343,7 @@ class CPythonFinder(Finder):
             implementation=self.implementation,
             filename=filename,
             url=url,
+            build_options=build_options,
             variant=variant,
         )
 
@@ -355,13 +377,29 @@ class CPythonFinder(Finder):
     def _normalize_os(self, os: str) -> str:
         return os
 
-    def _get_flavor_priority(self, flavor: str) -> int:
-        """Returns the priority of a flavor. Lower is better."""
+    def _get_priority(self, download: PythonDownload) -> tuple[int, int]:
+        """
+        Returns the priority of a download, a lower score is better.
+        """
+        flavor_priority = self._flavor_priority(download.flavor)
+        build_option_priority = self._build_option_priority(download.build_options)
+        return (flavor_priority, build_option_priority)
+
+    def _flavor_priority(self, flavor: str) -> int:
         try:
-            pref = self.FLAVOR_PREFERENCES.index(flavor)
+            priority = self.FLAVOR_PREFERENCES.index(flavor)
         except ValueError:
-            pref = len(self.FLAVOR_PREFERENCES) + 1
-        return pref
+            priority = len(self.FLAVOR_PREFERENCES) + 1
+        return priority
+
+    def _build_option_priority(self, build_options: list[str]) -> int:
+        # Prefer optimized builds
+        return -1 * sum(
+            (
+                "lto" in build_options,
+                "pgo" in build_options,
+            )
+        )
 
 
 class PyPyFinder(Finder):
@@ -574,6 +612,7 @@ def main() -> None:
     )
     # Silence httpx logging
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     asyncio.run(find())
 

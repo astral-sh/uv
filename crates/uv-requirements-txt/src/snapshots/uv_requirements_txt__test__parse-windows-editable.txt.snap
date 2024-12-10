@@ -1,5 +1,5 @@
 ---
-source: crates/requirements-txt/src/lib.rs
+source: crates/uv-requirements-txt/src/lib.rs
 expression: actual
 ---
 RequirementsTxt {
@@ -320,6 +320,106 @@ RequirementsTxt {
                             },
                             given: Some(
                                 "./editable[d",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                editable: true,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/editable.txt",
+                        ),
+                    ),
+                },
+            ),
+            hashes: [],
+        },
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: Url {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "/<REQUIREMENTS_DIR>/editable",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable",
+                                editable: true,
+                                virtual: false,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: Url {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "/<REQUIREMENTS_DIR>/editable",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable",
                             ),
                         },
                     },

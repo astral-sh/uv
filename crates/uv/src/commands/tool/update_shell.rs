@@ -9,14 +9,14 @@ use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_shell::Shell;
-use uv_tool::find_executable_directory;
+use uv_tool::tool_executable_dir;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Ensure that the executable directory is in PATH.
 pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
-    let executable_directory = find_executable_directory()?;
+    let executable_directory = tool_executable_dir()?;
     debug!(
         "Ensuring that the executable directory is in PATH: {}",
         executable_directory.simplified_display()

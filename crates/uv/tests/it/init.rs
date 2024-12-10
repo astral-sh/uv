@@ -1601,7 +1601,7 @@ fn init_virtual_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1609,14 +1609,7 @@ fn init_virtual_project() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        "#
         );
     });
 
@@ -1635,7 +1628,7 @@ fn init_virtual_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1644,16 +1637,9 @@ fn init_virtual_project() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = []
 
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-
         [tool.uv.workspace]
         members = ["bar"]
-        "###
+        "#
         );
     });
 
@@ -1730,7 +1716,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -1738,14 +1724,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
-
-        [project.scripts]
-        foo = "foo:main"
-
-        [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
-        "###
+        "#
         );
     });
 
@@ -2020,6 +1999,140 @@ fn init_requires_python_specifiers() -> Result<()> {
     }, {
         assert_snapshot!(
             python_version, @"3.8"
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, inferring the `requires-python` from the `.python-version` file.
+#[test]
+fn init_requires_python_version_file() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    context.temp_dir.child(".python-version").write_str("3.8")?;
+
+    let child = context.temp_dir.join("foo");
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, inferring the Python version from an existing `.venv`
+#[test]
+fn init_existing_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    // Create a new virtual environment in the directory
+    uv_snapshot!(context.filters(), context.venv().current_dir(&child).arg("--python").arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###);
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(child.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init`, it should ignore a the Python version from a parent `.venv`
+#[test]
+fn init_existing_environment_parent() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+
+    // Create a new virtual environment in the parent directory
+    uv_snapshot!(context.filters(), context.venv().current_dir(&context.temp_dir).arg("--python").arg("3.12"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "###);
+
+    let child = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(child.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let pyproject_toml = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.8"
+        dependencies = []
+        "###
         );
     });
 
@@ -2316,7 +2429,7 @@ fn init_with_author() {
         description = "Add your description here"
         readme = "README.md"
         authors = [
-            { name = "Alice", email = "alice@example.com" } 
+            { name = "Alice", email = "alice@example.com" }
         ]
         requires-python = ">=3.12"
         dependencies = []
@@ -2338,7 +2451,7 @@ fn init_with_author() {
         description = "Add your description here"
         readme = "README.md"
         authors = [
-            { name = "Alice", email = "alice@example.com" } 
+            { name = "Alice", email = "alice@example.com" }
         ]
         requires-python = ">=3.12"
         dependencies = []
@@ -2379,4 +2492,782 @@ fn init_with_author() {
         "#
         );
     });
+}
+
+/// Run `uv init --app --package --build-backend flit` to create a packaged application project
+#[test]
+fn init_application_package_flit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("flit"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["flit_core>=3.2,<4"]
+        build-backend = "flit_core.buildapi"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        def main() -> None:
+            print("Hello from foo!")
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    "###);
+
+    Ok(())
+}
+
+/// Run `uv init --lib --build-backend flit` to create an library project
+#[test]
+fn init_library_flit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let py_typed = child.join("src").join("foo").join("py.typed");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib").arg("--build-backend").arg("flit"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["flit_core>=3.2,<4"]
+        build-backend = "flit_core.buildapi"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        def hello() -> str:
+            return "Hello from foo!"
+        "###
+        );
+    });
+
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @""
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    "###);
+
+    Ok(())
+}
+
+/// Run `uv init --build-backend flit` should be equivalent to `uv init --package --build-backend flit`.
+#[test]
+fn init_backend_implies_package() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().arg("project").arg("--build-backend").arg("flit"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `project` at `[TEMP_DIR]/project`
+    "#);
+
+    let pyproject = context.read("project/pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        project = "project:main"
+
+        [build-system]
+        requires = ["flit_core>=3.2,<4"]
+        build-backend = "flit_core.buildapi"
+        "#
+        );
+    });
+}
+
+/// Run `uv init --app --package --build-backend maturin` to create a packaged application project
+#[test]
+#[cfg(feature = "crates-io")]
+fn init_app_build_backend_maturin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let pyi_file = child.join("src").join("foo").join("_core.pyi");
+    let lib_core = child.join("src").join("lib.rs");
+    let build_file = child.join("Cargo.toml");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("maturin"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [tool.maturin]
+        module-name = "foo._core"
+        python-packages = ["foo"]
+        python-source = "src"
+
+        [build-system]
+        requires = ["maturin>=1.0,<2.0"]
+        build-backend = "maturin"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        from foo._core import hello_from_bin
+
+        def main() -> None:
+            print(hello_from_bin())
+        "###
+        );
+    });
+
+    let pyi_contents = fs_err::read_to_string(pyi_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyi_contents, @r###"
+        from __future__ import annotations
+
+        def hello_from_bin() -> str: ...
+        "###
+        );
+    });
+
+    let lib_core_contents = fs_err::read_to_string(lib_core)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lib_core_contents, @r###"
+        use pyo3::prelude::*;
+
+        #[pyfunction]
+        fn hello_from_bin() -> String {
+            "Hello from foo!".to_string()
+        }
+
+        /// A Python module implemented in Rust. The name of this function must match
+        /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
+        /// import the module.
+        #[pymodule]
+        fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+            m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
+            Ok(())
+        }
+        "###
+        );
+    });
+
+    let build_file_contents = fs_err::read_to_string(build_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            build_file_contents, @r###"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+        edition = "2021"
+
+        [lib]
+        name = "_core"
+        # "cdylib" is necessary to produce a shared library for Python to import from.
+        crate-type = ["cdylib"]
+
+        [dependencies]
+        # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
+        # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
+        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init --app --package --build-backend scikit` to create a packaged application project
+#[test]
+fn init_app_build_backend_scikit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let pyi_file = child.join("src").join("foo").join("_core.pyi");
+    let lib_core = child.join("src").join("main.cpp");
+    let build_file = child.join("CMakeLists.txt");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("scikit"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [tool.scikit-build]
+        minimum-version = "build-system.requires"
+        build-dir = "build/{wheel_tag}"
+
+        [build-system]
+        requires = ["scikit-build-core>=0.10", "pybind11"]
+        build-backend = "scikit_build_core.build"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        from foo._core import hello_from_bin
+
+        def main() -> None:
+            print(hello_from_bin())
+        "###
+        );
+    });
+
+    let pyi_contents = fs_err::read_to_string(pyi_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyi_contents, @r###"
+        from __future__ import annotations
+
+        def hello_from_bin() -> str: ...
+        "###
+        );
+    });
+
+    let lib_core_contents = fs_err::read_to_string(lib_core)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lib_core_contents, @r###"
+        #include <pybind11/pybind11.h>
+
+        std::string hello_from_bin() { return "Hello from foo!"; }
+
+        namespace py = pybind11;
+
+        PYBIND11_MODULE(_core, m) {
+          m.doc() = "pybind11 hello module";
+
+          m.def("hello_from_bin", &hello_from_bin, R"pbdoc(
+              A function that returns a Hello string.
+          )pbdoc");
+        }
+        "###
+        );
+    });
+
+    let build_file_contents = fs_err::read_to_string(build_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            build_file_contents, @r###"
+        cmake_minimum_required(VERSION 3.15)
+        project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
+
+        set(PYBIND11_FINDPYTHON ON)
+        find_package(pybind11 CONFIG REQUIRED)
+
+        pybind11_add_module(_core MODULE src/main.cpp)
+        install(TARGETS _core DESTINATION ${SKBUILD_PROJECT_NAME})
+        "###
+        );
+    });
+
+    // We do not test with uv run since it would otherwise require specific CXX build tooling
+
+    Ok(())
+}
+
+/// Run `uv init --lib --build-backend maturin` to create a packaged application project
+#[test]
+#[cfg(feature = "crates-io")]
+fn init_lib_build_backend_maturin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let pyi_file = child.join("src").join("foo").join("_core.pyi");
+    let lib_core = child.join("src").join("lib.rs");
+    let build_file = child.join("Cargo.toml");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib").arg("--build-backend").arg("maturin"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.maturin]
+        module-name = "foo._core"
+        python-packages = ["foo"]
+        python-source = "src"
+
+        [build-system]
+        requires = ["maturin>=1.0,<2.0"]
+        build-backend = "maturin"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        from foo._core import hello_from_bin
+
+        def hello() -> str:
+            return hello_from_bin()
+        "###
+        );
+    });
+
+    let pyi_contents = fs_err::read_to_string(pyi_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyi_contents, @r###"
+        from __future__ import annotations
+
+        def hello_from_bin() -> str: ...
+        "###
+        );
+    });
+
+    let lib_core_contents = fs_err::read_to_string(lib_core)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lib_core_contents, @r###"
+        use pyo3::prelude::*;
+
+        #[pyfunction]
+        fn hello_from_bin() -> String {
+            "Hello from foo!".to_string()
+        }
+
+        /// A Python module implemented in Rust. The name of this function must match
+        /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
+        /// import the module.
+        #[pymodule]
+        fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+            m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
+            Ok(())
+        }
+        "###
+        );
+    });
+
+    let build_file_contents = fs_err::read_to_string(build_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            build_file_contents, @r###"
+        [package]
+        name = "foo"
+        version = "0.1.0"
+        edition = "2021"
+
+        [lib]
+        name = "_core"
+        # "cdylib" is necessary to produce a shared library for Python to import from.
+        crate-type = ["cdylib"]
+
+        [dependencies]
+        # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
+        # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
+        pyo3 = { version = "0.22.4", features = ["extension-module", "abi3-py39"] }
+        "###
+        );
+    });
+
+    Ok(())
+}
+
+/// Run `uv init --lib --build-backend scikit` to create a packaged application project
+#[test]
+fn init_lib_build_backend_scikit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let pyi_file = child.join("src").join("foo").join("_core.pyi");
+    let lib_core = child.join("src").join("main.cpp");
+    let build_file = child.join("CMakeLists.txt");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib").arg("--build-backend").arg("scikit"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.scikit-build]
+        minimum-version = "build-system.requires"
+        build-dir = "build/{wheel_tag}"
+
+        [build-system]
+        requires = ["scikit-build-core>=0.10", "pybind11"]
+        build-backend = "scikit_build_core.build"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        from foo._core import hello_from_bin
+
+        def hello() -> str:
+            return hello_from_bin()
+        "###
+        );
+    });
+
+    let pyi_contents = fs_err::read_to_string(pyi_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyi_contents, @r###"
+        from __future__ import annotations
+
+        def hello_from_bin() -> str: ...
+        "###
+        );
+    });
+
+    let lib_core_contents = fs_err::read_to_string(lib_core)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lib_core_contents, @r###"
+        #include <pybind11/pybind11.h>
+
+        std::string hello_from_bin() { return "Hello from foo!"; }
+
+        namespace py = pybind11;
+
+        PYBIND11_MODULE(_core, m) {
+          m.doc() = "pybind11 hello module";
+
+          m.def("hello_from_bin", &hello_from_bin, R"pbdoc(
+              A function that returns a Hello string.
+          )pbdoc");
+        }
+        "###
+        );
+    });
+
+    let build_file_contents = fs_err::read_to_string(build_file)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            build_file_contents, @r###"
+        cmake_minimum_required(VERSION 3.15)
+        project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
+
+        set(PYBIND11_FINDPYTHON ON)
+        find_package(pybind11 CONFIG REQUIRED)
+
+        pybind11_add_module(_core MODULE src/main.cpp)
+        install(TARGETS _core DESTINATION ${SKBUILD_PROJECT_NAME})
+        "###
+        );
+    });
+
+    // We do not test with uv run since it would otherwise require specific CXX build tooling
+
+    Ok(())
+}
+
+/// Run `uv init --app --package --build-backend uv` to create a packaged application project
+#[test]
+fn init_application_package_uv() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--app").arg("--package").arg("--build-backend").arg("uv"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The uv build backend is experimental and may change without warning
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    let mut filters = context.filters();
+    filters.push((r#"\["uv>=.*,<.*"\]"#, r#"["uv[SPECIFIERS]"]"#));
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv[SPECIFIERS]"]
+        build-backend = "uv"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        def main() -> None:
+            print("Hello from foo!")
+        "###
+        );
+    });
+
+    // Use preview to go through the fast path.
+    uv_snapshot!(context.filters(), context.run().arg("--preview").arg("foo").current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    "###);
+
+    Ok(())
 }

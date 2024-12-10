@@ -19,9 +19,9 @@ fn no_arguments() {
 
     ----- stderr -----
     error: the following required arguments were not provided:
-      <PACKAGE|--requirement <REQUIREMENT>>
+      <PACKAGE|--requirements <REQUIREMENTS>>
 
-    Usage: uv pip uninstall <PACKAGE|--requirement <REQUIREMENT>>
+    Usage: uv pip uninstall <PACKAGE|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "###
@@ -327,7 +327,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
 /// Uninstall a duplicate package in a virtual environment.
 #[test]
 fn uninstall_duplicate() -> Result<()> {
-    use crate::common::copy_dir_all;
+    use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
     let context1 = TestContext::new("3.12");
@@ -491,6 +491,67 @@ Version: 0.22.0
     assert!(!site_packages.child("zstandard.egg-link").exists());
     // The `.egg-info` directory should still exist.
     assert!(target.child("zstandard.egg-info").exists());
+
+    Ok(())
+}
+
+#[test]
+fn dry_run_uninstall_egg_info() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    // Manually create a `.egg-info` directory.
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .create_dir_all()?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("top_level.txt")
+        .write_str("zstd")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("SOURCES.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("PKG-INFO")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("dependency_links.txt")
+        .write_str("")?;
+    site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .child("entry_points.txt")
+        .write_str("")?;
+
+    // Manually create the package directory.
+    site_packages.child("zstd").create_dir_all()?;
+    site_packages
+        .child("zstd")
+        .child("__init__.py")
+        .write_str("")?;
+
+    // Run `pip uninstall`.
+    uv_snapshot!(context.pip_uninstall()
+        .arg("--dry-run")
+        .arg("zstandard"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would uninstall 1 package
+     - zstandard==0.22.0
+    "###);
+
+    // The `.egg-info` directory should still exist.
+    assert!(site_packages
+        .child("zstandard-0.22.0-py3.12.egg-info")
+        .exists());
+    // The package directory should still exist.
+    assert!(site_packages.child("zstd").child("__init__.py").exists());
 
     Ok(())
 }

@@ -21,8 +21,8 @@ $ docker run ghcr.io/astral-sh/uv --help
 uv provides a distroless Docker image including the `uv` binary. The following tags are published:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.4.21`
-- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.4` (the latest patch
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.5.7`
+- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.5` (the latest patch
   version)
 
 In addition, uv publishes the following images:
@@ -62,7 +62,7 @@ In addition, uv publishes the following images:
 
 As with the distroless image, each image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.4.21-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.5.7-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -92,7 +92,7 @@ ADD https://astral.sh/uv/install.sh /uv-installer.sh
 RUN sh /uv-installer.sh && rm /uv-installer.sh
 
 # Ensure the installed binary is on the `PATH`
-ENV PATH="/root/.cargo/bin/:$PATH"
+ENV PATH="/root/.local/bin/:$PATH"
 ```
 
 Note this requires `curl` to be available.
@@ -100,13 +100,13 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.4.21 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.5.7 /uv /uvx /bin/
 ```
 
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.4.21/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.5.7/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -161,7 +161,7 @@ RUN uv run some_script.py
 !!! tip
 
     Alternatively, the
-    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#configuring-the-project-environment-path) can
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects/config.md#project-environment-path) can
     be set before syncing to install to the system Python environment and skip environment activation
     entirely.
 
@@ -366,7 +366,7 @@ _contents_ are not copied into the image until the final `uv sync` command.
 
 !!! tip
 
-    If you're using a [workspace](../../concepts/workspaces.md), then use the
+    If you're using a [workspace](../../concepts/projects/workspaces.md), then use the
     `--no-install-workspace` flag which excludes the project _and_ any workspace members.
 
     If you want to remove specific packages from the sync, use `--no-install-package <name>`.

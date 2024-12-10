@@ -4,39 +4,39 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-use uv_auth::store_credentials_from_url;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    IndexStrategy, LowerBound, PreviewMode, Reinstall, SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    DependencyMetadata, IndexLocations, NameRequirementSpecification, Resolution,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Resolution,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_pep508::PackageName;
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
+    PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
-    ResolutionMode, ResolverMarkers,
+    ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, HashStrategy};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::report_target_environment;
 use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus, SharedState};
+use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
@@ -57,11 +57,11 @@ pub(crate) async fn pip_install(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: Vec<TrustedHost>,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
+    installer_metadata: bool,
     connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
@@ -78,11 +78,14 @@ pub(crate) async fn pip_install(
     break_system_packages: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
+    python_preference: PythonPreference,
     concurrency: Concurrency,
     native_tls: bool,
+    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     dry_run: bool,
     printer: Printer,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -90,7 +93,7 @@ pub(crate) async fn pip_install(
         .connectivity(connectivity)
         .native_tls(native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host);
+        .allow_insecure_host(allow_insecure_host.to_vec());
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -140,16 +143,30 @@ pub(crate) async fn pip_install(
         .collect();
 
     // Detect the current Python interpreter.
-    let environment = PythonEnvironment::find(
-        &python
-            .as_deref()
-            .map(PythonRequest::parse)
-            .unwrap_or_default(),
-        EnvironmentPreference::from_system_flag(system, true),
-        &cache,
-    )?;
-
-    report_target_environment(&environment, &cache, printer)?;
+    let environment = if target.is_some() || prefix.is_some() {
+        let installation = PythonInstallation::find(
+            &python
+                .as_deref()
+                .map(PythonRequest::parse)
+                .unwrap_or_default(),
+            EnvironmentPreference::from_system_flag(system, false),
+            python_preference,
+            &cache,
+        )?;
+        report_interpreter(&installation, true, printer)?;
+        PythonEnvironment::from_installation(installation)
+    } else {
+        let environment = PythonEnvironment::find(
+            &python
+                .as_deref()
+                .map(PythonRequest::parse)
+                .unwrap_or_default(),
+            EnvironmentPreference::from_system_flag(system, true),
+            &cache,
+        )?;
+        report_target_environment(&environment, &cache, printer)?;
+        environment
+    };
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
@@ -192,7 +209,7 @@ pub(crate) async fn pip_install(
 
     // Determine the markers to use for the resolution.
     let interpreter = environment.interpreter();
-    let markers = resolution_markers(
+    let marker_env = resolution_markers(
         python_version.as_ref(),
         python_platform.as_ref(),
         interpreter,
@@ -204,8 +221,13 @@ pub(crate) async fn pip_install(
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
     // it's an order of magnitude faster to validate the environment than to resolve the requirements.
-    if reinstall.is_none() && upgrade.is_none() && source_trees.is_empty() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints, &markers)? {
+    if reinstall.is_none()
+        && upgrade.is_none()
+        && source_trees.is_empty()
+        && overrides.is_empty()
+        && matches!(modifications, Modifications::Sufficient)
+    {
+        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -223,6 +245,7 @@ pub(crate) async fn pip_install(
                 if dry_run {
                     writeln!(printer.stderr(), "Would make no changes")?;
                 }
+
                 return Ok(ExitStatus::Success);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
@@ -255,7 +278,7 @@ pub(crate) async fn pip_install(
             constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&markers),
+            Some(&marker_env),
             hash_checking,
         )?
     } else {
@@ -265,16 +288,27 @@ pub(crate) async fn pip_install(
     // When resolving, don't take any external preferences into account.
     let preferences = Vec::default();
 
-    // Ignore development dependencies.
-    let dev = Vec::default();
-
     // Incorporate any index locations from the provided sources.
-    let index_locations =
-        index_locations.combine(index_url, extra_index_urls, find_links, no_index);
+    let index_locations = index_locations.combine(
+        extra_index_urls
+            .into_iter()
+            .map(Index::from_extra_index_url)
+            .chain(index_url.map(Index::from_index_url))
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        find_links
+            .into_iter()
+            .map(Index::from_find_links)
+            .map(|index| index.with_origin(Origin::RequirementsTxt))
+            .collect(),
+        no_index,
+    );
 
     // Add all authenticated sources to the cache.
-    for url in index_locations.urls() {
-        store_credentials_from_url(url);
+    for index in index_locations.allowed_indexes() {
+        if let Some(credentials) = index.credentials() {
+            uv_auth::store_credentials(index.raw_url(), credentials);
+        }
     }
 
     // Initialize the registry client.
@@ -292,7 +326,9 @@ pub(crate) async fn pip_install(
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(&client, &cache);
-        let entries = client.fetch(index_locations.flat_index()).await?;
+        let entries = client
+            .fetch(index_locations.flat_indexes().map(Index::url))
+            .await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
     };
 
@@ -313,7 +349,7 @@ pub(crate) async fn pip_install(
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&markers),
+            Some(&marker_env),
             HashCheckingMode::Verify,
         )?
     } else {
@@ -337,10 +373,7 @@ pub(crate) async fn pip_install(
         &index_locations,
         &flat_index,
         &dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_settings,
         build_isolation,
@@ -348,8 +381,10 @@ pub(crate) async fn pip_install(
         &build_options,
         &build_hasher,
         exclude_newer,
+        LowerBound::Warn,
         sources,
         concurrency,
+        preview,
     );
 
     let options = OptionsBuilder::new()
@@ -365,7 +400,6 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
-        dev,
         source_trees,
         project,
         None,
@@ -376,11 +410,12 @@ pub(crate) async fn pip_install(
         &reinstall,
         &upgrade,
         Some(&tags),
-        ResolverMarkers::specific_environment(markers.clone()),
+        ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
+        Conflicts::empty(),
         &client,
         &flat_index,
-        &state.index,
+        state.index(),
         &build_dispatch,
         concurrency,
         options,
@@ -389,24 +424,16 @@ pub(crate) async fn pip_install(
     )
     .await
     {
-        Ok(resolution) => Resolution::from(resolution),
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err))) => {
-            diagnostics::no_solution(&err);
-            return Ok(ExitStatus::Failure);
+        Ok(graph) => Resolution::from(graph),
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::FetchAndBuild(dist, err))) => {
-            diagnostics::fetch_and_build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, err))) => {
-            diagnostics::build(dist, err);
-            return Ok(ExitStatus::Failure);
-        }
-        Err(err) => return Err(err.into()),
     };
 
     // Sync the environment.
-    operations::install(
+    match operations::install(
         &resolution,
         site_packages,
         modifications,
@@ -419,23 +446,32 @@ pub(crate) async fn pip_install(
         &hasher,
         &tags,
         &client,
-        &state.in_flight,
+        state.in_flight(),
         concurrency,
         &build_dispatch,
         &cache,
         &environment,
         Box::new(DefaultInstallLogger),
+        installer_metadata,
         dry_run,
         printer,
     )
-    .await?;
+    .await
+    {
+        Ok(_) => {}
+        Err(err) => {
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+    }
 
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Notify the user of any environment diagnostics.
     if strict && !dry_run {
-        operations::diagnose_environment(&resolution, &environment, &markers, printer)?;
+        operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
     }
 
     Ok(ExitStatus::Success)

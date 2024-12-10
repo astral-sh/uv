@@ -16,7 +16,7 @@ use uv_pypi_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_settings::ToolOptions;
 use uv_shell::Shell;
-use uv_tool::{entrypoint_paths, find_executable_directory, InstalledTools, Tool, ToolEntrypoint};
+use uv_tool::{entrypoint_paths, tool_executable_dir, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -70,6 +70,8 @@ pub(crate) fn install_executables(
     force: bool,
     python: Option<String>,
     requirements: Vec<Requirement>,
+    constraints: Vec<Requirement>,
+    overrides: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let site_packages = SitePackages::from_environment(environment)?;
@@ -79,7 +81,7 @@ pub(crate) fn install_executables(
     };
 
     // Find a suitable path to install into
-    let executable_directory = find_executable_directory()?;
+    let executable_directory = tool_executable_dir()?;
     fs_err::create_dir_all(&executable_directory)
         .context("Failed to create executable directory")?;
 
@@ -183,7 +185,9 @@ pub(crate) fn install_executables(
 
     debug!("Adding receipt for tool `{name}`");
     let tool = Tool::new(
-        requirements.into_iter().collect(),
+        requirements,
+        constraints,
+        overrides,
         python,
         target_entry_points
             .into_iter()

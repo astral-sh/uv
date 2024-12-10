@@ -46,6 +46,30 @@ impl Reinstall {
     pub fn is_all(&self) -> bool {
         matches!(self, Self::All)
     }
+
+    /// Combine a set of [`Reinstall`] values.
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            // If both are `None`, the result is `None`.
+            (Self::None, Self::None) => Self::None,
+            // If either is `All`, the result is `All`.
+            (Self::All, _) | (_, Self::All) => Self::All,
+            // If one is `None`, the result is the other.
+            (Self::Packages(a), Self::None) => Self::Packages(a),
+            (Self::None, Self::Packages(b)) => Self::Packages(b),
+            // If both are `Packages`, the result is the union of the two.
+            (Self::Packages(mut a), Self::Packages(b)) => {
+                a.extend(b);
+                Self::Packages(a)
+            }
+        }
+    }
+
+    /// Create a [`Reinstall`] strategy to reinstall a single package.
+    pub fn package(package_name: PackageName) -> Self {
+        Self::Packages(vec![package_name])
+    }
 }
 
 /// Create a [`Refresh`] policy by integrating the [`Reinstall`] policy.

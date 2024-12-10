@@ -117,57 +117,63 @@ the nav title is needed for backwards navigation in the collapsible
 nav variant.
 
 See https://github.com/astral-sh/uv/issues/5130 */
-.md-nav__title {
-  display: none;
-}
-@media screen and (max-width: 1219px) {
+@media screen and (min-width: 76.25em) {
   .md-nav__title {
-    display: flex ;
+    display: none;
   }
 }
 
 
-/* Reducing spacing between nav items to fit more content */
-.md-nav__link {
-  margin-top: 0.25em;
-}
-.md-nav__item--section {
-  margin: 0.75em 0;
-}
-/* Retain larger spacing for each top-level section in the nav */
-.md-nav__item--nested {
-  margin-top: 1em;
-}
-/* Retain larger spacing for the right-side table-of-contents nav */
-.md-nav--secondary .md-nav__link {
-  margin-top: 0.5em;
-}
-/* See: https://mkdocstrings.github.io/recipes/#prevent-selection-of-prompts-and-output-in-python-code-blocks */
-.highlight .gp, .highlight .go { /* Generic.Prompt, Generic.Output */
-    user-select: none;
+/* Always take the full screen for content, require scrolling to see the footer
+This stops the size of the nav from jumping around when you visit a page without
+a lot of content (i.e., an overview page). We don't apply this to sma screens
+because the nav is in a hamburger menu anyway
+*/
+@media screen and (min-width: 76.25em) {
+  .md-main {
+    min-height: 100vh;
+  }
 }
 
-/* Increase the size of the sections headings, remove the bold */
-.md-nav__container > .md-nav__link:first-child {
-  font-size: 17.5px;
-  font-weight: normal;
-  margin-bottom: 0.1em;
-}
-
-/* Increase the size of the index nav item to match the sections */
-.md-nav--primary .md-nav__item:first-child {
-  font-size: 17.5px;
-  font-weight: normal;
-}
-/* But do not increase the size of other nav items */
-.md-nav__item--section > .md-nav > .md-nav__list > .md-nav__item {
-  font-size: 15px;
-  font-weight: normal;
+/* Tweak the formatting of the primary nav on a large screen */
+@media screen and (min-width: 76.25em) {
+  .md-nav--primary .md-nav {
+    font-size: 0.75rem;
+  }
+  /* Remove the bold from the section headings, use a larger font instead */
+  .md-nav__item--section > .md-nav__link {
+      font-weight: normal;
+      font-size: 0.85rem;
+  }
+  /* Reducing spacing between nav items to fit more content 
+  First, disable `nav__link` spacing then use `nav__item` to enforce margins this reduces inconsistencies in the spacing. */
+  .md-nav--primary .md-nav__link {
+    margin: 0;
+  }
+  .md-nav--primary .md-nav__item {
+    margin-top: 0.35em;
+  }
+  /* Use larger spacing for the sections headings */
+  .md-nav--primary .md-nav__item--section {
+    margin-bottom: 0.75em;
+    margin-top: 1em;
+  }
+  /* Increase the size of the first nav item to match the sections 
+  It has no children, so it is not considered a section */
+  .md-nav--primary > .md-nav__list > .md-nav__item:first-of-type {
+    font-size: 0.85rem;
+    margin-bottom: 0.75em; 
+  }
 }
 
 /* Bold the active nav link for accessibility */
 .md-nav__link--active {
   font-weight: bold;
+}
+
+/* See: https://mkdocstrings.github.io/recipes/#prevent-selection-of-prompts-and-output-in-python-code-blocks */
+.highlight .gp, .highlight .go { /* Generic.Prompt, Generic.Output */
+  user-select: none;
 }
 
 /* Styling for the generated CLI reference page */
@@ -194,4 +200,13 @@ h3.cli-reference {
 
 .toclink:hover {
   color: var(--md-accent-fg-color) !important;
+}
+
+
+/* Omit the first breadcrumb item, which is the "Introduction" */
+.md-path__list > .md-path__item:first-of-type {
+  display: none;
+}
+.md-path__list > .md-path__item:nth-of-type(2):before {
+  display: none;
 }

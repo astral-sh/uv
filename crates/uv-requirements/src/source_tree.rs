@@ -1,10 +1,13 @@
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::path::Path;
+use std::slice;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
+use rustc_hash::FxHashSet;
 use url::Url;
 
 use uv_configuration::ExtrasSpecification;
@@ -14,7 +17,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep508::RequirementOrigin;
+use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
@@ -89,46 +92,75 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
-        let extras = match self.extras {
-            ExtrasSpecification::All => metadata.provides_extras.as_slice(),
-            ExtrasSpecification::None => &[],
-            ExtrasSpecification::Some(extras) => extras,
-        };
+        let extras = self
+            .extras
+            .extra_names(metadata.provides_extras.iter())
+            .cloned()
+            .collect::<Vec<_>>();
 
-        // Determine the appropriate requirements to return based on the extras. This involves
-        // evaluating the `extras` expression in any markers, but preserving the remaining marker
-        // conditions.
-        let mut requirements: Vec<Requirement> = metadata
+        let dependencies = metadata
             .requires_dist
             .into_iter()
             .map(|requirement| Requirement {
                 origin: Some(origin.clone()),
-                marker: requirement.marker.simplify_extras(extras),
+                marker: requirement.marker.simplify_extras(&extras),
                 ..requirement
             })
+            .collect::<Vec<_>>();
+
+        // Transitively process all extras that are recursively included, starting with the current
+        // extra.
+        let mut requirements = dependencies.clone();
+        let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
+        let mut queue: VecDeque<_> = requirements
+            .iter()
+            .filter(|req| req.name == metadata.name)
+            .flat_map(|req| {
+                req.extras
+                    .iter()
+                    .cloned()
+                    .map(|extra| (extra, req.marker.simplify_extras(&extras)))
+            })
             .collect();
+        while let Some((extra, marker)) = queue.pop_front() {
+            if !seen.insert((extra.clone(), marker)) {
+                continue;
+            }
 
-        // Resolve any recursive extras.
-        loop {
-            // Find the first recursive requirement.
-            // TODO(charlie): Respect markers on recursive extras.
-            let Some(index) = requirements.iter().position(|requirement| {
-                requirement.name == metadata.name && requirement.marker.is_true()
-            }) else {
-                break;
-            };
-
-            // Remove the requirement that points to us.
-            let recursive = requirements.remove(index);
-
-            // Re-simplify the requirements.
-            for requirement in &mut requirements {
-                requirement.marker = requirement
-                    .marker
-                    .clone()
-                    .simplify_extras(&recursive.extras);
+            // Find the requirements for the extra.
+            for requirement in &dependencies {
+                if requirement.marker.top_level_extra_name().as_ref() == Some(&extra) {
+                    let requirement = {
+                        let mut marker = marker;
+                        marker.and(requirement.marker);
+                        Requirement {
+                            name: requirement.name.clone(),
+                            extras: requirement.extras.clone(),
+                            groups: requirement.groups.clone(),
+                            source: requirement.source.clone(),
+                            origin: requirement.origin.clone(),
+                            marker: marker.simplify_extras(slice::from_ref(&extra)),
+                        }
+                    };
+                    if requirement.name == metadata.name {
+                        // Add each transitively included extra.
+                        queue.extend(
+                            requirement
+                                .extras
+                                .iter()
+                                .cloned()
+                                .map(|extra| (extra, requirement.marker)),
+                        );
+                    } else {
+                        // Add the requirements for that extra.
+                        requirements.push(requirement);
+                    }
+                }
             }
         }
+
+        // Drop all the self-requirements now that we flattened them out.
+        requirements.retain(|req| req.name != metadata.name);
 
         let project = metadata.name;
         let extras = metadata.provides_extras;
@@ -159,8 +191,12 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             )
         })?;
 
-        // If the path is a `pyproject.toml`, attempt to extract the requirements statically.
-        if let Ok(metadata) = self.database.requires_dist(source_tree).await {
+        // If the path is a `pyproject.toml`, attempt to extract the requirements statically. The
+        // distribution database will do this too, but we can be even more aggressive here since we
+        // _only_ need the requirements. So, for example, even if the version is dynamic, we can
+        // still extract the requirements without performing a build, unlike in the database where
+        // we typically construct a "complete" metadata object.
+        if let Some(metadata) = self.database.requires_dist(source_tree).await? {
             return Ok(metadata);
         }
 

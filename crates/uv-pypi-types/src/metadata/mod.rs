@@ -1,3 +1,4 @@
+mod build_requires;
 mod metadata10;
 mod metadata12;
 mod metadata23;
@@ -5,14 +6,18 @@ mod metadata_resolver;
 mod pyproject_toml;
 mod requires_txt;
 
-use crate::VerbatimParsedUrl;
-use mailparse::{MailHeaderMap, MailParseError};
 use std::str::Utf8Error;
+
+use mailparse::{MailHeaderMap, MailParseError};
 use thiserror::Error;
+
 use uv_normalize::InvalidNameError;
 use uv_pep440::{VersionParseError, VersionSpecifiersParseError};
 use uv_pep508::Pep508Error;
 
+use crate::VerbatimParsedUrl;
+
+pub use build_requires::BuildRequires;
 pub use metadata10::Metadata10;
 pub use metadata12::Metadata12;
 pub use metadata23::Metadata23;

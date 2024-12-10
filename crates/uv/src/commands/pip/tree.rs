@@ -1,16 +1,19 @@
+use std::collections::VecDeque;
 use std::fmt::Write;
 
 use anyhow::Result;
-use indexmap::IndexMap;
 use owo_colors::OwoColorize;
+use petgraph::graph::{EdgeIndex, NodeIndex};
+use petgraph::prelude::EdgeRef;
+use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::Cache;
-use uv_distribution::Metadata;
 use uv_distribution_types::{Diagnostic, Name};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_pypi_types::{RequirementSource, ResolverMarkerEnvironment};
+use uv_pep508::{Requirement, VersionOrUrl};
+use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
 use crate::commands::pip::operations::report_target_environment;
@@ -22,8 +25,8 @@ use crate::printer::Printer;
 pub(crate) fn pip_tree(
     show_version_specifiers: bool,
     depth: u8,
-    prune: Vec<PackageName>,
-    package: Vec<PackageName>,
+    prune: &[PackageName],
+    package: &[PackageName],
     no_dedupe: bool,
     invert: bool,
     strict: bool,
@@ -43,17 +46,20 @@ pub(crate) fn pip_tree(
 
     // Read packages from the virtual environment.
     let site_packages = SitePackages::from_environment(&environment)?;
-    let mut packages: IndexMap<_, Vec<_>> = IndexMap::new();
-    for package in site_packages.iter() {
-        let metadata = Metadata::from_metadata23(package.metadata()?);
+
+    let packages = {
+        let mut packages: FxHashMap<_, Vec<_>> = FxHashMap::default();
+        for package in site_packages.iter() {
+            packages
+                .entry(package.name())
+                .or_default()
+                .push(package.metadata()?);
+        }
         packages
-            .entry(package.name().clone())
-            .or_default()
-            .push(metadata);
-    }
+    };
 
     // Determine the markers to use for the resolution.
-    let markers = environment.interpreter().resolver_markers();
+    let markers = environment.interpreter().resolver_marker_environment();
 
     // Render the tree.
     let rendered_tree = DisplayDependencyGraph::new(
@@ -64,7 +70,7 @@ pub(crate) fn pip_tree(
         invert,
         show_version_specifiers,
         &markers,
-        packages,
+        &packages,
     )
     .render()
     .join("\n");
@@ -97,90 +103,172 @@ pub(crate) fn pip_tree(
 }
 
 #[derive(Debug)]
-pub(crate) struct DisplayDependencyGraph {
-    packages: IndexMap<PackageName, Vec<Metadata>>,
+pub(crate) struct DisplayDependencyGraph<'env> {
+    /// The constructed dependency graph.
+    graph: petgraph::graph::Graph<
+        &'env ResolutionMetadata,
+        &'env Requirement<VerbatimParsedUrl>,
+        petgraph::Directed,
+    >,
+    /// The packages considered as roots of the dependency tree.
+    roots: Vec<NodeIndex>,
     /// Maximum display depth of the dependency tree
     depth: usize,
-    /// Prune the given packages from the display of the dependency tree.
-    prune: Vec<PackageName>,
-    /// Display only the specified packages.
-    package: Vec<PackageName>,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
-    /// Map from package name to its requirements.
-    ///
-    /// If `--invert` is given the map is inverted.
-    requirements: FxHashMap<PackageName, Vec<PackageName>>,
-    /// Map from requirement package name-to-parent-to-dependency metadata.
-    dependencies: FxHashMap<PackageName, FxHashMap<PackageName, Dependency>>,
+    /// Whether to invert the dependency tree.
+    invert: bool,
+    /// Whether to include the version specifiers in the tree.
+    show_version_specifiers: bool,
 }
 
-impl DisplayDependencyGraph {
+impl<'env> DisplayDependencyGraph<'env> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
     pub(crate) fn new(
         depth: usize,
-        prune: Vec<PackageName>,
-        package: Vec<PackageName>,
+        prune: &[PackageName],
+        package: &[PackageName],
         no_dedupe: bool,
         invert: bool,
         show_version_specifiers: bool,
         markers: &ResolverMarkerEnvironment,
-        packages: IndexMap<PackageName, Vec<Metadata>>,
+        packages: &'env FxHashMap<&PackageName, Vec<ResolutionMetadata>>,
     ) -> Self {
-        let mut requirements: FxHashMap<_, Vec<_>> = FxHashMap::default();
-        let mut dependencies: FxHashMap<PackageName, FxHashMap<PackageName, Dependency>> =
-            FxHashMap::default();
+        // Create a graph.
+        let mut graph = petgraph::graph::Graph::<
+            &ResolutionMetadata,
+            &Requirement<VerbatimParsedUrl>,
+            petgraph::Directed,
+        >::new();
 
-        // Add all transitive requirements.
+        // Step 1: Add each installed package.
+        let mut inverse: FxHashMap<PackageName, Vec<NodeIndex>> = FxHashMap::default();
         for metadata in packages.values().flatten() {
-            // Ignore any optional dependencies.
-            for required in metadata
-                .requires_dist
-                .iter()
-                .filter(|requirement| requirement.marker.evaluate(markers, &[]))
-            {
-                let dependency = if invert {
-                    Dependency::Inverted(
-                        required.name.clone(),
-                        metadata.name.clone(),
-                        required.source.clone(),
-                    )
-                } else {
-                    Dependency::Normal(
-                        metadata.name.clone(),
-                        required.name.clone(),
-                        required.source.clone(),
-                    )
-                };
+            if prune.contains(&metadata.name) {
+                continue;
+            }
 
-                requirements
-                    .entry(dependency.parent().clone())
-                    .or_default()
-                    .push(dependency.child().clone());
+            let index = graph.add_node(metadata);
+            inverse
+                .entry(metadata.name.clone())
+                .or_default()
+                .push(index);
+        }
 
-                if show_version_specifiers {
-                    dependencies
-                        .entry(dependency.parent().clone())
-                        .or_default()
-                        .insert(dependency.child().clone(), dependency);
+        // Step 2: Add all dependencies.
+        for index in graph.node_indices() {
+            let metadata = &graph[index];
+
+            for requirement in &metadata.requires_dist {
+                if prune.contains(&requirement.name) {
+                    continue;
+                }
+                if !requirement.marker.evaluate(markers, &[]) {
+                    continue;
+                }
+
+                for dep_index in inverse
+                    .get(&requirement.name)
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                {
+                    let dep = &graph[dep_index];
+
+                    // Avoid adding an edge if the dependency is not required by the current package.
+                    if let Some(VersionOrUrl::VersionSpecifier(specifier)) =
+                        requirement.version_or_url.as_ref()
+                    {
+                        if !specifier.contains(&dep.version) {
+                            continue;
+                        }
+                    }
+
+                    graph.add_edge(index, dep_index, requirement);
                 }
             }
         }
+
+        // Step 2: Reverse the graph.
+        if invert {
+            graph.reverse();
+        }
+
+        // Step 3: Filter the graph to those nodes reachable from the target packages.
+        if !package.is_empty() {
+            // Perform a DFS from the root nodes to find the reachable nodes.
+            let mut reachable = graph
+                .node_indices()
+                .filter(|index| package.contains(&graph[*index].name))
+                .collect::<FxHashSet<_>>();
+            let mut stack = reachable.iter().copied().collect::<VecDeque<_>>();
+            while let Some(node) = stack.pop_front() {
+                for edge in graph.edges_directed(node, Direction::Outgoing) {
+                    if reachable.insert(edge.target()) {
+                        stack.push_back(edge.target());
+                    }
+                }
+            }
+
+            // Remove the unreachable nodes from the graph.
+            graph.retain_nodes(|_, index| reachable.contains(&index));
+        }
+
+        // Compute the list of roots.
+        let roots = {
+            let mut edges = vec![];
+
+            // Remove any cycles.
+            let feedback_set: Vec<EdgeIndex> = petgraph::algo::greedy_feedback_arc_set(&graph)
+                .map(|e| e.id())
+                .collect();
+            for edge_id in feedback_set {
+                if let Some((source, target)) = graph.edge_endpoints(edge_id) {
+                    if let Some(weight) = graph.remove_edge(edge_id) {
+                        edges.push((source, target, weight));
+                    }
+                }
+            }
+
+            // Find the root nodes.
+            let mut roots = graph
+                .node_indices()
+                .filter(|index| {
+                    graph
+                        .edges_directed(*index, Direction::Incoming)
+                        .next()
+                        .is_none()
+                })
+                .collect::<Vec<_>>();
+
+            // Sort the roots.
+            roots.sort_by_key(|index| {
+                let metadata = &graph[*index];
+                (&metadata.name, &metadata.version)
+            });
+
+            // Re-add the removed edges.
+            for (source, target, weight) in edges {
+                graph.add_edge(source, target, weight);
+            }
+
+            roots
+        };
+
         Self {
-            packages,
+            graph,
+            roots,
             depth,
-            prune,
-            package,
             no_dedupe,
-            requirements,
-            dependencies,
+            invert,
+            show_version_specifiers,
         }
     }
 
     /// Perform a depth-first traversal of the given distribution and its dependencies.
-    fn visit<'env>(
-        &'env self,
-        metadata: &'env Metadata,
+    fn visit(
+        &self,
+        cursor: Cursor,
         visited: &mut FxHashMap<&'env PackageName, Vec<PackageName>>,
         path: &mut Vec<&'env PackageName>,
     ) -> Vec<String> {
@@ -189,18 +277,31 @@ impl DisplayDependencyGraph {
             return Vec::new();
         }
 
+        let metadata = &self.graph[cursor.node()];
         let package_name = &metadata.name;
         let mut line = format!("{} v{}", package_name, metadata.version);
 
         // If the current package is not top-level (i.e., it has a parent), include the specifiers.
-        if let Some(last) = path.last().copied() {
-            if let Some(dependency) = self
-                .dependencies
-                .get(last)
-                .and_then(|deps| deps.get(package_name))
-            {
+        if self.show_version_specifiers {
+            if let Some(edge) = cursor.edge() {
                 line.push(' ');
-                line.push_str(&format!("[{dependency}]"));
+
+                let source = &self.graph[edge];
+                if self.invert {
+                    let parent = self.graph.edge_endpoints(edge).unwrap().0;
+                    let parent = &self.graph[parent].name;
+                    let version = match source.version_or_url.as_ref() {
+                        None => "*".to_string(),
+                        Some(version) => version.to_string(),
+                    };
+                    line.push_str(&format!("[requires: {parent} {version}]"));
+                } else {
+                    let version = match source.version_or_url.as_ref() {
+                        None => "*".to_string(),
+                        Some(version) => version.to_string(),
+                    };
+                    line.push_str(&format!("[required: {version}]"));
+                }
             }
         }
 
@@ -217,25 +318,35 @@ impl DisplayDependencyGraph {
             }
         }
 
-        let requirements = self
-            .requirements
-            .get(package_name)
-            .into_iter()
-            .flatten()
-            .filter(|&req| {
-                // Skip if the current package is not one of the installed distributions.
-                !self.prune.contains(req) && self.packages.contains_key(req)
+        let mut dependencies = self
+            .graph
+            .edges_directed(cursor.node(), Direction::Outgoing)
+            .map(|edge| {
+                let node = edge.target();
+                Cursor::new(node, edge.id())
             })
-            .cloned()
             .collect::<Vec<_>>();
+        dependencies.sort_by_key(|node| {
+            let metadata = &self.graph[node.node()];
+            (&metadata.name, &metadata.version)
+        });
 
         let mut lines = vec![line];
 
         // Keep track of the dependency path to avoid cycles.
-        visited.insert(package_name, requirements.clone());
+        visited.insert(
+            package_name,
+            dependencies
+                .iter()
+                .map(|node| {
+                    let metadata = &self.graph[node.node()];
+                    metadata.name.clone()
+                })
+                .collect(),
+        );
         path.push(package_name);
 
-        for (index, req) in requirements.iter().enumerate() {
+        for (index, dep) in dependencies.iter().enumerate() {
             // For sub-visited packages, add the prefix to make the tree display user-friendly.
             // The key observation here is you can group the tree as follows when you're at the
             // root of the tree:
@@ -255,24 +366,21 @@ impl DisplayDependencyGraph {
             // those in Group 3 have `└── ` at the top and `    ` at the rest.
             // This observation is true recursively even when looking at the subtree rooted
             // at `level_1_0`.
-            let (prefix_top, prefix_rest) = if requirements.len() - 1 == index {
+            let (prefix_top, prefix_rest) = if dependencies.len() - 1 == index {
                 ("└── ", "    ")
             } else {
                 ("├── ", "│   ")
             };
 
-            for distribution in self.packages.get(req).into_iter().flatten() {
-                for (visited_index, visited_line) in
-                    self.visit(distribution, visited, path).iter().enumerate()
-                {
-                    let prefix = if visited_index == 0 {
-                        prefix_top
-                    } else {
-                        prefix_rest
-                    };
+            for (visited_index, visited_line) in self.visit(*dep, visited, path).iter().enumerate()
+            {
+                let prefix = if visited_index == 0 {
+                    prefix_top
+                } else {
+                    prefix_rest
+                };
 
-                    lines.push(format!("{prefix}{visited_line}"));
-                }
+                lines.push(format!("{prefix}{visited_line}"));
             }
         }
         path.pop();
@@ -282,81 +390,42 @@ impl DisplayDependencyGraph {
 
     /// Depth-first traverse the nodes to render the tree.
     pub(crate) fn render(&self) -> Vec<String> {
-        let mut visited: FxHashMap<&PackageName, Vec<PackageName>> = FxHashMap::default();
-        let mut path: Vec<&PackageName> = Vec::new();
-        let mut lines: Vec<String> = Vec::new();
+        let mut path = Vec::new();
+        let mut lines = Vec::with_capacity(self.graph.node_count());
+        let mut visited =
+            FxHashMap::with_capacity_and_hasher(self.graph.node_count(), rustc_hash::FxBuildHasher);
 
-        if self.package.is_empty() {
-            // The root nodes are those that are not required by any other package.
-            let children: FxHashSet<_> = self.requirements.values().flatten().collect();
-            for package in self.packages.values().flatten() {
-                // If the current package is not required by any other package, start the traversal
-                // with the current package as the root.
-                if !children.contains(&package.name) {
-                    path.clear();
-                    lines.extend(self.visit(package, &mut visited, &mut path));
-                }
-            }
-        } else {
-            for (index, package) in self.package.iter().enumerate() {
-                if index != 0 {
-                    lines.push(String::new());
-                }
-
-                for package in self.packages.get(package).into_iter().flatten() {
-                    path.clear();
-                    lines.extend(self.visit(package, &mut visited, &mut path));
-                }
-            }
+        for node in &self.roots {
+            path.clear();
+            lines.extend(self.visit(Cursor::root(*node), &mut visited, &mut path));
         }
 
         lines
     }
 }
 
-#[derive(Debug)]
-enum Dependency {
-    /// Show dependencies from parent to the child package that it requires.
-    Normal(PackageName, PackageName, RequirementSource),
-    /// Show dependencies from the child package to the parent that requires it.
-    Inverted(PackageName, PackageName, RequirementSource),
-}
+/// A node in the dependency graph along with the edge that led to it, or `None` for root nodes.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
+struct Cursor(NodeIndex, Option<EdgeIndex>);
 
-impl Dependency {
-    /// Return the parent in the tree.
-    fn parent(&self) -> &PackageName {
-        match self {
-            Self::Normal(parent, _, _) => parent,
-            Self::Inverted(parent, _, _) => parent,
-        }
+impl Cursor {
+    /// Create a [`Cursor`] representing a node in the dependency tree.
+    fn new(node: NodeIndex, edge: EdgeIndex) -> Self {
+        Self(node, Some(edge))
     }
 
-    /// Return the child in the tree.
-    fn child(&self) -> &PackageName {
-        match self {
-            Self::Normal(_, child, _) => child,
-            Self::Inverted(_, child, _) => child,
-        }
+    /// Create a [`Cursor`] representing a root node in the dependency tree.
+    fn root(node: NodeIndex) -> Self {
+        Self(node, None)
     }
-}
 
-impl std::fmt::Display for Dependency {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Normal(_, _, source) => {
-                let version = match source.version_or_url() {
-                    None => "*".to_string(),
-                    Some(version) => version.to_string(),
-                };
-                write!(f, "required: {version}")
-            }
-            Self::Inverted(parent, _, source) => {
-                let version = match source.version_or_url() {
-                    None => "*".to_string(),
-                    Some(version) => version.to_string(),
-                };
-                write!(f, "requires: {parent} {version}")
-            }
-        }
+    /// Return the [`NodeIndex`] of the node.
+    fn node(&self) -> NodeIndex {
+        self.0
+    }
+
+    /// Return the [`EdgeIndex`] of the edge that led to the node, if any.
+    fn edge(&self) -> Option<EdgeIndex> {
+        self.1
     }
 }

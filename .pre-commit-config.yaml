@@ -7,12 +7,12 @@ exclude: |
 
 repos:
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.20.2
+    rev: v0.23
     hooks:
       - id: validate-pyproject
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.26.0
+    rev: v1.28.2
     hooks:
       - id: typos
 
@@ -42,7 +42,7 @@ repos:
         types_or: [yaml, json5]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.8.2
     hooks:
       - id: ruff-format
       - id: ruff

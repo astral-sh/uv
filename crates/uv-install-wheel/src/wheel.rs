@@ -1,11 +1,8 @@
 use std::collections::HashMap;
-use std::io::{BufReader, Cursor, Read, Seek, Write};
+use std::io;
+use std::io::{BufReader, Read, Seek, Write};
 use std::path::{Path, PathBuf};
-use std::{env, io};
 
-use crate::record::RecordEntry;
-use crate::script::Script;
-use crate::{Error, Layout};
 use data_encoding::BASE64URL_NOPAD;
 use fs_err as fs;
 use fs_err::{DirEntry, File};
@@ -13,39 +10,18 @@ use mailparse::parse_headers;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 use tracing::{instrument, warn};
+use walkdir::WalkDir;
+
 use uv_cache_info::CacheInfo;
-use uv_fs::{relative_to, Simplified};
+use uv_fs::{persist_with_retry_sync, relative_to, rename_with_retry_sync, Simplified};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
-use walkdir::WalkDir;
-use zip::write::FileOptions;
-use zip::ZipWriter;
+use uv_shell::escape_posix_for_single_quotes;
+use uv_trampoline_builder::windows_script_launcher;
 
-const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
-
-#[cfg(all(windows, target_arch = "x86"))]
-const LAUNCHER_I686_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-gui.exe");
-
-#[cfg(all(windows, target_arch = "x86"))]
-const LAUNCHER_I686_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-console.exe");
-
-#[cfg(all(windows, target_arch = "x86_64"))]
-const LAUNCHER_X86_64_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-gui.exe");
-
-#[cfg(all(windows, target_arch = "x86_64"))]
-const LAUNCHER_X86_64_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-console.exe");
-
-#[cfg(all(windows, target_arch = "aarch64"))]
-const LAUNCHER_AARCH64_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-gui.exe");
-
-#[cfg(all(windows, target_arch = "aarch64"))]
-const LAUNCHER_AARCH64_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-console.exe");
+use crate::record::RecordEntry;
+use crate::script::Script;
+use crate::{Error, Layout};
 
 /// Wrapper script template function
 ///
@@ -147,96 +123,16 @@ fn format_shebang(executable: impl AsRef<Path>, os_name: &str, relocatable: bool
             } else {
                 ""
             };
-            // Like Python's `shlex.quote`:
-            // > Use single quotes, and put single quotes into double quotes
-            // > The string $'b is then quoted as '$'"'"'b'
-            let executable = format!("{}'{}'", prefix, executable.replace('\'', r#"'"'"'"#));
+            let executable = format!(
+                "{}'{}'",
+                prefix,
+                escape_posix_for_single_quotes(&executable)
+            );
             return format!("#!/bin/sh\n'''exec' {executable} \"$0\" \"$@\"\n' '''");
         }
     }
 
     format!("#!{executable}")
-}
-
-/// A Windows script is a minimal .exe launcher binary with the python entrypoint script appended as
-/// stored zip file.
-///
-/// <https://github.com/pypa/pip/blob/fd0ea6bc5e8cb95e518c23d901c26ca14db17f89/src/pip/_vendor/distlib/scripts.py#L248-L262>
-#[allow(unused_variables)]
-pub(crate) fn windows_script_launcher(
-    launcher_python_script: &str,
-    is_gui: bool,
-    python_executable: impl AsRef<Path>,
-) -> Result<Vec<u8>, Error> {
-    // This method should only be called on Windows, but we avoid `#[cfg(windows)]` to retain
-    // compilation on all platforms.
-    if cfg!(not(windows)) {
-        return Err(Error::NotWindows);
-    }
-
-    let launcher_bin: &[u8] = match env::consts::ARCH {
-        #[cfg(all(windows, target_arch = "x86"))]
-        "x86" => {
-            if is_gui {
-                LAUNCHER_I686_GUI
-            } else {
-                LAUNCHER_I686_CONSOLE
-            }
-        }
-        #[cfg(all(windows, target_arch = "x86_64"))]
-        "x86_64" => {
-            if is_gui {
-                LAUNCHER_X86_64_GUI
-            } else {
-                LAUNCHER_X86_64_CONSOLE
-            }
-        }
-        #[cfg(all(windows, target_arch = "aarch64"))]
-        "aarch64" => {
-            if is_gui {
-                LAUNCHER_AARCH64_GUI
-            } else {
-                LAUNCHER_AARCH64_CONSOLE
-            }
-        }
-        #[cfg(windows)]
-        arch => {
-            return Err(Error::UnsupportedWindowsArch(arch));
-        }
-        #[cfg(not(windows))]
-        arch => &[],
-    };
-
-    let mut payload: Vec<u8> = Vec::new();
-    {
-        // We're using the zip writer, but with stored compression
-        // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
-        // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-        let stored = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        let mut archive = ZipWriter::new(Cursor::new(&mut payload));
-        let error_msg = "Writing to Vec<u8> should never fail";
-        archive.start_file("__main__.py", stored).expect(error_msg);
-        archive
-            .write_all(launcher_python_script.as_bytes())
-            .expect(error_msg);
-        archive.finish().expect(error_msg);
-    }
-
-    let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
-
-    let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bin.len() + payload.len());
-    launcher.extend_from_slice(launcher_bin);
-    launcher.extend_from_slice(&payload);
-    launcher.extend_from_slice(python_path.as_bytes());
-    launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
-            .expect("File Path to be smaller than 4GB")
-            .to_le_bytes(),
-    );
-    launcher.extend_from_slice(&LAUNCHER_MAGIC_NUMBER);
-
-    Ok(launcher)
 }
 
 /// Returns a [`PathBuf`] to `python[w].exe` for script execution.
@@ -418,12 +314,14 @@ pub(crate) fn move_folder_recorded(
         let src = entry.path();
         // This is the base path for moving to the actual target for the data
         // e.g. for data it's without <..>.data/data/
-        let relative_to_data = src.strip_prefix(src_dir).expect("Prefix must no change");
+        let relative_to_data = src
+            .strip_prefix(src_dir)
+            .expect("walkdir prefix must not change");
         // This is the path stored in RECORD
         // e.g. for data it's with .data/data/
         let relative_to_site_packages = src
             .strip_prefix(site_packages)
-            .expect("Prefix must no change");
+            .expect("prefix must not change");
         let target = dest_dir.join(relative_to_data);
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
@@ -526,16 +424,8 @@ fn install_script(
 
         let mut target = uv_fs::tempfile_in(&layout.scheme.scripts)?;
         let size_and_encoded_hash = copy_and_hash(&mut start.chain(script), &mut target)?;
-        target.persist(&script_absolute).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    path.user_display(),
-                    err.error
-                ),
-            )
-        })?;
+
+        persist_with_retry_sync(target, &script_absolute)?;
         fs::remove_file(&path)?;
 
         // Make the script executable. We just created the file, so we can set permissions directly.
@@ -569,7 +459,7 @@ fn install_script(
 
             if permissions.mode() & 0o111 == 0o111 {
                 // If the permissions are already executable, we don't need to change them.
-                fs::rename(&path, &script_absolute)?;
+                rename_with_retry_sync(&path, &script_absolute)?;
             } else {
                 // If we have to modify the permissions, copy the file, since we might not own it.
                 warn!(
@@ -590,7 +480,7 @@ fn install_script(
 
         #[cfg(not(unix))]
         {
-            fs::rename(&path, &script_absolute)?;
+            rename_with_retry_sync(&path, &script_absolute)?;
         }
 
         None
@@ -722,7 +612,7 @@ pub(crate) fn write_file_recorded(
 }
 
 /// Adds `INSTALLER`, `REQUESTED` and `direct_url.json` to the .dist-info dir
-pub(crate) fn extra_dist_info(
+pub(crate) fn write_installer_metadata(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,
@@ -873,7 +763,7 @@ mod test {
             Wheel-Version: 1.0
             Generator: bdist_wheel (0.37.1)
             Root-Is-Purelib: false
-            Tag:        cp38-cp38-manylinux_2_17_x86_64    
+            Tag:        cp38-cp38-manylinux_2_17_x86_64
         "};
 
         let wheel = parse_email_message_file(&mut text.as_bytes(), "WHEEL").unwrap();
@@ -1073,54 +963,6 @@ mod test {
             )
         );
         Ok(())
-    }
-
-    #[test]
-    #[cfg(all(windows, target_arch = "x86"))]
-    fn test_launchers_are_small() {
-        // At time of writing, they are 45kb~ bytes.
-        assert!(
-            super::LAUNCHER_I686_GUI.len() < 45 * 1024,
-            "GUI launcher: {}",
-            super::LAUNCHER_I686_GUI.len()
-        );
-        assert!(
-            super::LAUNCHER_I686_CONSOLE.len() < 45 * 1024,
-            "CLI launcher: {}",
-            super::LAUNCHER_I686_CONSOLE.len()
-        );
-    }
-
-    #[test]
-    #[cfg(all(windows, target_arch = "x86_64"))]
-    fn test_launchers_are_small() {
-        // At time of writing, they are 45kb~ bytes.
-        assert!(
-            super::LAUNCHER_X86_64_GUI.len() < 45 * 1024,
-            "GUI launcher: {}",
-            super::LAUNCHER_X86_64_GUI.len()
-        );
-        assert!(
-            super::LAUNCHER_X86_64_CONSOLE.len() < 45 * 1024,
-            "CLI launcher: {}",
-            super::LAUNCHER_X86_64_CONSOLE.len()
-        );
-    }
-
-    #[test]
-    #[cfg(all(windows, target_arch = "aarch64"))]
-    fn test_launchers_are_small() {
-        // At time of writing, they are 45kb~ bytes.
-        assert!(
-            super::LAUNCHER_AARCH64_GUI.len() < 45 * 1024,
-            "GUI launcher: {}",
-            super::LAUNCHER_AARCH64_GUI.len()
-        );
-        assert!(
-            super::LAUNCHER_AARCH64_CONSOLE.len() < 45 * 1024,
-            "CLI launcher: {}",
-            super::LAUNCHER_AARCH64_CONSOLE.len()
-        );
     }
 
     #[test]

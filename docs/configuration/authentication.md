@@ -35,15 +35,18 @@ uv supports credentials over HTTP when querying package registries.
 Authentication can come from the following sources, in order of precedence:
 
 - The URL, e.g., `https://<user>:<password>@<hostname>/...`
-- A [`netrc`](https://everything.curl.dev/usingcurl/netrc) configuration file
+- A [`.netrc`](https://everything.curl.dev/usingcurl/netrc) configuration file
 - A [keyring](https://github.com/jaraco/keyring) provider (requires opt-in)
 
 If authentication is found for a single net location (scheme, host, and port), it will be cached for
 the duration of the command and used for other queries to that net location. Authentication is not
 cached across invocations of uv.
 
-Note `--keyring-provider subprocess` or `UV_KEYRING_PROVIDER=subprocess` must be provided to enable
-keyring-based authentication.
+`.netrc` authentication is enabled by default, and will respect the `NETRC` environment variable if
+defined, falling back to `~/.netrc` if not.
+
+To enable keyring-based authentication, pass the `--keyring-provider subprocess` command-line
+argument to uv, or set `UV_KEYRING_PROVIDER=subprocess`.
 
 Authentication may be used for hosts specified in the following contexts:
 

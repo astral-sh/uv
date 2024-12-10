@@ -9,6 +9,7 @@ pub(crate) mod check;
 pub(crate) mod compile;
 pub(crate) mod freeze;
 pub(crate) mod install;
+pub(crate) mod latest;
 pub(crate) mod list;
 pub(crate) mod loggers;
 pub(crate) mod operations;
@@ -32,7 +33,7 @@ pub(crate) fn resolution_markers(
         (None, Some(python_version)) => {
             ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers()))
         }
-        (None, None) => interpreter.resolver_markers(),
+        (None, None) => interpreter.resolver_marker_environment(),
     }
 }
 
@@ -47,7 +48,7 @@ pub(crate) fn resolution_tags<'env>(
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
-            interpreter.manylinux_compatible(),
+            python_platform.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
         (Some(python_platform), None) => Cow::Owned(Tags::from_env(
@@ -55,7 +56,7 @@ pub(crate) fn resolution_tags<'env>(
             interpreter.python_tuple(),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
-            interpreter.manylinux_compatible(),
+            python_platform.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
         (None, Some(python_version)) => Cow::Owned(Tags::from_env(
@@ -82,7 +83,7 @@ pub(crate) fn resolution_environment(
             (python_version.major(), python_version.minor()),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
-            interpreter.manylinux_compatible(),
+            python_platform.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
         (Some(python_platform), None) => Cow::Owned(Tags::from_env(
@@ -90,7 +91,7 @@ pub(crate) fn resolution_environment(
             interpreter.python_tuple(),
             interpreter.implementation_name(),
             interpreter.implementation_tuple(),
-            interpreter.manylinux_compatible(),
+            python_platform.manylinux_compatible(),
             interpreter.gil_disabled(),
         )?),
         (None, Some(python_version)) => Cow::Owned(Tags::from_env(
@@ -115,7 +116,7 @@ pub(crate) fn resolution_environment(
         (None, Some(python_version)) => {
             ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers()))
         }
-        (None, None) => interpreter.resolver_markers(),
+        (None, None) => interpreter.resolver_marker_environment(),
     };
 
     Ok((tags, markers))

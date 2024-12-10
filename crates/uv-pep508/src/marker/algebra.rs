@@ -44,23 +44,26 @@
 //! a [`NodeId`], which represents a potentially complemented reference to a [`Node`] in the interner,
 //! or a terminal `true`/`false` node. Interning allows the reduction rule that isomorphic nodes are
 //! merged to be applied globally.
+
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Bound;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
 
-use itertools::Either;
-use pubgrub::Range;
+use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
-use uv_pep440::Operator;
-use uv_pep440::{Version, VersionSpecifier};
-use uv_pubgrub::PubGrubSpecifier;
+use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
+use version_ranges::Ranges;
 
+use crate::marker::lowering::{
+    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+};
 use crate::marker::MarkerValueExtra;
-use crate::ExtraOperator;
-use crate::{MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion};
+use crate::{
+    ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
+};
 
 /// The global node interner.
 pub(crate) static INTERNER: LazyLock<Interner> = LazyLock::new(Interner::default);
@@ -92,6 +95,9 @@ struct InternerState {
     /// A cache for `AND` operations between two nodes.
     /// Note that `OR` is implemented in terms of `AND`.
     cache: FxHashMap<(NodeId, NodeId), NodeId>,
+
+    /// The [`NodeId`] for the disjunction of known, mutually incompatible markers.
+    exclusions: Option<NodeId>,
 }
 
 impl InternerShared {
@@ -157,43 +163,54 @@ impl InternerGuard<'_> {
     /// Returns a decision node for a single marker expression.
     pub(crate) fn expression(&mut self, expr: MarkerExpression) -> NodeId {
         let (var, children) = match expr {
-            // Normalize `python_version` markers to `python_full_version` nodes.
-            MarkerExpression::Version {
-                key: MarkerValueVersion::PythonVersion,
-                specifier,
-            } => match python_version_to_full_version(normalize_specifier(specifier)) {
-                Ok(specifier) => (
-                    Variable::Version(MarkerValueVersion::PythonFullVersion),
-                    Edges::from_specifier(specifier),
-                ),
-                Err(node) => return node,
-            },
-            MarkerExpression::VersionIn {
-                key: MarkerValueVersion::PythonVersion,
-                versions,
-                negated,
-            } => match Edges::from_python_versions(versions, negated) {
-                Ok(edges) => (
-                    Variable::Version(MarkerValueVersion::PythonFullVersion),
-                    edges,
-                ),
-                Err(node) => return node,
-            },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
-            MarkerExpression::Version { key, specifier } => {
-                (Variable::Version(key), Edges::from_specifier(specifier))
-            }
+            MarkerExpression::Version { key, specifier } => match key {
+                MarkerValueVersion::ImplementationVersion => (
+                    Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
+                    Edges::from_specifier(specifier),
+                ),
+                MarkerValueVersion::PythonFullVersion => (
+                    Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                    Edges::from_specifier(specifier),
+                ),
+                // Normalize `python_version` markers to `python_full_version` nodes.
+                MarkerValueVersion::PythonVersion => {
+                    match python_version_to_full_version(normalize_specifier(specifier)) {
+                        Ok(specifier) => (
+                            Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                            Edges::from_specifier(specifier),
+                        ),
+                        Err(node) => return node,
+                    }
+                }
+            },
             // A variable representing the output of a version key. Edges correspond
             // to disjoint version ranges.
             MarkerExpression::VersionIn {
                 key,
                 versions,
                 negated,
-            } => (
-                Variable::Version(key),
-                Edges::from_versions(&versions, negated),
-            ),
+            } => match key {
+                MarkerValueVersion::ImplementationVersion => (
+                    Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
+                    Edges::from_versions(&versions, negated),
+                ),
+                MarkerValueVersion::PythonFullVersion => (
+                    Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                    Edges::from_versions(&versions, negated),
+                ),
+                // Normalize `python_version` markers to `python_full_version` nodes.
+                MarkerValueVersion::PythonVersion => {
+                    match Edges::from_python_versions(versions, negated) {
+                        Ok(edges) => (
+                            Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
+                            edges,
+                        ),
+                        Err(node) => return node,
+                    }
+                }
+            },
             // The `in` and `contains` operators are a bit different than other operators.
             // In particular, they do not represent a particular value for the corresponding
             // variable, and can overlap. For example, `'nux' in os_name` and `os_name == 'Linux'`
@@ -208,51 +225,89 @@ impl InternerGuard<'_> {
                 key,
                 operator: MarkerOperator::In,
                 value,
-            } => (Variable::In { key, value }, Edges::from_bool(true)),
+            } => (
+                Variable::In {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(true),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::NotIn,
                 value,
-            } => (Variable::In { key, value }, Edges::from_bool(false)),
+            } => (
+                Variable::In {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(false),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::Contains,
                 value,
-            } => (Variable::Contains { key, value }, Edges::from_bool(true)),
+            } => (
+                Variable::Contains {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(true),
+            ),
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::NotContains,
                 value,
-            } => (Variable::Contains { key, value }, Edges::from_bool(false)),
+            } => (
+                Variable::Contains {
+                    key: key.into(),
+                    value,
+                },
+                Edges::from_bool(false),
+            ),
             // A variable representing the output of a string key. Edges correspond
             // to disjoint string ranges.
             MarkerExpression::String {
                 key,
                 operator,
                 value,
-            } => (Variable::String(key), Edges::from_string(operator, value)),
+            } => (
+                Variable::String(key.into()),
+                Edges::from_string(operator, value),
+            ),
             // A variable representing the existence or absence of a particular extra.
             MarkerExpression::Extra {
-                name,
+                name: MarkerValueExtra::Extra(extra),
                 operator: ExtraOperator::Equal,
-            } => (Variable::Extra(name), Edges::from_bool(true)),
+            } => (
+                Variable::Extra(CanonicalMarkerValueExtra::Extra(extra)),
+                Edges::from_bool(true),
+            ),
             MarkerExpression::Extra {
-                name,
+                name: MarkerValueExtra::Extra(extra),
                 operator: ExtraOperator::NotEqual,
-            } => (Variable::Extra(name), Edges::from_bool(false)),
+            } => (
+                Variable::Extra(CanonicalMarkerValueExtra::Extra(extra)),
+                Edges::from_bool(false),
+            ),
+            // Invalid extras are always `false`.
+            MarkerExpression::Extra {
+                name: MarkerValueExtra::Arbitrary(_),
+                ..
+            } => return NodeId::FALSE,
         };
 
         self.create_node(var, children)
     }
 
-    // Returns a decision node representing the disjunction of two nodes.
-    pub(crate) fn or(&mut self, x: NodeId, y: NodeId) -> NodeId {
+    /// Returns a decision node representing the disjunction of two nodes.
+    pub(crate) fn or(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
         // We take advantage of cheap negation here and implement OR in terms
         // of it's De Morgan complement.
-        self.and(x.not(), y.not()).not()
+        self.and(xi.not(), yi.not()).not()
     }
 
-    // Returns a decision node representing the conjunction of two nodes.
+    /// Returns a decision node representing the conjunction of two nodes.
     pub(crate) fn and(&mut self, xi: NodeId, yi: NodeId) -> NodeId {
         if xi.is_true() {
             return yi;
@@ -278,6 +333,14 @@ impl InternerGuard<'_> {
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
 
+        // Determine whether the conjunction _could_ contain a conflict.
+        //
+        // As an optimization, we only have to perform this check at the top-level, since these
+        // variables are given higher priority in the tree. In other words, if they're present, they
+        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
+        // children.
+        let conflicts = x.var.is_conflicting_variable() && y.var.is_conflicting_variable();
+
         // Perform Shannon Expansion of the higher order variable.
         let (func, children) = match x.var.cmp(&y.var) {
             // X is higher order than Y, apply Y to every child of X.
@@ -299,6 +362,18 @@ impl InternerGuard<'_> {
 
         // Create the output node.
         let node = self.create_node(func, children);
+
+        // If the node includes known incompatibilities, map it to `false`.
+        let node = if conflicts {
+            let exclusions = self.exclusions();
+            if self.disjointness(node, exclusions.not()) {
+                NodeId::FALSE
+            } else {
+                node
+            }
+        } else {
+            node
+        };
 
         // Memoize the result of this operation.
         //
@@ -330,17 +405,73 @@ impl InternerGuard<'_> {
         }
 
         let (x, y) = (self.shared.node(xi), self.shared.node(yi));
+
+        // Determine whether the conjunction _could_ contain a conflict.
+        //
+        // As an optimization, we only have to perform this check at the top-level, since these
+        // variables are given higher priority in the tree. In other words, if they're present, they
+        // _must_ be at the top; and if they're not at the top, we know they aren't present in any
+        // children.
+        if x.var.is_conflicting_variable() && y.var.is_conflicting_variable() {
+            return self.and(xi, yi).is_false();
+        }
+
+        // Perform Shannon Expansion of the higher order variable.
         match x.var.cmp(&y.var) {
             // X is higher order than Y, Y must be disjoint with every child of X.
             Ordering::Less => x
                 .children
                 .nodes()
-                .all(|x| self.is_disjoint(x.negate(xi), yi)),
+                .all(|x| self.disjointness(x.negate(xi), yi)),
             // Y is higher order than X, X must be disjoint with every child of Y.
             Ordering::Greater => y
                 .children
                 .nodes()
-                .all(|y| self.is_disjoint(y.negate(yi), xi)),
+                .all(|y| self.disjointness(y.negate(yi), xi)),
+            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
+        }
+    }
+
+    /// Returns `true` if there is no environment in which both marker trees can apply,
+    /// i.e., their conjunction is always `false`.
+    fn disjointness(&mut self, xi: NodeId, yi: NodeId) -> bool {
+        // NOTE(charlie): This is equivalent to `is_disjoint`, with the exception that it doesn't
+        // perform the mutually-incompatible marker check. If it did, we'd create an infinite loop,
+        // since `is_disjoint` calls `and` (when relevant variables are present) which then calls
+        // `disjointness`.
+
+        // `false` is disjoint with any marker.
+        if xi.is_false() || yi.is_false() {
+            return true;
+        }
+        // `true` is not disjoint with any marker except `false`.
+        if xi.is_true() || yi.is_true() {
+            return false;
+        }
+        // `X` and `X` are not disjoint.
+        if xi == yi {
+            return false;
+        }
+        // `X` and `not X` are disjoint by definition.
+        if xi.not() == yi {
+            return true;
+        }
+
+        let (x, y) = (self.shared.node(xi), self.shared.node(yi));
+
+        // Perform Shannon Expansion of the higher order variable.
+        match x.var.cmp(&y.var) {
+            // X is higher order than Y, Y must be disjoint with every child of X.
+            Ordering::Less => x
+                .children
+                .nodes()
+                .all(|x| self.disjointness(x.negate(xi), yi)),
+            // Y is higher order than X, X must be disjoint with every child of Y.
+            Ordering::Greater => y
+                .children
+                .nodes()
+                .all(|y| self.disjointness(y.negate(yi), xi)),
             // X and Y represent the same variable, their merged edges must be unsatisifiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
@@ -362,13 +493,77 @@ impl InternerGuard<'_> {
                 // Restrict this variable to the given output by merging it
                 // with the relevant child.
                 let node = if value { high } else { low };
-                return node.negate(i);
+                return self.restrict(node.negate(i), f);
             }
         }
 
         // Restrict all nodes recursively.
         let children = node.children.map(i, |node| self.restrict(node, f));
         self.create_node(node.var.clone(), children)
+    }
+
+    /// Returns a new tree where the only nodes remaining are non-`extra`
+    /// nodes.
+    ///
+    /// If there are only `extra` nodes, then this returns a tree that is
+    /// always true.
+    ///
+    /// This works by assuming all `extra` nodes are always true.
+    ///
+    /// For example, given a marker like
+    /// `((os_name == ... and extra == foo) or (sys_platform == ... and extra != foo))`,
+    /// this would return a marker
+    /// `os_name == ... or sys_platform == ...`.
+    pub(crate) fn without_extras(&mut self, mut i: NodeId) -> NodeId {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return i;
+        }
+
+        let parent = i;
+        let node = self.shared.node(i);
+        if matches!(node.var, Variable::Extra(_)) {
+            i = NodeId::FALSE;
+            for child in node.children.nodes() {
+                i = self.or(i, child.negate(parent));
+            }
+            if i.is_true() {
+                return NodeId::TRUE;
+            }
+            self.without_extras(i)
+        } else {
+            // Restrict all nodes recursively.
+            let children = node.children.map(i, |node| self.without_extras(node));
+            self.create_node(node.var.clone(), children)
+        }
+    }
+
+    /// Returns a new tree where the only nodes remaining are `extra` nodes.
+    ///
+    /// If there are no extra nodes, then this returns a tree that is always
+    /// true.
+    ///
+    /// This works by assuming all non-`extra` nodes are always true.
+    pub(crate) fn only_extras(&mut self, mut i: NodeId) -> NodeId {
+        if matches!(i, NodeId::TRUE | NodeId::FALSE) {
+            return i;
+        }
+
+        let parent = i;
+        let node = self.shared.node(i);
+        if !matches!(node.var, Variable::Extra(_)) {
+            i = NodeId::FALSE;
+            for child in node.children.nodes() {
+                i = self.or(i, child.negate(parent));
+            }
+            if i.is_true() {
+                return NodeId::TRUE;
+            }
+            self.only_extras(i)
+        } else {
+            // Restrict all nodes recursively.
+            let children = node.children.map(i, |node| self.only_extras(node));
+            self.create_node(node.var.clone(), children)
+        }
     }
 
     /// Simplify this tree by *assuming* that the Python version range provided
@@ -393,7 +588,7 @@ impl InternerGuard<'_> {
         // Look for a `python_full_version` expression, otherwise
         // we recursively simplify.
         let Node {
-            var: Variable::Version(MarkerValueVersion::PythonFullVersion),
+            var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
         else {
@@ -403,7 +598,7 @@ impl InternerGuard<'_> {
             });
             return self.create_node(node.var.clone(), children);
         };
-        let py_range = Range::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
+        let py_range = Ranges::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
         if py_range.is_empty() {
             // Oops, the bounds imply there is nothing that can match,
             // so we always evaluate to false.
@@ -428,12 +623,12 @@ impl InternerGuard<'_> {
         // are known to be satisfied.
         let &(ref first_range, first_node_id) = new.first().unwrap();
         let first_upper = first_range.bounding_range().unwrap().1;
-        let clipped = Range::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
+        let clipped = Ranges::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
         *new.first_mut().unwrap() = (clipped, first_node_id);
 
         let &(ref last_range, last_node_id) = new.last().unwrap();
         let last_lower = last_range.bounding_range().unwrap().0;
-        let clipped = Range::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
+        let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
         *new.last_mut().unwrap() = (clipped, last_node_id);
 
         self.create_node(node.var.clone(), Edges::Version { edges: new })
@@ -459,14 +654,14 @@ impl InternerGuard<'_> {
             return i;
         }
 
-        let py_range = Range::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
+        let py_range = Ranges::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
         if py_range.is_empty() {
             // Oops, the bounds imply there is nothing that can match,
             // so we always evaluate to false.
             return NodeId::FALSE;
         }
         if matches!(i, NodeId::TRUE) {
-            let var = Variable::Version(MarkerValueVersion::PythonFullVersion);
+            let var = Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion);
             let edges = Edges::Version {
                 edges: Edges::from_range(&py_range),
             };
@@ -475,7 +670,7 @@ impl InternerGuard<'_> {
 
         let node = self.shared.node(i);
         let Node {
-            var: Variable::Version(MarkerValueVersion::PythonFullVersion),
+            var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
             children: Edges::Version { ref edges },
         } = node
         else {
@@ -521,14 +716,14 @@ impl InternerGuard<'_> {
             // adjacent ranges map to the same node, which would not be
             // a canonical representation.
             if exclude_node_id == first_node_id {
-                let clipped = Range::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
                 *new.first_mut().unwrap() = (clipped, first_node_id);
             } else {
-                let clipped = Range::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
                 *new.first_mut().unwrap() = (clipped, first_node_id);
 
                 let py_range_lower =
-                    Range::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
+                    Ranges::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
                 new.insert(0, (py_range_lower.complement(), NodeId::FALSE.negate(i)));
             }
         }
@@ -539,19 +734,258 @@ impl InternerGuard<'_> {
             // same reasoning applies here: to maintain a canonical
             // representation.
             if exclude_node_id == last_node_id {
-                let clipped = Range::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
+                let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
                 *new.last_mut().unwrap() = (clipped, last_node_id);
             } else {
-                let clipped = Range::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
+                let clipped = Ranges::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
                 *new.last_mut().unwrap() = (clipped, last_node_id);
 
                 let py_range_upper =
-                    Range::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
+                    Ranges::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
                 new.push((py_range_upper.complement(), exclude_node_id));
             }
         }
         self.create_node(node.var.clone(), Edges::Version { edges: new })
             .negate(i)
+    }
+
+    /// The disjunction of known incompatible conditions.
+    ///
+    /// For example, while the marker specification and grammar do not _forbid_ it, we know that
+    /// both `sys_platform == 'win32'` and `platform_system == 'Darwin'` will never true at the
+    /// same time.
+    ///
+    /// This method thus encodes assumptions about the environment that are not guaranteed by the
+    /// PEP 508 specification alone.
+    fn exclusions(&mut self) -> NodeId {
+        /// Perform a disjunction operation between two nodes.
+        ///
+        /// This is equivalent to [`InternerGuard::or`], with the exception that it does not
+        /// incorporate knowledge from outside the marker algebra.
+        fn disjunction(guard: &mut InternerGuard<'_>, xi: NodeId, yi: NodeId) -> NodeId {
+            // We take advantage of cheap negation here and implement OR in terms
+            // of it's De Morgan complement.
+            conjunction(guard, xi.not(), yi.not()).not()
+        }
+
+        /// Perform a conjunction operation between two nodes.
+        ///
+        /// This is equivalent to [`InternerGuard::and`], with the exception that it does not
+        /// incorporate knowledge from outside the marker algebra.
+        fn conjunction(guard: &mut InternerGuard<'_>, xi: NodeId, yi: NodeId) -> NodeId {
+            if xi.is_true() {
+                return yi;
+            }
+            if yi.is_true() {
+                return xi;
+            }
+            if xi == yi {
+                return xi;
+            }
+            if xi.is_false() || yi.is_false() {
+                return NodeId::FALSE;
+            }
+            // `X and not X` is `false` by definition.
+            if xi.not() == yi {
+                return NodeId::FALSE;
+            }
+
+            let (x, y) = (guard.shared.node(xi), guard.shared.node(yi));
+
+            // Perform Shannon Expansion of the higher order variable.
+            let (func, children) = match x.var.cmp(&y.var) {
+                // X is higher order than Y, apply Y to every child of X.
+                Ordering::Less => {
+                    let children = x.children.map(xi, |node| conjunction(guard, node, yi));
+                    (x.var.clone(), children)
+                }
+                // Y is higher order than X, apply X to every child of Y.
+                Ordering::Greater => {
+                    let children = y.children.map(yi, |node| conjunction(guard, node, xi));
+                    (y.var.clone(), children)
+                }
+                // X and Y represent the same variable, merge their children.
+                Ordering::Equal => {
+                    let children = x
+                        .children
+                        .apply(xi, &y.children, yi, |x, y| conjunction(guard, x, y));
+                    (x.var.clone(), children)
+                }
+            };
+
+            // Create the output node.
+            guard.create_node(func, children)
+        }
+
+        if let Some(exclusions) = self.state.exclusions {
+            return exclusions;
+        }
+        let mut tree = NodeId::FALSE;
+        for (a, b) in [
+            // sys_platform == 'darwin' and platform_system == 'Windows'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Windows".to_string(),
+                },
+            ),
+            // sys_platform == 'darwin' and platform_system == 'Linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Linux".to_string(),
+                },
+            ),
+            // sys_platform == 'win32' and platform_system == 'Darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Darwin".to_string(),
+                },
+            ),
+            // sys_platform == 'win32' and platform_system == 'Linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Linux".to_string(),
+                },
+            ),
+            // sys_platform == 'linux' and platform_system == 'Darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "linux".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Darwin".to_string(),
+                },
+            ),
+            // sys_platform == 'linux' and platform_system == 'Windows'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "linux".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Windows".to_string(),
+                },
+            ),
+            // os_name == 'nt' and sys_platform == 'darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                },
+            ),
+            // os_name == 'nt' and sys_platform == 'linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "linux".to_string(),
+                },
+            ),
+            // os_name == 'posix' and sys_platform == 'win32'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "posix".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                },
+            ),
+            // os_name == 'nt' and platform_system == 'Darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Darwin".to_string(),
+                },
+            ),
+            // os_name == 'nt' and platform_system == 'Linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Linux".to_string(),
+                },
+            ),
+            // os_name == 'posix' and platform_system == 'Windows'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "posix".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Windows".to_string(),
+                },
+            ),
+        ] {
+            let a = self.expression(a);
+            let b = self.expression(b);
+            let a_and_b = conjunction(self, a, b);
+            tree = disjunction(self, tree, a_and_b);
+        }
+        self.state.exclusions = Some(tree);
+        tree
     }
 }
 
@@ -567,30 +1001,44 @@ impl InternerGuard<'_> {
 /// impact.
 #[derive(PartialOrd, Ord, PartialEq, Eq, Hash, Clone, Debug)]
 pub(crate) enum Variable {
+    /// A string marker, such as `os_name`.
+    String(CanonicalMarkerValueString),
     /// A version marker, such as `python_version`.
     ///
     /// This is the highest order variable as it typically contains the most complex
     /// ranges, allowing us to merge ranges at the top-level.
-    Version(MarkerValueVersion),
-    /// A string marker, such as `os_name`.
-    String(MarkerValueString),
+    Version(CanonicalMarkerValueVersion),
     /// A variable representing a `<key> in <value>` expression for a particular
     /// string marker and value.
     In {
-        key: MarkerValueString,
+        key: CanonicalMarkerValueString,
         value: String,
     },
     /// A variable representing a `<value> in <key>` expression for a particular
     /// string marker and value.
     Contains {
-        key: MarkerValueString,
+        key: CanonicalMarkerValueString,
         value: String,
     },
     /// A variable representing the existence or absence of a given extra.
     ///
     /// We keep extras at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
-    Extra(MarkerValueExtra),
+    Extra(CanonicalMarkerValueExtra),
+}
+
+impl Variable {
+    /// Returns `true` if the variable is known to be involved in _at least_ one conflicting
+    /// marker pair.
+    ///
+    /// For example, `sys_platform == 'win32'` and `platform_system == 'Darwin'` are known to
+    /// never be true at the same time.
+    fn is_conflicting_variable(&self) -> bool {
+        let Variable::String(marker) = self else {
+            return false;
+        };
+        marker.is_conflicting()
+    }
 }
 
 /// A decision node in an Algebraic Decision Diagram.
@@ -688,7 +1136,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     Version {
-        edges: SmallVec<(Range<Version>, NodeId)>,
+        edges: SmallVec<(Ranges<Version>, NodeId)>,
     },
     // The edges of a string variable, representing a disjoint set of ranges that cover
     // the output space.
@@ -696,7 +1144,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     String {
-        edges: SmallVec<(Range<String>, NodeId)>,
+        edges: SmallVec<(Ranges<String>, NodeId)>,
     },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
@@ -727,13 +1175,13 @@ impl Edges {
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
     fn from_string(operator: MarkerOperator, value: String) -> Edges {
-        let range: Range<String> = match operator {
-            MarkerOperator::Equal => Range::singleton(value),
-            MarkerOperator::NotEqual => Range::singleton(value).complement(),
-            MarkerOperator::GreaterThan => Range::strictly_higher_than(value),
-            MarkerOperator::GreaterEqual => Range::higher_than(value),
-            MarkerOperator::LessThan => Range::strictly_lower_than(value),
-            MarkerOperator::LessEqual => Range::lower_than(value),
+        let range: Ranges<String> = match operator {
+            MarkerOperator::Equal => Ranges::singleton(value),
+            MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
+            MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
+            MarkerOperator::GreaterEqual => Ranges::higher_than(value),
+            MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
+            MarkerOperator::LessEqual => Ranges::lower_than(value),
             MarkerOperator::TildeEqual => unreachable!("string comparisons with ~= are ignored"),
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
@@ -745,10 +1193,9 @@ impl Edges {
 
     /// Returns the [`Edges`] for a version specifier.
     fn from_specifier(specifier: VersionSpecifier) -> Edges {
-        let specifier =
-            PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
+        let specifier = release_specifier_to_range(normalize_specifier(specifier));
         Edges::Version {
-            edges: Edges::from_range(&specifier.into()),
+            edges: Edges::from_range(&specifier),
         }
     }
 
@@ -756,17 +1203,15 @@ impl Edges {
     ///
     /// Only for use when the `key` is a `PythonVersion`. Normalizes to `PythonFullVersion`.
     fn from_python_versions(versions: Vec<Version>, negated: bool) -> Result<Edges, NodeId> {
-        let mut range = Range::empty();
-
-        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
-        // seem efficient.
-        for version in versions {
-            let specifier = VersionSpecifier::equals_version(version.clone());
-            let specifier = python_version_to_full_version(specifier)?;
-            let pubgrub_specifier =
-                PubGrubSpecifier::from_release_specifier(&normalize_specifier(specifier)).unwrap();
-            range = range.union(&pubgrub_specifier.into());
-        }
+        let mut range: Ranges<Version> = versions
+            .into_iter()
+            .map(|version| {
+                let specifier = VersionSpecifier::equals_version(version.clone());
+                let specifier = python_version_to_full_version(specifier)?;
+                Ok(release_specifier_to_range(normalize_specifier(specifier)))
+            })
+            .flatten_ok()
+            .collect::<Result<Ranges<_>, NodeId>>()?;
 
         if negated {
             range = range.complement();
@@ -778,14 +1223,16 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &Vec<Version>, negated: bool) -> Edges {
-        let mut range = Range::empty();
-
-        // TODO(zanieb): We need to make sure this is performant, repeated unions like this do not
-        // seem efficient.
-        for version in versions {
-            range = range.union(&Range::singleton(version.clone()));
-        }
+    fn from_versions(versions: &[Version], negated: bool) -> Edges {
+        let mut range: Ranges<Version> = versions
+            .iter()
+            .map(|version| {
+                (
+                    Bound::Included(version.clone()),
+                    Bound::Included(version.clone()),
+                )
+            })
+            .collect();
 
         if negated {
             range = range.complement();
@@ -797,7 +1244,7 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_range<T>(range: &Range<T>) -> SmallVec<(Range<T>, NodeId)>
+    fn from_range<T>(range: &Ranges<T>) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Ord + Clone,
     {
@@ -805,13 +1252,13 @@ impl Edges {
 
         // Add the `true` edges.
         for (start, end) in range.iter() {
-            let range = Range::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::TRUE));
         }
 
         // Add the `false` edges.
         for (start, end) in range.complement().iter() {
-            let range = Range::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
             edges.push((range, NodeId::FALSE));
         }
 
@@ -891,12 +1338,12 @@ impl Edges {
     /// In that case, we drop any ranges that do not exist in the domain of both edges. Note that
     /// this should not occur in practice because `requires-python` bounds are global.
     fn apply_ranges<T>(
-        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
         left_parent: NodeId,
-        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
         right_parent: NodeId,
         mut apply: impl FnMut(NodeId, NodeId) -> NodeId,
-    ) -> SmallVec<(Range<T>, NodeId)>
+    ) -> SmallVec<(Ranges<T>, NodeId)>
     where
         T: Clone + Ord,
     {
@@ -959,8 +1406,8 @@ impl Edges {
                     low: right_low,
                 },
             ) => {
-                interner.is_disjoint(high.negate(parent), right_high.negate(right_parent))
-                    && interner.is_disjoint(low.negate(parent), right_low.negate(right_parent))
+                interner.disjointness(high.negate(parent), right_high.negate(right_parent))
+                    && interner.disjointness(low.negate(parent), right_low.negate(right_parent))
             }
             _ => unreachable!("cannot merge two `Edges` of different types"),
         }
@@ -968,9 +1415,9 @@ impl Edges {
 
     // Returns `true` if all intersecting ranges in two range maps are disjoint.
     fn is_disjoint_ranges<T>(
-        left_edges: &SmallVec<(Range<T>, NodeId)>,
+        left_edges: &SmallVec<(Ranges<T>, NodeId)>,
         left_parent: NodeId,
-        right_edges: &SmallVec<(Range<T>, NodeId)>,
+        right_edges: &SmallVec<(Ranges<T>, NodeId)>,
         right_parent: NodeId,
         interner: &mut InternerGuard<'_>,
     ) -> bool
@@ -987,7 +1434,7 @@ impl Edges {
                 }
 
                 // Ensure the intersection is disjoint.
-                if !interner.is_disjoint(
+                if !interner.disjointness(
                     left_child.negate(left_parent),
                     right_child.negate(right_parent),
                 ) {
@@ -1179,7 +1626,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
 }
 
 /// Compares the start of two ranges that are known to be disjoint.
-fn compare_disjoint_range_start<T>(range1: &Range<T>, range2: &Range<T>) -> Ordering
+fn compare_disjoint_range_start<T>(range1: &Ranges<T>, range2: &Ranges<T>) -> Ordering
 where
     T: Ord,
 {
@@ -1199,7 +1646,7 @@ where
 }
 
 /// Returns `true` if two disjoint ranges can be conjoined seamlessly without introducing a gap.
-fn can_conjoin<T>(range1: &Range<T>, range2: &Range<T>) -> bool
+fn can_conjoin<T>(range1: &Ranges<T>, range2: &Ranges<T>) -> bool
 where
     T: Ord + Clone,
 {
@@ -1236,4 +1683,89 @@ impl fmt::Debug for NodeId {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::{NodeId, INTERNER};
+    use crate::MarkerExpression;
+
+    fn expr(s: &str) -> NodeId {
+        INTERNER
+            .lock()
+            .expression(MarkerExpression::from_str(s).unwrap().unwrap())
+    }
+
+    #[test]
+    fn basic() {
+        let m = || INTERNER.lock();
+        let extra_foo = expr("extra == 'foo'");
+        assert!(!extra_foo.is_false());
+
+        let os_foo = expr("os_name == 'foo'");
+        let extra_and_os_foo = m().or(extra_foo, os_foo);
+        assert!(!extra_and_os_foo.is_false());
+        assert!(!m().and(extra_foo, os_foo).is_false());
+
+        let trivially_true = m().or(extra_and_os_foo, extra_and_os_foo.not());
+        assert!(!trivially_true.is_false());
+        assert!(trivially_true.is_true());
+
+        let trivially_false = m().and(extra_foo, extra_foo.not());
+        assert!(trivially_false.is_false());
+
+        let e = m().or(trivially_false, os_foo);
+        assert!(!e.is_false());
+
+        let extra_not_foo = expr("extra != 'foo'");
+        assert!(m().and(extra_foo, extra_not_foo).is_false());
+        assert!(m().or(extra_foo, extra_not_foo).is_true());
+
+        let os_geq_bar = expr("os_name >= 'bar'");
+        assert!(!os_geq_bar.is_false());
+
+        let os_le_bar = expr("os_name < 'bar'");
+        assert!(m().and(os_geq_bar, os_le_bar).is_false());
+        assert!(m().or(os_geq_bar, os_le_bar).is_true());
+
+        let os_leq_bar = expr("os_name <= 'bar'");
+        assert!(!m().and(os_geq_bar, os_leq_bar).is_false());
+        assert!(m().or(os_geq_bar, os_leq_bar).is_true());
+    }
+
+    #[test]
+    fn version() {
+        let m = || INTERNER.lock();
+        let eq_3 = expr("python_version == '3'");
+        let neq_3 = expr("python_version != '3'");
+        let geq_3 = expr("python_version >= '3'");
+        let leq_3 = expr("python_version <= '3'");
+
+        let eq_2 = expr("python_version == '2'");
+        let eq_1 = expr("python_version == '1'");
+        assert!(m().and(eq_2, eq_1).is_false());
+
+        assert_eq!(eq_3.not(), neq_3);
+        assert_eq!(eq_3, neq_3.not());
+
+        assert!(m().and(eq_3, neq_3).is_false());
+        assert!(m().or(eq_3, neq_3).is_true());
+
+        assert_eq!(m().and(eq_3, geq_3), eq_3);
+        assert_eq!(m().and(eq_3, leq_3), eq_3);
+
+        assert_eq!(m().and(geq_3, leq_3), eq_3);
+
+        assert!(!m().and(geq_3, leq_3).is_false());
+        assert!(m().or(geq_3, leq_3).is_true());
+    }
+
+    #[test]
+    fn simplify() {
+        let m = || INTERNER.lock();
+        let x86 = expr("platform_machine == 'x86_64'");
+        let not_x86 = expr("platform_machine != 'x86_64'");
+        let windows = expr("platform_machine == 'Windows'");
+
+        let a = m().and(x86, windows);
+        let b = m().and(not_x86, windows);
+        assert_eq!(m().or(a, b), windows);
+    }
+}

@@ -152,18 +152,6 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         else:
             scenario["python_patch"] = False
 
-    # We don't yet support local versions that aren't expressed as direct dependencies.
-    for scenario in data["scenarios"]:
-        expected = scenario["expected"]
-
-        if scenario["name"] in (
-            "local-less-than-or-equal",
-            "local-simple",
-            "local-transitive-confounding",
-            "local-used-without-sdist",
-        ):
-            expected["satisfiable"] = False
-
     # Split scenarios into `install`, `compile` and `lock` cases
     install_scenarios = []
     compile_scenarios = []
@@ -172,7 +160,6 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
     for scenario in data["scenarios"]:
         resolver_options = scenario["resolver_options"] or {}
         if resolver_options.get("universal"):
-            print(scenario["name"])
             lock_scenarios.append(scenario)
         elif resolver_options.get("python") is not None:
             compile_scenarios.append(scenario)

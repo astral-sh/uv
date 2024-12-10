@@ -45,10 +45,19 @@ impl Pep723Item {
             Self::Remote(metadata) => metadata,
         }
     }
+
+    /// Return the path of the PEP 723 item, if any.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Self::Script(script) => Some(&script.path),
+            Self::Stdin(_) => None,
+            Self::Remote(_) => None,
+        }
+    }
 }
 
 /// A PEP 723 script, including its [`Pep723Metadata`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pep723Script {
     /// The path to the Python script.
     pub path: PathBuf,
@@ -189,7 +198,7 @@ impl Pep723Script {
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
 /// See: <https://peps.python.org/pep-0723/>
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
     pub dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
@@ -249,19 +258,21 @@ impl FromStr for Pep723Metadata {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolUv {
     #[serde(flatten)]
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+    pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
 
@@ -481,4 +492,233 @@ fn serialize_metadata(metadata: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use crate::{serialize_metadata, Pep723Error, ScriptTag};
+
+    #[test]
+    fn missing_space() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        #requires-python = '>=3.11'
+        # ///
+    "};
+
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlock)
+        ));
+    }
+
+    #[test]
+    fn no_closing_pragma() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+    "};
+
+        assert!(matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlock)
+        ));
+    }
+
+    #[test]
+    fn leading_content() {
+        let contents = indoc::indoc! {r"
+        pass # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #   'requests<3',
+        #   'rich',
+        # ]
+        # ///
+        #
+        #
+    "};
+
+        assert_eq!(ScriptTag::parse(contents.as_bytes()).unwrap(), None);
+    }
+
+    #[test]
+    fn simple() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
+
+        let expected_metadata = indoc::indoc! {r"
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
+
+        let expected_data = indoc::indoc! {r"
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.prelude, String::new());
+        assert_eq!(actual.metadata, expected_metadata);
+        assert_eq!(actual.postlude, expected_data);
+    }
+
+    #[test]
+    fn simple_with_shebang() {
+        let contents = indoc::indoc! {r"
+        #!/usr/bin/env python3
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
+
+        let expected_metadata = indoc::indoc! {r"
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
+
+        let expected_data = indoc::indoc! {r"
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get('https://peps.python.org/api/peps.json')
+        data = resp.json()
+    "};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.prelude, "#!/usr/bin/env python3\n".to_string());
+        assert_eq!(actual.metadata, expected_metadata);
+        assert_eq!(actual.postlude, expected_data);
+    }
+    #[test]
+    fn embedded_comment() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        # embedded-csharp = '''
+        # /// <summary>
+        # /// text
+        # ///
+        # /// </summary>
+        # public class MyClass { }
+        # '''
+        # ///
+    "};
+
+        let expected = indoc::indoc! {r"
+        embedded-csharp = '''
+        /// <summary>
+        /// text
+        ///
+        /// </summary>
+        public class MyClass { }
+        '''
+    "};
+
+        let actual = ScriptTag::parse(contents.as_bytes())
+            .unwrap()
+            .unwrap()
+            .metadata;
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn trailing_lines() {
+        let contents = indoc::indoc! {r"
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #     'requests<3',
+        #     'rich',
+        # ]
+        # ///
+        #
+        #
+    "};
+
+        let expected = indoc::indoc! {r"
+        requires-python = '>=3.11'
+        dependencies = [
+            'requests<3',
+            'rich',
+        ]
+    "};
+
+        let actual = ScriptTag::parse(contents.as_bytes())
+            .unwrap()
+            .unwrap()
+            .metadata;
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_serialize_metadata_formatting() {
+        let metadata = indoc::indoc! {r"
+        requires-python = '>=3.11'
+        dependencies = [
+          'requests<3',
+          'rich',
+        ]
+    "};
+
+        let expected_output = indoc::indoc! {r"
+        # /// script
+        # requires-python = '>=3.11'
+        # dependencies = [
+        #   'requests<3',
+        #   'rich',
+        # ]
+        # ///
+    "};
+
+        let result = serialize_metadata(metadata);
+        assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_serialize_metadata_empty() {
+        let metadata = "";
+        let expected_output = "# /// script\n# ///\n";
+
+        let result = serialize_metadata(metadata);
+        assert_eq!(result, expected_output);
+    }
+}

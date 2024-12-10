@@ -9,27 +9,29 @@ use anyhow::{anyhow, Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use tracing::{debug, instrument};
-
+use tracing::{debug, instrument, trace};
+use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, PreviewMode,
+    Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
     SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_pypi_types::Requirement;
+use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
-    PythonRequirement, Resolver, ResolverMarkers,
+    PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -43,11 +45,8 @@ pub struct BuildDispatch<'a> {
     index_locations: &'a IndexLocations,
     index_strategy: IndexStrategy,
     flat_index: &'a FlatIndex,
-    index: &'a InMemoryIndex,
-    git: &'a GitResolver,
-    capabilities: &'a IndexCapabilities,
+    shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
-    in_flight: &'a InFlight,
     build_isolation: BuildIsolation<'a>,
     link_mode: uv_install_wheel::linker::LinkMode,
     build_options: &'a BuildOptions,
@@ -56,8 +55,10 @@ pub struct BuildDispatch<'a> {
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
+    bounds: LowerBound,
     sources: SourceStrategy,
     concurrency: Concurrency,
+    preview: PreviewMode,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -69,10 +70,7 @@ impl<'a> BuildDispatch<'a> {
         index_locations: &'a IndexLocations,
         flat_index: &'a FlatIndex,
         dependency_metadata: &'a DependencyMetadata,
-        index: &'a InMemoryIndex,
-        git: &'a GitResolver,
-        capabilities: &'a IndexCapabilities,
-        in_flight: &'a InFlight,
+        shared_state: SharedState,
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
@@ -80,8 +78,10 @@ impl<'a> BuildDispatch<'a> {
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
+        bounds: LowerBound,
         sources: SourceStrategy,
         concurrency: Concurrency,
+        preview: PreviewMode,
     ) -> Self {
         Self {
             client,
@@ -90,11 +90,8 @@ impl<'a> BuildDispatch<'a> {
             interpreter,
             index_locations,
             flat_index,
-            index,
-            git,
-            capabilities,
+            shared_state,
             dependency_metadata,
-            in_flight,
             index_strategy,
             config_settings,
             build_isolation,
@@ -104,8 +101,10 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
+            bounds,
             sources,
             concurrency,
+            preview,
         }
     }
 
@@ -128,16 +127,20 @@ impl<'a> BuildDispatch<'a> {
 impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
 
+    fn interpreter(&self) -> &Interpreter {
+        self.interpreter
+    }
+
     fn cache(&self) -> &Cache {
         self.cache
     }
 
     fn git(&self) -> &GitResolver {
-        self.git
+        &self.shared_state.git
     }
 
     fn capabilities(&self) -> &IndexCapabilities {
-        self.capabilities
+        &self.shared_state.capabilities
     }
 
     fn dependency_metadata(&self) -> &DependencyMetadata {
@@ -152,17 +155,21 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.config_settings
     }
 
+    fn bounds(&self) -> LowerBound {
+        self.bounds
+    }
+
     fn sources(&self) -> SourceStrategy {
         self.sources
     }
 
-    fn index_locations(&self) -> &IndexLocations {
+    fn locations(&self) -> &IndexLocations {
         self.index_locations
     }
 
     async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
-        let markers = self.interpreter.resolver_markers();
+        let marker_env = self.interpreter.resolver_marker_environment();
         let tags = self.interpreter.tags()?;
 
         let resolver = Resolver::new(
@@ -173,16 +180,19 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
-            ResolverMarkers::specific_environment(markers),
+            ResolverEnvironment::specific(marker_env),
+            // Conflicting groups only make sense when doing
+            // universal resolution.
+            Conflicts::empty(),
             Some(tags),
             self.flat_index,
-            self.index,
+            &self.shared_state.index,
             self.hasher,
             self,
             EmptyInstalledPackages,
             DistributionDatabase::new(self.client, self, self.concurrency.downloads),
         )?;
-        let graph = resolver.resolve().await.with_context(|| {
+        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements
@@ -190,8 +200,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                     .map(|requirement| format!("`{requirement}`"))
                     .join(", ")
             )
-        })?;
-        Ok(Resolution::from(graph))
+        })?);
+        Ok(resolution)
     }
 
     #[instrument(
@@ -229,7 +239,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         } = Planner::new(resolution).build(
             site_packages,
             &Reinstall::default(),
-            &BuildOptions::default(),
+            self.build_options,
             self.hasher,
             self.index_locations,
             self.config_settings,
@@ -264,9 +274,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             );
 
             preparer
-                .prepare(remote, self.in_flight)
-                .await
-                .context("Failed to prepare distributions")?
+                .prepare(remote, &self.shared_state.in_flight, resolution)
+                .await?
         };
 
         // Remove any unnecessary packages.
@@ -310,8 +319,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         source: &'data Path,
         subdirectory: Option<&'data Path>,
-        version_id: Option<String>,
+        install_path: &'data Path,
+        version_id: Option<&'data str>,
         dist: Option<&'data SourceDist>,
+        sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
     ) -> Result<SourceBuild> {
@@ -343,12 +354,15 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let builder = SourceBuild::setup(
             source,
             subdirectory,
+            install_path,
             dist_name,
             dist_version,
             self.interpreter,
             self,
             self.source_build_context.clone(),
             version_id,
+            self.index_locations,
+            sources,
             self.config_settings.clone(),
             self.build_isolation,
             build_kind,
@@ -359,5 +373,119 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         .boxed_local()
         .await?;
         Ok(builder)
+    }
+
+    async fn direct_build<'data>(
+        &'data self,
+        source: &'data Path,
+        subdirectory: Option<&'data Path>,
+        output_dir: &'data Path,
+        build_kind: BuildKind,
+        version_id: Option<&'data str>,
+    ) -> Result<Option<DistFilename>> {
+        // Direct builds are a preview feature with the uv build backend.
+        if self.preview.is_disabled() {
+            trace!("Preview is disabled, not checking for direct build");
+            return Ok(None);
+        }
+
+        let source_tree = if let Some(subdir) = subdirectory {
+            source.join(subdir)
+        } else {
+            source.to_path_buf()
+        };
+
+        // Only perform the direct build if the backend is uv in a compatible version.
+        let source_tree_str = source_tree.display().to_string();
+        let identifier = version_id.unwrap_or_else(|| &source_tree_str);
+        if !check_direct_build(&source_tree, identifier) {
+            trace!("Requirements for direct build not matched: {identifier}");
+            return Ok(None);
+        }
+
+        debug!("Performing direct build for {identifier}");
+
+        let output_dir = output_dir.to_path_buf();
+        let filename = tokio::task::spawn_blocking(move || -> Result<_> {
+            let filename = match build_kind {
+                BuildKind::Wheel => {
+                    let wheel = uv_build_backend::build_wheel(
+                        &source_tree,
+                        &output_dir,
+                        None,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::WheelFilename(wheel)
+                }
+                BuildKind::Sdist => {
+                    let source_dist = uv_build_backend::build_source_dist(
+                        &source_tree,
+                        &output_dir,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::SourceDistFilename(source_dist)
+                }
+                BuildKind::Editable => {
+                    let wheel = uv_build_backend::build_editable(
+                        &source_tree,
+                        &output_dir,
+                        None,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::WheelFilename(wheel)
+                }
+            };
+            Ok(filename)
+        })
+        .await??;
+
+        Ok(Some(filename))
+    }
+}
+
+/// Shared state used during resolution and installation.
+///
+/// All elements are `Arc`s, so we can clone freely.
+#[derive(Default, Clone)]
+pub struct SharedState {
+    /// The resolved Git references.
+    git: GitResolver,
+    /// The fetched package versions and metadata.
+    index: InMemoryIndex,
+    /// The downloaded distributions.
+    in_flight: InFlight,
+    /// The discovered capabilities for each registry index.
+    capabilities: IndexCapabilities,
+}
+
+impl SharedState {
+    pub fn new(
+        git: GitResolver,
+        index: InMemoryIndex,
+        in_flight: InFlight,
+        capabilities: IndexCapabilities,
+    ) -> Self {
+        Self {
+            git,
+            index,
+            in_flight,
+            capabilities,
+        }
+    }
+
+    pub fn git(&self) -> &GitResolver {
+        &self.git
+    }
+
+    pub fn index(&self) -> &InMemoryIndex {
+        &self.index
+    }
+
+    pub fn in_flight(&self) -> &InFlight {
+        &self.in_flight
+    }
+
+    pub fn capabilities(&self) -> &IndexCapabilities {
+        &self.capabilities
     }
 }

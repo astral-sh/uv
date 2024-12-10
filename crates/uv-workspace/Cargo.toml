@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache-key = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git = { workspace = true }
 uv-macros = { workspace = true }
@@ -27,7 +29,6 @@ uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
-either = { workspace = true }
 fs-err = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
@@ -36,7 +37,6 @@ rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
-serde-untagged = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml =  { workspace = true }

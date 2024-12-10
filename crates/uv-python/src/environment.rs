@@ -43,6 +43,7 @@ pub struct InvalidEnvironment {
 #[derive(Debug, Clone)]
 pub enum InvalidEnvironmentKind {
     NotDirectory,
+    Empty,
     MissingExecutable(PathBuf),
 }
 
@@ -128,6 +129,7 @@ impl std::fmt::Display for InvalidEnvironmentKind {
             Self::MissingExecutable(path) => {
                 write!(f, "missing Python executable at `{}`", path.user_display())
             }
+            Self::Empty => write!(f, "directory is empty"),
         }
     }
 }
@@ -174,6 +176,14 @@ impl PythonEnvironment {
             return Err(InvalidEnvironment {
                 path: venv,
                 kind: InvalidEnvironmentKind::NotDirectory,
+            }
+            .into());
+        }
+
+        if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+            return Err(InvalidEnvironment {
+                path: venv,
+                kind: InvalidEnvironmentKind::Empty,
             }
             .into());
         }

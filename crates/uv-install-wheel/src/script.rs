@@ -8,7 +8,7 @@ use crate::{wheel, Error};
 
 /// A script defining the name of the runnable entrypoint and the module and function that should be
 /// run.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub(crate) struct Script {
     pub(crate) name: String,
     pub(crate) module: String,
@@ -94,7 +94,7 @@ pub(crate) fn scripts_from_ini(
         let Some((left, right)) = script.name.split_once('.') else {
             return true;
         };
-        !(left == "pip3" || right.parse::<u8>().is_ok())
+        !(left == "pip3" && right.parse::<u8>().is_ok())
     });
     // ... either has a `pip3` launcher we can use as template for the `pip3.x` users expect.
     if let Some(pip_script) = console_scripts.iter().find(|script| script.name == "pip3") {
@@ -109,7 +109,7 @@ pub(crate) fn scripts_from_ini(
 
 #[cfg(test)]
 mod test {
-    use crate::script::Script;
+    use crate::script::{scripts_from_ini, Script};
 
     #[test]
     fn test_valid_script_names() {
@@ -147,5 +147,75 @@ mod test {
             .unwrap();
         assert_eq!(script.function, "mod_bar.sub_foo.func_baz");
         assert_eq!(script.import_name(), "mod_bar");
+    }
+
+    #[test]
+    fn test_pip3_entry_point_modification() {
+        // Notably pip only applies the modification hack to entry points
+        // called "pip" and "easy_install" -- if there are abi3 style wheels
+        // that contain other versioned entry points, they keep their (probably
+        // incorrect) suffixes.
+        let sample_ini = "
+[console_scripts]
+pip = a:b1
+pip3 = a:b2
+pip3.11 = a:b3
+pip3.x = a:b4
+pip4.11 = a:b5
+memray = a:b6
+memray3.11 = a:b7
+";
+        let (mut console_scripts, _gui_scripts) =
+            scripts_from_ini(None, 99, sample_ini.to_string()).unwrap();
+        console_scripts.sort();
+
+        assert_eq!(
+            Some(&Script {
+                name: "memray".to_string(),
+                module: "a".to_string(),
+                function: "b6".to_string()
+            }),
+            console_scripts.first()
+        );
+        assert_eq!(
+            Some(&Script {
+                name: "memray3.11".to_string(),
+                module: "a".to_string(),
+                function: "b7".to_string()
+            }),
+            console_scripts.get(1)
+        );
+        assert_eq!(
+            Some(&Script {
+                name: "pip".to_string(),
+                module: "a".to_string(),
+                function: "b1".to_string()
+            }),
+            console_scripts.get(2)
+        );
+        assert_eq!(
+            Some(&Script {
+                name: "pip3".to_string(),
+                module: "a".to_string(),
+                function: "b2".to_string()
+            }),
+            console_scripts.get(3)
+        );
+        assert_eq!(
+            Some(&Script {
+                name: "pip3.99".to_string(),
+                module: "a".to_string(),
+                function: "b2".to_string()
+            }),
+            console_scripts.get(4)
+        );
+        assert_eq!(
+            Some(&Script {
+                name: "pip3.x".to_string(),
+                module: "a".to_string(),
+                function: "b4".to_string()
+            }),
+            console_scripts.get(5)
+        );
     }
 }

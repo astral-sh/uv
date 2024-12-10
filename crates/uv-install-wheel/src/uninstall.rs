@@ -33,10 +33,39 @@ pub fn uninstall_wheel(dist_info: &Path) -> Result<Uninstall, Error> {
     let mut file_count = 0usize;
     let mut dir_count = 0usize;
 
+    #[cfg(windows)]
+    let itself = std::env::current_exe().ok();
+
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
     for entry in &record {
         let path = site_packages.join(&entry.path);
+
+        // On Windows, deleting the current executable is a special case.
+        #[cfg(windows)]
+        if let Some(itself) = itself.as_ref() {
+            if itself
+                .file_name()
+                .is_some_and(|itself| path.file_name().is_some_and(|path| itself == path))
+            {
+                if same_file::is_same_file(itself, &path).unwrap_or(false) {
+                    tracing::debug!("Detected self-delete of executable: {}", path.display());
+                    match self_replace::self_delete_outside_path(site_packages) {
+                        Ok(()) => {
+                            trace!("Removed file: {}", path.display());
+                            file_count += 1;
+                            if let Some(parent) = path.parent() {
+                                visited.insert(normalize_path(parent));
+                            }
+                        }
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(err.into()),
+                    }
+                    continue;
+                }
+            }
+        }
+
         match fs::remove_file(&path) {
             Ok(()) => {
                 trace!("Removed file: {}", path.display());

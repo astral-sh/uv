@@ -1,50 +1,48 @@
 # Crates
 
-## [bench](./bench)
+## [uv-bench](./uv-bench)
 
 Functionality for benchmarking uv.
 
-## [cache-key](./cache-key)
+## [uv-cache-key](./uv-cache-key)
 
 Generic functionality for caching paths, URLs, and other resources across platforms.
 
-## [distribution-filename](./distribution-filename)
+## [uv-distribution-filename](./uv-distribution-filename)
 
 Parse built distribution (wheel) and source distribution (sdist) filenames to extract structured
 metadata.
 
-## [distribution-types](./distribution-types)
+## [uv-distribution-types](./uv-distribution-types)
 
 Abstractions for representing built distributions (wheels) and source distributions (sdists), and
 the sources from which they can be downloaded.
 
-## [install-wheel-rs](./install-wheel-rs)
+## [uv-install-wheel-rs](./uv-install-wheel)
 
-Install built distributions (wheels) into a virtual environment.]
+Install built distributions (wheels) into a virtual environment.
 
-## [once-map](./once-map)
+## [uv-once-map](./uv-once-map)
 
 A [`waitmap`](https://github.com/withoutboats/waitmap)-like concurrent hash map for executing tasks
 exactly once.
 
-## [pep440-rs](./pep440-rs)
+## [uv-pep440-rs](./uv-pep440)
 
 Utilities for interacting with Python version numbers and specifiers.
 
-## [pep508-rs](./pep508-rs)
+## [uv-pep508-rs](./uv-pep508)
 
-Utilities for interacting with [PEP 508](https://peps.python.org/pep-0508/) dependency specifiers.
+Utilities for parsing and evaluating
+[dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/),
+previously known as [PEP 508](https://peps.python.org/pep-0508/).
 
-## [platform-host](./platform-host)
-
-Functionality for detecting the current platform (operating system, architecture, etc.).
-
-## [platform-tags](./platform-tags)
+## [uv-platform-tags](./uv-platform-tags)
 
 Functionality for parsing and inferring Python platform tags as per
 [PEP 425](https://peps.python.org/pep-0425/).
 
-## [uv](./uv)
+## [uv-cli](./uv-cli)
 
 Command-line interface for the uv package manager.
 
@@ -98,10 +96,6 @@ Functionality for detecting and leveraging the current Python interpreter.
 
 Normalize package and extra names as per Python specifications.
 
-## [uv-package](./uv-package)
-
-Types and functionality for working with Python packages, e.g., parsing wheel files.
-
 ## [uv-requirements](./uv-requirements)
 
 Utilities for reading package requirements from `pyproject.toml` and `requirements.txt` files.
@@ -118,7 +112,7 @@ Utilities for detecting and manipulating shell environments.
 
 Shared traits for uv, to avoid circular dependencies.
 
-## [pypi-types](./pypi-types)
+## [uv-pypi-types](./uv-pypi-types)
 
 General-purpose type definitions for types used in PyPI-compatible APIs.
 
@@ -134,6 +128,6 @@ User-facing warnings for uv.
 
 Workspace abstractions for uv.
 
-## [requirements-txt](./requirements-txt)
+## [uv-requirements-txt](./uv-requirements-txt)
 
 Functionality for parsing `requirements.txt` files.

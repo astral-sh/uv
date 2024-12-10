@@ -9,6 +9,8 @@ use std::io::Read;
 use std::io::Write;
 use url::Url;
 
+use uv_static::EnvVars;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Credentials {
     /// The name of the user for authentication.
@@ -74,7 +76,7 @@ impl Credentials {
         }
     }
 
-    pub(crate) fn username(&self) -> Option<&str> {
+    pub fn username(&self) -> Option<&str> {
         self.username.as_deref()
     }
 
@@ -82,7 +84,7 @@ impl Credentials {
         self.username.clone()
     }
 
-    pub(crate) fn password(&self) -> Option<&str> {
+    pub fn password(&self) -> Option<&str> {
         self.password.as_deref()
     }
 
@@ -137,6 +139,20 @@ impl Credentials {
                     .into_owned()
             }),
         })
+    }
+
+    /// Extract the [`Credentials`] from the environment, given a named source.
+    ///
+    /// For example, given a name of `"pytorch"`, search for `UV_INDEX_PYTORCH_USERNAME` and
+    /// `UV_INDEX_PYTORCH_PASSWORD`.
+    pub fn from_env(name: impl AsRef<str>) -> Option<Self> {
+        let username = std::env::var(EnvVars::index_username(name.as_ref())).ok();
+        let password = std::env::var(EnvVars::index_password(name.as_ref())).ok();
+        if username.is_none() && password.is_none() {
+            None
+        } else {
+            Some(Self::new(username, password))
+        }
     }
 
     /// Parse [`Credentials`] from an HTTP request, if any.
@@ -230,4 +246,111 @@ impl Credentials {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use insta::assert_debug_snapshot;
+
+    use super::*;
+
+    #[test]
+    fn from_url_no_credentials() {
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        assert_eq!(Credentials::from_url(url), None);
+    }
+
+    #[test]
+    fn from_url_username_and_password() {
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_username("user").unwrap();
+        auth_url.set_password(Some("password")).unwrap();
+        let credentials = Credentials::from_url(&auth_url).unwrap();
+        assert_eq!(credentials.username(), Some("user"));
+        assert_eq!(credentials.password(), Some("password"));
+    }
+
+    #[test]
+    fn from_url_no_username() {
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_password(Some("password")).unwrap();
+        let credentials = Credentials::from_url(&auth_url).unwrap();
+        assert_eq!(credentials.username(), None);
+        assert_eq!(credentials.password(), Some("password"));
+    }
+
+    #[test]
+    fn from_url_no_password() {
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_username("user").unwrap();
+        let credentials = Credentials::from_url(&auth_url).unwrap();
+        assert_eq!(credentials.username(), Some("user"));
+        assert_eq!(credentials.password(), None);
+    }
+
+    #[test]
+    fn authenticated_request_from_url() {
+        let url = Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_username("user").unwrap();
+        auth_url.set_password(Some("password")).unwrap();
+        let credentials = Credentials::from_url(&auth_url).unwrap();
+
+        let mut request = reqwest::Request::new(reqwest::Method::GET, url);
+        request = credentials.authenticate(request);
+
+        let mut header = request
+            .headers()
+            .get(reqwest::header::AUTHORIZATION)
+            .expect("Authorization header should be set")
+            .clone();
+        header.set_sensitive(false);
+
+        assert_debug_snapshot!(header, @r###""Basic dXNlcjpwYXNzd29yZA==""###);
+        assert_eq!(Credentials::from_header_value(&header), Some(credentials));
+    }
+
+    #[test]
+    fn authenticated_request_from_url_with_percent_encoded_user() {
+        let url = Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_username("user@domain").unwrap();
+        auth_url.set_password(Some("password")).unwrap();
+        let credentials = Credentials::from_url(&auth_url).unwrap();
+
+        let mut request = reqwest::Request::new(reqwest::Method::GET, url);
+        request = credentials.authenticate(request);
+
+        let mut header = request
+            .headers()
+            .get(reqwest::header::AUTHORIZATION)
+            .expect("Authorization header should be set")
+            .clone();
+        header.set_sensitive(false);
+
+        assert_debug_snapshot!(header, @r###""Basic dXNlckBkb21haW46cGFzc3dvcmQ=""###);
+        assert_eq!(Credentials::from_header_value(&header), Some(credentials));
+    }
+
+    #[test]
+    fn authenticated_request_from_url_with_percent_encoded_password() {
+        let url = Url::parse("https://example.com/simple/first/").unwrap();
+        let mut auth_url = url.clone();
+        auth_url.set_username("user").unwrap();
+        auth_url.set_password(Some("password==")).unwrap();
+        let credentials = Credentials::from_url(&auth_url).unwrap();
+
+        let mut request = reqwest::Request::new(reqwest::Method::GET, url);
+        request = credentials.authenticate(request);
+
+        let mut header = request
+            .headers()
+            .get(reqwest::header::AUTHORIZATION)
+            .expect("Authorization header should be set")
+            .clone();
+        header.set_sensitive(false);
+
+        assert_debug_snapshot!(header, @r###""Basic dXNlcjpwYXNzd29yZD09""###);
+        assert_eq!(Credentials::from_header_value(&header), Some(credentials));
+    }
+}

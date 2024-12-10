@@ -1,15 +1,19 @@
+use std::io::Cursor;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use flate2::write::GzEncoder;
 use fs_err as fs;
+use fs_err::File;
 use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
 
 use crate::common::{
-    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path, TestContext,
+    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path,
+    venv_to_interpreter, TestContext,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -50,7 +54,7 @@ fn empty_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Audited in [TIME]
     "###
     );
@@ -73,6 +77,41 @@ fn missing_pyproject_toml() {
     error: File not found: `pyproject.toml`
     "###
     );
+}
+
+#[test]
+fn missing_find_links() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("flask")?;
+
+    let error = regex::escape("The system cannot find the path specified. (os error 3)");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(std::iter::once((
+            error.as_str(),
+            "No such file or directory (os error 2)",
+        )))
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--find-links")
+        .arg("./missing")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `--find-links` directory: [TEMP_DIR]/missing
+      Caused by: No such file or directory (os error 2)
+    "###
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -178,7 +217,13 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         unknown = "field"
     "#})?;
 
-    uv_snapshot!(context.pip_install()
+    let mut filters = context.filters();
+    filters.push((
+        "expected one of `native-tls`, `offline`, .*",
+        "expected one of `native-tls`, `offline`, [...]",
+    ));
+
+    uv_snapshot!(filters, context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @r###"
     success: true
@@ -191,10 +236,32 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         |
       2 | unknown = "field"
         | ^^^^^^^
-      unknown field `unknown`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `publish-url`, `trusted-publishing`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `workspace`, `sources`, `dev-dependencies`, `managed`, `package`
+      unknown field `unknown`, expected one of `native-tls`, `offline`, [...]
 
     Resolved in [TIME]
     Audited in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_uv_toml_option_disallowed() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r"
+        managed = true
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "###
     );
 
@@ -231,64 +298,63 @@ dependencies = ["flask==1.0.x"]
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to build: `project @ file://[TEMP_DIR]/path_dep`
-      Caused by: Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      × Failed to build `project @ file://[TEMP_DIR]/path_dep`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
 
-    [stdout]
-    configuration error: `project.dependencies[0]` must be pep508
-    DESCRIPTION:
-        Project dependency specification according to PEP 508
+          [stdout]
+          configuration error: `project.dependencies[0]` must be pep508
+          DESCRIPTION:
+              Project dependency specification according to PEP 508
 
-    GIVEN VALUE:
-        "flask==1.0.x"
+          GIVEN VALUE:
+              "flask==1.0.x"
 
-    OFFENDING RULE: 'format'
+          OFFENDING RULE: 'format'
 
-    DEFINITION:
-        {
-            "$id": "#/definitions/dependency",
-            "title": "Dependency",
-            "type": "string",
-            "format": "pep508"
-        }
+          DEFINITION:
+              {
+                  "$id": "#/definitions/dependency",
+                  "title": "Dependency",
+                  "type": "string",
+                  "format": "pep508"
+              }
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 14, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-        return self._get_build_requires(config_settings, requirements=['wheel'])
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-        self.run_setup()
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-        super().run_setup(setup_script=setup_script)
-      File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-        exec(code, locals())
-      File "<string>", line 1, in <module>
-      File "[CACHE_DIR]/builds-v0/[TMP]/__init__.py", line 104, in setup
-        return distutils.core.setup(**attrs)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/core.py", line 159, in setup
-        dist.parse_config_files()
-      File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 20, in parse_config_files
-        result = old_parse_config_files(self, *args, **kwargs)
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 631, in parse_config_files
-        pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
-      File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 68, in apply_configuration
-        config = read_configuration(filepath, True, ignore_option_errors, dist)
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 129, in read_configuration
-        validate(subset, filepath)
-      File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 57, in validate
-        raise ValueError(f"{error}/n{summary}") from None
-    ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
-    configuration error: `project.dependencies[0]` must be pep508
-
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/__init__.py", line 104, in setup
+              return distutils.core.setup(**attrs)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/core.py", line 159, in setup
+              dist.parse_config_files()
+            File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 20, in parse_config_files
+              result = old_parse_config_files(self, *args, **kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 631, in parse_config_files
+              pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
+            File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 68, in apply_configuration
+              config = read_configuration(filepath, True, ignore_option_errors, dist)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 129, in read_configuration
+              validate(subset, filepath)
+            File "[CACHE_DIR]/builds-v0/[TMP]/pyprojecttoml.py", line 57, in validate
+              raise ValueError(f"{error}/n{summary}") from None
+          ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
+          configuration error: `project.dependencies[0]` must be pep508
     "###
     );
 
@@ -748,6 +814,27 @@ fn reinstall_incomplete() -> Result<()> {
 #[test]
 fn exact_install_removes_extraneous_packages() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
+    // Install anyio
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--exact")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
 
     // Install flask
     uv_snapshot!(context.filters(), context.pip_install()
@@ -770,10 +857,55 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
     "###
     );
 
-    // Install anyio with exact flag removes flask and flask dependencies.
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio==3.7.0")?;
+    // Install requirements file with exact flag removes flask and flask dependencies.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--exact")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+     - blinker==1.7.0
+     - click==8.1.7
+     - flask==3.0.2
+     - itsdangerous==2.1.2
+     - jinja2==3.1.3
+     - markupsafe==2.1.5
+     - werkzeug==3.0.1
+    "###
+    );
+
+    // Install flask again
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("flask"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    requirements_txt.write_str(indoc! {r"
+        anyio==3.7.0
+        flit_core<4.0.0
+        "
+    })?;
+
+    // Install requirements file with exact flag installs flit_core and removes flask and flask dependencies.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--exact")
         .arg("-r")
@@ -787,15 +919,13 @@ fn exact_install_removes_extraneous_packages() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + anyio==3.7.0
      - blinker==1.7.0
      - click==8.1.7
      - flask==3.0.2
-     + idna==3.6
+     + flit-core==3.9.0
      - itsdangerous==2.1.2
      - jinja2==3.1.3
      - markupsafe==2.1.5
-     + sniffio==1.3.1
      - werkzeug==3.0.1
     "###
     );
@@ -1181,7 +1311,7 @@ fn install_editable_bare_cli() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1208,7 +1338,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -1530,25 +1660,24 @@ fn install_git_public_https_missing_branch_or_tag() {
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`git fetch .*`", "`git fetch [...]`"));
+    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
     filters.push(("exit status", "exit code"));
 
     uv_snapshot!(filters, context.pip_install()
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
-      Caused by: Git operation failed
-      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      Caused by: failed to fetch branch or tag `2.0.0`
-      Caused by: process didn't exit successfully: `git fetch [...]` (exit code: 128)
-    --- stderr
-    fatal: couldn't find remote ref refs/tags/2.0.0
-
+      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      ├─▶ failed to fetch branch or tag `2.0.0`
+      ╰─▶ process didn't exit successfully: `git fetch [...]` (exit code: 128)
+          --- stderr
+          fatal: couldn't find remote ref refs/tags/2.0.0
     "###);
 }
 
@@ -1560,7 +1689,7 @@ fn install_git_public_https_missing_commit() {
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`git fetch .*`", "`git fetch [...]`"));
+    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
     filters.push(("exit status", "exit code"));
 
     // There are flakes on Windows where this irrelevant error is appended
@@ -1574,18 +1703,17 @@ fn install_git_public_https_missing_commit() {
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b")
         , @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      Caused by: Git operation failed
-      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      Caused by: failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
-      Caused by: process didn't exit successfully: `git fetch [...]` (exit code: 128)
-    --- stderr
-    fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
-
+      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      ├─▶ failed to fetch commit `79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b`
+      ╰─▶ process didn't exit successfully: `git fetch [...]` (exit code: 128)
+          --- stderr
+          fatal: remote error: upload-pack: not our ref 79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b
     "###);
 }
 
@@ -1778,6 +1906,7 @@ fn install_git_private_https_pat_not_authorized() {
 
     let mut filters = context.filters();
     filters.insert(0, (token, "***"));
+    filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
@@ -1785,19 +1914,18 @@ fn install_git_private_https_pat_not_authorized() {
         .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
         , @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage`
-      Caused by: Git operation failed
-      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
-    --- stderr
-    remote: Support for password authentication was removed on August 13, 2021.
-    remote: Please see https://docs.github.com/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
-    fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
-
+      × Failed to download and build `uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
+      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+          --- stderr
+          remote: Support for password authentication was removed on August 13, 2021.
+          remote: Please see https://docs.github.com/get-started/getting-started-with-git/about-remote-repositories#cloning-with-https-urls for information on currently recommended modes of authentication.
+          fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
     "###);
 }
 
@@ -2062,7 +2190,7 @@ fn install_only_binary_all_and_no_binary_all() {
            cannot be used.
           And because you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: Pre-releases are available for anyio in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###
     );
 
@@ -2262,18 +2390,17 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env("UV_EXCLUDE_NEWER", "2018-10-08"), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::UV_EXCLUDE_NEWER, "2018-10-08"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: project @ file://[TEMP_DIR]/
-      Caused by: Failed to resolve requirements from `setup.py` build
-      Caused by: No solution found when resolving: `setuptools>=40.8.0`
-      Caused by: Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -3101,7 +3228,7 @@ fn config_settings() {
 /// Reinstall a duplicate package in a virtual environment.
 #[test]
 fn reinstall_duplicate() -> Result<()> {
-    use crate::common::copy_dir_all;
+    use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
     let context1 = TestContext::new("3.12");
@@ -3363,7 +3490,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3383,7 +3510,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3409,7 +3536,7 @@ requires-python = ">=3.8"
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -3457,7 +3584,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3477,7 +3604,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3494,7 +3621,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3515,7 +3642,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3546,7 +3673,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3579,7 +3706,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3600,7 +3727,7 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3656,7 +3783,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3676,7 +3803,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -3699,7 +3826,7 @@ fn invalidate_path_on_commit() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -3924,18 +4051,17 @@ fn no_build_isolation() -> Result<()> {
         .arg("requirements.in")
         .arg("--no-build-isolation"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+      × Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'setuptools'
-
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+          ModuleNotFoundError: No module named 'setuptools'
     "###
     );
 
@@ -3993,18 +4119,17 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
         .arg("requirements.in")
         .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+      × Failed to download and build `anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz`
+      ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'setuptools'
-
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+          ModuleNotFoundError: No module named 'setuptools'
     "###
     );
 
@@ -4660,6 +4785,8 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
     Request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "###
     );
 }
@@ -4701,6 +4828,8 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
     Request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "###
     );
 }
@@ -4797,7 +4926,7 @@ fn deptry_gitignore() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at [VENV]/
+    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -5315,7 +5444,7 @@ fn already_installed_local_version_of_remote_package() {
 #[cfg(unix)]
 fn already_installed_multiple_versions() -> Result<()> {
     fn prepare(context: &TestContext) -> Result<()> {
-        use crate::common::copy_dir_all;
+        use uv_fs::copy_dir_all;
 
         // Install into the base environment
         context.pip_install().arg("anyio==3.7.0").assert().success();
@@ -5656,21 +5785,20 @@ fn require_hashes_mismatch() -> Result<()> {
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
-      Caused by: Hash mismatch for `anyio==4.0.0`
+      × Failed to download `anyio==4.0.0`
+      ╰─▶ Hash mismatch for `anyio==4.0.0`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "###
     );
 
@@ -6119,43 +6247,81 @@ fn verify_hashes_missing_version() -> Result<()> {
 fn verify_hashes_mismatch() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
-        anyio==4.0.0 \
-            --hash=sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
-            --hash=sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
         idna==3.6 \
-            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
-            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
-            # via anyio
-        sniffio==1.3.1 \
             --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
             --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
-            # via anyio
     "})?;
 
     // Raise an error.
     uv_snapshot!(context.pip_install()
+        .arg("--no-deps")
         .arg("-r")
         .arg("requirements.txt")
         .arg("--verify-hashes"), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    error: Failed to prepare distributions
-      Caused by: Failed to fetch wheel: anyio==4.0.0
-      Caused by: Hash mismatch for `anyio==4.0.0`
+    Resolved 1 package in [TIME]
+      × Failed to download `idna==3.6`
+      ╰─▶ Hash mismatch for `idna==3.6`
 
-    Expected:
-      sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-      sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+          Expected:
+            sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2
+            sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
 
-    Computed:
-      sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          Computed:
+            sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+    "###
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("--no-deps")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--no-verify-hashes"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "###
+    );
+
+    Ok(())
+}
+
+/// Provide the correct hash with `--verify-hashes`.
+#[test]
+fn verify_hashes_match() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        idna==3.6 \
+            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("--no-deps")
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
     "###
     );
 
@@ -6950,18 +7116,17 @@ fn install_build_isolation_package() -> Result<()> {
         .arg("iniconfig")
         .arg(package.path()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to download and build: `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      Caused by: Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
+      × Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      ╰─▶ Build backend failed to determine metadata through `prepare_metadata_for_build_wheel` (exit status: 1)
 
-    [stderr]
-    Traceback (most recent call last):
-      File "<string>", line 8, in <module>
-    ModuleNotFoundError: No module named 'hatchling'
-
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 8, in <module>
+          ModuleNotFoundError: No module named 'hatchling'
     "###
     );
 
@@ -7208,7 +7373,7 @@ fn sklearn() {
     let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
         .chain(context.filters())
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r#"
+    uv_snapshot!(filters, context.pip_install().arg("sklearn"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7219,7 +7384,7 @@ fn sklearn() {
 
           [stderr]
           The 'sklearn' PyPI package is deprecated, use 'scikit-learn'
-          rather than 'sklearn' for pip commands. 
+          rather than 'sklearn' for pip commands.
 
           Here is how to fix this error in the main use cases:
           - use 'pip install scikit-learn' rather than 'pip install sklearn'
@@ -7235,6 +7400,234 @@ fn sklearn() {
           https://github.com/scikit-learn/sklearn-pypi-package
 
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
-    "#
+    "###
     );
+}
+
+#[test]
+fn resolve_derivation_chain() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["wsgiref"]
+        "#
+    })?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([
+            (r"exit code: 1", "exit status: 1"),
+            (r"/.*/src", "/[TMP]/src"),
+        ])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg("-e")
+        .arg("."), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `wsgiref==0.1.2`
+      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=['wheel'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+              exec(code, locals())
+            File "<string>", line 5, in <module>
+            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+              print "Setuptools version",version,"or greater has been installed."
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
+
+      help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+    "###
+    );
+
+    Ok(())
+}
+
+/// Ensure that `UV_NO_INSTALLER_METADATA` env var is respected.
+#[test]
+fn respect_no_installer_metadata_env_var() {
+    let context = TestContext::new("3.12");
+
+    // Install urllib3.
+    uv_snapshot!(context.pip_install()
+        .arg("urllib3==2.2.1")
+        .arg("--strict")
+        .env(EnvVars::UV_NO_INSTALLER_METADATA, "1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + urllib3==2.2.1
+    "###
+    );
+
+    context.assert_command("import urllib3").success();
+
+    // Assert INSTALLER file was _not_ created.
+    let installer_file = context
+        .site_packages()
+        .join("urllib3-2.2.3.dist-info")
+        .join("INSTALLER");
+    assert!(!installer_file.exists());
+}
+
+/// Check that we error if a source dist lies about its built wheel version.
+#[test]
+fn test_dynamic_version_sdist_wrong_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a source dist that has a version in its name, a dynamic version in pyproject.toml,
+    // but reports the wrong version when built.
+    let pyproject_toml = r#"
+    [project]
+    name = "foo"
+    requires-python = ">=3.9"
+    dependencies = []
+    dynamic = ["version"]
+    "#;
+
+    let setup_py = indoc! {r#"
+    from setuptools import setup
+
+    setup(name="foo", version="10.11.12")
+    "#};
+
+    let source_dist = context.temp_dir.child("foo-1.2.3.tar.gz");
+    // Flush the file after we're done.
+    {
+        let file = File::create(source_dist.path())?;
+        let enc = GzEncoder::new(file, flate2::Compression::default());
+        let mut tar = tar::Builder::new(enc);
+
+        for (path, contents) in [
+            ("foo-1.2.3/pyproject.toml", pyproject_toml),
+            ("foo-1.2.3/setup.py", setup_py),
+        ] {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(contents.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append_data(&mut header, path, Cursor::new(contents))?;
+        }
+        tar.finish()?;
+    }
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(source_dist.path()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `foo @ file://[TEMP_DIR]/foo-1.2.3.tar.gz`
+      ╰─▶ Package metadata version `10.11.12` does not match given version `1.2.3`
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package with multiple wheels at the same version, differing only in the build tag. We
+/// should choose the wheel with the highest build tag.
+#[test]
+fn build_tag() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("build-tag")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + build-tag==1.0.0
+    "###
+    );
+
+    // Ensure that we choose the highest build tag (5).
+    uv_snapshot!(Command::new(venv_to_interpreter(&context.venv))
+        .arg("-B")
+        .arg("-c")
+        .arg("import build_tag; build_tag.main()")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    5
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn missing_subdirectory_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("source-distribution @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `source-distribution @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing`
+      ╰─▶ The source distribution `git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing` has no subdirectory `missing`
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn missing_subdirectory_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing`
+      ╰─▶ The source distribution `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing` has no subdirectory `missing`
+    "###
+    );
+
+    Ok(())
 }

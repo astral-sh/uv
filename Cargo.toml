@@ -31,13 +31,15 @@ uv-cli = { path = "crates/uv-cli" }
 uv-client = { path = "crates/uv-client" }
 uv-configuration = { path = "crates/uv-configuration" }
 uv-console = { path = "crates/uv-console" }
+uv-dirs = { path = "crates/uv-dirs" }
 uv-dispatch = { path = "crates/uv-dispatch" }
 uv-distribution = { path = "crates/uv-distribution" }
 uv-distribution-filename = { path = "crates/uv-distribution-filename" }
 uv-distribution-types = { path = "crates/uv-distribution-types" }
 uv-extract = { path = "crates/uv-extract" }
-uv-fs = { path = "crates/uv-fs" }
+uv-fs = { path = "crates/uv-fs", features = ["serde", "tokio"] }
 uv-git = { path = "crates/uv-git" }
+uv-globfilter = { path = "crates/uv-globfilter" }
 uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { path = "crates/uv-installer" }
 uv-macros = { path = "crates/uv-macros" }
@@ -45,10 +47,9 @@ uv-metadata = { path = "crates/uv-metadata" }
 uv-normalize = { path = "crates/uv-normalize" }
 uv-once-map = { path = "crates/uv-once-map" }
 uv-options-metadata = { path = "crates/uv-options-metadata" }
-uv-pep440 = { path = "crates/uv-pep440", features = ["tracing"] }
+uv-pep440 = { path = "crates/uv-pep440", features = ["tracing", "rkyv", "version-ranges"] }
 uv-pep508 = { path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
 uv-platform-tags = { path = "crates/uv-platform-tags" }
-uv-pubgrub = { path = "crates/uv-pubgrub" }
 uv-publish = { path = "crates/uv-publish" }
 uv-pypi-types = { path = "crates/uv-pypi-types" }
 uv-python = { path = "crates/uv-python" }
@@ -60,6 +61,7 @@ uv-settings = { path = "crates/uv-settings" }
 uv-shell = { path = "crates/uv-shell" }
 uv-state = { path = "crates/uv-state" }
 uv-static = { path = "crates/uv-static" }
+uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-tool = { path = "crates/uv-tool" }
 uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
@@ -70,18 +72,19 @@ uv-workspace = { path = "crates/uv-workspace" }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 async-channel = { version = "2.3.1" }
-async-compression = { version = "0.4.12" }
+async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
-async_http_range_reader = { version = "0.8.0" }
-async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "011b24604fa7bc223daaad7712c0694bac8f0a87", features = ["deflate", "tokio"] }
-axoupdater = { version = "0.7.2", default-features = false }
+async_http_range_reader = { version = "0.9.1" }
+async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["deflate", "tokio"] }
+axoupdater = { version = "0.8.2", default-features = false }
 backoff = { version = "0.4.0" }
 base64 = { version = "0.22.1" }
+bitflags = { version = "2.6.0" }
 boxcar = { version = "0.2.5" }
 bytecheck = { version = "0.8.0" }
 cachedir = { version = "0.3.1" }
 cargo-util = { version = "0.2.14" }
-clap = { version = "4.5.17" }
+clap = { version = "4.5.17", features = ["derive", "env", "string", "wrap_help"] }
 clap_complete_command = { version = "0.6.1" }
 configparser = { version = "3.1.0" }
 console = { version = "0.15.8", default-features = false }
@@ -89,19 +92,20 @@ csv = { version = "1.3.0" }
 ctrlc = { version = "3.4.5" }
 dashmap = { version = "6.1.0" }
 data-encoding = { version = "2.6.0" }
-directories = { version = "5.0.1" }
-dirs-sys = { version = "0.4.1" }
+dotenvy = { version = "0.15.7" }
 dunce = { version = "1.0.5" }
 either = { version = "1.13.0" }
 encoding_rs_io = { version = "0.1.7" }
 etcetera = { version = "0.8.0" }
 flate2 = { version = "1.0.33", default-features = false }
-fs-err = { version = "2.11.0" }
+fs-err = { version = "3.0.0", features = ["tokio"] }
 fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
+globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
-goblin = { version = "0.8.2", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
+goblin = { version = "0.9.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
+hashbrown = { version = "0.15.1" }
 hex = { version = "0.4.3" }
 home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
@@ -110,37 +114,41 @@ indexmap = { version = "2.5.0" }
 indicatif = { version = "0.17.8" }
 indoc = { version = "2.0.5" }
 itertools = { version = "0.13.0" }
-jiff = { version = "0.1.13", features = ["serde"] }
+jiff = { version = "0.1.14", features = ["serde"] }
 junction = { version = "1.2.0" }
 krata-tokio-tar = { version = "0.4.2" }
 mailparse = { version = "0.15.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
-miette = { version = "7.2.0" }
+miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nanoid = { version = "0.4.0" }
+nix = { version = "0.29.0" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 petgraph = { version = "0.6.5" }
 platform-info = { version = "2.0.3" }
 proc-macro2 = { version = "1.0.86" }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "388685a8711092971930986644cfed152d1a1f6c" }
+procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
+pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "57832d0588fbb7aab824813481104761dc1c7740" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
-reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2"] }
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913", features = ["multipart"] }
-reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
+regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
+reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
+reqwest-middleware = { version = "0.4.0", features = ["multipart"] }
+reqwest-retry = { version = "0.7.0" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
-rust-netrc = { git = "https://github.com/gribouille/netrc", rev = "544f3890b621f0dc30fcefb4f804269c160ce2e9" }
+rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
 rustix = { version = "0.38.37", default-features = false, features = ["fs", "std"] }
 same-file = { version = "1.0.6" }
 schemars = { version = "0.8.21", features = ["url"] }
 seahash = { version = "4.1.0" }
-serde = { version = "1.0.210", features = ["derive"] }
+self-replace = { version = "1.5.0" }
+serde = { version = "1.0.210", features = ["derive", "rc"] }
 serde-untagged = { version = "0.1.6" }
 serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
@@ -148,14 +156,15 @@ smallvec = { version = "1.13.2" }
 spdx = { version = "0.10.6" }
 syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
+tar = { version = "0.4.43" }
 target-lexicon = { version = "0.12.16" }
-tempfile = { version = "3.12.0" }
+tempfile = { version = "3.14.0" }
 textwrap = { version = "0.16.1" }
-thiserror = { version = "1.0.63" }
-tl = { git = "https://github.com/charliermarsh/tl.git", rev = "6e25b2ee2513d75385101a8ff9f591ef51f314ec" }
-tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", "signal", "sync"] }
+thiserror = { version = "2.0.0" }
+tl = { git = "https://github.com/astral-sh/tl.git", rev = "6e25b2ee2513d75385101a8ff9f591ef51f314ec" }
+tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", "rt", "signal", "sync"] }
 tokio-stream = { version = "0.1.16" }
-tokio-util = { version = "0.7.12", features = ["compat"] }
+tokio-util = { version = "0.7.12", features = ["compat", "io"] }
 toml = { version = "0.8.19" }
 toml_edit = { version = "0.22.21", features = ["serde"] }
 tracing = { version = "0.1.40" }
@@ -164,11 +173,12 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "re
 tracing-tree = { version = "0.4.0" }
 unicode-width = { version = "0.1.13" }
 unscanny = { version = "0.1.0" }
-url = { version = "2.5.2" }
+url = { version = "2.5.2", features = ["serde"] }
 urlencoding = { version = "2.1.3" }
+version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "57832d0588fbb7aab824813481104761dc1c7740" }
 walkdir = { version = "2.5.0" }
-which = { version = "6.0.3", features = ["regex"] }
-windows-registry = { version = "0.2.0" }
+which = { version = "7.0.0", features = ["regex"] }
+windows-registry = { version = "0.3.0" }
 windows-result = { version = "0.2.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO"] }
 winreg = { version = "0.52.0" }
@@ -179,9 +189,6 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
 ignored = ["flate2", "xz2"]
-
-[patch.crates-io]
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "5e3eaf254b5bd481c75d2710eed055f95b756913" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"
@@ -215,6 +222,7 @@ get_unwrap = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
+if_not_else = "allow"
 
 [profile.release]
 strip = true
@@ -276,10 +284,10 @@ strip = "debuginfo"
 [profile.dist]
 inherits = "release"
 
-# Config for 'cargo dist'
+# Config for 'dist'
 [workspace.metadata.dist]
-# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.22.1"
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.25.2-prerelease.3"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
@@ -309,13 +317,13 @@ targets = [
 ]
 # Whether to auto-include files like READMEs, LICENSEs, and CHANGELOGs (default true)
 auto-includes = false
-# Whether cargo-dist should create a Github Release or use an existing draft
+# Whether dist should create a Github Release or use an existing draft
 create-release = true
 # Which actions to run on pull requests
 pr-run-mode = "skip"
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
-# Which phase cargo-dist should use to create the GitHub release
+# Which phase dist should use to create the GitHub release
 github-release = "announce"
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
@@ -330,4 +338,4 @@ github-custom-job-permissions = { "build-docker" = { packages = "write", content
 # Whether to install an updater program
 install-updater = false
 # Path that installers should place binaries in
-install-path = "CARGO_HOME"
+install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]

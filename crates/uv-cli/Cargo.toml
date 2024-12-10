@@ -46,4 +46,5 @@ default = []
 self-update = []
 
 [build-dependencies]
+uv-static = { workspace = true }
 fs-err = { workspace = true }

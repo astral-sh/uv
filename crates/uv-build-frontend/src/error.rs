@@ -57,6 +57,8 @@ static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    Lowering(#[from] uv_distribution::MetadataError),
     #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
@@ -106,17 +108,22 @@ impl Display for MissingHeaderCause {
                 {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{header}\" for {package_name}@{package_version}",
+                        "This error likely indicates that you need to install a library that provides \"{}\" for `{}`",
+                        header.cyan(),
+                        format!("{package_name}@{package_version}").cyan(),
                     )
                 } else if let Some(version_id) = &self.version_id {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{header}\" for {version_id}",
+                        "This error likely indicates that you need to install a library that provides \"{}\" for `{}`",
+                        header.cyan(),
+                        version_id.cyan(),
                     )
                 } else {
                     write!(
                         f,
-                        "This error likely indicates that you need to install a library that provides \"{header}\"",
+                        "This error likely indicates that you need to install a library that provides \"{}\"",
+                        header.cyan(),
                     )
                 }
             }
@@ -126,17 +133,25 @@ impl Display for MissingHeaderCause {
                 {
                     write!(
                         f,
-                        "This error likely indicates that you need to install the library that provides a shared library for {library} for {package_name}@{package_version} (e.g., lib{library}-dev)",
+                        "This error likely indicates that you need to install the library that provides a shared library for `{}` for `{}` (e.g., `{}`)",
+                        library.cyan(),
+                        format!("{package_name}@{package_version}").cyan(),
+                        format!("lib{library}-dev").cyan(),
                     )
                 } else if let Some(version_id) = &self.version_id {
                     write!(
                         f,
-                        "This error likely indicates that you need to install the library that provides a shared library for {library} for {version_id} (e.g., lib{library}-dev)",
+                        "This error likely indicates that you need to install the library that provides a shared library for `{}` for `{}` (e.g., `{}`)",
+                        library.cyan(),
+                        version_id.cyan(),
+                        format!("lib{library}-dev").cyan(),
                     )
                 } else {
                     write!(
                         f,
-                        "This error likely indicates that you need to install the library that provides a shared library for {library} (e.g., lib{library}-dev)",
+                        "This error likely indicates that you need to install the library that provides a shared library for `{}` (e.g., `{}`)",
+                        library.cyan(),
+                        format!("lib{library}-dev").cyan(),
                     )
                 }
             }
@@ -146,17 +161,36 @@ impl Display for MissingHeaderCause {
                 {
                     write!(
                         f,
-                        "This error likely indicates that {package_name}@{package_version} depends on {package}, but doesn't declare it as a build dependency. If {package_name} is a first-party package, consider adding {package} to its `build-system.requires`. Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`."
+                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. If `{}` is a first-party package, consider adding `{}` to its `{}`. Otherwise, `{}` into the environment and re-run with `{}`.",
+                        format!("{package_name}@{package_version}").cyan(),
+                        package.cyan(),
+                        package_name.cyan(),
+                        package.cyan(),
+                        "build-system.requires".green(),
+                        format!("uv pip install {package}").green(),
+                        "--no-build-isolation".green(),
                     )
                 } else if let Some(version_id) = &self.version_id {
                     write!(
                         f,
-                        "This error likely indicates that {version_id} depends on {package}, but doesn't declare it as a build dependency. If {version_id} is a first-party package, consider adding {package} to its `build-system.requires`. Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`.",
+                        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. If `{}` is a first-party package, consider adding `{}` to its `{}`. Otherwise, `{}` into the environment and re-run with `{}`.",
+                        version_id.cyan(),
+                        package.cyan(),
+                        version_id.cyan(),
+                        package.cyan(),
+                        "build-system.requires".green(),
+                        format!("uv pip install {package}").green(),
+                        "--no-build-isolation".green(),
                     )
                 } else {
                     write!(
                         f,
-                        "This error likely indicates that a package depends on {package}, but doesn't declare it as a build dependency. If the package is a first-party package, consider adding {package} to its `build-system.requires`. Otherwise, `uv pip install {package}` into the environment and re-run with `--no-build-isolation`.",
+                        "This error likely indicates that a package depends on `{}`, but doesn't declare it as a build dependency. If the package is a first-party package, consider adding `{}` to its `{}`. Otherwise, `{}` into the environment and re-run with `{}`.",
+                        package.cyan(),
+                        package.cyan(),
+                        "build-system.requires".green(),
+                        format!("uv pip install {package}").green(),
+                        "--no-build-isolation".green(),
                     )
                 }
             }
@@ -166,12 +200,18 @@ impl Display for MissingHeaderCause {
                 {
                     write!(
                         f,
-                        "{package} was removed from the standard library in Python {version}. Consider adding a constraint (like `{package_name} >{package_version}`) to avoid building a version of {package_name} that depends on {package}.",
+                        "`{}` was removed from the standard library in Python {version}. Consider adding a constraint (like `{}`) to avoid building a version of `{}` that depends on `{}`.",
+                        package.cyan(),
+                        format!("{package_name} >{package_version}").green(),
+                        package_name.cyan(),
+                        package.cyan(),
                     )
                 } else {
                     write!(
                         f,
-                        "{package} was removed from the standard library in Python {version}. Consider adding a constraint to avoid building a package-version that depends on {package}.",
+                        "`{}` was removed from the standard library in Python {version}. Consider adding a constraint to avoid building a package that depends on `{}`.",
+                        package.cyan(),
+                        package.cyan(),
                     )
                 }
             }
@@ -217,7 +257,6 @@ pub struct MissingHeaderError {
     exit_code: ExitStatus,
     stdout: Vec<String>,
     stderr: Vec<String>,
-    #[source]
     cause: MissingHeaderCause,
 }
 
@@ -225,21 +264,21 @@ impl Display for MissingHeaderError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} ({})", self.message, self.exit_code)?;
 
-        let mut non_empty = false;
-
         if self.stdout.iter().any(|line| !line.trim().is_empty()) {
             write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout.join("\n"))?;
-            non_empty = true;
         }
 
         if self.stderr.iter().any(|line| !line.trim().is_empty()) {
             write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr.join("\n"))?;
-            non_empty = true;
         }
 
-        if non_empty {
-            writeln!(f)?;
-        }
+        write!(
+            f,
+            "\n\n{}{} {}",
+            "hint".bold().cyan(),
+            ":".bold(),
+            self.cause
+        )?;
 
         Ok(())
     }
@@ -399,11 +438,9 @@ mod test {
               |          ^~~~~~~~~~~~~~~~~~~
         compilation terminated.
         error: command '/usr/bin/gcc' failed with exit code 1
+
+        hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz-1.11`
         "###);
-        insta::assert_snapshot!(
-            std::error::Error::source(&err).unwrap(),
-            @r###"This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for pygraphviz-1.11"###
-        );
     }
 
     #[test]
@@ -445,11 +482,9 @@ mod test {
         /usr/bin/ld: cannot find -lncurses: No such file or directory
         collect2: error: ld returned 1 exit status
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
+
+        hint: This error likely indicates that you need to install the library that provides a shared library for `ncurses` for `pygraphviz-1.11` (e.g., `libncurses-dev`)
         "###);
-        insta::assert_snapshot!(
-            std::error::Error::source(&err).unwrap(),
-            @"This error likely indicates that you need to install the library that provides a shared library for ncurses for pygraphviz-1.11 (e.g., libncurses-dev)"
-        );
     }
 
     #[test]
@@ -493,11 +528,9 @@ mod test {
            or: setup.py cmd --help
 
         error: invalid command 'bdist_wheel'
+
+        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
         "###);
-        insta::assert_snapshot!(
-            std::error::Error::source(&err).unwrap(),
-            @"This error likely indicates that pygraphviz-1.11 depends on wheel, but doesn't declare it as a build dependency. If pygraphviz-1.11 is a first-party package, consider adding wheel to its `build-system.requires`. Otherwise, `uv pip install wheel` into the environment and re-run with `--no-build-isolation`."
-        );
     }
 
     #[test]
@@ -534,10 +567,8 @@ mod test {
         [stderr]
         import distutils.core
         ModuleNotFoundError: No module named 'distutils'
+
+        hint: `distutils` was removed from the standard library in Python 3.12. Consider adding a constraint (like `pygraphviz >1.11`) to avoid building a version of `pygraphviz` that depends on `distutils`.
         "###);
-        insta::assert_snapshot!(
-            std::error::Error::source(&err).unwrap(),
-            @"distutils was removed from the standard library in Python 3.12. Consider adding a constraint (like `pygraphviz >1.11`) to avoid building a version of pygraphviz that depends on distutils."
-        );
     }
 }

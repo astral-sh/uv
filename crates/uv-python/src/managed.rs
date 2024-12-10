@@ -1,15 +1,20 @@
 use core::fmt;
-use fs_err as fs;
-use itertools::Itertools;
 use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use thiserror::Error;
-use tracing::warn;
 
+use fs_err as fs;
+use itertools::Itertools;
+use same_file::is_same_file;
+use thiserror::Error;
+use tracing::{debug, warn};
+
+use uv_fs::{symlink_or_copy_file, LockedFile, Simplified};
 use uv_state::{StateBucket, StateStore};
+use uv_static::EnvVars;
+use uv_trampoline_builder::{windows_python_launcher, Launcher};
 
 use crate::downloads::Error as DownloadError;
 use crate::implementation::{
@@ -21,9 +26,6 @@ use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::{PythonRequest, PythonVariant};
-use uv_fs::{LockedFile, Simplified};
-use uv_static::EnvVars;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -44,21 +46,49 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error("Missing expected Python executable at {}", _0.user_display())]
+    MissingExecutable(PathBuf),
+    #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
+    CanonicalizeExecutable {
+        from: PathBuf,
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Failed to create Python executable link at {} from {}", to.user_display(), from.user_display())]
+    LinkExecutable {
+        from: PathBuf,
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Failed to create directory for Python executable link at {}", to.user_display())]
+    ExecutableDirectory {
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
     #[error("Failed to read Python installation directory: {0}", dir.user_display())]
     ReadError {
         dir: PathBuf,
         #[source]
         err: io::Error,
     },
+    #[error("Failed to find a directory to install executables into")]
+    NoExecutableDirectory,
+    #[error(transparent)]
+    LauncherError(#[from] uv_trampoline_builder::Error),
     #[error("Failed to read managed Python directory name: {0}")]
     NameError(String),
+    #[error("Failed to construct absolute path to managed Python directory: {}", _0.user_display())]
+    AbsolutePath(PathBuf, #[source] std::io::Error),
     #[error(transparent)]
     NameParseError(#[from] installation::PythonInstallationKeyError),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
 }
 /// A collection of uv-managed Python installations installed on the current system.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ManagedPythonInstallations {
     /// The path to the top-level directory of the installed Python versions.
     root: PathBuf,
@@ -97,9 +127,9 @@ impl ManagedPythonInstallations {
         ))
     }
 
-    /// Return the location of the cache directory for managed Python installations.
-    pub fn cache(&self) -> PathBuf {
-        self.root.join(".cache")
+    /// Return the location of the scratch directory for managed Python installations.
+    pub fn scratch(&self) -> PathBuf {
+        self.root.join(".temp")
     }
 
     /// Initialize the Python installation directory.
@@ -126,9 +156,9 @@ impl ManagedPythonInstallations {
         // Create the directory, if it doesn't exist.
         fs::create_dir_all(root)?;
 
-        // Create the cache directory, if it doesn't exist.
-        let cache = self.cache();
-        fs::create_dir_all(&cache)?;
+        // Create the scratch directory, if it doesn't exist.
+        let scratch = self.scratch();
+        fs::create_dir_all(&scratch)?;
 
         // Add a .gitignore.
         match fs::OpenOptions::new()
@@ -177,7 +207,7 @@ impl ManagedPythonInstallations {
                 })
             }
         };
-        let cache = self.cache();
+        let cache = self.scratch();
         Ok(dirs
             .into_iter()
             .filter(|path| *path != cache)
@@ -258,18 +288,78 @@ impl ManagedPythonInstallation {
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
 
+        let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
+
         Ok(Self { path, key })
     }
 
-    /// The path to this toolchain's Python executable.
+    /// The path to this managed installation's Python executable.
+    ///
+    /// If the installation has multiple execututables i.e., `python`, `python3`, etc., this will
+    /// return the _canonical_ executable name which the other names link to. On Unix, this is
+    /// `python{major}.{minor}{variant}` and on Windows, this is `python{exe}`.
     pub fn executable(&self) -> PathBuf {
-        if cfg!(windows) {
-            self.python_dir().join("python.exe")
+        let implementation = match self.implementation() {
+            ImplementationName::CPython => "python",
+            ImplementationName::PyPy => "pypy",
+            ImplementationName::GraalPy => {
+                unreachable!("Managed installations of GraalPy are not supported")
+            }
+        };
+
+        let version = match self.implementation() {
+            ImplementationName::CPython => {
+                if cfg!(unix) {
+                    format!("{}.{}", self.key.major, self.key.minor)
+                } else {
+                    String::new()
+                }
+            }
+            // PyPy uses a full version number, even on Windows.
+            ImplementationName::PyPy => format!("{}.{}", self.key.major, self.key.minor),
+            ImplementationName::GraalPy => {
+                unreachable!("Managed installations of GraalPy are not supported")
+            }
+        };
+
+        // On Windows, the executable is just `python.exe` even for alternative variants
+        let variant = if cfg!(unix) {
+            self.key.variant.suffix()
+        } else {
+            ""
+        };
+
+        let name = format!(
+            "{implementation}{version}{variant}{exe}",
+            exe = std::env::consts::EXE_SUFFIX
+        );
+
+        let executable = if cfg!(windows) {
+            self.python_dir().join(name)
         } else if cfg!(unix) {
-            self.python_dir().join("bin").join("python3")
+            self.python_dir().join("bin").join(name)
         } else {
             unimplemented!("Only Windows and Unix systems are supported.")
+        };
+
+        // Workaround for python-build-standalone v20241016 which is missing the standard
+        // `python.exe` executable in free-threaded distributions on Windows.
+        //
+        // See https://github.com/astral-sh/uv/issues/8298
+        if cfg!(windows)
+            && matches!(self.key.variant, PythonVariant::Freethreaded)
+            && !executable.exists()
+        {
+            // This is the alternative executable name for the freethreaded variant
+            return self.python_dir().join(format!(
+                "python{}.{}t{}",
+                self.key.major,
+                self.key.minor,
+                std::env::consts::EXE_SUFFIX
+            ));
         }
+
+        executable
     }
 
     fn python_dir(&self) -> PathBuf {
@@ -323,6 +413,47 @@ impl ManagedPythonInstallation {
         }
     }
 
+    /// Ensure the environment contains the canonical Python executable names.
+    pub fn ensure_canonical_executables(&self) -> Result<(), Error> {
+        let python = self.executable();
+
+        let canonical_names = &["python"];
+
+        for name in canonical_names {
+            let executable =
+                python.with_file_name(format!("{name}{exe}", exe = std::env::consts::EXE_SUFFIX));
+
+            // Do not attempt to perform same-file copies — this is fine on Unix but fails on
+            // Windows with a permission error instead of 'already exists'
+            if executable == python {
+                continue;
+            }
+
+            match uv_fs::symlink_or_copy_file(&python, &executable) {
+                Ok(()) => {
+                    debug!(
+                        "Created link {} -> {}",
+                        executable.user_display(),
+                        python.user_display(),
+                    );
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    return Err(Error::MissingExecutable(python.clone()))
+                }
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(err) => {
+                    return Err(Error::CanonicalizeExecutable {
+                        from: executable,
+                        to: python,
+                        err,
+                    })
+                }
+            };
+        }
+
+        Ok(())
+    }
+
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
@@ -330,10 +461,7 @@ impl ManagedPythonInstallation {
         let stdlib = if matches!(self.key.os, Os(target_lexicon::OperatingSystem::Windows)) {
             self.python_dir().join("Lib")
         } else {
-            let lib_suffix = match self.key.variant {
-                PythonVariant::Default => "",
-                PythonVariant::Freethreaded => "t",
-            };
+            let lib_suffix = self.key.variant.suffix();
             let python = if matches!(
                 self.key.implementation,
                 LenientImplementationName::Known(ImplementationName::PyPy)
@@ -349,6 +477,99 @@ impl ManagedPythonInstallation {
         fs_err::write(file, EXTERNALLY_MANAGED)?;
 
         Ok(())
+    }
+
+    /// Create a link to the managed Python executable.
+    ///
+    /// If the file already exists at the target path, an error will be returned.
+    pub fn create_bin_link(&self, target: &Path) -> Result<(), Error> {
+        let python = self.executable();
+
+        let bin = target.parent().ok_or(Error::NoExecutableDirectory)?;
+        fs_err::create_dir_all(bin).map_err(|err| Error::ExecutableDirectory {
+            to: bin.to_path_buf(),
+            err,
+        })?;
+
+        if cfg!(unix) {
+            // Note this will never copy on Unix — we use it here to allow compilation on Windows
+            match symlink_or_copy_file(&python, target) {
+                Ok(()) => Ok(()),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    Err(Error::MissingExecutable(python.clone()))
+                }
+                Err(err) => Err(Error::LinkExecutable {
+                    from: python,
+                    to: target.to_path_buf(),
+                    err,
+                }),
+            }
+        } else if cfg!(windows) {
+            // TODO(zanieb): Install GUI launchers as well
+            let launcher = windows_python_launcher(&python, false)?;
+
+            // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
+            // error context anyway
+            #[allow(clippy::disallowed_types)]
+            {
+                std::fs::File::create_new(target)
+                    .and_then(|mut file| file.write_all(launcher.as_ref()))
+                    .map_err(|err| Error::LinkExecutable {
+                        from: python,
+                        to: target.to_path_buf(),
+                        err,
+                    })
+            }
+        } else {
+            unimplemented!("Only Windows and Unix systems are supported.")
+        }
+    }
+
+    /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
+    /// [`ManagedPythonInstallation::create_bin_link`].
+    pub fn is_bin_link(&self, path: &Path) -> bool {
+        if cfg!(unix) {
+            is_same_file(path, self.executable()).unwrap_or_default()
+        } else if cfg!(windows) {
+            let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
+                return false;
+            };
+            if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
+                return false;
+            }
+            launcher.python_path == self.executable()
+        } else {
+            unreachable!("Only Windows and Unix are supported")
+        }
+    }
+
+    /// Returns `true` if self is a suitable upgrade of other.
+    pub fn is_upgrade_of(&self, other: &ManagedPythonInstallation) -> bool {
+        // Require matching implementation
+        if self.key.implementation != other.key.implementation {
+            return false;
+        }
+        // Require a matching variant
+        if self.key.variant != other.key.variant {
+            return false;
+        }
+        // Require matching minor version
+        if (self.key.major, self.key.minor) != (other.key.major, other.key.minor) {
+            return false;
+        }
+        // Require a newer, or equal patch version (for pre-release upgrades)
+        if self.key.patch <= other.key.patch {
+            return false;
+        }
+        if let Some(other_pre) = other.key.prerelease {
+            if let Some(self_pre) = self.key.prerelease {
+                return self_pre > other_pre;
+            }
+            // Do not upgrade from non-prerelease to prerelease
+            return false;
+        }
+        // Do not upgrade if the patch versions are the same
+        self.key.patch != other.key.patch
     }
 }
 
@@ -371,4 +592,10 @@ impl fmt::Display for ManagedPythonInstallation {
                 .to_string_lossy()
         )
     }
+}
+
+/// Find the directory to install Python executables into.
+pub fn python_executable_dir() -> Result<PathBuf, Error> {
+    uv_dirs::user_executable_directory(Some(EnvVars::UV_PYTHON_BIN_DIR))
+        .ok_or(Error::NoExecutableDirectory)
 }

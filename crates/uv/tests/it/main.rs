@@ -34,6 +34,9 @@ mod init;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod lock;
 
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod lock_conflict;
+
 mod lock_scenarios;
 
 mod pip_check;
@@ -66,10 +69,13 @@ mod publish;
 
 mod python_dir;
 
-#[cfg(all(feature = "python", feature = "pypi"))]
+#[cfg(feature = "python")]
 mod python_find;
 
-#[cfg(all(feature = "python", feature = "pypi"))]
+#[cfg(feature = "python-managed")]
+mod python_install;
+
+#[cfg(feature = "python")]
 mod python_pin;
 
 #[cfg(all(feature = "python", feature = "pypi"))]

@@ -3,9 +3,9 @@
 [![Crates.io](https://img.shields.io/crates/v/pep508_rs.svg?logo=rust&style=flat-square)](https://crates.io/crates/pep508_rs)
 [![PyPI](https://img.shields.io/pypi/v/pep508_rs.svg?logo=python&style=flat-square)](https://pypi.org/project/pep508_rs)
 
-A library for python
+A library for
 [dependency specifiers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/),
-better known as [PEP 508](https://peps.python.org/pep-0508/).
+previously known as [PEP 508](https://peps.python.org/pep-0508/).
 
 ## Usage
 

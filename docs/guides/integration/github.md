@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
 ```
 
 It is considered best practice to pin to a specific uv version, e.g., with:
@@ -37,10 +37,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
         with:
           # Install a specific version of uv.
-          version: "0.4.21"
+          version: "0.5.7"
 ```
 
 ## Setting up Python
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
 
       - name: Set up Python
         run: uv python install
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
@@ -117,7 +117,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
 
       - name: "Set up Python"
         uses: actions/setup-python@v5
@@ -140,7 +140,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
 
       - name: "Set up Python"
         uses: actions/setup-python@v5
@@ -165,7 +165,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v4
 
       - name: Set up Python
         run: uv python install
@@ -181,7 +181,7 @@ jobs:
 !!! tip
 
     The
-    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects.md#configuring-the-project-environment-path) can
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects/config.md#project-environment-path) can
     be used to install to the system Python environment instead of creating a virtual environment.
 
 ## Caching
@@ -193,7 +193,7 @@ persisting the cache:
 
 ```yaml title="example.yml"
 - name: Enable caching
-  uses: astral-sh/setup-uv@v3
+  uses: astral-sh/setup-uv@v4
   with:
     enable-cache: true
 ```
@@ -202,7 +202,7 @@ You can configure the action to use a custom cache directory on the runner:
 
 ```yaml title="example.yml"
 - name: Define a custom uv cache path
-  uses: astral-sh/setup-uv@v3
+  uses: astral-sh/setup-uv@v4
   with:
     enable-cache: true
     cache-local-path: "/path/to/cache"
@@ -212,7 +212,7 @@ Or invalidate it when the lockfile changes:
 
 ```yaml title="example.yml"
 - name: Define a cache dependency glob
-  uses: astral-sh/setup-uv@v3
+  uses: astral-sh/setup-uv@v4
   with:
     enable-cache: true
     cache-dependency-glob: "uv.lock"
@@ -222,7 +222,7 @@ Or when any requirements file changes:
 
 ```yaml title="example.yml"
 - name: Define a cache dependency glob
-  uses: astral-sh/setup-uv@v3
+  uses: astral-sh/setup-uv@v4
   with:
     enable-cache: true
     cache-dependency-glob: "requirements**.txt"

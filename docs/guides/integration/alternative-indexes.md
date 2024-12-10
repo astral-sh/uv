@@ -21,7 +21,7 @@ Authenticate to a feed using a
 ### Using a PAT
 
 If there is a PAT available (eg
-[ `$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
+[`$(System.AccessToken)` in an Azure pipeline](https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables?view=azure-devops&tabs=yaml#systemaccesstoken)),
 credentials can be provided via the "Basic" HTTP authentication scheme. Include the PAT in the
 password field of the URL. A username must be included as well, but can be any string.
 
@@ -60,6 +60,58 @@ $ export UV_KEYRING_PROVIDER=subprocess
 
 $ # Configure the index URL with the username
 $ export UV_EXTRA_INDEX_URL=https://VssSessionToken@pkgs.dev.azure.com/{organisation}/{project}/_packaging/{feedName}/pypi/simple/
+```
+
+## Google Artifact Registry
+
+uv can install packages from
+[Google Artifact Registry](https://cloud.google.com/artifact-registry/docs). Authenticate to a
+repository using password authentication or using [`keyring`](https://github.com/jaraco/keyring)
+package.
+
+!!! note
+
+    This guide assumes `gcloud` CLI has previously been installed and setup.
+
+### Password authentication
+
+Credentials can be provided via "Basic" HTTP authentication scheme. Include access token in the
+password field of the URL. Username must be `oauth2accesstoken`, otherwise authentication will fail.
+
+For example, with the token stored in the `$ARTIFACT_REGISTRY_TOKEN` environment variable, set the
+index URL with:
+
+```bash
+export ARTIFACT_REGISTRY_TOKEN=$(gcloud auth application-default print-access-token)
+export UV_EXTRA_INDEX_URL=https://oauth2accesstoken:$ARTIFACT_REGISTRY_TOKEN@{region}-python.pkg.dev/{projectId}/{repositoryName}/simple
+```
+
+### Using `keyring`
+
+You can also authenticate to Artifact Registry using [`keyring`](https://github.com/jaraco/keyring)
+package with
+[`keyrings.google-artifactregistry-auth` plugin](https://github.com/GoogleCloudPlatform/artifact-registry-python-tools).
+Because these two packages are required to authenticate to Artifact Registry, they must be
+pre-installed from a source other than Artifact Registry.
+
+The `artifacts-keyring` plugin wraps [gcloud CLI](https://cloud.google.com/sdk/gcloud) to generate
+short-lived access tokens, securely store them in system keyring and refresh them when they are
+expired.
+
+uv only supports using the `keyring` package in
+[subprocess mode](https://github.com/astral-sh/uv/blob/main/PIP_COMPATIBILITY.md#registry-authentication).
+The `keyring` executable must be in the `PATH`, i.e., installed globally or in the active
+environment. The `keyring` CLI requires a username in the URL and it must be `oauth2accesstoken`.
+
+```bash
+# Pre-install keyring and Artifact Registry plugin from the public PyPI
+uv tool install keyring --with keyrings.google-artifactregistry-auth
+
+# Enable keyring authentication
+export UV_KEYRING_PROVIDER=subprocess
+
+# Configure the index URL with the username
+export UV_EXTRA_INDEX_URL=https://oauth2accesstoken@{region}-python.pkg.dev/{projectId}/{repositoryName}/simple
 ```
 
 ## AWS CodeArtifact
@@ -108,7 +160,7 @@ from the credentials:
 
 ```bash
 # Configure uv to use AWS CodeArtifact
-export UV_PUBLISH_URL="https://${AWS_CODEARTIFACT_TOKEN}@${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${AWS_CODEARTIFACT_REPOSITORY}/"
+export UV_PUBLISH_URL="https://${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION}.amazonaws.com/pypi/${AWS_CODEARTIFACT_REPOSITORY}/"
 export UV_PUBLISH_USERNAME=aws
 export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
 
@@ -118,4 +170,4 @@ uv publish
 
 ## Other indexes
 
-uv is also known to work with JFrog's Artifactory and the Google Cloud Artifact Registry.
+uv is also known to work with JFrog's Artifactory.

@@ -86,6 +86,8 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or_else(|| &PythonRequest::Default);
 
@@ -100,7 +102,16 @@ impl PythonInstallation {
             {
                 if let Some(request) = PythonDownloadRequest::from_request(request) {
                     debug!("Requested Python not found, checking for available download...");
-                    match Self::fetch(request.fill()?, client_builder, cache, reporter).await {
+                    match Self::fetch(
+                        request.fill()?,
+                        client_builder,
+                        cache,
+                        reporter,
+                        python_install_mirror,
+                        pypy_install_mirror,
+                    )
+                    .await
+                    {
                         Ok(installation) => Ok(installation),
                         Err(Error::Download(downloads::Error::NoDownloadFound(_))) => {
                             Err(Error::MissingPython(err))
@@ -121,10 +132,12 @@ impl PythonInstallation {
         client_builder: &BaseClientBuilder<'a>,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings()?.init()?;
         let installations_dir = installations.root();
-        let cache_dir = installations.cache();
+        let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
         let download = ManagedPythonDownload::from_request(&request)?;
@@ -132,7 +145,15 @@ impl PythonInstallation {
 
         info!("Fetching requested Python...");
         let result = download
-            .fetch(&client, installations_dir, &cache_dir, reporter)
+            .fetch_with_retry(
+                &client,
+                installations_dir,
+                &scratch_dir,
+                false,
+                python_install_mirror,
+                pypy_install_mirror,
+                reporter,
+            )
             .await?;
 
         let path = match result {
@@ -142,6 +163,7 @@ impl PythonInstallation {
 
         let installed = ManagedPythonInstallation::new(path)?;
         installed.ensure_externally_managed()?;
+        installed.ensure_canonical_executables()?;
 
         Ok(Self {
             source: PythonSource::Managed,
@@ -304,6 +326,40 @@ impl PythonInstallationKey {
     pub fn libc(&self) -> &Libc {
         &self.libc
     }
+
+    pub fn variant(&self) -> &PythonVariant {
+        &self.variant
+    }
+
+    /// Return a canonical name for a minor versioned executable.
+    pub fn executable_name_minor(&self) -> String {
+        format!(
+            "python{maj}.{min}{var}{exe}",
+            maj = self.major,
+            min = self.minor,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
+
+    /// Return a canonical name for a major versioned executable.
+    pub fn executable_name_major(&self) -> String {
+        format!(
+            "python{maj}{var}{exe}",
+            maj = self.major,
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
+
+    /// Return a canonical name for an un-versioned executable.
+    pub fn executable_name(&self) -> String {
+        format!(
+            "python{var}{exe}",
+            var = self.variant.suffix(),
+            exe = std::env::consts::EXE_SUFFIX
+        )
+    }
 }
 
 impl fmt::Display for PythonInstallationKey {
@@ -404,5 +460,6 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
             .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
+            .then_with(|| self.variant.cmp(&other.variant))
     }
 }

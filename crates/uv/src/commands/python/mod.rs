@@ -11,6 +11,8 @@ pub(super) enum ChangeEventKind {
     Removed,
     /// The Python version was installed.
     Added,
+    /// The Python version was reinstalled.
+    Reinstalled,
 }
 
 #[derive(Debug)]
