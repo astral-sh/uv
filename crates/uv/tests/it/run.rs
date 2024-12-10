@@ -542,7 +542,6 @@ fn run_pep723_script_requires_python() -> Result<()> {
 
 /// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
 #[test]
-#[cfg(windows)]
 fn run_pythonw_script() -> Result<()> {
     let context = TestContext::new("3.12");
 
