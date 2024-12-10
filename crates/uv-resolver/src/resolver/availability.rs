@@ -31,8 +31,6 @@ impl Display for UnavailableReason {
 pub(crate) enum UnavailableVersion {
     /// Version is incompatible because it has no usable distributions
     IncompatibleDist(IncompatibleDist),
-    /// The wheel metadata was not found.
-    MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata,
     /// The wheel metadata was found, but the metadata was inconsistent.
@@ -50,7 +48,6 @@ impl UnavailableVersion {
     pub(crate) fn message(&self) -> String {
         match self {
             UnavailableVersion::IncompatibleDist(invalid_dist) => format!("{invalid_dist}"),
-            UnavailableVersion::MissingMetadata => "not include a `METADATA` file".into(),
             UnavailableVersion::InvalidMetadata => "invalid metadata".into(),
             UnavailableVersion::InconsistentMetadata => "inconsistent metadata".into(),
             UnavailableVersion::InvalidStructure => "an invalid package format".into(),
@@ -64,7 +61,6 @@ impl UnavailableVersion {
     pub(crate) fn singular_message(&self) -> String {
         match self {
             UnavailableVersion::IncompatibleDist(invalid_dist) => invalid_dist.singular_message(),
-            UnavailableVersion::MissingMetadata => format!("does {self}"),
             UnavailableVersion::InvalidMetadata => format!("has {self}"),
             UnavailableVersion::InconsistentMetadata => format!("has {self}"),
             UnavailableVersion::InvalidStructure => format!("has {self}"),
@@ -76,7 +72,6 @@ impl UnavailableVersion {
     pub(crate) fn plural_message(&self) -> String {
         match self {
             UnavailableVersion::IncompatibleDist(invalid_dist) => invalid_dist.plural_message(),
-            UnavailableVersion::MissingMetadata => format!("do {self}"),
             UnavailableVersion::InvalidMetadata => format!("have {self}"),
             UnavailableVersion::InconsistentMetadata => format!("have {self}"),
             UnavailableVersion::InvalidStructure => format!("have {self}"),
@@ -117,8 +112,6 @@ pub(crate) enum UnavailablePackage {
     Offline,
     /// The package was not found in the registry.
     NotFound,
-    /// The package metadata was not found.
-    MissingMetadata,
     /// The package metadata was found, but could not be parsed.
     InvalidMetadata(String),
     /// The package has an invalid structure.
@@ -131,7 +124,6 @@ impl UnavailablePackage {
             UnavailablePackage::NoIndex => "not found in the provided package locations",
             UnavailablePackage::Offline => "not found in the cache",
             UnavailablePackage::NotFound => "not found in the package registry",
-            UnavailablePackage::MissingMetadata => "not include a `METADATA` file",
             UnavailablePackage::InvalidMetadata(_) => "invalid metadata",
             UnavailablePackage::InvalidStructure(_) => "an invalid package format",
         }
@@ -142,7 +134,6 @@ impl UnavailablePackage {
             UnavailablePackage::NoIndex => format!("was {self}"),
             UnavailablePackage::Offline => format!("was {self}"),
             UnavailablePackage::NotFound => format!("was {self}"),
-            UnavailablePackage::MissingMetadata => format!("does {self}"),
             UnavailablePackage::InvalidMetadata(_) => format!("has {self}"),
             UnavailablePackage::InvalidStructure(_) => format!("has {self}"),
         }

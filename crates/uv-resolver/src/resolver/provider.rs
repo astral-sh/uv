@@ -48,8 +48,6 @@ pub enum MetadataResponse {
 pub enum MetadataUnavailable {
     /// The wheel metadata was not found in the cache and the network is not available.
     Offline,
-    /// The wheel metadata was not found.
-    MissingMetadata,
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata(Arc<uv_pypi_types::MetadataError>),
     /// The wheel metadata was found, but the metadata was inconsistent.
