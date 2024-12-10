@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+use crate::resolver::MetadataUnavailable;
 use uv_distribution_types::IncompatibleDist;
 use uv_pep440::{Version, VersionSpecifiers};
 
@@ -91,6 +92,22 @@ impl Display for UnavailableVersion {
     }
 }
 
+impl From<&MetadataUnavailable> for UnavailableVersion {
+    fn from(reason: &MetadataUnavailable) -> Self {
+        match reason {
+            MetadataUnavailable::Offline => UnavailableVersion::Offline,
+            MetadataUnavailable::InvalidMetadata(_) => UnavailableVersion::InvalidMetadata,
+            MetadataUnavailable::InconsistentMetadata(_) => {
+                UnavailableVersion::InconsistentMetadata
+            }
+            MetadataUnavailable::InvalidStructure(_) => UnavailableVersion::InvalidStructure,
+            MetadataUnavailable::RequiresPython(requires_python, _python_version) => {
+                UnavailableVersion::RequiresPython(requires_python.clone())
+            }
+        }
+    }
+}
+
 /// The package is unavailable and cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum UnavailablePackage {
@@ -135,6 +152,22 @@ impl UnavailablePackage {
 impl Display for UnavailablePackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.message())
+    }
+}
+
+impl From<&MetadataUnavailable> for UnavailablePackage {
+    fn from(reason: &MetadataUnavailable) -> Self {
+        match reason {
+            MetadataUnavailable::Offline => Self::Offline,
+            MetadataUnavailable::InvalidMetadata(err) => Self::InvalidMetadata(err.to_string()),
+            MetadataUnavailable::InconsistentMetadata(err) => {
+                Self::InvalidMetadata(err.to_string())
+            }
+            MetadataUnavailable::InvalidStructure(err) => Self::InvalidStructure(err.to_string()),
+            MetadataUnavailable::RequiresPython(..) => {
+                unreachable!("`requires-python` is only known upfront for registry distributions")
+            }
+        }
     }
 }
 

@@ -10,7 +10,6 @@ use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::flat_index::FlatIndex;
-use crate::resolver::UnavailablePackage;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
 use crate::{ExcludeNewer, RequiresPython};
@@ -63,22 +62,15 @@ pub enum MetadataUnavailable {
 }
 
 impl MetadataUnavailable {
-    pub(crate) fn to_unavailable_package(&self) -> UnavailablePackage {
+    /// Like [`std::error::Error::source`], but we don't want to derive the std error since our
+    /// formatting system is more custom.
+    pub(crate) fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            MetadataUnavailable::Offline => UnavailablePackage::Offline,
-            MetadataUnavailable::MissingMetadata => UnavailablePackage::MissingMetadata,
-            MetadataUnavailable::InvalidMetadata(err) => {
-                UnavailablePackage::InvalidMetadata(err.to_string())
-            }
-            MetadataUnavailable::InconsistentMetadata(err) => {
-                UnavailablePackage::InvalidMetadata(err.to_string())
-            }
-            MetadataUnavailable::InvalidStructure(err) => {
-                UnavailablePackage::InvalidStructure(err.to_string())
-            }
-            MetadataUnavailable::RequiresPython(..) => {
-                unreachable!("`requires-python` is only known upfront for registry distributions")
-            }
+            MetadataUnavailable::Offline => None,
+            MetadataUnavailable::InvalidMetadata(err) => Some(err),
+            MetadataUnavailable::InconsistentMetadata(err) => Some(err),
+            MetadataUnavailable::InvalidStructure(err) => Some(err),
+            MetadataUnavailable::RequiresPython(_, _) => None,
         }
     }
 }

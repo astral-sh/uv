@@ -923,7 +923,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             MetadataResponse::Found(archive) => &archive.metadata,
             MetadataResponse::Unavailable(reason) => {
                 self.unavailable_packages
-                    .insert(name.clone(), reason.to_unavailable_package());
+                    .insert(name.clone(), reason.into());
                 return Ok(None);
             }
             MetadataResponse::Error(dist, err) => {
@@ -1292,42 +1292,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
                     MetadataResponse::Unavailable(err) => {
-                        let unavailable_reason = match err {
-                            MetadataUnavailable::Offline => UnavailableVersion::Offline,
-                            MetadataUnavailable::MissingMetadata => {
-                                UnavailableVersion::MissingMetadata
-                            }
-                            MetadataUnavailable::InvalidMetadata(err) => {
-                                warn!("Unable to extract metadata for {name}: {err}");
-                                UnavailableVersion::InvalidMetadata
-                            }
-                            MetadataUnavailable::InconsistentMetadata(err) => {
-                                warn!("Unable to extract metadata for {name}: {err}");
-                                UnavailableVersion::InconsistentMetadata
-                            }
-                            MetadataUnavailable::InvalidStructure(err) => {
-                                warn!("Unable to extract metadata for {name}: {err}");
-                                UnavailableVersion::InvalidStructure
-                            }
-                            MetadataUnavailable::RequiresPython(
-                                requires_python,
-                                python_version,
-                            ) => {
-                                warn!(
-                                    "Unable to extract metadata for {name}: {}",
-                                    uv_distribution::Error::RequiresPython(
-                                        requires_python.clone(),
-                                        python_version.clone()
-                                    )
-                                );
-                                UnavailableVersion::RequiresPython(requires_python.clone())
-                            }
-                        };
+                        let unavailable_version = UnavailableVersion::from(err);
+                        if let Some(err) = err.source() {
+                            // Show the detailed error for metadata parse errors.
+                            warn!(
+                                "{} {}: {}",
+                                unavailable_version.singular_message(),
+                                name,
+                                err
+                            );
+                        } else {
+                            warn!("{} {}", unavailable_version.singular_message(), name);
+                        }
                         self.incomplete_packages
                             .entry(name.clone())
                             .or_default()
                             .insert(version.clone(), err.clone());
-                        return Ok(Dependencies::Unavailable(unavailable_reason));
+                        return Ok(Dependencies::Unavailable(unavailable_version));
                     }
                     MetadataResponse::Error(dist, err) => {
                         let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
