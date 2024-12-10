@@ -1291,23 +1291,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
-                    MetadataResponse::Unavailable(err) => {
-                        let unavailable_version = UnavailableVersion::from(err);
-                        if let Some(err) = err.source() {
+                    MetadataResponse::Unavailable(reason) => {
+                        let unavailable_version = UnavailableVersion::from(reason);
+                        let message = unavailable_version.singular_message();
+                        if let Some(err) = reason.source() {
                             // Show the detailed error for metadata parse errors.
-                            warn!(
-                                "{} {}: {}",
-                                unavailable_version.singular_message(),
-                                name,
-                                err
-                            );
+                            warn!("{name} {message}: {err}");
                         } else {
-                            warn!("{} {}", unavailable_version.singular_message(), name);
+                            warn!("{name} {message}");
                         }
                         self.incomplete_packages
                             .entry(name.clone())
                             .or_default()
-                            .insert(version.clone(), err.clone());
+                            .insert(version.clone(), reason.clone());
                         return Ok(Dependencies::Unavailable(unavailable_version));
                     }
                     MetadataResponse::Error(dist, err) => {
@@ -1771,45 +1767,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ))),
                     );
                 }
-                Some(Response::Dist {
-                    dist: Dist::Built(dist),
-                    metadata,
-                }) => {
-                    trace!("Received built distribution metadata for: {dist}");
-                    match &metadata {
-                        MetadataResponse::Unavailable(MetadataUnavailable::InvalidMetadata(
-                            err,
-                        )) => {
-                            warn!("Unable to extract metadata for {dist}: {err}");
+                Some(Response::Dist { dist, metadata }) => {
+                    let dist_kind = match dist {
+                        Dist::Built(_) => "built",
+                        Dist::Source(_) => "source",
+                    };
+                    trace!("Received {dist_kind} distribution metadata for: {dist}");
+                    if let MetadataResponse::Unavailable(reason) = &metadata {
+                        let message = UnavailableVersion::from(reason).singular_message();
+                        if let Some(err) = reason.source() {
+                            // Show the detailed error for metadata parse errors.
+                            warn!("{dist} {message}: {err}");
+                        } else {
+                            warn!("{dist} {message}");
                         }
-                        MetadataResponse::Unavailable(MetadataUnavailable::InvalidStructure(
-                            err,
-                        )) => {
-                            warn!("Unable to extract metadata for {dist}: {err}");
-                        }
-                        _ => {}
-                    }
-                    self.index
-                        .distributions()
-                        .done(dist.version_id(), Arc::new(metadata));
-                }
-                Some(Response::Dist {
-                    dist: Dist::Source(dist),
-                    metadata,
-                }) => {
-                    trace!("Received source distribution metadata for: {dist}");
-                    match &metadata {
-                        MetadataResponse::Unavailable(MetadataUnavailable::InvalidMetadata(
-                            err,
-                        )) => {
-                            warn!("Unable to extract metadata for {dist}: {err}");
-                        }
-                        MetadataResponse::Unavailable(MetadataUnavailable::InvalidStructure(
-                            err,
-                        )) => {
-                            warn!("Unable to extract metadata for {dist}: {err}");
-                        }
-                        _ => {}
                     }
                     self.index
                         .distributions()
