@@ -582,6 +582,7 @@ jobs:
             # see https://github.com/astral-sh/uv/issues/6528
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
             toolchain: nightly
+            maturin_args: -Crelocation-model=pic -Clink-args=-Wl,-z,notext -Ccode-model=large
       fail-fast: false
 
     steps:
@@ -598,7 +599,7 @@ jobs:
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
-          args: ${{ matrix.platform.arch == 'ppc64le' && '--profile release-no-lto' || '--release'}} --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
+          args: ${{ matrix.platform.arch == 'ppc64le' && '--profile release-no-lto' || '--release'}} --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} -- ${{ matrix.platform.maturin_args }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@v2
