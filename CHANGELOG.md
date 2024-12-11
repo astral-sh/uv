@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.5.8
+
+**This release does not include the `powerpc64le-unknown-linux-musl` target due to a build issue. See [#9793](https://github.com/astral-sh/uv/issues/9793) for details. If this change affects you, please file an issue with your use-case.**
+
+### Enhancements
+
+- Omit empty resolution markers in lockfile  ([#9738](https://github.com/astral-sh/uv/pull/9738))
+- Add `--install-dir` to to `uv python install` and `uninstall` commands ([#7920](https://github.com/astral-sh/uv/pull/7920))
+- Add `--show-urls` and `--only-downloads` to `uv python list` ([#8062](https://github.com/astral-sh/uv/pull/8062))
+- Add `uv python list --all-arches` ([#9782](https://github.com/astral-sh/uv/pull/9782))
+- Add `uv run --gui-script` flag for running Python scripts with `pythonw.exe` ([#9152](https://github.com/astral-sh/uv/pull/9152))
+- Allow `--gui-script` on Unix ([#9787](https://github.com/astral-sh/uv/pull/9787))
+- Allow download of Python distribution variants optimized for newer x86_64 microarchitectures ([#9781](https://github.com/astral-sh/uv/pull/9781))
+- Allow execution of `pyw` files on Unix ([#9759](https://github.com/astral-sh/uv/pull/9759))
+- Allow users to specify URLs in `project.dependencies` and `tool.uv.sources` ([#9718](https://github.com/astral-sh/uv/pull/9718))
+- Encode mutually-incompatible pairs of markers ([#9444](https://github.com/astral-sh/uv/pull/9444))
+- Improve the error message when a Python install request is not valid ([#9783](https://github.com/astral-sh/uv/pull/9783))
+- Preserve directory-level standalone build symlinks ([#9723](https://github.com/astral-sh/uv/pull/9723))
+- Add support for `uv publish --index <name>` ([#9694](https://github.com/astral-sh/uv/pull/9694))
+- Reframe `--locked` and `--frozen` as `--check` operations for `uv lock` ([#9662](https://github.com/astral-sh/uv/pull/9662))
+- Rename Python install scratch directory from `.cache` -> `.temp` ([#9756](https://github.com/astral-sh/uv/pull/9756))
+- Enable `uv tool uninstall uv` on Windows ([#8963](https://github.com/astral-sh/uv/pull/8963))
+- Improve self-dependency hint to make shadowing clear ([#9716](https://github.com/astral-sh/uv/pull/9716))
+- Refactor unavailable metadata to shrink the resolver ([#9769](https://github.com/astral-sh/uv/pull/9769))
+- Show 'depends on itself' for proxy packages ([#9717](https://github.com/astral-sh/uv/pull/9717))
+- Show a dedicated error for missing subdirectories ([#9761](https://github.com/astral-sh/uv/pull/9761))
+- Show a dedicated hint for missing `git+` prefixes ([#9789](https://github.com/astral-sh/uv/pull/9789))
+
+### Performance
+
+- Eagerly error when parsing `pyproject.toml` requirements ([#9704](https://github.com/astral-sh/uv/pull/9704))
+- Use copy-on-write when normalizing paths ([#9710](https://github.com/astral-sh/uv/pull/9710))
+
+### Bug fixes
+
+- Avoid enforcing non-conflicts in `uv export` ([#9751](https://github.com/astral-sh/uv/pull/9751))
+- Don't drop comments between items in TOML tables ([#9784](https://github.com/astral-sh/uv/pull/9784))
+- Don't fail with `--no-build` when static metadata is available ([#9785](https://github.com/astral-sh/uv/pull/9785))
+- Don't filter non-patch registry version ([#9736](https://github.com/astral-sh/uv/pull/9736))
+- Don't read metadata from stale `.egg-info` files ([#9760](https://github.com/astral-sh/uv/pull/9760))
+- Enforce correctness of self-dependencies ([#9705](https://github.com/astral-sh/uv/pull/9705))
+- Fix projects's typo in resolver error messages ([#9708](https://github.com/astral-sh/uv/pull/9708))
+- Ignore `.` prefixed directories during managed Python installation discovery ([#9786](https://github.com/astral-sh/uv/pull/9786))
+- Improve handling of invalid virtual environments during interpreter discovery ([#8086](https://github.com/astral-sh/uv/pull/8086))
+- Normalize relative paths when `--project` is specified ([#9709](https://github.com/astral-sh/uv/pull/9709))
+- Respect self-constraints on recursive extras ([#9714](https://github.com/astral-sh/uv/pull/9714))
+- Respect user settings for tracing coloring ([#9733](https://github.com/astral-sh/uv/pull/9733))
+- Retry on tar extraction errors ([#9753](https://github.com/astral-sh/uv/pull/9753))
+- Add conflict markers to the lock file ([#9370](https://github.com/astral-sh/uv/pull/9370))
+- De-duplicate resolution markers ([#9780](https://github.com/astral-sh/uv/pull/9780))
+- Avoid 403 error hint for PyTorch URLs ([#9750](https://github.com/astral-sh/uv/pull/9750))
+- Avoid treating non-existent `--find-links` as relative URLs ([#9720](https://github.com/astral-sh/uv/pull/9720))
+- Omit Windows Store `python3.13.exe` et al ([#9679](https://github.com/astral-sh/uv/pull/9679))
+- Replace executables with broken symlinks during `uv python install` ([#9706](https://github.com/astral-sh/uv/pull/9706))
+
+### Documentation
+
+- Fix build failure links ([#9740](https://github.com/astral-sh/uv/pull/9740))
+
 ## 0.5.7
 
 ### Enhancements
