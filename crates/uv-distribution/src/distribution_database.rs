@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, warn, Instrument};
+use tracing::{info_span, instrument, warn, Instrument};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -321,8 +321,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .boxed_local()
             .await?;
 
-        // Validate that the metadata is consistent with the distribution.
-
         // If the wheel was unzipped previously, respect it. Source distributions are
         // cached under a unique revision ID, so unzipped directories are never stale.
         match built_wheel.target.canonicalize() {
@@ -444,19 +442,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
-        // Optimization: Skip source dist download when we must not build them anyway.
-        if self
-            .build_context
-            .build_options()
-            .no_build_requirement(source.name())
-        {
-            if source.is_editable() {
-                debug!("Allowing build for editable source distribution: {source}");
-            } else {
-                return Err(Error::NoBuild);
-            }
-        }
-
         let lock = self.locks.acquire(source).await;
         let _guard = lock.lock().await;
 
@@ -465,8 +450,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .download_and_build_metadata(source, hashes, &self.client)
             .boxed_local()
             .await?;
-
-        // Validate that the metadata is consistent with the distribution.
 
         Ok(metadata)
     }

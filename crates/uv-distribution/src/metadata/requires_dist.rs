@@ -367,25 +367,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn conflict_project_and_sources() {
-        let input = indoc! {r#"
-            [project]
-            name = "foo"
-            version = "0.0.0"
-            dependencies = [
-              "tqdm @ git+https://github.com/tqdm/tqdm",
-            ]
-            [tool.uv.sources]
-            tqdm = { url = "https://files.pythonhosted.org/packages/a5/d6/502a859bac4ad5e274255576cd3e15ca273cdb91731bc39fb840dd422ee9/tqdm-4.66.0-py3-none-any.whl" }
-        "#};
-
-        assert_snapshot!(format_err(input).await, @r###"
-        error: Failed to parse entry: `tqdm`
-          Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
-        "###);
-    }
-
-    #[tokio::test]
     async fn wrong_type() {
         let input = indoc! {r#"
             [project]
@@ -568,7 +549,7 @@ mod test {
 
         assert_snapshot!(format_err(input).await, @r###"
         error: Failed to parse entry: `tqdm`
-          Caused by: Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
+          Caused by: `tqdm` references a workspace in `tool.uv.sources` (e.g., `tqdm = { workspace = true }`), but is not a workspace member
         "###);
     }
 

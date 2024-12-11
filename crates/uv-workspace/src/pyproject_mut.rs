@@ -413,7 +413,17 @@ impl PyProjectTomlMut {
         let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
 
-        optional_dependencies.fmt();
+        // If `project.optional-dependencies` is an inline table, reformat it.
+        //
+        // Reformatting can drop comments between keys, but you can't put comments
+        // between items in an inline table anyway.
+        if let Some(optional_dependencies) = self
+            .project()?
+            .get_mut("optional-dependencies")
+            .and_then(Item::as_inline_table_mut)
+        {
+            optional_dependencies.fmt();
+        }
 
         if let Some(source) = source {
             self.add_source(&name, source)?;
@@ -448,7 +458,17 @@ impl PyProjectTomlMut {
         let name = req.name.clone();
         let added = add_dependency(req, group, source.is_some())?;
 
-        dependency_groups.fmt();
+        // If `dependency-groups` is an inline table, reformat it.
+        //
+        // Reformatting can drop comments between keys, but you can't put comments
+        // between items in an inline table anyway.
+        if let Some(dependency_groups) = self
+            .doc
+            .get_mut("dependency-groups")
+            .and_then(Item::as_inline_table_mut)
+        {
+            dependency_groups.fmt();
+        }
 
         if let Some(source) = source {
             self.add_source(&name, source)?;

@@ -25,6 +25,7 @@ use crate::managed::ManagedPythonInstallations;
 use crate::microsoft_store::find_microsoft_store_pythons;
 #[cfg(windows)]
 use crate::py_launcher::{registry_pythons, WindowsPython};
+use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
     virtualenv_python_executable, CondaEnvironmentKind,
@@ -302,7 +303,7 @@ fn python_executables_from_installed<'a>(
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     let from_managed_installations = std::iter::once_with(move || {
-        ManagedPythonInstallations::from_settings()
+        ManagedPythonInstallations::from_settings(None)
             .map_err(Error::from)
             .and_then(|installed_installations| {
                 debug!(
@@ -339,7 +340,12 @@ fn python_executables_from_installed<'a>(
             // Skip interpreter probing if we already know the version doesn't match.
             let version_filter = move |entry: &WindowsPython| {
                 if let Some(found) = &entry.version {
-                    version.matches_version(found)
+                    // Some distributions emit the patch version (example: `SysVersion: 3.9`)
+                    if found.string.chars().filter(|c| *c == '.').count() == 1 {
+                        version.matches_major_minor(found.major(), found.minor())
+                    } else {
+                        version.matches_version(found)
+                    }
                 } else {
                     true
                 }
@@ -724,10 +730,27 @@ impl Error {
                     false
                 }
                 InterpreterError::NotFound(path) => {
-                    trace!("Skipping missing interpreter at {}", path.display());
-                    false
+                    // If the interpreter is from an active, valid virtual environment, we should
+                    // fail because it's broken
+                    if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
+                        .then(|| {
+                            path.parent()
+                                .and_then(Path::parent)
+                                .map(|path| path.join("pyvenv.cfg").try_exists())
+                        })
+                        .flatten()
+                    {
+                        true
+                    } else {
+                        trace!("Skipping missing interpreter at {}", path.display());
+                        false
+                    }
                 }
             },
+            Error::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
+                trace!("Skipping broken virtualenv at {}", path.display());
+                false
+            }
             _ => true,
         }
     }
@@ -1155,11 +1178,16 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     //   `C:\Users\crmar\AppData\Local\Microsoft\WindowsApps\python3.exe`
     let mut components = path.components().rev();
 
-    // Ex) `python.exe` or `python3.exe`
+    // Ex) `python.exe`, `python3.exe`, `python3.12.exe`, etc.
     if !components
         .next()
         .and_then(|component| component.as_os_str().to_str())
-        .is_some_and(|component| component == "python.exe" || component == "python3.exe")
+        .is_some_and(|component| {
+            component.starts_with("python")
+                && std::path::Path::new(component)
+                    .extension()
+                    .map_or(false, |ext| ext.eq_ignore_ascii_case("exe"))
+        })
     {
         return false;
     }
@@ -2004,7 +2032,7 @@ impl VersionRequest {
     /// Check if a version is compatible with the request.
     ///
     /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfull the request.
+    /// avoid querying interpreters if it's clear it cannot fulfill the request.
     pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
             Self::Any | Self::Default => true,
@@ -2027,7 +2055,7 @@ impl VersionRequest {
     /// Check if major and minor version segments are compatible with the request.
     ///
     /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfull the request.
+    /// avoid querying interpreters if it's clear it cannot fulfill the request.
     fn matches_major_minor(&self, major: u8, minor: u8) -> bool {
         match self {
             Self::Any | Self::Default => true,
@@ -2051,7 +2079,7 @@ impl VersionRequest {
     /// request.
     ///
     /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
-    /// avoid querying interpreters if it's clear it cannot fulfull the request.
+    /// avoid querying interpreters if it's clear it cannot fulfill the request.
     pub(crate) fn matches_major_minor_patch_prerelease(
         &self,
         major: u8,

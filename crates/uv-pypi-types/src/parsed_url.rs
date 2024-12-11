@@ -1,10 +1,14 @@
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
+
 use thiserror::Error;
 use url::{ParseError, Url};
+
 use uv_distribution_filename::{DistExtension, ExtensionError};
 use uv_git::{GitReference, GitSha, GitUrl, OidParseError};
-use uv_pep508::{Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError};
+use uv_pep508::{
+    looks_like_git_repository, Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError,
+};
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -24,6 +28,8 @@ pub enum ParsedUrlError {
     UrlParse(String, #[source] ParseError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
+    #[error("Direct URL (`{0}`) references a Git repository, but is missing the `git+` prefix (e.g., `git+{0}`)")]
+    MissingGitPrefix(String),
     #[error("Expected direct URL (`{0}`) to end in a supported file extension: {1}")]
     MissingExtensionUrl(String, ExtensionError),
     #[error("Expected path (`{0}`) to end in a supported file extension: {1}")]
@@ -303,8 +309,13 @@ impl TryFrom<Url> for ParsedArchiveUrl {
 
     fn try_from(url: Url) -> Result<Self, Self::Error> {
         let subdirectory = get_subdirectory(&url);
-        let ext = DistExtension::from_path(url.path())
-            .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
+        let ext = match DistExtension::from_path(url.path()) {
+            Ok(ext) => ext,
+            Err(..) if looks_like_git_repository(&url) => {
+                return Err(ParsedUrlError::MissingGitPrefix(url.to_string()))
+            }
+            Err(err) => return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err)),
+        };
         Ok(Self {
             url,
             subdirectory,

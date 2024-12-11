@@ -184,6 +184,10 @@ uv run [OPTIONS] [COMMAND]
 
 <p>May be provided multiple times.</p>
 
+</dd><dt><code>--gui-script</code></dt><dd><p>Run the given path as a Python GUI script.</p>
+
+<p>Using <code>--gui-script</code> will attempt to parse the path as a PEP 723 script and run it with pythonw.exe, irrespective of its extension. Only available on Windows.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--index</code> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
@@ -4351,7 +4355,11 @@ uv python list [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt><code>--all-platforms</code></dt><dd><p>List Python downloads for all platforms.</p>
+<dl class="cli-reference"><dt><code>--all-arches</code></dt><dd><p>List Python downloads for all architectures.</p>
+
+<p>By default, only downloads for the current architecture are shown.</p>
+
+</dd><dt><code>--all-platforms</code></dt><dd><p>List Python downloads for all platforms.</p>
 
 <p>By default, only downloads for the current platform are shown.</p>
 
@@ -4426,6 +4434,10 @@ uv python list [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+</dd><dt><code>--only-downloads</code></dt><dd><p>Only show Python downloads, exclude installed distributions.</p>
+
+<p>By default, available downloads for the current platform are shown.</p>
+
 </dd><dt><code>--only-installed</code></dt><dd><p>Only show installed Python versions, exclude available downloads.</p>
 
 <p>By default, available downloads for the current platform are shown.</p>
@@ -4457,6 +4469,10 @@ uv python list [OPTIONS]
 <li><code>only-system</code>:  Only use system Python installations; never use managed Python installations</li>
 </ul>
 </dd><dt><code>--quiet</code>, <code>-q</code></dt><dd><p>Do not print any output</p>
+
+</dd><dt><code>--show-urls</code></dt><dd><p>Show the URLs of available Python downloads.</p>
+
+<p>By default, these display as <code>&lt;download available&gt;</code>.</p>
 
 </dd><dt><code>--verbose</code>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -4553,6 +4569,13 @@ uv python install [OPTIONS] [TARGETS]...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--install-dir</code>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory to store the Python installation in.</p>
+
+<p>If provided, <code>UV_PYTHON_INSTALL_DIR</code> will need to be set for subsequent operations for uv to discover the Python installation.</p>
+
+<p>See <code>uv python dir</code> to view the current Python installation directory. Defaults to <code>~/.local/share/uv/python</code>.</p>
+
+<p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
 </dd><dt><code>--mirror</code> <i>mirror</i></dt><dd><p>Set the URL to use as the source for downloading Python installations.</p>
 
 <p>The provided URL will replace <code>https://github.com/indygreg/python-build-standalone/releases/download</code> in, e.g., <code>https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz</code>.</p>
@@ -5114,6 +5137,9 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--install-dir</code>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory where the Python was installed</p>
+
+<p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8126,6 +8152,15 @@ uv publish [OPTIONS] [FILES]...
 
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
+</dd><dt><code>--index</code> <i>index</i></dt><dd><p>The name of an index in the configuration to use for publishing.</p>
+
+<p>The index must have a <code>publish-url</code> setting, for example:</p>
+
+<pre><code class="language-toml [[tool.uv.index]] name = &quot;pypi&quot; url = &quot;https://pypi.org/simple&quot; publish-url = &quot;https://upload.pypi.org/legacy/&quot; ```">The index `url` will be used to check for existing files to skip duplicate uploads.
+
+With these settings, the following two calls are equivalent:</code></pre>
+
+<p>May also be set with the <code>UV_PUBLISH_INDEX</code> environment variable.</p>
 </dd><dt><code>--keyring-provider</code> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
 
 <p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>

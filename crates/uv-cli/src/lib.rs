@@ -296,6 +296,24 @@ pub enum ColorChoice {
     Never,
 }
 
+impl ColorChoice {
+    /// Combine self (higher priority) with an [`anstream::ColorChoice`] (lower priority).
+    ///
+    /// This method allows prioritizing the user choice, while using the inferred choice for a
+    /// stream as default.
+    #[must_use]
+    pub fn and_colorchoice(self, next: anstream::ColorChoice) -> Self {
+        match self {
+            Self::Auto => match next {
+                anstream::ColorChoice::Auto => Self::Auto,
+                anstream::ColorChoice::Always | anstream::ColorChoice::AlwaysAnsi => Self::Always,
+                anstream::ColorChoice::Never => Self::Never,
+            },
+            Self::Always | Self::Never => self,
+        }
+    }
+}
+
 impl From<ColorChoice> for anstream::ColorChoice {
     fn from(value: ColorChoice) -> Self {
         match value {
@@ -2684,7 +2702,7 @@ pub struct RunArgs {
     /// Run a Python module.
     ///
     /// Equivalent to `python -m <module>`.
-    #[arg(short, long, conflicts_with = "script")]
+    #[arg(short, long, conflicts_with_all = ["script", "gui_script"])]
     pub module: bool,
 
     /// Only include the development dependency group.
@@ -2783,8 +2801,15 @@ pub struct RunArgs {
     ///
     /// Using `--script` will attempt to parse the path as a PEP 723 script,
     /// irrespective of its extension.
-    #[arg(long, short, conflicts_with = "module")]
+    #[arg(long, short, conflicts_with_all = ["module", "gui_script"])]
     pub script: bool,
+
+    /// Run the given path as a Python GUI script.
+    ///
+    /// Using `--gui-script` will attempt to parse the path as a PEP 723 script and run it with pythonw.exe,
+    /// irrespective of its extension. Only available on Windows.
+    #[arg(long, conflicts_with_all = ["script", "module"])]
+    pub gui_script: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -4204,11 +4229,29 @@ pub struct PythonListArgs {
     #[arg(long)]
     pub all_platforms: bool,
 
+    /// List Python downloads for all architectures.
+    ///
+    /// By default, only downloads for the current architecture are shown.
+    #[arg(long, alias = "all_architectures")]
+    pub all_arches: bool,
+
     /// Only show installed Python versions, exclude available downloads.
     ///
     /// By default, available downloads for the current platform are shown.
-    #[arg(long)]
+    #[arg(long, conflicts_with("only_downloads"))]
     pub only_installed: bool,
+
+    /// Only show Python downloads, exclude installed distributions.
+    ///
+    /// By default, available downloads for the current platform are shown.
+    #[arg(long, conflicts_with("only_installed"))]
+    pub only_downloads: bool,
+
+    /// Show the URLs of available Python downloads.
+    ///
+    /// By default, these display as `<download available>`.
+    #[arg(long)]
+    pub show_urls: bool,
 }
 
 #[derive(Args)]
@@ -4232,6 +4275,16 @@ pub struct PythonDirArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonInstallArgs {
+    /// The directory to store the Python installation in.
+    ///
+    /// If provided, `UV_PYTHON_INSTALL_DIR` will need to be set for subsequent operations for
+    /// uv to discover the Python installation.
+    ///
+    /// See `uv python dir` to view the current Python installation directory. Defaults to
+    /// `~/.local/share/uv/python`.
+    #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
+    pub install_dir: Option<PathBuf>,
+
     /// The Python version(s) to install.
     ///
     /// If not provided, the requested Python version(s) will be read from the
@@ -4292,6 +4345,10 @@ pub struct PythonInstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
+    /// The directory where the Python was installed.
+    #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
+    pub install_dir: Option<PathBuf>,
+
     /// The Python version(s) to uninstall.
     ///
     /// See `uv help python` to view supported request formats.
@@ -5123,14 +5180,32 @@ pub struct PublishArgs {
     #[arg(default_value = "dist/*")]
     pub files: Vec<String>,
 
-    /// The URL of the upload endpoint (not the index URL).
+    /// The name of an index in the configuration to use for publishing.
     ///
-    /// Note that there are typically different URLs for index access (e.g., `https:://.../simple`)
-    /// and index upload.
+    /// The index must have a `publish-url` setting, for example:
     ///
-    /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
-    #[arg(long, env = EnvVars::UV_PUBLISH_URL)]
-    pub publish_url: Option<Url>,
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "pypi"
+    /// url = "https://pypi.org/simple"
+    /// publish-url = "https://upload.pypi.org/legacy/"
+    /// ```
+    ///
+    /// The index `url` will be used to check for existing files to skip duplicate uploads.
+    ///
+    /// With these settings, the following two calls are equivalent:
+    ///
+    /// ```
+    /// uv publish --index pypi
+    /// uv publish --publish-url https://upload.pypi.org/legacy/ --check-url https://pypi.org/simple
+    /// ```
+    #[arg(
+        long,
+        env = EnvVars::UV_PUBLISH_INDEX,
+        conflicts_with = "publish_url",
+        conflicts_with = "check_url"
+    )]
+    pub index: Option<String>,
 
     /// The username for the upload.
     #[arg(short, long, env = EnvVars::UV_PUBLISH_USERNAME)]
@@ -5169,6 +5244,15 @@ pub struct PublishArgs {
     /// Defaults to `disabled`.
     #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
     pub keyring_provider: Option<KeyringProviderType>,
+
+    /// The URL of the upload endpoint (not the index URL).
+    ///
+    /// Note that there are typically different URLs for index access (e.g., `https:://.../simple`)
+    /// and index upload.
+    ///
+    /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
+    #[arg(long, env = EnvVars::UV_PUBLISH_URL)]
+    pub publish_url: Option<Url>,
 
     /// Check an index URL for existing files to skip duplicate uploads.
     ///

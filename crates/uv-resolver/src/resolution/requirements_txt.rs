@@ -170,7 +170,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
     pub(crate) fn from_annotated_dist(annotated: &'dist AnnotatedDist) -> Self {
         assert!(
             annotated.marker.conflict().is_true(),
-            "found dist {annotated} with non-trivial conflicting marker {marker}, \
+            "found dist {annotated} with non-trivial conflicting marker {marker:?}, \
              which cannot be represented in a `requirements.txt` format",
             marker = annotated.marker,
         );
@@ -181,7 +181,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
             // OK because we've asserted above that this dist
             // does not have a non-trivial conflicting marker
             // that we would otherwise need to care about.
-            markers: annotated.marker.pep508(),
+            markers: annotated.marker.combined(),
             extras: if let Some(extra) = annotated.extra.clone() {
                 vec![extra]
             } else {

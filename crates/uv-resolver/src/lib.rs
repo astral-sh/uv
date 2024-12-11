@@ -22,7 +22,7 @@ pub use resolver::{
     PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
     ResolverProvider, VersionsResponse, WheelMetadataResult,
 };
-pub use universal_marker::UniversalMarker;
+pub use universal_marker::{ConflictMarker, UniversalMarker};
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 

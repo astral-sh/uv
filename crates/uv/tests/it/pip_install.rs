@@ -7589,3 +7589,68 @@ fn build_tag() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn missing_git_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test`
+      Caused by: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
+    workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn missing_subdirectory_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing`
+      ╰─▶ The source distribution `git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing` has no subdirectory `missing`
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn missing_subdirectory_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing`
+      ╰─▶ The source distribution `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing` has no subdirectory `missing`
+    "###
+    );
+
+    Ok(())
+}

@@ -21,14 +21,14 @@ use uv_pypi_types::{
     Conflicts, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
 };
 
-use crate::graph_ops::marker_reachability;
+use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
-use crate::universal_marker::UniversalMarker;
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
     VersionsResponse,
@@ -70,6 +70,26 @@ impl ResolutionGraphNode {
         match self {
             ResolutionGraphNode::Root => &UniversalMarker::TRUE,
             ResolutionGraphNode::Dist(dist) => &dist.marker,
+        }
+    }
+
+    pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
+        match *self {
+            ResolutionGraphNode::Root => None,
+            ResolutionGraphNode::Dist(ref dist) => {
+                let extra = dist.extra.as_ref()?;
+                Some((&dist.name, extra))
+            }
+        }
+    }
+
+    pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
+        match *self {
+            ResolutionGraphNode::Root => None,
+            ResolutionGraphNode::Dist(ref dist) => {
+                let group = dist.dev.as_ref()?;
+                Some((&dist.name, group))
+            }
         }
     }
 }
@@ -179,12 +199,20 @@ impl ResolverOutput {
         // Compute and apply the marker reachability.
         let mut reachability = marker_reachability(&graph, &fork_markers);
 
-        // Apply the reachability to the graph.
+        // Apply the reachability to the graph and imbibe world
+        // knowledge about conflicts.
+        let conflict_marker = ConflictMarker::from_conflicts(conflicts);
         for index in graph.node_indices() {
             if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
                 dist.marker = reachability.remove(&index).unwrap_or_default();
+                dist.marker.imbibe(conflict_marker);
             }
         }
+        for weight in graph.edge_weights_mut() {
+            weight.imbibe(conflict_marker);
+        }
+
+        simplify_conflict_markers(conflicts, &mut graph);
 
         // Discard any unreachable nodes.
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
@@ -730,8 +758,8 @@ impl ResolverOutput {
         }
         let mut dupes = vec![];
         for (name, marker_trees) in name_to_markers {
-            for (i, (version1, marker1)) in marker_trees.iter().enumerate() {
-                for (version2, marker2) in &marker_trees[i + 1..] {
+            for (i, (version1, &marker1)) in marker_trees.iter().enumerate() {
+                for (version2, &marker2) in &marker_trees[i + 1..] {
                     if version1 == version2 {
                         continue;
                     }
@@ -740,8 +768,8 @@ impl ResolverOutput {
                             name: name.clone(),
                             version1: (*version1).clone(),
                             version2: (*version2).clone(),
-                            marker1: *(*marker1),
-                            marker2: *(*marker2),
+                            marker1,
+                            marker2,
                         });
                     }
                 }
@@ -780,8 +808,8 @@ impl Display for ConflictingDistributionError {
         write!(
             f,
             "found conflicting versions for package `{name}`:
-             `{marker1}` (for version `{version1}`) is not disjoint with \
-             `{marker2}` (for version `{version2}`)",
+             `{marker1:?}` (for version `{version1}`) is not disjoint with \
+             `{marker2:?}` (for version `{version2}`)",
         )
     }
 }

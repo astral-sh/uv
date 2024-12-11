@@ -145,6 +145,12 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
+    pub fn with_any_arch(mut self) -> Self {
+        self.arch = None;
+        self
+    }
+
+    #[must_use]
     pub fn with_os(mut self, os: Os) -> Self {
         self.os = Some(os);
         self
@@ -464,12 +470,12 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract a Python distribution, retrying on failure.
-    #[instrument(skip(client, installation_dir, cache_dir, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch_with_retry(
         &self,
         client: &uv_client::BaseClient,
         installation_dir: &Path,
-        cache_dir: &Path,
+        scratch_dir: &Path,
         reinstall: bool,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
@@ -483,7 +489,7 @@ impl ManagedPythonDownload {
                 .fetch(
                     client,
                     installation_dir,
-                    cache_dir,
+                    scratch_dir,
                     reinstall,
                     python_install_mirror,
                     pypy_install_mirror,
@@ -514,12 +520,12 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract a Python distribution.
-    #[instrument(skip(client, installation_dir, cache_dir, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
         installation_dir: &Path,
-        cache_dir: &Path,
+        scratch_dir: &Path,
         reinstall: bool,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
@@ -543,7 +549,7 @@ impl ManagedPythonDownload {
             .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
 
         // Download and extract into a temporary directory.
-        let temp_dir = tempfile::tempdir_in(cache_dir).map_err(Error::DownloadDirError)?;
+        let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
 
         debug!(
             "Downloading {url} to temporary location: {}",

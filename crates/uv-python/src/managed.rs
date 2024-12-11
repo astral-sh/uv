@@ -107,11 +107,15 @@ impl ManagedPythonInstallations {
     }
 
     /// Prefer, in order:
-    /// 1. The specific Python directory specified by the user, i.e., `UV_PYTHON_INSTALL_DIR`
-    /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`
-    /// 3. A directory in the local data directory, e.g., `./.uv/python`
-    pub fn from_settings() -> Result<Self, Error> {
-        if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
+    ///
+    /// 1. The specific Python directory passed via the `install_dir` argument.
+    /// 2. The specific Python directory specified with the `UV_PYTHON_INSTALL_DIR` environment variable.
+    /// 3. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`.
+    /// 4. A directory in the local data directory, e.g., `./.uv/python`.
+    pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
+        if let Some(install_dir) = install_dir {
+            Ok(Self::from_path(install_dir))
+        } else if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
@@ -127,9 +131,9 @@ impl ManagedPythonInstallations {
         ))
     }
 
-    /// Return the location of the cache directory for managed Python installations.
-    pub fn cache(&self) -> PathBuf {
-        self.root.join(".cache")
+    /// Return the location of the scratch directory for managed Python installations.
+    pub fn scratch(&self) -> PathBuf {
+        self.root.join(".temp")
     }
 
     /// Initialize the Python installation directory.
@@ -156,9 +160,9 @@ impl ManagedPythonInstallations {
         // Create the directory, if it doesn't exist.
         fs::create_dir_all(root)?;
 
-        // Create the cache directory, if it doesn't exist.
-        let cache = self.cache();
-        fs::create_dir_all(&cache)?;
+        // Create the scratch directory, if it doesn't exist.
+        let scratch = self.scratch();
+        fs::create_dir_all(&scratch)?;
 
         // Add a .gitignore.
         match fs::OpenOptions::new()
@@ -207,10 +211,18 @@ impl ManagedPythonInstallations {
                 })
             }
         };
-        let cache = self.cache();
+        let scratch = self.scratch();
         Ok(dirs
             .into_iter()
-            .filter(|path| *path != cache)
+            // Ignore the scratch directory
+            .filter(|path| *path != scratch)
+            // Ignore any `.` prefixed directories
+            .filter(|path| {
+                path.file_name()
+                    .and_then(OsStr::to_str)
+                    .map(|name| !name.starts_with('.'))
+                    .unwrap_or(true)
+            })
             .filter_map(|path| {
                 ManagedPythonInstallation::new(path)
                     .inspect_err(|err| {
@@ -227,7 +239,7 @@ impl ManagedPythonInstallations {
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
         let platform_key = platform_key_from_env()?;
 
-        let iter = ManagedPythonInstallations::from_settings()?
+        let iter = ManagedPythonInstallations::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
                 installation

@@ -19,7 +19,7 @@ pub use crate::lock::target::InstallTarget;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
-use crate::universal_marker::UniversalMarker;
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, InMemoryIndex, MetadataResponse, PrereleaseMode, RequiresPython, ResolutionMode,
     ResolverOutput,
@@ -63,21 +63,21 @@ static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
         "platform_system == 'Linux' and os_name == 'posix' and sys_platform == 'linux'",
     )
     .unwrap();
-    UniversalMarker::new(pep508, MarkerTree::TRUE)
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static WINDOWS_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str(
         "platform_system == 'Windows' and os_name == 'nt' and sys_platform == 'win32'",
     )
     .unwrap();
-    UniversalMarker::new(pep508, MarkerTree::TRUE)
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str(
         "platform_system == 'Darwin' and os_name == 'posix' and sys_platform == 'darwin'",
     )
     .unwrap();
-    UniversalMarker::new(pep508, MarkerTree::TRUE)
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -149,7 +149,7 @@ impl Lock {
                 resolution
                     .fork_markers
                     .iter()
-                    .filter(|fork_markers| !fork_markers.is_disjoint(&dist.marker))
+                    .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
                     .copied()
                     .collect()
             } else {
@@ -296,16 +296,16 @@ impl Lock {
                     tag.starts_with(linux_tag) || tag == "linux_armv6l" || tag == "linux_armv7l"
                 })
             }) {
-                !graph.graph[node_index].marker().is_disjoint(&LINUX_MARKERS)
+                !graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS)
             } else if platform_tags
                 .iter()
                 .all(|tag| windows_tags.contains(&&**tag))
             {
                 !graph.graph[node_index]
                     .marker()
-                    .is_disjoint(&WINDOWS_MARKERS)
+                    .is_disjoint(*WINDOWS_MARKERS)
             } else if platform_tags.iter().all(|tag| tag.starts_with("macosx_")) {
-                !graph.graph[node_index].marker().is_disjoint(&MAC_MARKERS)
+                !graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS)
             } else {
                 true
             }
@@ -618,18 +618,12 @@ impl Lock {
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
-                self.fork_markers
-                    .iter()
-                    .map(|marker| {
-                        // TODO(ag): Consider whether `resolution-markers` should actually
-                        // include conflicting marker info. In which case, we should serialize
-                        // the entire `UniversalMarker` (taking care to still make the PEP 508
-                        // simplified).
-                        SimplifiedMarkerTree::new(&self.requires_python, marker.pep508())
-                    })
-                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
+                deduplicated_simplified_pep508_markers(&self.fork_markers, &self.requires_python)
+                    .into_iter(),
             );
-            doc.insert("resolution-markers", value(fork_markers));
+            if !fork_markers.is_empty() {
+                doc.insert("resolution-markers", value(fork_markers));
+            }
         }
 
         if !self.supported_environments.is_empty() {
@@ -860,7 +854,7 @@ impl Lock {
                     || dist
                         .fork_markers
                         .iter()
-                        .any(|marker| marker.evaluate(marker_env, &[]))
+                        .any(|marker| marker.evaluate_no_extras(marker_env))
                 {
                     if found_dist.is_some() {
                         return Err(format!("found multiple packages matching `{name}`"));
@@ -1449,7 +1443,9 @@ impl TryFrom<LockWire> for Lock {
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             // TODO(ag): Consider whether this should also deserialize a conflict marker.
             // We currently aren't serializing. Dropping it completely is likely to be wrong.
-            .map(|complexified_marker| UniversalMarker::new(complexified_marker, MarkerTree::TRUE))
+            .map(|complexified_marker| {
+                UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
+            })
             .collect();
         let lock = Lock::new(
             wire.version,
@@ -1971,17 +1967,13 @@ impl Package {
         self.id.to_toml(None, &mut table);
 
         if !self.fork_markers.is_empty() {
-            let wheels = each_element_on_its_line_array(
-                self.fork_markers
-                    .iter()
-                    // TODO(ag): Consider whether `resolution-markers` should actually
-                    // include conflicting marker info. In which case, we should serialize
-                    // the entire `UniversalMarker` (taking care to still make the PEP 508
-                    // simplified).
-                    .map(|marker| SimplifiedMarkerTree::new(requires_python, marker.pep508()))
-                    .filter_map(super::requires_python::SimplifiedMarkerTree::try_to_string),
+            let fork_markers = each_element_on_its_line_array(
+                deduplicated_simplified_pep508_markers(&self.fork_markers, requires_python)
+                    .into_iter(),
             );
-            table.insert("resolution-markers", value(wheels));
+            if !fork_markers.is_empty() {
+                table.insert("resolution-markers", value(fork_markers));
+            }
         }
 
         if !self.dependencies.is_empty() {
@@ -2251,7 +2243,7 @@ impl PackageWire {
                 // TODO(ag): Consider whether this should also deserialize a conflict marker.
                 // We currently aren't serializing. Dropping it completely is likely to be wrong.
                 .map(|complexified_marker| {
-                    UniversalMarker::new(complexified_marker, MarkerTree::TRUE)
+                    UniversalMarker::new(complexified_marker, ConflictMarker::TRUE)
                 })
                 .collect(),
             dependencies: unwire_deps(self.dependencies)?,
@@ -3541,7 +3533,7 @@ impl Dependency {
         complexified_marker: UniversalMarker,
     ) -> Dependency {
         let simplified_marker =
-            SimplifiedMarkerTree::new(requires_python, complexified_marker.pep508());
+            SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
         Dependency {
             package_id,
             extra,
@@ -3621,7 +3613,6 @@ struct DependencyWire {
     extra: BTreeSet<ExtraName>,
     #[serde(default)]
     marker: SimplifiedMarkerTree,
-    // FIXME: Add support for representing conflict markers.
 }
 
 impl DependencyWire {
@@ -3635,8 +3626,7 @@ impl DependencyWire {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             simplified_marker: self.marker,
-            // FIXME: Support reading conflict markers.
-            complexified_marker: UniversalMarker::new(complexified_marker, MarkerTree::TRUE),
+            complexified_marker: UniversalMarker::from_combined(complexified_marker),
         })
     }
 }
@@ -4143,11 +4133,6 @@ enum LockErrorKind {
         #[source]
         err: DependencyGroupError,
     },
-    /// An error that occurs when trying to export a `uv.lock` with
-    /// conflicting extras/groups specified to `requirements.txt`.
-    /// (Because `requirements.txt` cannot encode them.)
-    #[error("Cannot represent `uv.lock` with conflicting extras or groups as `requirements.txt`")]
-    ConflictsNotAllowedInRequirementsTxt,
 }
 
 /// An error that occurs when a source string could not be parsed.
@@ -4213,6 +4198,46 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
     // The line break between the last element's comma and the closing square bracket.
     array.set_trailing("\n");
     array
+}
+
+/// Returns the simplified string-ified version of each marker given.
+///
+/// If a marker is a duplicate of a previous marker or is always true after
+/// simplification, then it is omitted from the `Vec` returned. (And indeed,
+/// the `Vec` returned may be empty.)
+fn deduplicated_simplified_pep508_markers(
+    markers: &[UniversalMarker],
+    requires_python: &RequiresPython,
+) -> Vec<String> {
+    // NOTE(ag): It's possible that `resolution-markers` should actually
+    // include conflicting marker info. In which case, we should serialize
+    // the entire `UniversalMarker` (taking care to still make the PEP 508
+    // simplified). At present, we don't include that info. And as a result,
+    // this can lead to duplicate markers, since each represents a fork with
+    // the same PEP 508 marker but a different conflict marker. We strip the
+    // conflict marker, which can leave duplicate PEP 508 markers.
+    //
+    // So if we did include the conflict marker, then we wouldn't need to do
+    // deduplication.
+    //
+    // Why don't we include conflict markers though? At present, it's just
+    // not clear that they are necessary. So by the principle of being
+    // conservative, we don't write them. In particular, I believe the original
+    // reason for `resolution-markers` is to prevent non-deterministic locking.
+    // But it's not clear that that can occur for conflict markers.
+    let mut simplified = vec![];
+    // Deduplicate without changing order.
+    let mut seen = FxHashSet::default();
+    for marker in markers {
+        let simplified_marker = SimplifiedMarkerTree::new(requires_python, marker.pep508());
+        let Some(simplified_string) = simplified_marker.try_to_string() else {
+            continue;
+        };
+        if seen.insert(simplified_string.clone()) {
+            simplified.push(simplified_string);
+        }
+    }
+    simplified
 }
 
 #[cfg(test)]

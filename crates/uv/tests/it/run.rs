@@ -542,7 +542,6 @@ fn run_pep723_script_requires_python() -> Result<()> {
 
 /// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
 #[test]
-#[cfg(windows)]
 fn run_pythonw_script() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2889,6 +2888,75 @@ fn run_script_explicit_directory() -> Result<()> {
 
     ----- stderr -----
     error: failed to read from file `script`: Is a directory (os error 21)
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(windows)]
+fn run_gui_script_explicit_windows() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+        import sys
+        import os
+
+        executable = os.path.basename(sys.executable).lower()
+        if not executable.startswith("pythonw"):
+            print(f"Error: Expected pythonw.exe but got: {executable}", file=sys.stderr)
+            sys.exit(1)
+        
+        print(f"Using executable: {executable}", file=sys.stderr)
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `script`
+    Resolved in [TIME]
+    Audited in [TIME]
+    Using executable: pythonw.exe
+    "###);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(not(windows))]
+fn run_gui_script_explicit_unix() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let test_script = context.temp_dir.child("script");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = []
+        # ///
+        import sys
+        import os
+
+        executable = os.path.basename(sys.executable).lower()
+        print(f"Using executable: {executable}", file=sys.stderr)
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--gui-script").arg("script"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Reading inline script metadata from `script`
+    Resolved in [TIME]
+    Audited in [TIME]
+    Using executable: python3
     "###);
 
     Ok(())

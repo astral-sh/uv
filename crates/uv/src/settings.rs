@@ -296,6 +296,7 @@ impl RunSettings {
             only_dev,
             no_editable,
             script: _,
+            gui_script: _,
             command: _,
             with,
             with_editable,
@@ -703,6 +704,9 @@ impl ToolDirSettings {
 pub(crate) enum PythonListKinds {
     #[default]
     Default,
+    /// Only list version downloads.
+    Downloads,
+    /// Only list installed versions.
     Installed,
 }
 
@@ -712,7 +716,9 @@ pub(crate) enum PythonListKinds {
 pub(crate) struct PythonListSettings {
     pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
+    pub(crate) all_arches: bool,
     pub(crate) all_versions: bool,
+    pub(crate) show_urls: bool,
 }
 
 impl PythonListSettings {
@@ -722,11 +728,16 @@ impl PythonListSettings {
         let PythonListArgs {
             all_versions,
             all_platforms,
+            all_arches,
             only_installed,
+            only_downloads,
+            show_urls,
         } = args;
 
         let kinds = if only_installed {
             PythonListKinds::Installed
+        } else if only_downloads {
+            PythonListKinds::Downloads
         } else {
             PythonListKinds::default()
         };
@@ -734,7 +745,9 @@ impl PythonListSettings {
         Self {
             kinds,
             all_platforms,
+            all_arches,
             all_versions,
+            show_urls,
         }
     }
 }
@@ -760,6 +773,7 @@ impl PythonDirSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonInstallSettings {
+    pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
@@ -784,6 +798,7 @@ impl PythonInstallSettings {
         let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
 
         let PythonInstallArgs {
+            install_dir,
             targets,
             reinstall,
             force,
@@ -793,6 +808,7 @@ impl PythonInstallSettings {
         } = args;
 
         Self {
+            install_dir,
             targets,
             reinstall,
             force,
@@ -807,6 +823,7 @@ impl PythonInstallSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonUninstallSettings {
+    pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
     pub(crate) all: bool,
 }
@@ -818,9 +835,17 @@ impl PythonUninstallSettings {
         args: PythonUninstallArgs,
         _filesystem: Option<FilesystemOptions>,
     ) -> Self {
-        let PythonUninstallArgs { targets, all } = args;
+        let PythonUninstallArgs {
+            install_dir,
+            targets,
+            all,
+        } = args;
 
-        Self { targets, all }
+        Self {
+            install_dir,
+            targets,
+            all,
+        }
     }
 }
 
@@ -2829,12 +2854,16 @@ pub(crate) struct PublishSettings {
     pub(crate) files: Vec<String>,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
+    pub(crate) index: Option<String>,
 
     // Both CLI and configuration.
     pub(crate) publish_url: Url,
     pub(crate) trusted_publishing: TrustedPublishing,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) check_url: Option<IndexUrl>,
+
+    // Configuration only
+    pub(crate) index_locations: IndexLocations,
 }
 
 impl PublishSettings {
@@ -2852,7 +2881,11 @@ impl PublishSettings {
             check_url,
         } = publish;
         let ResolverInstallerOptions {
-            keyring_provider, ..
+            keyring_provider,
+            index,
+            extra_index_url,
+            index_url,
+            ..
         } = top_level;
 
         // Tokens are encoded in the same way as username/password
@@ -2878,6 +2911,17 @@ impl PublishSettings {
                 .combine(keyring_provider)
                 .unwrap_or_default(),
             check_url: args.check_url.combine(check_url),
+            index: args.index,
+            index_locations: IndexLocations::new(
+                index
+                    .into_iter()
+                    .flatten()
+                    .chain(extra_index_url.into_iter().flatten().map(Index::from))
+                    .chain(index_url.into_iter().map(Index::from))
+                    .collect(),
+                Vec::new(),
+                false,
+            ),
         }
     }
 }

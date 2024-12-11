@@ -9738,7 +9738,7 @@ fn lock_transitive_extra() -> Result<()> {
 }
 
 /// If a source is provided via `tool.uv.sources` _and_ a URL is provided in `project.dependencies`,
-/// we raise an error.
+/// we accept the source in `tool.uv.sources`, unless `--no-sources` is provided.
 #[test]
 fn lock_mismatched_sources() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -9760,15 +9760,87 @@ fn lock_mismatched_sources() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `uv-public-pypackage`
-      ╰─▶ Can't combine URLs from both `project.dependencies` and `tool.uv.sources`
+    Resolved 2 packages in [TIME]
     "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1" }]
+
+        [[package]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+        "###
+        );
+    });
+
+    // If we run with `--no-sources`, we should use the URL provided in `project.dependencies`.
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "uv-public-pypackage" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "uv-public-pypackage", git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.2" }]
+
+        [[package]]
+        name = "uv-public-pypackage"
+        version = "0.1.0"
+        source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.2#b270df1a2fb5d012294e9aaf05e7e0bab1e6a389" }
+        "###
+        );
+    });
 
     Ok(())
 }
@@ -13945,8 +14017,6 @@ fn lock_default_index() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: An index URL (https://download.pytorch.org/whl/cu121) could not be queried due to a lack of valid authentication credentials (403 Forbidden).
     "###);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -19236,6 +19306,128 @@ fn no_lowest_warning_with_name_and_url() -> Result<()> {
 }
 
 #[test]
+fn lock_no_build_static_metadata() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "dummy"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Re-run with `--offline`. We shouldn't need a network connection to validate an
+    // already-correct lockfile with immutable metadata.
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--frozen"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Distribution `dummy==0.1.0 @ virtual+.` can't be installed because it is marked as `--no-build` but has no binary distribution
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_no_build_dynamic_metadata() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "dummy"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `dummy @ file://[TEMP_DIR]/`
+      ╰─▶ Building source distributions for dummy is disabled
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn lock_self_compatible() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -19457,7 +19649,7 @@ fn lock_self_incompatible() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `project` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
+          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     "###);
 
     Ok(())
@@ -19590,9 +19782,9 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
+          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     "###);
 
     Ok(())
@@ -19624,9 +19816,9 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
+          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     "###);
 
     Ok(())
@@ -19759,9 +19951,9 @@ fn lock_self_extra_incompatible() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because project[foo] depends on your project and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `project[foo]` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
+          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     "###);
 
     Ok(())
@@ -19888,9 +20080,45 @@ fn lock_self_marker_incompatible() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only project{sys_platform == 'win32'}<=0.1 is available and your project depends on project{sys_platform == 'win32'}>0.1, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because only project{sys_platform == 'win32'}<=0.1 is available and your project depends on itself at an incompatible version (project{sys_platform == 'win32'}>0.1), we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The package `project` depends on itself at an incompatible version. This is likely a mistake. Consider removing the dependency.
+          hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_missing_git_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["workspace-in-root-test"]
+
+        [tool.uv.sources]
+        workspace-in-root-test = { url = "https://github.com/astral-sh/workspace-in-root-test" }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `workspace-in-root-test`
+      ╰─▶ `workspace-in-root-test` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `workspace-in-root-test = { git = "https://github.com/astral-sh/workspace-in-root-test" }`)
     "###);
 
     Ok(())
