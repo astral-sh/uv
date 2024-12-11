@@ -105,7 +105,7 @@ Resolved 2 packages in 170ms
 Prepared 2 packages in 627ms
 Installed 2 packages in 1ms
  + example==0.1.0 (from file:///home/user/example)
- + ruff==0.5.6
+ + ruff==0.5.7
 
 $ uv run ruff check
 All checks passed!
@@ -145,11 +145,11 @@ Install a tool with `uv tool install`:
 $ uv tool install ruff
 Resolved 1 package in 6ms
 Installed 1 package in 2ms
- + ruff==0.5.6
+ + ruff==0.5.7
 Installed 1 executable: ruff
 
 $ ruff --version
-ruff 0.5.6
+ruff 0.5.7
 ```
 
 See the [tools documentation](https://docs.astral.sh/uv/guides/tools/) to get started.

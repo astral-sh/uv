@@ -59,7 +59,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"uv\.exe", "uv"),
     // uv version display
     (
-        r"uv(-.*)? \d+\.\d+\.\d+( \(.*\))?",
+        r"uv(-.*)? \d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
     // The exact message is host language dependent
@@ -1075,7 +1075,7 @@ pub fn venv_to_interpreter(venv: &Path) -> PathBuf {
 
 /// Get the path to the python interpreter for a specific python version.
 pub fn get_python(version: &PythonVersion) -> PathBuf {
-    ManagedPythonInstallations::from_settings()
+    ManagedPythonInstallations::from_settings(None)
         .map(|installed_pythons| {
             installed_pythons
                 .find_version(version)

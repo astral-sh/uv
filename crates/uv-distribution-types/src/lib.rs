@@ -39,7 +39,9 @@ use std::str::FromStr;
 
 use url::Url;
 
-use uv_distribution_filename::{DistExtension, SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{
+    DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
+};
 use uv_fs::normalize_absolute_path;
 use uv_git::GitUrl;
 use uv_normalize::PackageName;
@@ -52,8 +54,8 @@ pub use crate::any::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
 pub use crate::dependency_metadata::*;
-pub use crate::derivation::*;
 pub use crate::diagnostic::*;
+pub use crate::dist_error::*;
 pub use crate::error::*;
 pub use crate::file::*;
 pub use crate::hash::*;
@@ -75,8 +77,8 @@ mod any;
 mod buildable;
 mod cached;
 mod dependency_metadata;
-mod derivation;
 mod diagnostic;
+mod dist_error;
 mod error;
 mod file;
 mod hash;
@@ -312,6 +314,7 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PathSourceDist {
     pub name: PackageName,
+    pub version: Option<Version>,
     /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -410,12 +413,24 @@ impl Dist {
                     url,
                 })))
             }
-            DistExtension::Source(ext) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                name,
-                install_path,
-                ext,
-                url,
-            }))),
+            DistExtension::Source(ext) => {
+                // If there is a version in the filename, record it.
+                let version = url
+                    .filename()
+                    .ok()
+                    .and_then(|filename| {
+                        SourceDistFilename::parse(filename.as_ref(), ext, &name).ok()
+                    })
+                    .map(|filename| filename.version);
+
+                Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                    name,
+                    version,
+                    install_path,
+                    ext,
+                    url,
+                })))
+            }
         }
     }
 
@@ -534,6 +549,15 @@ impl Dist {
         match self {
             Self::Built(dist) => DistRef::Built(dist),
             Self::Source(dist) => DistRef::Source(dist),
+        }
+    }
+}
+
+impl<'a> From<&'a Dist> for DistRef<'a> {
+    fn from(dist: &'a Dist) -> Self {
+        match dist {
+            Dist::Built(built) => DistRef::Built(built),
+            Dist::Source(source) => DistRef::Source(source),
         }
     }
 }

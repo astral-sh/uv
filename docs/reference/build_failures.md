@@ -78,7 +78,7 @@ ModuleNotFoundError: No module named 'distutils'
 !!! important
 
     The `--use-pep517` flag should be included with the `pip install` invocation to ensure the same
-    build isolation behavior. uv always uses [build isolation by default](https://docs.astral.sh/uv/pip/compatibility.md#pep-517-build-isolation).
+    build isolation behavior. uv always uses [build isolation by default](../pip/compatibility.md#pep-517-build-isolation).
 
     We also recommend including the `--force-reinstall` and `--no-cache` options when reproducing
     failures.
@@ -140,13 +140,20 @@ If the build error mentions a missing command, for example, `gcc`:
 Then, you'll need to install it with your system package manager, e.g., to resolve the error above:
 
 ```console
-$ apt-get install gcc
+$ apt install gcc
 ```
 
-!!! note
+!!! tip
 
     When using the uv-managed Python versions, it's common to need `clang` installed instead of
     `gcc`.
+
+    Many Linux distributions provide a package that includes all the common build dependencies.
+    You can address most build requirements by installing it, e.g., for Debian or Ubuntu:
+
+    ```console
+    $ apt install build-essential
+    ```
 
 ### Header or library is missing
 
@@ -297,6 +304,6 @@ numpy<1.23; python_version < "3.10"
 ### Package is only usable on a specific platform
 
 If locking fails due to building a package that is only usable on another platform, you can
-[provide dependency metadata manually](https://docs.astral.sh/uv/reference/settings.md#dependency-metadata)
-to skip the build. uv can not verify this information, so it is important to specify correct
-metadata when using this override.
+[provide dependency metadata manually](./settings.md#dependency-metadata) to skip the build. uv can
+not verify this information, so it is important to specify correct metadata when using this
+override.

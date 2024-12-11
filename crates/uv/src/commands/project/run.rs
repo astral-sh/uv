@@ -18,7 +18,7 @@ use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{
     Concurrency, DevGroupsSpecification, EditableMode, ExtrasSpecification, GroupsSpecification,
-    InstallOptions, LowerBound, SourceStrategy, TrustedHost,
+    InstallOptions, LowerBound, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
@@ -86,6 +86,7 @@ pub(crate) async fn run(
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     // These cases seem quite complex because (in theory) they should change the "current package".
     // Let's ban them entirely for now.
@@ -341,6 +342,7 @@ pub(crate) async fn run(
                 allow_insecure_host,
                 cache,
                 printer,
+                preview,
             )
             .await;
 
@@ -662,6 +664,7 @@ pub(crate) async fn run(
                     allow_insecure_host,
                     cache,
                     printer,
+                    preview,
                 )
                 .await
                 {
@@ -742,6 +745,7 @@ pub(crate) async fn run(
                     allow_insecure_host,
                     cache,
                     printer,
+                    preview,
                 )
                 .await
                 {
@@ -893,6 +897,7 @@ pub(crate) async fn run(
                     allow_insecure_host,
                     cache,
                     printer,
+                    preview,
                 )
                 .await;
 
@@ -1168,7 +1173,7 @@ pub(crate) enum RunCommand {
     /// Search `sys.path` for the named module and execute its contents as the `__main__` module.
     /// Equivalent to `python -m module`.
     PythonModule(OsString, Vec<OsString>),
-    /// Execute a `pythonw` script (Windows only).
+    /// Execute a `pythonw` GUI script.
     PythonGuiScript(PathBuf, Vec<OsString>),
     /// Execute a Python package containing a `__main__.py` file.
     PythonPackage(PathBuf, Vec<OsString>),
@@ -1196,7 +1201,13 @@ impl RunCommand {
             | Self::PythonRemote(..)
             | Self::Empty => Cow::Borrowed("python"),
             Self::PythonModule(..) => Cow::Borrowed("python -m"),
-            Self::PythonGuiScript(..) => Cow::Borrowed("pythonw"),
+            Self::PythonGuiScript(..) => {
+                if cfg!(windows) {
+                    Cow::Borrowed("pythonw")
+                } else {
+                    Cow::Borrowed("python")
+                }
+            }
             Self::PythonStdin(_) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
         }
@@ -1333,10 +1344,12 @@ impl std::fmt::Display for RunCommand {
 
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
+    #[allow(clippy::fn_params_excessive_bools)]
     pub(crate) async fn from_args(
         command: &ExternalCommand,
         module: bool,
         script: bool,
+        gui_script: bool,
         connectivity: Connectivity,
         native_tls: bool,
         allow_insecure_host: &[TrustedHost],
@@ -1390,6 +1403,8 @@ impl RunCommand {
             return Ok(Self::PythonModule(target.clone(), args.to_vec()));
         } else if script {
             return Ok(Self::PythonScript(target.clone().into(), args.to_vec()));
+        } else if gui_script {
+            return Ok(Self::PythonGuiScript(target.clone().into(), args.to_vec()));
         }
 
         let metadata = target_path.metadata();
@@ -1408,10 +1423,9 @@ impl RunCommand {
             && is_file
         {
             Ok(Self::PythonScript(target_path, args.to_vec()))
-        } else if cfg!(windows)
-            && target_path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
+        } else if target_path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("pyw"))
             && is_file
         {
             Ok(Self::PythonGuiScript(target_path, args.to_vec()))

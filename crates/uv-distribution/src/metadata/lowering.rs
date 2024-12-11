@@ -12,7 +12,7 @@ use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
 use uv_git::GitReference;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
 use uv_pypi_types::{
     ConflictItem, ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl,
 };
@@ -185,9 +185,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = git_source(
                                 &git,
                                 subdirectory.map(PathBuf::from),
@@ -203,10 +200,8 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
-                            let source = url_source(url, subdirectory.map(PathBuf::from))?;
+                            let source =
+                                url_source(&requirement, url, subdirectory.map(PathBuf::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -215,9 +210,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = path_source(
                                 PathBuf::from(path),
                                 git_member,
@@ -265,7 +257,7 @@ impl LoweredRequirement {
                                 index.into_url(),
                                 conflict,
                                 lower_bound,
-                            )?;
+                            );
                             (source, marker)
                         }
                         Source::Workspace {
@@ -275,9 +267,6 @@ impl LoweredRequirement {
                         } => {
                             if !is_workspace {
                                 return Err(LoweringError::WorkspaceFalse);
-                            }
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
                             }
                             let member = workspace
                                 .packages()
@@ -317,10 +306,10 @@ impl LoweredRequirement {
                             let source = if let Some(git_member) = &git_member {
                                 // If the workspace comes from a Git dependency, all workspace
                                 // members need to be Git dependencies, too.
-                                let subdirectory = uv_fs::normalize_path(
-                                    &uv_fs::relative_to(member.root(), git_member.fetch_root)
-                                        .expect("Workspace member must be relative"),
-                                );
+                                let subdirectory =
+                                    uv_fs::relative_to(member.root(), git_member.fetch_root)
+                                        .expect("Workspace member must be relative");
+                                let subdirectory = uv_fs::normalize_path_buf(subdirectory);
                                 RequirementSource::Git {
                                     repository: git_member.git_source.git.repository().clone(),
                                     reference: git_member.git_source.git.reference().clone(),
@@ -433,9 +422,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = git_source(
                                 &git,
                                 subdirectory.map(PathBuf::from),
@@ -451,10 +437,8 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
-                            let source = url_source(url, subdirectory.map(PathBuf::from))?;
+                            let source =
+                                url_source(&requirement, url, subdirectory.map(PathBuf::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -463,9 +447,6 @@ impl LoweredRequirement {
                             marker,
                             ..
                         } => {
-                            if matches!(requirement.version_or_url, Some(VersionOrUrl::Url(_))) {
-                                return Err(LoweringError::ConflictingUrls);
-                            }
                             let source = path_source(
                                 PathBuf::from(path),
                                 None,
@@ -497,7 +478,7 @@ impl LoweredRequirement {
                                 index.into_url(),
                                 conflict,
                                 lower_bound,
-                            )?;
+                            );
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
@@ -550,10 +531,10 @@ pub enum LoweringError {
     InvalidUrl(#[from] url::ParseError),
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
-    #[error("Can't combine URLs from both `project.dependencies` and `tool.uv.sources`")]
-    ConflictingUrls,
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
+    #[error("`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)")]
+    MissingGitSource(PackageName, Url),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
     #[error("Editable must refer to a local directory, not a file: `{0}`")]
@@ -628,7 +609,11 @@ fn git_source(
 }
 
 /// Convert a URL source into a [`RequirementSource`].
-fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSource, LoweringError> {
+fn url_source(
+    requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
+    url: Url,
+    subdirectory: Option<PathBuf>,
+) -> Result<RequirementSource, LoweringError> {
     let mut verbatim_url = url.clone();
     if verbatim_url.fragment().is_some() {
         return Err(LoweringError::ForbiddenFragment(url));
@@ -640,8 +625,18 @@ fn url_source(url: Url, subdirectory: Option<PathBuf>) -> Result<RequirementSour
         verbatim_url.set_fragment(Some(subdirectory));
     }
 
-    let ext = DistExtension::from_path(url.path())
-        .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?;
+    let ext = match DistExtension::from_path(url.path()) {
+        Ok(ext) => ext,
+        Err(..) if looks_like_git_repository(&url) => {
+            return Err(LoweringError::MissingGitSource(
+                requirement.name.clone(),
+                url.clone(),
+            ))
+        }
+        Err(err) => {
+            return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err).into());
+        }
+    };
 
     let verbatim_url = VerbatimUrl::from_url(verbatim_url);
     Ok(RequirementSource::Url {
@@ -658,7 +653,7 @@ fn registry_source(
     index: Url,
     conflict: Option<ConflictItem>,
     bounds: LowerBound,
-) -> Result<RequirementSource, LoweringError> {
+) -> RequirementSource {
     match &requirement.version_or_url {
         None => {
             if matches!(bounds, LowerBound::Warn) {
@@ -667,18 +662,30 @@ fn registry_source(
                     requirement.name
                 );
             }
-            Ok(RequirementSource::Registry {
+            RequirementSource::Registry {
                 specifier: VersionSpecifiers::empty(),
                 index: Some(index),
                 conflict,
-            })
+            }
         }
-        Some(VersionOrUrl::VersionSpecifier(version)) => Ok(RequirementSource::Registry {
+        Some(VersionOrUrl::VersionSpecifier(version)) => RequirementSource::Registry {
             specifier: version.clone(),
             index: Some(index),
             conflict,
-        }),
-        Some(VersionOrUrl::Url(_)) => Err(LoweringError::ConflictingUrls),
+        },
+        Some(VersionOrUrl::Url(_)) => {
+            if matches!(bounds, LowerBound::Warn) {
+                warn_user_once!(
+                    "Missing version constraint (e.g., a lower bound) for `{}` due to use of a URL specifier",
+                    requirement.name
+                );
+            }
+            RequirementSource::Registry {
+                specifier: VersionSpecifiers::empty(),
+                index: Some(index),
+                conflict,
+            }
+        }
     }
 }
 
@@ -711,10 +718,9 @@ fn path_source(
     };
     if is_dir {
         if let Some(git_member) = git_member {
-            let subdirectory = uv_fs::normalize_path(
-                &uv_fs::relative_to(install_path, git_member.fetch_root)
-                    .expect("Workspace member must be relative"),
-            );
+            let subdirectory = uv_fs::relative_to(install_path, git_member.fetch_root)
+                .expect("Workspace member must be relative");
+            let subdirectory = uv_fs::normalize_path_buf(subdirectory);
             return Ok(RequirementSource::Git {
                 repository: git_member.git_source.git.repository().clone(),
                 reference: git_member.git_source.git.reference().clone(),

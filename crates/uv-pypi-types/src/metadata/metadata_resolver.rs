@@ -151,8 +151,11 @@ impl ResolutionMetadata {
         })
     }
 
-    pub fn parse_pyproject_toml(toml: &str) -> Result<Self, MetadataError> {
-        parse_pyproject_toml(toml)
+    pub fn parse_pyproject_toml(
+        toml: &str,
+        sdist_version: Option<&Version>,
+    ) -> Result<Self, MetadataError> {
+        parse_pyproject_toml(toml, sdist_version)
     }
 }
 

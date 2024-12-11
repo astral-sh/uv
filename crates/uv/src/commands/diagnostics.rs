@@ -1,20 +1,17 @@
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_distribution_types::{BuiltDist, DerivationChain, DerivationStep, Name, SourceDist};
+use uv_distribution_types::{DerivationChain, DerivationStep, Dist, DistErrorKind, Name};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
 
 use crate::commands::pip;
 
-type Error = Box<dyn std::error::Error + Send + Sync>;
-
-/// Static map of common package name typos or misconfigurations to their correct package names.
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
         serde_json::from_str(include_str!("suggestions.json")).unwrap();
@@ -75,72 +72,26 @@ impl OperationDiagnostic {
                 }
                 None
             }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::DownloadAndBuild(
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
+                kind,
                 dist,
                 chain,
                 err,
             )) => {
-                download_and_build(dist, &chain, Box::new(err));
+                dist_error(kind, dist, &chain, err);
                 None
             }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Download(
+            pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
+                dist_error(kind, dist, &DerivationChain::default(), Arc::new(err));
+                None
+            }
+            pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
+                kind,
                 dist,
                 chain,
                 err,
             )) => {
-                download(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, chain, err)) => {
-                build(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Requirements(uv_requirements::Error::DownloadAndBuild(
-                dist,
-                chain,
-                err,
-            )) => {
-                download_and_build(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Requirements(uv_requirements::Error::Download(
-                dist,
-                chain,
-                err,
-            )) => {
-                download(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Requirements(uv_requirements::Error::Build(
-                dist,
-                chain,
-                err,
-            )) => {
-                build(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
-                dist,
-                chain,
-                err,
-            )) => {
-                download_and_build(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::Download(
-                dist,
-                chain,
-                err,
-            )) => {
-                download(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::Build(
-                dist,
-                chain,
-                err,
-            )) => {
-                build(dist, &chain, Box::new(err));
+                dist_error(kind, dist, &chain, Arc::new(err));
                 None
             }
             pip::operations::Error::Requirements(err) => {
@@ -158,113 +109,47 @@ impl OperationDiagnostic {
     }
 }
 
-/// Render a remote source distribution build failure with a help message.
-pub(crate) fn download_and_build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Error) {
+/// Render a distribution failure (read, download or build) with a help message.
+pub(crate) fn dist_error(
+    kind: DistErrorKind,
+    dist: Box<Dist>,
+    chain: &DerivationChain,
+    cause: Arc<uv_distribution::Error>,
+) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to download and build `{sdist}`")]
+    #[error("{kind} `{dist}`")]
     #[diagnostic()]
     struct Diagnostic {
-        sdist: Box<SourceDist>,
+        kind: DistErrorKind,
+        dist: Box<Dist>,
         #[source]
-        cause: Error,
+        cause: Arc<uv_distribution::Error>,
         #[help]
         help: Option<String>,
     }
 
+    let help = SUGGESTIONS
+        .get(dist.name())
+        .map(|suggestion| {
+            format!(
+                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                dist.name().cyan(),
+                suggestion.cyan(),
+                suggestion.cyan(),
+            )
+        })
+        .or_else(|| {
+            if chain.is_empty() {
+                None
+            } else {
+                Some(format_chain(dist.name(), dist.version(), chain))
+            }
+        });
     let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS
-            .get(sdist.name())
-            .map(|suggestion| {
-                format!(
-                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    sdist.name().cyan(),
-                    suggestion.cyan(),
-                    suggestion.cyan(),
-                )
-            })
-            .or_else(|| {
-                if chain.is_empty() {
-                    None
-                } else {
-                    Some(format_chain(sdist.name(), sdist.version(), chain))
-                }
-            }),
-        sdist,
+        kind,
+        dist,
         cause,
-    });
-    anstream::eprint!("{report:?}");
-}
-
-/// Render a remote binary distribution download failure with a help message.
-pub(crate) fn download(wheel: Box<BuiltDist>, chain: &DerivationChain, cause: Error) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to download `{wheel}`")]
-    #[diagnostic()]
-    struct Diagnostic {
-        wheel: Box<BuiltDist>,
-        #[source]
-        cause: Error,
-        #[help]
-        help: Option<String>,
-    }
-
-    let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS
-            .get(wheel.name())
-            .map(|suggestion| {
-                format!(
-                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    wheel.name().cyan(),
-                    suggestion.cyan(),
-                    suggestion.cyan(),
-                )
-            })
-            .or_else(|| {
-                if chain.is_empty() {
-                    None
-                } else {
-                    Some(format_chain(wheel.name(), Some(wheel.version()), chain))
-                }
-            }),
-        wheel,
-        cause,
-    });
-    anstream::eprint!("{report:?}");
-}
-
-/// Render a local source distribution build failure with a help message.
-pub(crate) fn build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Error) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to build `{sdist}`")]
-    #[diagnostic()]
-    struct Diagnostic {
-        sdist: Box<SourceDist>,
-        #[source]
-        cause: Error,
-        #[help]
-        help: Option<String>,
-    }
-
-    let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS
-            .get(sdist.name())
-            .map(|suggestion| {
-                format!(
-                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    sdist.name().cyan(),
-                    suggestion.cyan(),
-                    suggestion.cyan(),
-                )
-            })
-            .or_else(|| {
-                if chain.is_empty() {
-                    None
-                } else {
-                    Some(format_chain(sdist.name(), sdist.version(), chain))
-                }
-            }),
-        sdist,
-        cause,
+        help,
     });
     anstream::eprint!("{report:?}");
 }

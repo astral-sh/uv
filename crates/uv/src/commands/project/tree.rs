@@ -8,7 +8,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{Connectivity, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, DevGroupsSpecification, LowerBound, TargetTriple, TrustedHost,
+    Concurrency, DevGroupsSpecification, LowerBound, PreviewMode, TargetTriple, TrustedHost,
 };
 use uv_dispatch::SharedState;
 use uv_distribution_types::IndexCapabilities;
@@ -58,6 +58,7 @@ pub(crate) async fn tree(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
@@ -121,6 +122,7 @@ pub(crate) async fn tree(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {

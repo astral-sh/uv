@@ -4,6 +4,10 @@
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum ProjectBuildBackend {
+    #[cfg_attr(feature = "clap", value(hide = true))]
+    #[cfg_attr(feature = "schemars", value(hide = true))]
+    /// Use uv as the project build backend.
+    Uv,
     #[default]
     #[serde(alias = "hatchling")]
     #[cfg_attr(feature = "clap", value(alias = "hatchling"))]

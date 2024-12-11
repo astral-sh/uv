@@ -1,5 +1,6 @@
 use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use fs_err::File;
 use indoc::indoc;
@@ -2331,6 +2332,40 @@ fn list_files_errors() -> Result<()> {
     ----- stderr -----
       × Failed to build `[WORKSPACE]/scripts/packages/anyio_local`
       ╰─▶ Can only use `--list` with the uv backend
+    "###);
+    Ok(())
+}
+
+#[test]
+fn version_mismatch() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
+    context
+        .build()
+        .arg("--sdist")
+        .arg("--out-dir")
+        .arg(context.temp_dir.path())
+        .arg(anyio_local)
+        .assert()
+        .success();
+    let wrong_source_dist = context.temp_dir.child("anyio-1.2.3.tar.gz");
+    fs_err::rename(
+        context.temp_dir.child("anyio-4.3.0+foo.tar.gz"),
+        &wrong_source_dist,
+    )?;
+    uv_snapshot!(context.filters(), context.build()
+        .arg(wrong_source_dist.path())
+        .arg("--wheel")
+        .arg("--out-dir")
+        .arg(context.temp_dir.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel from source distribution...
+      × Failed to build `[TEMP_DIR]/anyio-1.2.3.tar.gz`
+      ╰─▶ The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
     "###);
     Ok(())
 }

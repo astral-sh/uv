@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    LowerBound, NoBinary, NoBuild, SourceStrategy, TrustedHost,
+    LowerBound, NoBinary, NoBuild, PreviewMode, SourceStrategy, TrustedHost,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
@@ -65,6 +65,7 @@ pub(crate) async fn venv(
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     match venv_impl(
         project_dir,
@@ -92,6 +93,7 @@ pub(crate) async fn venv(
         cache,
         printer,
         relocatable,
+        preview,
     )
     .await
     {
@@ -150,6 +152,7 @@ async fn venv_impl(
     cache: &Cache,
     printer: Printer,
     relocatable: bool,
+    preview: PreviewMode,
 ) -> miette::Result<ExitStatus> {
     let project = if no_project {
         None
@@ -333,6 +336,7 @@ async fn venv_impl(
             LowerBound::Allow,
             sources,
             concurrency,
+            preview,
         );
 
         // Resolve the seed packages.

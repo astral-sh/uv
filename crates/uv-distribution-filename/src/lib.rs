@@ -6,7 +6,7 @@ use uv_pep440::Version;
 pub use build_tag::{BuildTag, BuildTagError};
 pub use egg::{EggInfoFilename, EggInfoFilenameError};
 pub use extension::{DistExtension, ExtensionError, SourceDistExtension};
-pub use source_dist::SourceDistFilename;
+pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
 pub use wheel::{WheelFilename, WheelFilenameError};
 
 mod build_tag;
@@ -15,7 +15,7 @@ mod extension;
 mod source_dist;
 mod wheel;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DistFilename {
     SourceDistFilename(SourceDistFilename),
     WheelFilename(WheelFilename),

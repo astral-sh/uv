@@ -1,15 +1,19 @@
+use std::io::Cursor;
 use std::process::Command;
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
+use flate2::write::GzEncoder;
 use fs_err as fs;
+use fs_err::File;
 use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
 
 use crate::common::{
-    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path, TestContext,
+    self, build_vendor_links_url, decode_token, get_bin, uv_snapshot, venv_bin_path,
+    venv_to_interpreter, TestContext,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -73,6 +77,41 @@ fn missing_pyproject_toml() {
     error: File not found: `pyproject.toml`
     "###
     );
+}
+
+#[test]
+fn missing_find_links() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("flask")?;
+
+    let error = regex::escape("The system cannot find the path specified. (os error 3)");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(std::iter::once((
+            error.as_str(),
+            "No such file or directory (os error 2)",
+        )))
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--find-links")
+        .arg("./missing")
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `--find-links` directory: [TEMP_DIR]/missing
+      Caused by: No such file or directory (os error 2)
+    "###
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -7454,4 +7493,164 @@ fn respect_no_installer_metadata_env_var() {
         .join("urllib3-2.2.3.dist-info")
         .join("INSTALLER");
     assert!(!installer_file.exists());
+}
+
+/// Check that we error if a source dist lies about its built wheel version.
+#[test]
+fn test_dynamic_version_sdist_wrong_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a source dist that has a version in its name, a dynamic version in pyproject.toml,
+    // but reports the wrong version when built.
+    let pyproject_toml = r#"
+    [project]
+    name = "foo"
+    requires-python = ">=3.9"
+    dependencies = []
+    dynamic = ["version"]
+    "#;
+
+    let setup_py = indoc! {r#"
+    from setuptools import setup
+
+    setup(name="foo", version="10.11.12")
+    "#};
+
+    let source_dist = context.temp_dir.child("foo-1.2.3.tar.gz");
+    // Flush the file after we're done.
+    {
+        let file = File::create(source_dist.path())?;
+        let enc = GzEncoder::new(file, flate2::Compression::default());
+        let mut tar = tar::Builder::new(enc);
+
+        for (path, contents) in [
+            ("foo-1.2.3/pyproject.toml", pyproject_toml),
+            ("foo-1.2.3/setup.py", setup_py),
+        ] {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(contents.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append_data(&mut header, path, Cursor::new(contents))?;
+        }
+        tar.finish()?;
+    }
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(source_dist.path()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `foo @ file://[TEMP_DIR]/foo-1.2.3.tar.gz`
+      ╰─▶ Package metadata version `10.11.12` does not match given version `1.2.3`
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package with multiple wheels at the same version, differing only in the build tag. We
+/// should choose the wheel with the highest build tag.
+#[test]
+fn build_tag() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("build-tag")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("scripts/links/")), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + build-tag==1.0.0
+    "###
+    );
+
+    // Ensure that we choose the highest build tag (5).
+    uv_snapshot!(Command::new(venv_to_interpreter(&context.venv))
+        .arg("-B")
+        .arg("-c")
+        .arg("import build_tag; build_tag.main()")
+        .current_dir(&context.temp_dir), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    5
+
+    ----- stderr -----
+    "###);
+}
+
+#[test]
+fn missing_git_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test`
+      Caused by: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
+    workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn missing_subdirectory_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `workspace-in-root-test @ git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing`
+      ╰─▶ The source distribution `git+https://github.com/astral-sh/workspace-in-root-test#subdirectory=missing` has no subdirectory `missing`
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn missing_subdirectory_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing`
+      ╰─▶ The source distribution `https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz#subdirectory=missing` has no subdirectory `missing`
+    "###
+    );
+
+    Ok(())
 }

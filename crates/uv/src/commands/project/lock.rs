@@ -11,8 +11,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{Connectivity, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, ExtrasSpecification, LowerBound, Reinstall, SourceStrategy,
-    TrustedHost, Upgrade,
+    Concurrency, Constraints, ExtrasSpecification, LowerBound, PreviewMode, Reinstall,
+    SourceStrategy, TrustedHost, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
@@ -89,6 +89,7 @@ pub(crate) async fn lock(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     // Find the project requirements.
     let workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
@@ -142,6 +143,7 @@ pub(crate) async fn lock(
         allow_insecure_host,
         cache,
         printer,
+        preview,
     )
     .await
     {
@@ -201,6 +203,7 @@ pub(super) async fn do_safe_lock(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<LockResult, ProjectError> {
     match mode {
         LockMode::Frozen => {
@@ -231,6 +234,7 @@ pub(super) async fn do_safe_lock(
                 allow_insecure_host,
                 cache,
                 printer,
+                preview,
             )
             .await?;
 
@@ -270,6 +274,7 @@ pub(super) async fn do_safe_lock(
                 allow_insecure_host,
                 cache,
                 printer,
+                preview,
             )
             .await?;
 
@@ -300,6 +305,7 @@ async fn do_lock(
     allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<LockResult, ProjectError> {
     let start = std::time::Instant::now();
 
@@ -502,6 +508,7 @@ async fn do_lock(
         bounds,
         sources,
         concurrency,
+        preview,
     );
 
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);

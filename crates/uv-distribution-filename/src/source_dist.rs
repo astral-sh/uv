@@ -14,6 +14,8 @@ use uv_pep440::{Version, VersionParseError};
     Debug,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Serialize,
     Deserialize,
     rkyv::Archive,

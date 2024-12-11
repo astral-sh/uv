@@ -87,7 +87,7 @@ mod resolver {
     use uv_client::RegistryClient;
     use uv_configuration::{
         BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, LowerBound,
-        SourceStrategy,
+        PreviewMode, SourceStrategy,
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
@@ -190,6 +190,7 @@ mod resolver {
             LowerBound::default(),
             sources,
             concurrency,
+            PreviewMode::Enabled,
         );
 
         let markers = if universal {

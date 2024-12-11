@@ -1,13 +1,13 @@
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::{fixture::ChildPath, prelude::*};
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 
+use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
-
-use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
+use uv_fs::Simplified;
 use uv_static::EnvVars;
 
 #[test]
@@ -5110,6 +5110,110 @@ fn sync_derivation_chain_group() -> Result<()> {
     Ok(())
 }
 
+/// See: <https://github.com/astral-sh/uv/issues/9743>
+#[test]
+fn sync_stale_egg_info() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = [
+            "member @ git+https://github.com/astral-sh/uv-stale-egg-info-test.git#subdirectory=member",
+            "root @ git+https://github.com/astral-sh/uv-stale-egg-info-test.git",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r###"
+            version = 1
+            requires-python = ">=3.13"
+
+            [options]
+            exclude-newer = "2024-03-25T00:00:00Z"
+
+            [[package]]
+            name = "foo"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "member" },
+                { name = "root" },
+            ]
+
+            [package.metadata]
+            requires-dist = [
+                { name = "member", git = "https://github.com/astral-sh/uv-stale-egg-info-test.git?subdirectory=member" },
+                { name = "root", git = "https://github.com/astral-sh/uv-stale-egg-info-test.git" },
+            ]
+
+            [[package]]
+            name = "member"
+            version = "0.1.dev5+gfea1041"
+            source = { git = "https://github.com/astral-sh/uv-stale-egg-info-test.git?subdirectory=member#fea10416b9c479ac88fb217e14e40249b63bfbee" }
+            dependencies = [
+                { name = "setuptools" },
+            ]
+
+            [[package]]
+            name = "root"
+            version = "0.1.dev5+gfea1041"
+            source = { git = "https://github.com/astral-sh/uv-stale-egg-info-test.git#fea10416b9c479ac88fb217e14e40249b63bfbee" }
+            dependencies = [
+                { name = "member" },
+            ]
+
+            [[package]]
+            name = "setuptools"
+            version = "69.2.0"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950 }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485 },
+            ]
+            "###
+            );
+        }
+    );
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + member==0.1.dev5+gfea1041 (from git+https://github.com/astral-sh/uv-stale-egg-info-test.git@fea10416b9c479ac88fb217e14e40249b63bfbee#subdirectory=member)
+     + root==0.1.dev5+gfea1041 (from git+https://github.com/astral-sh/uv-stale-egg-info-test.git@fea10416b9c479ac88fb217e14e40249b63bfbee)
+     + setuptools==69.2.0
+    "###);
+
+    Ok(())
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
 fn sync_git_repeated_member_static_metadata() -> Result<()> {
@@ -5585,6 +5689,127 @@ fn sync_git_path_dependency() -> Result<()> {
     Installed 2 packages in [TIME]
      + package1==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package1)
      + package2==0.1.0 (from git+https://github.com/astral-sh/uv-path-dependency-test.git@28781b32cf1f260cdb2c8040628079eb265202bd#subdirectory=package2)
+    "###);
+
+    Ok(())
+}
+
+/// Sync a package with multiple wheels at the same version, differing only in the build tag. We
+/// should choose the wheel with the highest build tag.
+#[test]
+fn sync_build_tag() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Populate the `--find-links` entries.
+    fs_err::create_dir_all(context.temp_dir.join("links"))?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("build_tag-"))
+        {
+            let dest = context
+                .temp_dir
+                .join("links")
+                .join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["build-tag"]
+
+        [tool.uv]
+        find-links = ["{}"]
+        "#,
+            context.temp_dir.join("links/").portable_display(),
+        })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    let lock = fs_err::read_to_string(context.temp_dir.child("uv.lock")).unwrap();
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "build-tag"
+        version = "1.0.0"
+        source = { registry = "links" }
+        wheels = [
+            { path = "build_tag-1.0.0-1-py2.py3-none-any.whl" },
+            { path = "build_tag-1.0.0-3-py2.py3-none-any.whl" },
+            { path = "build_tag-1.0.0-5-py2.py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "build-tag" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "build-tag" }]
+        "###
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + build-tag==1.0.0
+    "###);
+
+    // Ensure that we choose the highest build tag (5).
+    uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("python").arg("-c").arg("import build_tag; build_tag.main()"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    5
+
+    ----- stderr -----
     "###);
 
     Ok(())

@@ -56,7 +56,8 @@ The `.python-version` file can be used to create a default Python version reques
 described above can be used, though use of a version number is recommended for interopability with
 other tools.
 
-A `.python-version` file can be created in the current directory with the `uv python pin` command.
+A `.python-version` file can be created in the current directory with the
+[`uv python pin`](../reference/cli.md/#uv-python-pin) command.
 
 Discovery of `.python-version` files can be disabled with `--no-config`.
 

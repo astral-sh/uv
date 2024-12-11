@@ -10,8 +10,8 @@ use rustc_hash::FxHashMap;
 use tracing::trace;
 
 use uv_distribution_types::{
-    BuiltDist, DerivationChain, IndexCapabilities, IndexLocations, IndexUrl, InstalledDist,
-    SourceDist,
+    DerivationChain, Dist, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl,
+    InstalledDist, InstalledDistError,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{LocalVersionSlice, Version};
@@ -24,7 +24,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
-    IncompletePackage, ResolverEnvironment, UnavailablePackage, UnavailableReason,
+    MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
 use crate::Options;
 
@@ -97,37 +97,16 @@ pub enum ResolveError {
     #[error(transparent)]
     ParsedUrl(#[from] uv_pypi_types::ParsedUrlError),
 
-    #[error("Failed to download `{0}`")]
-    Download(
-        Box<BuiltDist>,
+    #[error("{0} `{1}`")]
+    Dist(
+        DistErrorKind,
+        Box<Dist>,
         DerivationChain,
         #[source] Arc<uv_distribution::Error>,
     ),
 
-    #[error("Failed to download and build `{0}`")]
-    DownloadAndBuild(
-        Box<SourceDist>,
-        DerivationChain,
-        #[source] Arc<uv_distribution::Error>,
-    ),
-
-    #[error("Failed to read `{0}`")]
-    Read(
-        Box<BuiltDist>,
-        DerivationChain,
-        #[source] Arc<uv_distribution::Error>,
-    ),
-
-    // TODO(zanieb): Use `thiserror` in `InstalledDist` so we can avoid chaining `anyhow`
     #[error("Failed to read metadata from installed package `{0}`")]
-    ReadInstalled(Box<InstalledDist>, DerivationChain, #[source] anyhow::Error),
-
-    #[error("Failed to build `{0}`")]
-    Build(
-        Box<SourceDist>,
-        DerivationChain,
-        #[source] Arc<uv_distribution::Error>,
-    ),
+    ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),
@@ -166,7 +145,7 @@ pub struct NoSolutionError {
     index_locations: IndexLocations,
     index_capabilities: IndexCapabilities,
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
-    incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+    incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
     fork_urls: ForkUrls,
     env: ResolverEnvironment,
     workspace_members: BTreeSet<PackageName>,
@@ -184,7 +163,7 @@ impl NoSolutionError {
         index_locations: IndexLocations,
         index_capabilities: IndexCapabilities,
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
+        incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         fork_urls: ForkUrls,
         env: ResolverEnvironment,
         workspace_members: BTreeSet<PackageName>,
@@ -747,7 +726,7 @@ fn collapse_unavailable_versions(
 ///
 /// Intended to effectively change the root to a workspace member in single project
 /// workspaces, avoiding a level of indirection like "And because your project
-/// requires your project, we can conclude that your projects's requirements are
+/// requires your project, we can conclude that your project's requirements are
 /// unsatisfiable."
 fn drop_root_dependency_on_project(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,

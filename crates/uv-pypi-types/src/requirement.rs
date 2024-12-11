@@ -562,6 +562,16 @@ impl RequirementSource {
         matches!(self, Self::Directory { editable: true, .. })
     }
 
+    /// Returns `true` if the source is empty.
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Registry { specifier, .. } => specifier.is_empty(),
+            Self::Url { .. } | Self::Git { .. } | Self::Path { .. } | Self::Directory { .. } => {
+                false
+            }
+        }
+    }
+
     /// If the source is the registry, return the version specifiers
     pub fn version_specifiers(&self) -> Option<&VersionSpecifiers> {
         match self {

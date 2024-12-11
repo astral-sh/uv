@@ -6,7 +6,7 @@ use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
 use crate::resolver::ForkState;
-use crate::universal_marker::UniversalMarker;
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::PythonRequirement;
 
 /// Represents one or more marker environments for a resolution.
@@ -379,24 +379,13 @@ impl ResolverEnvironment {
                 ref exclude,
                 ..
             } => {
-                let mut conflict_marker = MarkerTree::TRUE;
+                let mut conflict_marker = ConflictMarker::TRUE;
                 for item in exclude.iter() {
-                    if let Some(extra) = item.extra() {
-                        let operator = uv_pep508::ExtraOperator::NotEqual;
-                        let name = uv_pep508::MarkerValueExtra::Extra(extra.clone());
-                        let expr = uv_pep508::MarkerExpression::Extra { operator, name };
-                        let exclude_extra_marker = MarkerTree::expression(expr);
-                        conflict_marker.and(exclude_extra_marker);
-                    }
+                    conflict_marker =
+                        conflict_marker.and(ConflictMarker::from_conflict_item(item).negate());
                 }
                 for item in include.iter() {
-                    if let Some(extra) = item.extra() {
-                        let operator = uv_pep508::ExtraOperator::Equal;
-                        let name = uv_pep508::MarkerValueExtra::Extra(extra.clone());
-                        let expr = uv_pep508::MarkerExpression::Extra { operator, name };
-                        let exclude_extra_marker = MarkerTree::expression(expr);
-                        conflict_marker.and(exclude_extra_marker);
-                    }
+                    conflict_marker = conflict_marker.and(ConflictMarker::from_conflict_item(item));
                 }
                 Some(UniversalMarker::new(*markers, conflict_marker))
             }

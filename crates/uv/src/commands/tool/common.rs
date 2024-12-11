@@ -125,47 +125,52 @@ pub(crate) fn install_executables(
         return Ok(ExitStatus::Failure);
     }
 
-    // Check if they exist, before installing
-    let mut existing_entry_points = target_entry_points
-        .iter()
-        .filter(|(_, _, target_path)| target_path.exists())
-        .peekable();
+    // Error if we're overwriting an existing entrypoint, unless the user passed `--force`.
+    if !force {
+        let mut existing_entry_points = target_entry_points
+            .iter()
+            .filter(|(_, _, target_path)| target_path.exists())
+            .peekable();
+        if existing_entry_points.peek().is_some() {
+            // Clean up the environment we just created
+            installed_tools.remove_environment(name)?;
 
-    // Ignore any existing entrypoints if the user passed `--force`, or the existing recept was
-    // broken.
-    if force {
-        for (name, _, target) in existing_entry_points {
-            debug!("Removing existing executable: `{name}`");
-            fs_err::remove_file(target)?;
+            let existing_entry_points = existing_entry_points
+                // SAFETY: We know the target has a filename because we just constructed it above
+                .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
+                .collect::<Vec<_>>();
+            let (s, exists) = if existing_entry_points.len() == 1 {
+                ("", "exists")
+            } else {
+                ("s", "exist")
+            };
+            bail!(
+                "Executable{s} already {exists}: {} (use `--force` to overwrite)",
+                existing_entry_points
+                    .iter()
+                    .map(|name| name.bold())
+                    .join(", ")
+            )
         }
-    } else if existing_entry_points.peek().is_some() {
-        // Clean up the environment we just created
-        installed_tools.remove_environment(name)?;
-
-        let existing_entry_points = existing_entry_points
-            // SAFETY: We know the target has a filename because we just constructed it above
-            .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
-            .collect::<Vec<_>>();
-        let (s, exists) = if existing_entry_points.len() == 1 {
-            ("", "exists")
-        } else {
-            ("s", "exist")
-        };
-        bail!(
-            "Executable{s} already {exists}: {} (use `--force` to overwrite)",
-            existing_entry_points
-                .iter()
-                .map(|name| name.bold())
-                .join(", ")
-        )
     }
+
+    #[cfg(windows)]
+    let itself = std::env::current_exe().ok();
 
     for (name, source_path, target_path) in &target_entry_points {
         debug!("Installing executable: `{name}`");
+
         #[cfg(unix)]
         replace_symlink(source_path, target_path).context("Failed to install executable")?;
+
         #[cfg(windows)]
-        fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
+        if itself.as_ref().is_some_and(|itself| {
+            std::path::absolute(target_path).is_ok_and(|target| *itself == target)
+        }) {
+            self_replace::self_replace(source_path).context("Failed to install entrypoint")?;
+        } else {
+            fs_err::copy(source_path, target_path).context("Failed to install entrypoint")?;
+        }
     }
 
     let s = if target_entry_points.len() == 1 {

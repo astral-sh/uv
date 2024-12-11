@@ -9,17 +9,18 @@ use anyhow::{anyhow, Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use tracing::{debug, instrument};
-
+use tracing::{debug, instrument, trace};
+use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, Reinstall,
-    SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, PreviewMode,
+    Reinstall, SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
     SourceDist, VersionOrUrlRef,
@@ -29,8 +30,8 @@ use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    DerivationChainBuilder, ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest,
-    OptionsBuilder, PythonRequirement, Resolver, ResolverEnvironment,
+    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
+    PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
 
@@ -57,6 +58,7 @@ pub struct BuildDispatch<'a> {
     bounds: LowerBound,
     sources: SourceStrategy,
     concurrency: Concurrency,
+    preview: PreviewMode,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -79,6 +81,7 @@ impl<'a> BuildDispatch<'a> {
         bounds: LowerBound,
         sources: SourceStrategy,
         concurrency: Concurrency,
+        preview: PreviewMode,
     ) -> Self {
         Self {
             client,
@@ -101,6 +104,7 @@ impl<'a> BuildDispatch<'a> {
             bounds,
             sources,
             concurrency,
+            preview,
         }
     }
 
@@ -270,32 +274,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             );
 
             preparer
-                .prepare(remote, &self.shared_state.in_flight)
-                .await
-                .map_err(|err| match err {
-                    uv_installer::PrepareError::DownloadAndBuild(dist, chain, err) => {
-                        debug_assert!(chain.is_empty());
-                        let chain =
-                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
-                                .unwrap_or_default();
-                        uv_installer::PrepareError::DownloadAndBuild(dist, chain, err)
-                    }
-                    uv_installer::PrepareError::Download(dist, chain, err) => {
-                        debug_assert!(chain.is_empty());
-                        let chain =
-                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
-                                .unwrap_or_default();
-                        uv_installer::PrepareError::Download(dist, chain, err)
-                    }
-                    uv_installer::PrepareError::Build(dist, chain, err) => {
-                        debug_assert!(chain.is_empty());
-                        let chain =
-                            DerivationChainBuilder::from_resolution(resolution, (&*dist).into())
-                                .unwrap_or_default();
-                        uv_installer::PrepareError::Build(dist, chain, err)
-                    }
-                    _ => err,
-                })?
+                .prepare(remote, &self.shared_state.in_flight, resolution)
+                .await?
         };
 
         // Remove any unnecessary packages.
@@ -340,7 +320,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         source: &'data Path,
         subdirectory: Option<&'data Path>,
         install_path: &'data Path,
-        version_id: Option<String>,
+        version_id: Option<&'data str>,
         dist: Option<&'data SourceDist>,
         sources: SourceStrategy,
         build_kind: BuildKind,
@@ -393,6 +373,73 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         .boxed_local()
         .await?;
         Ok(builder)
+    }
+
+    async fn direct_build<'data>(
+        &'data self,
+        source: &'data Path,
+        subdirectory: Option<&'data Path>,
+        output_dir: &'data Path,
+        build_kind: BuildKind,
+        version_id: Option<&'data str>,
+    ) -> Result<Option<DistFilename>> {
+        // Direct builds are a preview feature with the uv build backend.
+        if self.preview.is_disabled() {
+            trace!("Preview is disabled, not checking for direct build");
+            return Ok(None);
+        }
+
+        let source_tree = if let Some(subdir) = subdirectory {
+            source.join(subdir)
+        } else {
+            source.to_path_buf()
+        };
+
+        // Only perform the direct build if the backend is uv in a compatible version.
+        let source_tree_str = source_tree.display().to_string();
+        let identifier = version_id.unwrap_or_else(|| &source_tree_str);
+        if !check_direct_build(&source_tree, identifier) {
+            trace!("Requirements for direct build not matched: {identifier}");
+            return Ok(None);
+        }
+
+        debug!("Performing direct build for {identifier}");
+
+        let output_dir = output_dir.to_path_buf();
+        let filename = tokio::task::spawn_blocking(move || -> Result<_> {
+            let filename = match build_kind {
+                BuildKind::Wheel => {
+                    let wheel = uv_build_backend::build_wheel(
+                        &source_tree,
+                        &output_dir,
+                        None,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::WheelFilename(wheel)
+                }
+                BuildKind::Sdist => {
+                    let source_dist = uv_build_backend::build_source_dist(
+                        &source_tree,
+                        &output_dir,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::SourceDistFilename(source_dist)
+                }
+                BuildKind::Editable => {
+                    let wheel = uv_build_backend::build_editable(
+                        &source_tree,
+                        &output_dir,
+                        None,
+                        uv_version::version(),
+                    )?;
+                    DistFilename::WheelFilename(wheel)
+                }
+            };
+            Ok(filename)
+        })
+        .await??;
+
+        Ok(Some(filename))
     }
 }
 

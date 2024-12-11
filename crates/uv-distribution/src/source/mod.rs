@@ -26,7 +26,7 @@ use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
 use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
-use uv_distribution_filename::{SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{EggInfoFilename, SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, FileLocation, GitSourceUrl, HashPolicy, Hashed,
     PathSourceUrl, SourceDist, SourceUrl,
@@ -360,21 +360,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(metadata)
     }
 
-    /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-    pub(crate) async fn requires_dist(&self, project_root: &Path) -> Result<RequiresDist, Error> {
-        let requires_dist = read_requires_dist(project_root).await?;
-        let requires_dist = RequiresDist::from_project_maybe_workspace(
-            requires_dist,
-            project_root,
-            None,
-            self.build_context.locations(),
-            self.build_context.sources(),
-            self.build_context.bounds(),
-        )
-        .await?;
-        Ok(requires_dist)
-    }
-
     /// Build a source distribution from a remote URL.
     async fn url<'data>(
         &self,
@@ -407,6 +392,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
+
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
 
         // If there are build settings, we need to scope to a cache shard.
         let config_settings = self.build_context.config_settings();
@@ -510,6 +505,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // freshness, since entries have to be fresher than the revision itself.
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
+
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = subdirectory {
+            if !source_dist_entry.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    url.clone(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
 
         // If the metadata is static, return it.
         if let Some(metadata) =
@@ -1250,6 +1255,48 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(pointer)
     }
 
+    /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
+    pub(crate) async fn source_tree_requires_dist(
+        &self,
+        project_root: &Path,
+    ) -> Result<Option<RequiresDist>, Error> {
+        // Attempt to read static metadata from the `pyproject.toml`.
+        match read_requires_dist(project_root).await {
+            Ok(requires_dist) => {
+                debug!(
+                    "Found static `requires-dist` for: {}",
+                    project_root.display()
+                );
+                let requires_dist = RequiresDist::from_project_maybe_workspace(
+                    requires_dist,
+                    project_root,
+                    None,
+                    self.build_context.locations(),
+                    self.build_context.sources(),
+                    self.build_context.bounds(),
+                )
+                .await?;
+                Ok(Some(requires_dist))
+            }
+            Err(
+                err @ (Error::MissingPyprojectToml
+                | Error::PyprojectToml(
+                    uv_pypi_types::MetadataError::Pep508Error(_)
+                    | uv_pypi_types::MetadataError::DynamicField(_)
+                    | uv_pypi_types::MetadataError::FieldNotFound(_)
+                    | uv_pypi_types::MetadataError::PoetrySyntax,
+                )),
+            ) => {
+                debug!(
+                    "No static `requires-dist` available for: {} ({err:?})",
+                    project_root.display()
+                );
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     /// Build a source distribution from a Git repository.
     async fn git(
         &self,
@@ -1275,6 +1322,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.reporter.clone().map(Facade::from),
             )
             .await?;
+
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = resource.subdirectory {
+            if !fetch.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    resource.url.to_url(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
 
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
@@ -1363,6 +1420,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?;
 
+        // Validate that the subdirectory exists.
+        if let Some(subdirectory) = resource.subdirectory {
+            if !fetch.path().join(subdirectory).is_dir() {
+                return Err(Error::MissingSubdirectory(
+                    resource.url.to_url(),
+                    subdirectory.to_path_buf(),
+                ));
+            }
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -1411,12 +1478,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
                 .filter(|metadata| metadata.matches(source.name(), source.version()))
             {
-                let path = if let Some(subdirectory) = resource.subdirectory {
-                    Cow::Owned(fetch.path().join(subdirectory))
-                } else {
-                    Cow::Borrowed(fetch.path())
-                };
-
                 let git_member = GitWorkspaceMember {
                     fetch_root: fetch.path(),
                     git_source: resource,
@@ -1803,27 +1864,47 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         fs::create_dir_all(&cache_shard)
             .await
             .map_err(Error::CacheWrite)?;
-        let disk_filename = self
+        // Try a direct build if that isn't disabled and the uv build backend is used.
+        let disk_filename = if let Some(name) = self
             .build_context
-            .setup_build(
+            .direct_build(
                 source_root,
                 subdirectory,
-                source_root,
-                Some(source.to_string()),
-                source.as_dist(),
-                source_strategy,
+                temp_dir.path(),
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
                     BuildKind::Wheel
                 },
-                BuildOutput::Debug,
+                Some(&source.to_string()),
             )
             .await
             .map_err(Error::Build)?
-            .wheel(temp_dir.path())
-            .await
-            .map_err(Error::Build)?;
+        {
+            // In the uv build backend, the normalized filename and the disk filename are the same.
+            name.to_string()
+        } else {
+            self.build_context
+                .setup_build(
+                    source_root,
+                    subdirectory,
+                    source_root,
+                    Some(&source.to_string()),
+                    source.as_dist(),
+                    source_strategy,
+                    if source.is_editable() {
+                        BuildKind::Editable
+                    } else {
+                        BuildKind::Wheel
+                    },
+                    BuildOutput::Debug,
+                )
+                .await
+                .map_err(Error::Build)?
+                .wheel(temp_dir.path())
+                .await
+                .map_err(Error::Build)?
+        };
 
         // Read the metadata from the wheel.
         let filename = WheelFilename::from_str(&disk_filename)?;
@@ -1884,7 +1965,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root,
                 subdirectory,
                 source_root,
-                Some(source.to_string()),
+                Some(&source.to_string()),
                 source.as_dist(),
                 source_strategy,
                 if source.is_editable() {
@@ -1922,14 +2003,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&Path>,
     ) -> Result<Option<ResolutionMetadata>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
-        match read_pyproject_toml(source_root, subdirectory).await {
+        match read_pyproject_toml(source_root, subdirectory, source.version()).await {
             Ok(metadata) => {
                 debug!("Found static `pyproject.toml` for: {source}");
 
-                // Validate the metadata.
-                validate_metadata(source, &metadata)?;
-
-                return Ok(Some(metadata));
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `pyproject.toml` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
             }
             Err(
                 err @ (Error::MissingPyprojectToml
@@ -1956,10 +2045,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(metadata) => {
                 debug!("Found static `PKG-INFO` for: {source}");
 
-                // Validate the metadata.
-                validate_metadata(source, &metadata)?;
-
-                return Ok(Some(metadata));
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `PKG-INFO` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
             }
             Err(
                 err @ (Error::MissingPkgInfo
@@ -1976,14 +2073,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         }
 
         // Attempt to read static metadata from the `egg-info` directory.
-        match read_egg_info(source_root, subdirectory).await {
+        match read_egg_info(source_root, subdirectory, source.name(), source.version()).await {
             Ok(metadata) => {
                 debug!("Found static `egg-info` for: {source}");
 
-                // Validate the metadata.
-                validate_metadata(source, &metadata)?;
-
-                return Ok(Some(metadata));
+                // Validate the metadata, but ignore it if the metadata doesn't match.
+                match validate_metadata(source, &metadata) {
+                    Ok(()) => {
+                        return Ok(Some(metadata));
+                    }
+                    Err(Error::WheelMetadataNameMismatch { metadata, given }) => {
+                        debug!(
+                            "Ignoring `egg-info` for: {source} (metadata: {metadata}, given: {given})"
+                        );
+                    }
+                    Err(err) => return Err(err),
+                }
             }
             Err(
                 err @ (Error::MissingEggInfo
@@ -2245,8 +2350,14 @@ impl LocalRevisionPointer {
 async fn read_egg_info(
     source_tree: &Path,
     subdirectory: Option<&Path>,
+    name: Option<&PackageName>,
+    version: Option<&Version>,
 ) -> Result<ResolutionMetadata, Error> {
-    fn find_egg_info(source_tree: &Path) -> std::io::Result<Option<PathBuf>> {
+    fn find_egg_info(
+        source_tree: &Path,
+        name: Option<&PackageName>,
+        version: Option<&Version>,
+    ) -> std::io::Result<Option<PathBuf>> {
         for entry in fs_err::read_dir(source_tree)? {
             let entry = entry?;
             let ty = entry.file_type()?;
@@ -2256,6 +2367,27 @@ async fn read_egg_info(
                     .extension()
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("egg-info"))
                 {
+                    let Some(file_stem) = path.file_stem() else {
+                        continue;
+                    };
+                    let Some(file_stem) = file_stem.to_str() else {
+                        continue;
+                    };
+                    let Ok(file_name) = EggInfoFilename::parse(file_stem) else {
+                        continue;
+                    };
+                    if let Some(name) = name {
+                        debug!("Skipping `{file_stem}.egg-info` due to name mismatch (expected: `{name}`)");
+                        if file_name.name != *name {
+                            continue;
+                        }
+                    }
+                    if let Some(version) = version {
+                        if file_name.version.as_ref().is_some_and(|v| v != version) {
+                            debug!("Skipping `{file_stem}.egg-info` due to version mismatch (expected: `{version}`)");
+                            continue;
+                        }
+                    }
                     return Ok(Some(path));
                 }
             }
@@ -2269,7 +2401,7 @@ async fn read_egg_info(
     };
 
     // Locate the `egg-info` directory.
-    let egg_info = match find_egg_info(directory.as_ref()) {
+    let egg_info = match find_egg_info(directory.as_ref(), name, version) {
         Ok(Some(path)) => path,
         Ok(None) => return Err(Error::MissingEggInfo),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -2345,6 +2477,7 @@ async fn read_pkg_info(
 async fn read_pyproject_toml(
     source_tree: &Path,
     subdirectory: Option<&Path>,
+    sdist_version: Option<&Version>,
 ) -> Result<ResolutionMetadata, Error> {
     // Read the `pyproject.toml` file.
     let pyproject_toml = match subdirectory {
@@ -2360,8 +2493,8 @@ async fn read_pyproject_toml(
     };
 
     // Parse the metadata.
-    let metadata =
-        ResolutionMetadata::parse_pyproject_toml(&content).map_err(Error::PyprojectToml)?;
+    let metadata = ResolutionMetadata::parse_pyproject_toml(&content, sdist_version)
+        .map_err(Error::PyprojectToml)?;
 
     Ok(metadata)
 }

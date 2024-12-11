@@ -34,10 +34,18 @@ pub enum FindLinksDirectoryError {
     VerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
 }
 
+/// An entry in a `--find-links` index.
+#[derive(Debug, Clone)]
+pub struct FlatIndexEntry {
+    pub filename: DistFilename,
+    pub file: File,
+    pub index: IndexUrl,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct FlatIndexEntries {
     /// The list of `--find-links` entries.
-    pub entries: Vec<(DistFilename, File, IndexUrl)>,
+    pub entries: Vec<FlatIndexEntry>,
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
     pub offline: bool,
@@ -45,7 +53,7 @@ pub struct FlatIndexEntries {
 
 impl FlatIndexEntries {
     /// Create a [`FlatIndexEntries`] from a list of `--find-links` entries.
-    fn from_entries(entries: Vec<(DistFilename, File, IndexUrl)>) -> Self {
+    fn from_entries(entries: Vec<FlatIndexEntry>) -> Self {
         Self {
             entries,
             offline: false,
@@ -130,6 +138,9 @@ impl<'a> FlatIndexClient<'a> {
         while let Some(entries) = fetches.next().await.transpose()? {
             results.extend(entries);
         }
+        results
+            .entries
+            .sort_by(|a, b| a.filename.cmp(&b.filename).then(a.index.cmp(&b.index)));
         Ok(results)
     }
 
@@ -211,11 +222,11 @@ impl<'a> FlatIndexClient<'a> {
                             .expect("archived version always deserializes")
                     })
                     .filter_map(|file| {
-                        Some((
-                            DistFilename::try_from_normalized_filename(&file.filename)?,
+                        Some(FlatIndexEntry {
+                            filename: DistFilename::try_from_normalized_filename(&file.filename)?,
                             file,
-                            flat_index.clone(),
-                        ))
+                            index: flat_index.clone(),
+                        })
                     })
                     .collect();
                 Ok(FlatIndexEntries::from_entries(files))
@@ -232,8 +243,12 @@ impl<'a> FlatIndexClient<'a> {
         path: &Path,
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
+        // The path context is provided by the caller.
+        #[allow(clippy::disallowed_methods)]
+        let entries = std::fs::read_dir(path)?;
+
         let mut dists = Vec::new();
-        for entry in fs_err::read_dir(path)? {
+        for entry in entries {
             let entry = entry?;
             let metadata = entry.metadata()?;
 
@@ -283,7 +298,11 @@ impl<'a> FlatIndexClient<'a> {
                 );
                 continue;
             };
-            dists.push((filename, file, flat_index.clone()));
+            dists.push(FlatIndexEntry {
+                filename,
+                file,
+                index: flat_index.clone(),
+            });
         }
         Ok(FlatIndexEntries::from_entries(dists))
     }

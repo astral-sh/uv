@@ -11,7 +11,18 @@ use uv_platform_tags::{TagCompatibility, Tags};
 
 use crate::{BuildTag, BuildTagError};
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[rkyv(derive(Debug))]
 pub struct WheelFilename {
     pub name: PackageName,

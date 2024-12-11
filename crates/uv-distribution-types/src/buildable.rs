@@ -36,6 +36,7 @@ impl BuildableSource<'_> {
     pub fn version(&self) -> Option<&Version> {
         match self {
             Self::Dist(SourceDist::Registry(dist)) => Some(&dist.version),
+            Self::Dist(SourceDist::Path(dist)) => dist.version.as_ref(),
             Self::Dist(_) => None,
             Self::Url(_) => None,
         }

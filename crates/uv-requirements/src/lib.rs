@@ -4,7 +4,8 @@ pub use crate::source_tree::*;
 pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
-use uv_distribution_types::{BuiltDist, DerivationChain, Dist, GitSourceDist, SourceDist};
+
+use uv_distribution_types::{Dist, DistErrorKind, GitSourceDist, SourceDist};
 use uv_git::GitUrl;
 use uv_pypi_types::{Requirement, RequirementSource};
 
@@ -18,26 +19,8 @@ pub mod upgrade;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Failed to download `{0}`")]
-    Download(
-        Box<BuiltDist>,
-        DerivationChain,
-        #[source] uv_distribution::Error,
-    ),
-
-    #[error("Failed to download and build `{0}`")]
-    DownloadAndBuild(
-        Box<SourceDist>,
-        DerivationChain,
-        #[source] uv_distribution::Error,
-    ),
-
-    #[error("Failed to build `{0}`")]
-    Build(
-        Box<SourceDist>,
-        DerivationChain,
-        #[source] uv_distribution::Error,
-    ),
+    #[error("{0} `{1}`")]
+    Dist(DistErrorKind, Box<Dist>, #[source] uv_distribution::Error),
 
     #[error(transparent)]
     Distribution(#[from] uv_distribution::Error),
@@ -53,13 +36,16 @@ impl Error {
     /// Create an [`Error`] from a distribution error.
     pub(crate) fn from_dist(dist: Dist, cause: uv_distribution::Error) -> Self {
         match dist {
-            Dist::Built(dist) => Self::Download(Box::new(dist), DerivationChain::default(), cause),
+            Dist::Built(dist) => {
+                Self::Dist(DistErrorKind::Download, Box::new(Dist::Built(dist)), cause)
+            }
             Dist::Source(dist) => {
-                if dist.is_local() {
-                    Self::Build(Box::new(dist), DerivationChain::default(), cause)
+                let kind = if dist.is_local() {
+                    DistErrorKind::Build
                 } else {
-                    Self::DownloadAndBuild(Box::new(dist), DerivationChain::default(), cause)
-                }
+                    DistErrorKind::DownloadAndBuild
+                };
+                Self::Dist(kind, Box::new(Dist::Source(dist)), cause)
             }
         }
     }
