@@ -491,7 +491,7 @@ fn python_install_invalid_request() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `foobar` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions
+    error: `foobar` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
     "###);
 
     // Request a version we don't have a download for
@@ -824,7 +824,7 @@ fn python_install_unknown() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `foobar` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions
+    error: `foobar` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
     "###);
 
     context.temp_dir.child("foo").create_dir_all().unwrap();
@@ -836,7 +836,7 @@ fn python_install_unknown() {
     ----- stdout -----
 
     ----- stderr -----
-    error: `./foo` is not a valid Python download request; see `uv python help` for supported formats and `uv python list --only-downloads` for available versions
+    error: `./foo` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions
     "###);
 }
 
