@@ -2,7 +2,7 @@
 
 ## 0.5.8
 
-**This release does not include the `powerpc64le-unknown-linux-musl` target due to a build issue. If you're using these artifacts, please let us know. See [#9793](https://github.com/astral-sh/uv/issues/9793) for details.**
+**This release does not include the `powerpc64le-unknown-linux-musl` target due to a build issue. See [#9793](https://github.com/astral-sh/uv/issues/9793) for details. If this change affects you, please file an issue with your use-case.**
 
 ### Enhancements
 
