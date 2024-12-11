@@ -60,6 +60,18 @@ pub enum CompatibleDist<'a> {
     },
 }
 
+impl CompatibleDist<'_> {
+    /// Return the `requires-python` specifier for the distribution, if any.
+    pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
+        match self {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
+            CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
+            CompatibleDist::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleDist {
     /// An incompatible wheel is available.
