@@ -306,7 +306,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let pubgrub = State::init(root.clone(), MIN_VERSION.clone());
-        let mut prefetcher = BatchPrefetcher::default();
+        let mut prefetcher = BatchPrefetcher::new(
+            self.capabilities.clone(),
+            self.index.clone(),
+            request_sink.clone(),
+        );
         let state = ForkState::new(pubgrub, self.env.clone(), self.python_requirement.clone());
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state);
@@ -497,9 +501,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .partial_solution
                             .unchanging_term_for_package(next_id),
                         &state.python_requirement,
-                        &request_sink,
-                        &self.index,
-                        &self.capabilities,
                         &self.selector,
                         &state.env,
                     )?;
@@ -1078,57 +1079,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         };
 
-        // Validate the Python requirement.
-        let requires_python = match dist {
-            CompatibleDist::InstalledDist(_) => None,
-            CompatibleDist::SourceDist { sdist, .. }
-            | CompatibleDist::IncompatibleWheel { sdist, .. } => {
-                sdist.file.requires_python.as_ref()
-            }
-            CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
-        };
-        let incompatibility = requires_python.and_then(|requires_python| {
-            if python_requirement.installed() == python_requirement.target() {
-                if !python_requirement
-                    .installed()
-                    .is_contained_by(requires_python)
-                {
-                    return if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
-                        Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
-                            requires_python.clone(),
-                            PythonRequirementKind::Installed,
-                        )))
-                    } else {
-                        Some(IncompatibleDist::Source(
-                            IncompatibleSource::RequiresPython(
-                                requires_python.clone(),
-                                PythonRequirementKind::Installed,
-                            ),
-                        ))
-                    };
-                }
-            } else {
-                if !python_requirement.target().is_contained_by(requires_python) {
-                    return if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
-                        Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
-                            requires_python.clone(),
-                            PythonRequirementKind::Target,
-                        )))
-                    } else {
-                        Some(IncompatibleDist::Source(
-                            IncompatibleSource::RequiresPython(
-                                requires_python.clone(),
-                                PythonRequirementKind::Target,
-                            ),
-                        ))
-                    };
-                }
-            }
-            None
-        });
-
-        // The version is incompatible due to its Python requirement.
-        if let Some(incompatibility) = incompatibility {
+        // Check whether the version is incompatible due to its Python requirement.
+        if let Some(incompatibility) = Self::check_requires_python(dist, python_requirement) {
             return Ok(Some(ResolverVersion::Unavailable(
                 candidate.version().clone(),
                 UnavailableVersion::IncompatibleDist(incompatibility),
@@ -1178,6 +1130,59 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         Ok(Some(ResolverVersion::Available(version)))
+    }
+
+    /// Check if the distribution is incompatible with the Python requirement, and if so, return
+    /// the incompatibility.
+    fn check_requires_python(
+        dist: &CompatibleDist,
+        python_requirement: &PythonRequirement,
+    ) -> Option<IncompatibleDist> {
+        let requires_python = match dist {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. }
+            | CompatibleDist::IncompatibleWheel { sdist, .. } => {
+                sdist.file.requires_python.as_ref()
+            }
+            CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
+        }?;
+        if python_requirement.installed() == python_requirement.target() {
+            if !python_requirement
+                .installed()
+                .is_contained_by(requires_python)
+            {
+                return if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
+                    Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+                        requires_python.clone(),
+                        PythonRequirementKind::Installed,
+                    )))
+                } else {
+                    Some(IncompatibleDist::Source(
+                        IncompatibleSource::RequiresPython(
+                            requires_python.clone(),
+                            PythonRequirementKind::Installed,
+                        ),
+                    ))
+                };
+            }
+        } else {
+            if !python_requirement.target().is_contained_by(requires_python) {
+                return if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
+                    Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+                        requires_python.clone(),
+                        PythonRequirementKind::Target,
+                    )))
+                } else {
+                    Some(IncompatibleDist::Source(
+                        IncompatibleSource::RequiresPython(
+                            requires_python.clone(),
+                            PythonRequirementKind::Target,
+                        ),
+                    ))
+                };
+            }
+        }
+        None
     }
 
     /// Given a candidate package and version, return its dependencies.
