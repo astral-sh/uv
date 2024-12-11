@@ -40,7 +40,7 @@ pub enum ValidationError {
     #[error("Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `{0}`")]
     InvalidGroup(String),
     #[error(
-        "Entrypoint names must consist of letters, numbers, dots and dashes; invalid name: `{0}`"
+        "Entrypoint names must consist of letters, numbers, dots, underscores and dashes; invalid name: `{0}`"
     )]
     InvalidName(String),
     #[error("Use `project.scripts` instead of `project.entry-points.console_scripts`")]
@@ -558,7 +558,7 @@ impl PyProjectToml {
             // More strict than the spec, we enforce the recommendation
             if !name
                 .chars()
-                .all(|c| c.is_alphanumeric() || c == '.' || c == '-')
+                .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
             {
                 return Err(ValidationError::InvalidName(name.to_string()));
             }
@@ -1273,7 +1273,7 @@ mod tests {
             "a@b" = "bar"
         "#
         });
-        assert_snapshot!(script_error(&contents), @"Entrypoint names must consist of letters, numbers, dots and dashes; invalid name: `a@b`");
+        assert_snapshot!(script_error(&contents), @"Entrypoint names must consist of letters, numbers, dots, underscores and dashes; invalid name: `a@b`");
     }
 
     #[test]
