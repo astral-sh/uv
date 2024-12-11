@@ -19,7 +19,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -37,7 +37,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -325,7 +325,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Freethreaded
         },
@@ -343,7 +343,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Freethreaded
         },
@@ -559,7 +559,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -577,7 +577,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -865,7 +865,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Freethreaded
         },
@@ -883,7 +883,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Freethreaded
         },
@@ -1099,7 +1099,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -1117,7 +1117,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -1405,7 +1405,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -1423,7 +1423,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -1711,7 +1711,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -1729,7 +1729,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -2017,7 +2017,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -2035,7 +2035,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -2323,7 +2323,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -2341,7 +2341,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -2629,7 +2629,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -2647,7 +2647,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -2935,7 +2935,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -2953,7 +2953,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -3241,7 +3241,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -3259,7 +3259,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -3547,7 +3547,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -3565,7 +3565,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -3817,7 +3817,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -3835,7 +3835,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -4087,7 +4087,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -4105,7 +4105,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -4357,7 +4357,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -4375,7 +4375,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -4663,7 +4663,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -4681,7 +4681,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -4969,7 +4969,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -4987,7 +4987,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -5275,7 +5275,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -5293,7 +5293,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -5545,7 +5545,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -5563,7 +5563,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -5815,7 +5815,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -5833,7 +5833,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -6085,7 +6085,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -6103,7 +6103,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -6373,7 +6373,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -6391,7 +6391,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -6661,7 +6661,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -6679,7 +6679,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -6931,7 +6931,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -6949,7 +6949,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -7183,7 +7183,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -7201,7 +7201,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -7489,7 +7489,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -7507,7 +7507,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -7795,7 +7795,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -7813,7 +7813,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -8101,7 +8101,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -8119,7 +8119,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -8389,7 +8389,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -8407,7 +8407,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -8677,7 +8677,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -8695,7 +8695,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -8947,7 +8947,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -8965,7 +8965,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -9199,7 +9199,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -9217,7 +9217,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -9451,7 +9451,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -9469,7 +9469,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -9703,7 +9703,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -9721,7 +9721,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -9955,7 +9955,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -9973,7 +9973,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -10207,7 +10207,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -10225,7 +10225,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -10459,7 +10459,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -10477,7 +10477,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -10711,7 +10711,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -10729,7 +10729,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -10963,7 +10963,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -10981,7 +10981,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -11107,7 +11107,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -11125,7 +11125,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -11413,7 +11413,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -11431,7 +11431,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -11719,7 +11719,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -11737,7 +11737,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -12025,7 +12025,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -12043,7 +12043,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -12313,7 +12313,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -12331,7 +12331,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -12601,7 +12601,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -12619,7 +12619,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -12871,7 +12871,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -12889,7 +12889,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -13123,7 +13123,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -13141,7 +13141,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -13375,7 +13375,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -13393,7 +13393,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -13627,7 +13627,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -13645,7 +13645,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -13879,7 +13879,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -13897,7 +13897,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14131,7 +14131,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14149,7 +14149,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14383,7 +14383,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14401,7 +14401,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14527,7 +14527,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14545,7 +14545,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14671,7 +14671,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14689,7 +14689,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14797,7 +14797,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14815,7 +14815,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14923,7 +14923,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -14941,7 +14941,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15031,7 +15031,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15049,7 +15049,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15157,7 +15157,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15247,7 +15247,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15337,7 +15337,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15355,7 +15355,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15463,7 +15463,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15481,7 +15481,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15589,7 +15589,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15607,7 +15607,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15715,7 +15715,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15733,7 +15733,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15859,7 +15859,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -15877,7 +15877,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16003,7 +16003,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16021,7 +16021,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16147,7 +16147,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16165,7 +16165,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16291,7 +16291,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16309,7 +16309,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16435,7 +16435,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16453,7 +16453,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16561,7 +16561,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16669,7 +16669,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16777,7 +16777,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16885,7 +16885,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -16993,7 +16993,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17083,7 +17083,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17173,7 +17173,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17263,7 +17263,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17353,7 +17353,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17443,7 +17443,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17533,7 +17533,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17659,7 +17659,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17677,7 +17677,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17785,7 +17785,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17803,7 +17803,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17911,7 +17911,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -17929,7 +17929,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18037,7 +18037,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18055,7 +18055,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18163,7 +18163,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18181,7 +18181,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18289,7 +18289,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18307,7 +18307,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18415,7 +18415,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18433,7 +18433,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18541,7 +18541,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18559,7 +18559,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18667,7 +18667,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18775,7 +18775,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18883,7 +18883,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -18901,7 +18901,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -19009,7 +19009,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -19027,7 +19027,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -19135,7 +19135,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -19243,7 +19243,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -19351,7 +19351,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -19459,7 +19459,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -19567,7 +19567,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },
@@ -19675,7 +19675,7 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             },
-            os: Os(target_lexicon::OperatingSystem::Darwin),
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
             libc: Libc::None,
             variant: PythonVariant::Default
         },

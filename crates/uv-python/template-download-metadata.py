@@ -81,6 +81,15 @@ def prepare_arch(arch: dict) -> tuple[str, str]:
     return family, variant
 
 
+def prepare_os(os: str) -> str:
+    match os:
+        # Special constructors
+        case "darwin":
+            return "Darwin(None)"
+
+    return os.title()
+
+
 def prepare_prerelease(prerelease: str) -> str:
     if not prerelease:
         return "None"
@@ -91,7 +100,7 @@ def prepare_prerelease(prerelease: str) -> str:
 
 
 def prepare_value(value: dict) -> dict:
-    value["os"] = value["os"].title()
+    value["os"] = prepare_os(value["os"])
     value["arch_family"], value["arch_variant"] = prepare_arch(value["arch"])
     value["name"] = prepare_name(value["name"])
     value["libc"] = prepare_libc(value["libc"])
