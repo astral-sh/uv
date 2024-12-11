@@ -55,7 +55,7 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
-    ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    IncompletePackage, ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
@@ -64,7 +64,6 @@ pub use crate::resolver::environment::ResolverEnvironment;
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-pub(crate) use provider::MetadataUnavailable;
 
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
@@ -119,7 +118,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     /// Incompatibilities for packages that are entirely unavailable.
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
-    incomplete_packages: DashMap<PackageName, DashMap<Version, MetadataUnavailable>>,
+    incomplete_packages: DashMap<PackageName, DashMap<Version, IncompletePackage>>,
     /// The options that were used to configure this resolver.
     options: Options,
     /// The reporter to use for this resolver.
@@ -355,7 +354,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         state.priorities.get(&state.pubgrub.package_store[id])
                     })
                 else {
-                    // All packages have been assigned, the fork has been successfully resolved
                     if tracing::enabled!(Level::DEBUG) {
                         prefetcher.log_tried_versions();
                     }
@@ -921,10 +919,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // If we failed to fetch the metadata for a URL, we can't proceed.
         let metadata = match &*response {
             MetadataResponse::Found(archive) => &archive.metadata,
-            MetadataResponse::Unavailable(reason) => {
+            MetadataResponse::Offline => {
                 self.unavailable_packages
-                    .insert(name.clone(), reason.into());
+                    .insert(name.clone(), UnavailablePackage::Offline);
                 return Ok(None);
+            }
+            MetadataResponse::MissingMetadata => {
+                self.unavailable_packages
+                    .insert(name.clone(), UnavailablePackage::MissingMetadata);
+                return Ok(None);
+            }
+            MetadataResponse::InvalidMetadata(err) => {
+                self.unavailable_packages.insert(
+                    name.clone(),
+                    UnavailablePackage::InvalidMetadata(err.to_string()),
+                );
+                return Ok(None);
+            }
+            MetadataResponse::InconsistentMetadata(err) => {
+                self.unavailable_packages.insert(
+                    name.clone(),
+                    UnavailablePackage::InvalidMetadata(err.to_string()),
+                );
+                return Ok(None);
+            }
+            MetadataResponse::InvalidStructure(err) => {
+                self.unavailable_packages.insert(
+                    name.clone(),
+                    UnavailablePackage::InvalidStructure(err.to_string()),
+                );
+                return Ok(None);
+            }
+            MetadataResponse::RequiresPython(..) => {
+                unreachable!("`requires-python` is only known upfront for registry distributions")
             }
             MetadataResponse::Error(dist, err) => {
                 // TODO(charlie): Add derivation chain for URL dependencies. In practice, this isn't
@@ -1291,20 +1318,82 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 let metadata = match &*response {
                     MetadataResponse::Found(archive) => &archive.metadata,
-                    MetadataResponse::Unavailable(reason) => {
-                        let unavailable_version = UnavailableVersion::from(reason);
-                        let message = unavailable_version.singular_message();
-                        if let Some(err) = reason.source() {
-                            // Show the detailed error for metadata parse errors.
-                            warn!("{name} {message}: {err}");
-                        } else {
-                            warn!("{name} {message}");
-                        }
+                    MetadataResponse::Offline => {
                         self.incomplete_packages
                             .entry(name.clone())
                             .or_default()
-                            .insert(version.clone(), reason.clone());
-                        return Ok(Dependencies::Unavailable(unavailable_version));
+                            .insert(version.clone(), IncompletePackage::Offline);
+                        return Ok(Dependencies::Unavailable(UnavailableVersion::Offline));
+                    }
+                    MetadataResponse::MissingMetadata => {
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(version.clone(), IncompletePackage::MissingMetadata);
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::MissingMetadata,
+                        ));
+                    }
+                    MetadataResponse::InvalidMetadata(err) => {
+                        warn!("Unable to extract metadata for {name}: {err}");
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::InvalidMetadata(err.to_string()),
+                            );
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::InvalidMetadata,
+                        ));
+                    }
+                    MetadataResponse::InconsistentMetadata(err) => {
+                        warn!("Unable to extract metadata for {name}: {err}");
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::InconsistentMetadata(err.to_string()),
+                            );
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::InconsistentMetadata,
+                        ));
+                    }
+                    MetadataResponse::InvalidStructure(err) => {
+                        warn!("Unable to extract metadata for {name}: {err}");
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::InvalidStructure(err.to_string()),
+                            );
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::InvalidStructure,
+                        ));
+                    }
+                    MetadataResponse::RequiresPython(requires_python, python_version) => {
+                        warn!(
+                            "Unable to extract metadata for {name}: {}",
+                            uv_distribution::Error::RequiresPython(
+                                requires_python.clone(),
+                                python_version.clone()
+                            )
+                        );
+                        self.incomplete_packages
+                            .entry(name.clone())
+                            .or_default()
+                            .insert(
+                                version.clone(),
+                                IncompletePackage::RequiresPython(
+                                    requires_python.clone(),
+                                    python_version.clone(),
+                                ),
+                            );
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::RequiresPython(requires_python.clone()),
+                        ));
                     }
                     MetadataResponse::Error(dist, err) => {
                         let chain = DerivationChainBuilder::from_state(id, version, pubgrub)
@@ -1767,20 +1856,37 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         ))),
                     );
                 }
-                Some(Response::Dist { dist, metadata }) => {
-                    let dist_kind = match dist {
-                        Dist::Built(_) => "built",
-                        Dist::Source(_) => "source",
-                    };
-                    trace!("Received {dist_kind} distribution metadata for: {dist}");
-                    if let MetadataResponse::Unavailable(reason) = &metadata {
-                        let message = UnavailableVersion::from(reason).singular_message();
-                        if let Some(err) = reason.source() {
-                            // Show the detailed error for metadata parse errors.
-                            warn!("{dist} {message}: {err}");
-                        } else {
-                            warn!("{dist} {message}");
+                Some(Response::Dist {
+                    dist: Dist::Built(dist),
+                    metadata,
+                }) => {
+                    trace!("Received built distribution metadata for: {dist}");
+                    match &metadata {
+                        MetadataResponse::InvalidMetadata(err) => {
+                            warn!("Unable to extract metadata for {dist}: {err}");
                         }
+                        MetadataResponse::InvalidStructure(err) => {
+                            warn!("Unable to extract metadata for {dist}: {err}");
+                        }
+                        _ => {}
+                    }
+                    self.index
+                        .distributions()
+                        .done(dist.version_id(), Arc::new(metadata));
+                }
+                Some(Response::Dist {
+                    dist: Dist::Source(dist),
+                    metadata,
+                }) => {
+                    trace!("Received source distribution metadata for: {dist}");
+                    match &metadata {
+                        MetadataResponse::InvalidMetadata(err) => {
+                            warn!("Unable to extract metadata for {dist}: {err}");
+                        }
+                        MetadataResponse::InvalidStructure(err) => {
+                            warn!("Unable to extract metadata for {dist}: {err}");
+                        }
+                        _ => {}
                     }
                     self.index
                         .distributions()

@@ -18,7 +18,7 @@ use crate::error::ErrorTree;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
-use crate::resolver::{MetadataUnavailable, UnavailablePackage, UnavailableReason};
+use crate::resolver::{IncompletePackage, UnavailablePackage, UnavailableReason};
 use crate::{Flexibility, Options, RequiresPython, ResolverEnvironment};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
@@ -548,7 +548,7 @@ impl PubGrubReportFormatter<'_> {
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
+        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         workspace_members: &BTreeSet<PackageName>,
@@ -679,7 +679,7 @@ impl PubGrubReportFormatter<'_> {
         index_capabilities: &IndexCapabilities,
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
-        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
+        incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, IncompletePackage>>,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let no_find_links = index_locations.flat_indexes().peekable().peek().is_none();
@@ -693,6 +693,11 @@ impl PubGrubReportFormatter<'_> {
             }
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
+            }
+            Some(UnavailablePackage::MissingMetadata) => {
+                hints.insert(PubGrubHint::MissingPackageMetadata {
+                    package: package.clone(),
+                });
             }
             Some(UnavailablePackage::InvalidMetadata(reason)) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
@@ -715,31 +720,37 @@ impl PubGrubReportFormatter<'_> {
             for (version, incomplete) in versions.iter().rev() {
                 if set.contains(version) {
                     match incomplete {
-                        MetadataUnavailable::Offline => {
+                        IncompletePackage::Offline => {
                             hints.insert(PubGrubHint::Offline);
                         }
-                        MetadataUnavailable::InvalidMetadata(reason) => {
+                        IncompletePackage::MissingMetadata => {
+                            hints.insert(PubGrubHint::MissingVersionMetadata {
+                                package: package.clone(),
+                                version: version.clone(),
+                            });
+                        }
+                        IncompletePackage::InvalidMetadata(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.to_string(),
+                                reason: reason.clone(),
                             });
                         }
-                        MetadataUnavailable::InconsistentMetadata(reason) => {
+                        IncompletePackage::InconsistentMetadata(reason) => {
                             hints.insert(PubGrubHint::InconsistentVersionMetadata {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.to_string(),
+                                reason: reason.clone(),
                             });
                         }
-                        MetadataUnavailable::InvalidStructure(reason) => {
+                        IncompletePackage::InvalidStructure(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionStructure {
                                 package: package.clone(),
                                 version: version.clone(),
-                                reason: reason.to_string(),
+                                reason: reason.clone(),
                             });
                         }
-                        MetadataUnavailable::RequiresPython(requires_python, python_version) => {
+                        IncompletePackage::RequiresPython(requires_python, python_version) => {
                             hints.insert(PubGrubHint::IncompatibleBuildRequirement {
                                 package: package.clone(),
                                 version: version.clone(),
@@ -871,6 +882,8 @@ pub(crate) enum PubGrubHint {
     NoIndex,
     /// A package was not found in the registry, but network access was disabled.
     Offline,
+    /// Metadata for a package could not be found.
+    MissingPackageMetadata { package: PubGrubPackage },
     /// Metadata for a package could not be parsed.
     InvalidPackageMetadata {
         package: PubGrubPackage,
@@ -882,6 +895,12 @@ pub(crate) enum PubGrubHint {
         package: PubGrubPackage,
         // excluded from `PartialEq` and `Hash`
         reason: String,
+    },
+    /// Metadata for a package version could not be found.
+    MissingVersionMetadata {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
@@ -973,10 +992,16 @@ enum PubGrubHintCore {
     },
     NoIndex,
     Offline,
+    MissingPackageMetadata {
+        package: PubGrubPackage,
+    },
     InvalidPackageMetadata {
         package: PubGrubPackage,
     },
     InvalidPackageStructure {
+        package: PubGrubPackage,
+    },
+    MissingVersionMetadata {
         package: PubGrubPackage,
     },
     InvalidVersionMetadata {
@@ -1027,11 +1052,17 @@ impl From<PubGrubHint> for PubGrubHintCore {
             }
             PubGrubHint::NoIndex => Self::NoIndex,
             PubGrubHint::Offline => Self::Offline,
+            PubGrubHint::MissingPackageMetadata { package, .. } => {
+                Self::MissingPackageMetadata { package }
+            }
             PubGrubHint::InvalidPackageMetadata { package, .. } => {
                 Self::InvalidPackageMetadata { package }
             }
             PubGrubHint::InvalidPackageStructure { package, .. } => {
                 Self::InvalidPackageStructure { package }
+            }
+            PubGrubHint::MissingVersionMetadata { package, .. } => {
+                Self::MissingVersionMetadata { package }
             }
             PubGrubHint::InvalidVersionMetadata { package, .. } => {
                 Self::InvalidVersionMetadata { package }
@@ -1131,6 +1162,15 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                 )
             }
+            Self::MissingPackageMetadata { package } => {
+                write!(
+                    f,
+                    "{}{} Metadata for `{}` could not be found, as the wheel is missing a `METADATA` file",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.bold()
+                )
+            }
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
@@ -1149,6 +1189,16 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     package.cyan(),
                     textwrap::indent(reason, "  ")
+                )
+            }
+            Self::MissingVersionMetadata { package, version } => {
+                write!(
+                    f,
+                    "{}{} Metadata for `{}` ({}) could not be found, as the wheel is missing a `METADATA` file",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
                 )
             }
             Self::InvalidVersionMetadata {
