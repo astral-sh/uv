@@ -582,7 +582,7 @@ jobs:
             # see https://github.com/astral-sh/uv/issues/6528
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
             toolchain: nightly
-            maturin_args: -Crelocation-model=pic -Clink-args=-Wl,-z,notext -Ccode-model=large
+            maturin_args: -Ctarget-feature=+crt-static
       fail-fast: false
 
     steps:
