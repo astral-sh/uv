@@ -1146,43 +1146,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
         }?;
-        if python_requirement.installed() == python_requirement.target() {
-            if !python_requirement
-                .installed()
-                .is_contained_by(requires_python)
-            {
-                return if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
-                    Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
-                        requires_python.clone(),
-                        PythonRequirementKind::Installed,
-                    )))
-                } else {
-                    Some(IncompatibleDist::Source(
-                        IncompatibleSource::RequiresPython(
-                            requires_python.clone(),
-                            PythonRequirementKind::Installed,
-                        ),
-                    ))
-                };
-            }
+        if python_requirement.target().is_contained_by(requires_python) {
+            None
         } else {
-            if !python_requirement.target().is_contained_by(requires_python) {
-                return if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
-                    Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+            if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
+                Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+                    requires_python.clone(),
+                    if python_requirement.installed() == python_requirement.target() {
+                        PythonRequirementKind::Installed
+                    } else {
+                        PythonRequirementKind::Target
+                    },
+                )))
+            } else {
+                Some(IncompatibleDist::Source(
+                    IncompatibleSource::RequiresPython(
                         requires_python.clone(),
-                        PythonRequirementKind::Target,
-                    )))
-                } else {
-                    Some(IncompatibleDist::Source(
-                        IncompatibleSource::RequiresPython(
-                            requires_python.clone(),
-                            PythonRequirementKind::Target,
-                        ),
-                    ))
-                };
+                        if python_requirement.installed() == python_requirement.target() {
+                            PythonRequirementKind::Installed
+                        } else {
+                            PythonRequirementKind::Target
+                        },
+                    ),
+                ))
             }
         }
-        None
     }
 
     /// Given a candidate package and version, return its dependencies.
