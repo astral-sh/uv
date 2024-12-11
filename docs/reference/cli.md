@@ -4567,7 +4567,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>By default, only a <code>python{major}.{minor}</code> executable is installed, e.g., <code>python3.10</code>. When the <code>--default</code> flag is used, <code>python{major}</code>, e.g., <code>python3</code>, and <code>python</code> executables are also installed.</p>
 
-<p>Alternative Python variants will still include their tag. For example, installing 3.13+freethreaded with <code>--default</code> will include in <code>python3t</code> and <code>pythont</code>, not <code>python3</code> and <code>python</code>.</p>
+<p>Alternative Python variants will still include their tag. For example, installing 3.13+freethreaded with <code>--default</code> will include <code>python3t</code> and <code>pythont</code> instead of <code>python3</code> and <code>python</code>.</p>
 
 <p>If multiple Python versions are requested during the installation, the first request will be the default.</p>
 

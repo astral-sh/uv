@@ -4333,8 +4333,8 @@ pub struct PythonInstallArgs {
     /// also installed.
     ///
     /// Alternative Python variants will still include their tag. For example, installing
-    /// 3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
-    /// and `python`.
+    /// 3.13+freethreaded with `--default` will include `python3t` and `pythont` instead of
+    /// `python3` and `python`.
     ///
     /// If multiple Python versions are requested during the installation, the first request will be
     /// the default.
