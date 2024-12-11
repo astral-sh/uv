@@ -655,6 +655,12 @@ fn copy_launcher_windows(
 ///
 /// See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L591-L594>
 fn find_base_python(executable: &Path, major: u8, minor: u8) -> Result<PathBuf, io::Error> {
+    /// Returns `true` if `path` is the root directory.
+    fn is_root(path: &Path) -> bool {
+        let mut components = path.components();
+        components.next() == Some(std::path::Component::RootDir) && components.next().is_none()
+    }
+
     /// Determining whether `dir` is a valid Python prefix by searching for a "landmark".
     ///
     /// See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L183>
@@ -678,7 +684,7 @@ fn find_base_python(executable: &Path, major: u8, minor: u8) -> Result<PathBuf, 
         );
 
         // Determine whether this executable will produce a valid `home` for a virtual environment.
-        for prefix in executable.ancestors() {
+        for prefix in executable.ancestors().take_while(|path| !is_root(path)) {
             if is_prefix(prefix, major, minor) {
                 return Ok(executable.into_owned());
             }
