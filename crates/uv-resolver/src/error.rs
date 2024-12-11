@@ -787,7 +787,7 @@ impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
     }
 }
 
-impl<'range> SentinelRange<'range> {
+impl SentinelRange<'_> {
     /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]`.
     pub fn is_sentinel(&self) -> bool {
         self.0.iter().all(|(lower, upper)| {

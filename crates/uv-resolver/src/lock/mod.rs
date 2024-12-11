@@ -2752,7 +2752,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySource {
     {
         struct Visitor;
 
-        impl<'de> serde::de::Visitor<'de> for Visitor {
+        impl serde::de::Visitor<'_> for Visitor {
             type Value = RegistrySource;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -2973,7 +2973,7 @@ impl SourceDist {
     ) -> Result<Option<SourceDist>, LockError> {
         // Reject distributions from registries that don't match the index URL, as can occur with
         // `--find-links`.
-        if !index.is_some_and(|index| *index == reg_dist.index) {
+        if index.is_none_or(|index| *index != reg_dist.index) {
             return Ok(None);
         }
 
