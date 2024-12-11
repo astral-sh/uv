@@ -2306,7 +2306,7 @@ pub struct VenvArgs {
     /// During virtual environment creation, uv will not look for Python
     /// interpreters in virtual environments.
     ///
-    /// See `uv python help` for details on Python discovery and supported
+    /// See `uv help python` for details on Python discovery and supported
     /// request formats.
     #[arg(
         long,

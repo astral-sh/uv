@@ -7726,7 +7726,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>During virtual environment creation, uv will not look for Python interpreters in virtual environments.</p>
 
-<p>See <code>uv python help</code> for details on Python discovery and supported request formats.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
 </dd><dt><code>--python-preference</code> <i>python-preference</i></dt><dd><p>Whether to prefer uv-managed or system Python installations.</p>
