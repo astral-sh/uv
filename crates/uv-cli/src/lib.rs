@@ -3886,6 +3886,10 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_version_specifiers: bool,
 
+    /// List only tools that are outdated.
+    #[arg(long)]
+    pub outdated: bool,
+
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
