@@ -228,11 +228,6 @@ if_not_else = "allow"
 strip = true
 lto = "fat"
 
-# This profile disables LTO and is used for ppc64le musl cross builds which fail otherwise
-[profile.release-no-lto]
-inherits = "release"
-lto = false
-
 # This profile is meant to mimic the `release` profile as closely as
 # possible, but using settings that are more beneficial for iterative
 # development. That is, the `release` profile is intended for actually
