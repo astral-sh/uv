@@ -1295,7 +1295,7 @@ pub struct MarkerTreeDebugGraph<'a> {
     marker: &'a MarkerTree,
 }
 
-impl<'a> fmt::Debug for MarkerTreeDebugGraph<'a> {
+impl fmt::Debug for MarkerTreeDebugGraph<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.marker.fmt_graph(f, 0)
     }
@@ -1312,7 +1312,7 @@ pub struct MarkerTreeDebugRaw<'a> {
     marker: &'a MarkerTree,
 }
 
-impl<'a> fmt::Debug for MarkerTreeDebugRaw<'a> {
+impl fmt::Debug for MarkerTreeDebugRaw<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let node = INTERNER.shared.node(self.marker.0);
         f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()

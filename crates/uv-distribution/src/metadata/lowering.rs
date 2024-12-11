@@ -84,7 +84,7 @@ impl LoweredRequirement {
         if workspace.packages().contains_key(&requirement.name) {
             // And it's not a recursive self-inclusion (extras that activate other extras), e.g.
             // `framework[machine_learning]` depends on `framework[cuda]`.
-            if !project_name.is_some_and(|project_name| *project_name == requirement.name) {
+            if project_name.is_none_or(|project_name| *project_name != requirement.name) {
                 // It must be declared as a workspace source.
                 let Some(sources) = sources.as_ref() else {
                     // No sources were declared for the workspace package.
@@ -141,7 +141,7 @@ impl LoweredRequirement {
                 // Support recursive editable inclusions.
                 if has_sources
                     && requirement.version_or_url.is_none()
-                    && !project_name.is_some_and(|project_name| *project_name == requirement.name)
+                    && project_name.is_none_or(|project_name| *project_name != requirement.name)
                 {
                     warn_user_once!(
                         "Missing version constraint (e.g., a lower bound) for `{}`",

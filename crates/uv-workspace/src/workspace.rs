@@ -773,12 +773,12 @@ impl Workspace {
                             member_glob.to_string(),
                         ));
                     }
-                    // If the entry is _not_ a directory, skip it.
-                    Err(_) if !member_root.is_dir() => {
+                    Err(err) if err.kind() == std::io::ErrorKind::NotADirectory => {
                         warn!(
                             "Ignoring non-directory workspace member: `{}`",
                             member_root.simplified_display()
                         );
+
                         continue;
                     }
                     Err(err) => return Err(err.into()),
@@ -1032,7 +1032,7 @@ impl ProjectWorkspace {
         let project = pyproject_toml
             .project
             .clone()
-            .ok_or_else(|| WorkspaceError::MissingProject(pyproject_path))?;
+            .ok_or(WorkspaceError::MissingProject(pyproject_path))?;
 
         Self::from_project(project_root, &project, &pyproject_toml, options).await
     }

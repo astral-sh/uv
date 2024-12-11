@@ -992,6 +992,7 @@ impl ArchivedCachePolicy {
 /// This dictates what the caller should do next by indicating whether the
 /// cached response is stale or not.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum BeforeRequest {
     /// The cached response is still fresh, and the caller may return the
     /// cached response without issuing an HTTP requests.

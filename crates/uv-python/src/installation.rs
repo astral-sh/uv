@@ -89,7 +89,7 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or_else(|| &PythonRequest::Default);
+        let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
         match Self::find(request, environments, preference, cache) {

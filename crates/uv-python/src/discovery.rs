@@ -1193,17 +1193,17 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
     }
 
     // Ex) `WindowsApps`
-    if !components
+    if components
         .next()
-        .is_some_and(|component| component.as_os_str() == "WindowsApps")
+        .is_none_or(|component| component.as_os_str() != "WindowsApps")
     {
         return false;
     }
 
     // Ex) `Microsoft`
-    if !components
+    if components
         .next()
-        .is_some_and(|component| component.as_os_str() == "Microsoft")
+        .is_none_or(|component| component.as_os_str() != "Microsoft")
     {
         return false;
     }

@@ -387,7 +387,7 @@ fn clone_recursive(
     match attempt {
         Attempt::Initial => {
             if let Err(err) = reflink::reflink(&from, &to) {
-                if matches!(err.kind(), std::io::ErrorKind::AlreadyExists) {
+                if err.kind() == std::io::ErrorKind::AlreadyExists {
                     // If cloning/copying fails and the directory exists already, it must be merged recursively.
                     if entry.file_type()?.is_dir() {
                         for entry in fs::read_dir(from)? {
@@ -423,7 +423,7 @@ fn clone_recursive(
         }
         Attempt::Subsequent => {
             if let Err(err) = reflink::reflink(&from, &to) {
-                if matches!(err.kind(), std::io::ErrorKind::AlreadyExists) {
+                if err.kind() == std::io::ErrorKind::AlreadyExists {
                     // If cloning/copying fails and the directory exists already, it must be merged recursively.
                     if entry.file_type()?.is_dir() {
                         for entry in fs::read_dir(from)? {

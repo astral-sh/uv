@@ -1755,7 +1755,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
         if let Err(err) = rename_with_retry(extracted, target).await {
             // If the directory already exists, accept it.
-            if target.is_dir() {
+            if err.kind() == std::io::ErrorKind::AlreadyExists {
                 warn!("Directory already exists: {}", target.display());
             } else {
                 return Err(Error::CacheWrite(err));
@@ -1816,7 +1816,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
         if let Err(err) = rename_with_retry(extracted, target).await {
             // If the directory already exists, accept it.
-            if target.is_dir() {
+            if err.kind() == std::io::ErrorKind::AlreadyExists {
                 warn!("Directory already exists: {}", target.display());
             } else {
                 return Err(Error::CacheWrite(err));

@@ -3926,7 +3926,7 @@ mod tests {
     /// assertion failure messages.
     struct VersionBloatedDebug<'a>(&'a Version);
 
-    impl<'a> std::fmt::Debug for VersionBloatedDebug<'a> {
+    impl std::fmt::Debug for VersionBloatedDebug<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("Version")
                 .field("epoch", &self.0.epoch())
