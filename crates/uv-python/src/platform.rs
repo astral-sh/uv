@@ -116,7 +116,7 @@ impl Display for Libc {
 impl Display for Os {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &**self {
-            target_lexicon::OperatingSystem::Darwin(_) => write!(f, "macos"),
+            target_lexicon::OperatingSystem::Darwin => write!(f, "macos"),
             inner => write!(f, "{inner}"),
         }
     }
@@ -142,7 +142,7 @@ impl FromStr for Os {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let inner = match s {
-            "macos" => target_lexicon::OperatingSystem::Darwin(None),
+            "macos" => target_lexicon::OperatingSystem::Darwin,
             _ => target_lexicon::OperatingSystem::from_str(s)
                 .map_err(|()| Error::UnknownOs(s.to_string()))?,
         };
@@ -299,9 +299,7 @@ impl From<&uv_platform_tags::Os> for Os {
             uv_platform_tags::Os::FreeBsd { .. } => Self(target_lexicon::OperatingSystem::Freebsd),
             uv_platform_tags::Os::Haiku { .. } => Self(target_lexicon::OperatingSystem::Haiku),
             uv_platform_tags::Os::Illumos { .. } => Self(target_lexicon::OperatingSystem::Illumos),
-            uv_platform_tags::Os::Macos { .. } => {
-                Self(target_lexicon::OperatingSystem::Darwin(None))
-            }
+            uv_platform_tags::Os::Macos { .. } => Self(target_lexicon::OperatingSystem::Darwin),
             uv_platform_tags::Os::Manylinux { .. }
             | uv_platform_tags::Os::Musllinux { .. }
             | uv_platform_tags::Os::Android { .. } => Self(target_lexicon::OperatingSystem::Linux),

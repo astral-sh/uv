@@ -157,7 +157,7 @@ spdx = { version = "0.10.6" }
 syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
 tar = { version = "0.4.43" }
-target-lexicon = { version = "0.13.0" }
+target-lexicon = { version = "0.12.16" }
 tempfile = { version = "3.14.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.0" }
