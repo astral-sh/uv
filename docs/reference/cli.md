@@ -346,6 +346,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
 <p>Omit other dependencies. The project itself will also be omitted.</p>
@@ -628,6 +629,7 @@ uv init [OPTIONS] [PATH]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--package</code></dt><dd><p>Set up the project to be built as a Python package.</p>
 
 <p>Defines a <code>[build-system]</code> for the project.</p>
@@ -942,6 +944,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Add the requirements to the package&#8217;s optional dependencies for the specified extra.</p>
 
 <p>The group may then be activated when installing the project with the <code>--extra</code> flag.</p>
@@ -1283,6 +1286,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--optional</code> <i>optional</i></dt><dd><p>Remove the packages from the project&#8217;s optional dependencies for the specified extra</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Remove the dependencies from a specific package in the workspace</p>
@@ -1655,6 +1659,7 @@ uv sync [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
 <p>Omit other dependencies. The project itself will also be omitted.</p>
@@ -1974,6 +1979,7 @@ uv lock [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -2329,6 +2335,7 @@ uv export [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
 <p>Omit other dependencies. The project itself will also be omitted.</p>
@@ -2661,6 +2668,7 @@ uv tree [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-dev</code></dt><dd><p>Only include the development dependency group.</p>
 
 <p>Omit other dependencies. The project itself will also be omitted.</p>
@@ -3092,6 +3100,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -3403,6 +3412,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--overrides</code> <i>overrides</i></dt><dd><p>Override versions using the given requirements files.</p>
 
 <p>Overrides files are <code>requirements.txt</code>-like files that force a specific version of a requirement to be installed, regardless of the requirements declared by any constituent package, and regardless of whether this would be considered an invalid resolution.</p>
@@ -3710,6 +3720,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--prerelease</code> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
@@ -3864,6 +3875,7 @@ uv tool list [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -3975,6 +3987,7 @@ uv tool uninstall [OPTIONS] <NAME>...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -4096,6 +4109,7 @@ uv tool update-shell [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -4235,6 +4249,7 @@ uv tool dir [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -4434,6 +4449,7 @@ uv python list [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-downloads</code></dt><dd><p>Only show Python downloads, exclude installed distributions.</p>
 
 <p>By default, available downloads for the current platform are shown.</p>
@@ -4609,6 +4625,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -4751,6 +4768,7 @@ uv python find [OPTIONS] [REQUEST]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -4895,6 +4913,7 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -5038,6 +5057,7 @@ uv python dir [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -5166,6 +5186,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -5495,6 +5516,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-binary</code> <i>only-binary</i></dt><dd><p>Only use pre-built wheels; don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run code from the given packages. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -5918,6 +5940,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-binary</code> <i>only-binary</i></dt><dd><p>Only use pre-built wheels; don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run code from the given packages. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -6331,6 +6354,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--only-binary</code> <i>only-binary</i></dt><dd><p>Only use pre-built wheels; don&#8217;t build source distributions.</p>
 
 <p>When enabled, resolving will not run code from the given packages. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
@@ -6654,6 +6678,7 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--prefix</code> <i>prefix</i></dt><dd><p>Uninstall packages from the specified <code>--prefix</code> directory</p>
 
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
@@ -6791,6 +6816,7 @@ uv pip freeze [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -7010,6 +7036,7 @@ uv pip list [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--outdated</code></dt><dd><p>List outdated packages.</p>
 
 <p>The latest version of each package will be shown alongside the installed version. Up-to-date packages will be omitted from the output.</p>
@@ -7153,6 +7180,7 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -7291,6 +7319,7 @@ uv pip tree [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--outdated</code></dt><dd><p>Show the latest available version of each package in the tree</p>
 
 </dd><dt><code>--package</code> <i>package</i></dt><dd><p>Display only the specified packages</p>
@@ -7430,6 +7459,7 @@ uv pip check [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -7675,6 +7705,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -7970,6 +8001,7 @@ uv build [OPTIONS] [SRC]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--out-dir</code>, <code>-o</code> <i>out-dir</i></dt><dd><p>The output directory to which distributions should be written.</p>
 
 <p>Defaults to the <code>dist</code> subdirectory within the source directory, or the directory containing the source distribution archive.</p>
@@ -8201,6 +8233,7 @@ With these settings, the following two calls are equivalent:</code></pre>
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--password</code>, <code>-p</code> <i>password</i></dt><dd><p>The password for the upload</p>
 
 <p>May also be set with the <code>UV_PUBLISH_PASSWORD</code> environment variable.</p>
@@ -8373,6 +8406,7 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -8494,6 +8528,7 @@ uv cache prune [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -8617,6 +8652,7 @@ uv cache dir [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -8754,6 +8790,7 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -8872,6 +8909,7 @@ uv version [OPTIONS]
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--output-format</code> <i>output-format</i></dt><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -9038,6 +9076,7 @@ uv help [OPTIONS] [COMMAND]...
 
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
 </dd><dt><code>--project</code> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>

@@ -200,7 +200,7 @@ pub struct GlobalArgs {
     /// Disable network access.
     ///
     /// When disabled, uv will only use locally cached data and locally available files.
-    #[arg(global = true, long, overrides_with("no_offline"))]
+    #[arg(global = true, long, overrides_with("no_offline"), env = EnvVars::UV_OFFLINE, value_parser = clap::builder::BoolishValueParser::new())]
     pub offline: bool,
 
     #[arg(global = true, long, overrides_with("offline"), hide = true)]

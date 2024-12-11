@@ -202,6 +202,10 @@ Equivalent to the `--no-verify-hashes` argument. Disables hash verification for
 
 Use to disable line wrapping for diagnostics.
 
+### `UV_OFFLINE`
+
+Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
+
 ### `UV_OVERRIDE`
 
 Equivalent to the `--override` command-line argument. If set, uv will use this file

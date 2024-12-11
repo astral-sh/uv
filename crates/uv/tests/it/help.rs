@@ -57,7 +57,7 @@ fn help() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -137,7 +137,7 @@ fn help_flag() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -216,7 +216,7 @@ fn help_short_flag() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -374,6 +374,8 @@ fn help_subcommand() {
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
+              
+              [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -617,6 +619,8 @@ fn help_subsubcommand() {
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
+              
+              [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -730,7 +734,7 @@ fn help_flag_subcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -803,7 +807,7 @@ fn help_flag_subsubcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -960,7 +964,7 @@ fn help_with_global_option() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -1076,7 +1080,7 @@ fn help_with_no_pager() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress

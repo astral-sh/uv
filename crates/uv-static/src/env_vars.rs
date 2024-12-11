@@ -5,6 +5,9 @@ pub struct EnvVars;
 
 #[attribute_env_vars_metadata]
 impl EnvVars {
+    /// Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
+    pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
+
     /// Equivalent to the `--default-index` command-line argument. If set, uv will use
     /// this URL as the default index when searching for packages.
     pub const UV_DEFAULT_INDEX: &'static str = "UV_DEFAULT_INDEX";
