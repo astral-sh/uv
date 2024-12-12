@@ -1,13 +1,13 @@
-# uv
+<div align="center">
 
-[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![image](https://img.shields.io/pypi/v/uv.svg)](https://pypi.python.org/pypi/uv)
-[![image](https://img.shields.io/pypi/l/uv.svg)](https://pypi.python.org/pypi/uv)
-[![image](https://img.shields.io/pypi/pyversions/uv.svg)](https://pypi.python.org/pypi/uv)
-[![Actions status](https://github.com/astral-sh/uv/actions/workflows/ci.yml/badge.svg)](https://github.com/astral-sh/uv/actions)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
+  <picture align="center">
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/svg/uv-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/svg/uv.svg">
+    <img height="50px" alt="uv" src="./assets/svg/uv.svg">
+  </picture>
 
 An extremely fast Python package and project manager, written in Rust.
+</div>
 
 <p align="center">
   <picture align="center">
