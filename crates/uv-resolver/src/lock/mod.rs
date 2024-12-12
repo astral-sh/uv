@@ -1682,10 +1682,11 @@ impl Package {
                     Source::Path(path) => {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
+                        let install_path = absolute_path(workspace_root, path)?;
                         let path_dist = PathBuiltDist {
                             filename,
-                            url: verbatim_url(workspace_root.join(path), &self.id)?,
-                            install_path: workspace_root.join(path),
+                            url: verbatim_url(&install_path, &self.id)?,
+                            install_path: absolute_path(workspace_root, path)?,
                         };
                         let built_dist = BuiltDist::Path(path_dist);
                         Ok(Dist::Built(built_dist))
@@ -1780,40 +1781,44 @@ impl Package {
                 let DistExtension::Source(ext) = DistExtension::from_path(path)? else {
                     return Ok(None);
                 };
+                let install_path = absolute_path(workspace_root, path)?;
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     version: Some(self.id.version.clone()),
-                    url: verbatim_url(workspace_root.join(path), &self.id)?,
-                    install_path: workspace_root.join(path),
+                    url: verbatim_url(&install_path, &self.id)?,
+                    install_path,
                     ext,
                 };
                 uv_distribution_types::SourceDist::Path(path_dist)
             }
             Source::Directory(path) => {
+                let install_path = absolute_path(workspace_root, path)?;
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(workspace_root.join(path), &self.id)?,
-                    install_path: workspace_root.join(path),
+                    url: verbatim_url(&install_path, &self.id)?,
+                    install_path,
                     editable: false,
                     r#virtual: false,
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Editable(path) => {
+                let install_path = absolute_path(workspace_root, path)?;
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(workspace_root.join(path), &self.id)?,
-                    install_path: workspace_root.join(path),
+                    url: verbatim_url(&install_path, &self.id)?,
+                    install_path,
                     editable: true,
                     r#virtual: false,
                 };
                 uv_distribution_types::SourceDist::Directory(dir_dist)
             }
             Source::Virtual(path) => {
+                let install_path = absolute_path(workspace_root, path)?;
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(workspace_root.join(path), &self.id)?,
-                    install_path: workspace_root.join(path),
+                    url: verbatim_url(&install_path, &self.id)?,
+                    install_path,
                     editable: false,
                     r#virtual: true,
                 };
@@ -2181,13 +2186,19 @@ impl Package {
 }
 
 /// Attempts to construct a `VerbatimUrl` from the given `Path`.
-fn verbatim_url(path: PathBuf, id: &PackageId) -> Result<VerbatimUrl, LockError> {
+fn verbatim_url(path: &Path, id: &PackageId) -> Result<VerbatimUrl, LockError> {
     let url = VerbatimUrl::from_absolute_path(path).map_err(|err| LockErrorKind::VerbatimUrl {
         id: id.clone(),
         err,
     })?;
-
     Ok(url)
+}
+
+/// Attempts to construct an absolute path from the given `Path`.
+fn absolute_path(workspace_root: &Path, path: &Path) -> Result<PathBuf, LockError> {
+    let path = uv_fs::normalize_absolute_path(&workspace_root.join(path))
+        .map_err(LockErrorKind::AbsolutePath)?;
+    Ok(path)
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -4055,6 +4066,13 @@ enum LockErrorKind {
     /// An error that occurs when converting an index URL to a relative path
     #[error("Could not compute relative path between workspace and index")]
     IndexRelativePath(
+        /// The inner error we forward.
+        #[source]
+        std::io::Error,
+    ),
+    /// An error that occurs when converting a lockfile path from relative to absolute.
+    #[error("Could not compute absolute path from workspace root and lockfile path")]
+    AbsolutePath(
         /// The inner error we forward.
         #[source]
         std::io::Error,
