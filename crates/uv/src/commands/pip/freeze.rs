@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_distribution_types::{Diagnostic, InstalledDist, Name};
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
 use crate::commands::pip::operations::report_target_environment;
@@ -32,8 +32,8 @@ pub(crate) fn pip_freeze(
     report_target_environment(&environment, cache, printer)?;
 
     // Build the installed index.
-    let site_packages = SitePackages::from_environment(&environment)?;
-    for dist in site_packages
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
+    for dist in installed_packages
         .iter()
         .filter(|dist| !(exclude_editable && dist.is_editable()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
@@ -66,7 +66,7 @@ pub(crate) fn pip_freeze(
         // Determine the markers to use for resolution.
         let markers = environment.interpreter().resolver_marker_environment();
 
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in installed_packages.diagnostics(&markers)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

@@ -26,7 +26,7 @@ use uv_distribution_types::{
     SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
+use uv_installer::{Installer, Plan, Planner, Preparer, InstalledPackages};
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
@@ -229,7 +229,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         let tags = self.interpreter.tags()?;
 
         // Determine the set of installed packages.
-        let site_packages = SitePackages::from_environment(venv)?;
+        let installed_packages = InstalledPackages::from_environment(venv)?;
 
         let Plan {
             cached,
@@ -237,7 +237,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             reinstalls,
             extraneous: _,
         } = Planner::new(resolution).build(
-            site_packages,
+            installed_packages,
             &Reinstall::default(),
             self.build_options,
             self.hasher,
