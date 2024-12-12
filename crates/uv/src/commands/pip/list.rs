@@ -159,7 +159,13 @@ pub(crate) async fn pip_list(
                 .copied()
                 .map(|dist| {
                     let location = if verbose && dist.path().parent().is_some() {
-                        Some(dist.path().parent().unwrap().simplified_display().to_string())
+                        Some(
+                            dist.path()
+                                .parent()
+                                .unwrap()
+                                .simplified_display()
+                                .to_string(),
+                        )
                     } else {
                         None
                     };
@@ -188,9 +194,9 @@ pub(crate) async fn pip_list(
                             .get(dist.name())
                             .and_then(|filename| filename.as_ref())
                             .map(FileType::from),
-                        editable_project_location: dist
-                            .as_editable()
-                            .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+                        editable_project_location: dist.as_editable().map(|url| {
+                            url.to_file_path().unwrap().simplified_display().to_string()
+                        }),
                     }
                 })
                 .collect_vec();
@@ -275,7 +281,11 @@ pub(crate) async fn pip_list(
                         .iter()
                         .map(|dist| {
                             if dist.path().parent().is_some() {
-                                dist.path().parent().unwrap().simplified_display().to_string()
+                                dist.path()
+                                    .parent()
+                                    .unwrap()
+                                    .simplified_display()
+                                    .to_string()
                             } else {
                                 String::new()
                             }
@@ -284,10 +294,7 @@ pub(crate) async fn pip_list(
                 });
                 columns.push(Column {
                     header: String::from("Installer"),
-                    rows: results
-                        .iter()
-                        .map(|_| "uv".to_string())
-                        .collect_vec(),
+                    rows: results.iter().map(|_| "uv".to_string()).collect_vec(),
                 });
             }
 
