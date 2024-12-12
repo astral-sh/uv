@@ -27,7 +27,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;
-use crate::{InstallationStrategy, SitePackages};
+use crate::{InstallationStrategy, InstalledPackages};
 
 /// A wheel dependency is incompatible with the current platform.
 #[derive(Debug)]
@@ -256,7 +256,7 @@ impl<'a> Planner<'a> {
     /// return an _installed_ distribution that does not match the required hash.
     pub fn build(
         self,
-        mut site_packages: SitePackages,
+        mut installed_packages: InstalledPackages,
         installation: InstallationStrategy,
         reinstall: &Reinstall,
         build_options: &BuildOptions,
@@ -319,7 +319,7 @@ impl<'a> Planner<'a> {
             let no_build = build_options.no_build_package(dist.name());
 
             // Determine whether the distribution is already installed.
-            let installed_dists = site_packages.remove_packages(dist.name());
+            let installed_dists = installed_packages.remove_packages(dist.name());
             if reinstall {
                 reinstalls.extend(installed_dists);
             } else {
@@ -763,11 +763,11 @@ impl<'a> Planner<'a> {
         }
 
         // Remove any unnecessary packages.
-        if site_packages.any() {
+        if installed_packages.any() {
             // Retain seed packages unless: (1) the virtual environment was created by uv and
             // (2) the `--seed` argument was not passed to `uv venv`.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv() && !cfg.is_seed());
-            for dist_info in site_packages {
+            for dist_info in installed_packages {
                 if seed_packages && is_seed_package(&dist_info, venv) {
                     debug!("Preserving seed package: {dist_info}");
                     continue;

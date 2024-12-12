@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_configuration::TargetTriple;
 use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDist};
-use uv_installer::{SitePackages, SitePackagesDiagnostic};
+use uv_installer::{InstalledPackages, InstalledPackagesDiagnostic};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, PythonVersion,
 };
@@ -40,8 +40,8 @@ pub(crate) fn pip_check(
     report_target_environment(&environment, cache, printer)?;
 
     // Build the installed index.
-    let site_packages = SitePackages::from_environment(&environment)?;
-    let packages: Vec<&InstalledDist> = site_packages.iter().collect();
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
+    let packages: Vec<&InstalledDist> = installed_packages.iter().collect();
 
     let s = if packages.len() == 1 { "" } else { "s" };
     writeln!(
@@ -60,7 +60,7 @@ pub(crate) fn pip_check(
     let tags = resolution_tags(python_version, python_platform, environment.interpreter())?;
 
     // Run the diagnostics.
-    let diagnostics: Vec<SitePackagesDiagnostic> = site_packages
+    let diagnostics: Vec<InstalledPackagesDiagnostic> = installed_packages
         .diagnostics(&markers, &tags, dependency_metadata)?
         .into_iter()
         .collect();

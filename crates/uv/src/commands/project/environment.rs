@@ -47,7 +47,7 @@ impl EphemeralEnvironment {
             .0
             .site_packages()
             .next()
-            .ok_or(ProjectError::NoSitePackages)?;
+            .ok_or(ProjectError::NoInstalledPackages)?;
         let overlay_path = site_packages.join("_uv_ephemeral_overlay.pth");
         fs_err::write(overlay_path, contents)?;
         Ok(())

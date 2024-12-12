@@ -16,7 +16,7 @@ use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, InstalledPackages, SatisfiesResult};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -551,7 +551,7 @@ pub(crate) async fn install(
                 )?;
 
                 // Check if the installed packages meet the requirements.
-                let site_packages = SitePackages::from_environment(environment.environment())?;
+                let site_packages = InstalledPackages::from_environment(environment.environment())?;
                 // TODO(charlie): This fast path only validates the explicit requested
                 // requirements. It can miss editable-mode drift for implicit workspace members.
                 if matches!(

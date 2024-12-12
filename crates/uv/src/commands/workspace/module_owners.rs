@@ -8,7 +8,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
@@ -115,7 +115,7 @@ pub(crate) async fn collect_module_owners(
     .await?;
 
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
-    for dist in SitePackages::from_environment(venv)?.iter() {
+    for dist in InstalledPackages::from_environment(venv)?.iter() {
         let Some(package_id) = package_ids.get(dist.name()) else {
             continue;
         };

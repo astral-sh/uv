@@ -26,7 +26,7 @@ use uv_distribution_types::{
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
+use uv_installer::{InstallationStrategy, InstalledPackages, Plan, Planner, Preparer};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
@@ -552,7 +552,7 @@ impl Changelog {
 /// Returns a [`Changelog`] summarizing the changes made to the environment.
 pub(crate) async fn install(
     resolution: &Resolution,
-    site_packages: SitePackages,
+    installed_packages: InstalledPackages,
     installation: InstallationStrategy,
     modifications: Modifications,
     reinstall: &Reinstall,
@@ -579,7 +579,7 @@ pub(crate) async fn install(
     // downloaded (`remote`), and those that should be removed (`extraneous`).
     let plan = Planner::new(resolution)
         .build(
-            site_packages,
+            installed_packages,
             installation,
             reinstall,
             build_options,
@@ -1070,8 +1070,8 @@ pub(crate) fn diagnose_environment(
     dependency_metadata: &DependencyMetadata,
     printer: Printer,
 ) -> Result<(), Error> {
-    let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics(markers, tags, dependency_metadata)? {
+    let installed_packages = InstalledPackages::from_environment(venv)?;
+    for diagnostic in installed_packages.diagnostics(markers, tags, dependency_metadata)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .distributions()

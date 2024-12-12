@@ -24,7 +24,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, InstalledPackages, SatisfiesResult};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
@@ -316,7 +316,7 @@ pub(crate) async fn pip_install(
     )?;
 
     // Determine the set of installed packages.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
@@ -328,7 +328,7 @@ pub(crate) async fn pip_install(
         && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies_spec(
+        match installed_packages.satisfies_spec(
             &requirements,
             &constraints,
             &overrides,
@@ -564,7 +564,7 @@ pub(crate) async fn pip_install(
             extras,
             &groups,
             preferences,
-            site_packages.clone(),
+            installed_packages.clone(),
             &hasher,
             &reinstall,
             &upgrade,
@@ -633,7 +633,7 @@ pub(crate) async fn pip_install(
     // Sync the environment.
     match operations::install(
         &resolution,
-        site_packages,
+        installed_packages,
         InstallationStrategy::Permissive,
         modifications,
         &reinstall,

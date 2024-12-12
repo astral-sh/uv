@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_install_wheel::read_record;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
 use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
@@ -39,10 +39,11 @@ impl ToolEnvironment {
 
     /// Return the [`Version`] of the tool package in this environment.
     pub fn version(&self) -> Result<Version, Error> {
-        let site_packages = SitePackages::from_environment(&self.environment).map_err(|err| {
-            Error::EnvironmentRead(self.environment.root().to_path_buf(), err.to_string())
-        })?;
-        let packages = site_packages.get_packages(&self.name);
+        let installed_packages =
+            InstalledPackages::from_environment(&self.environment).map_err(|err| {
+                Error::EnvironmentRead(self.environment.root().to_path_buf(), err.to_string())
+            })?;
+        let packages = installed_packages.get_packages(&self.name);
         let package = packages
             .first()
             .ok_or_else(|| Error::MissingToolPackage(self.name.clone()))?;
@@ -390,11 +391,11 @@ pub fn tool_executable_dir() -> Result<PathBuf, Error> {
 
 /// Find the `.dist-info` directory for a package in an environment.
 fn find_dist_info<'a>(
-    site_packages: &'a SitePackages,
+    installed_packages: &'a InstalledPackages,
     package_name: &PackageName,
     package_version: &Version,
 ) -> Result<&'a Path, Error> {
-    site_packages
+    installed_packages
         .get_packages(package_name)
         .iter()
         .find(|package| package.version() == package_version)
@@ -409,12 +410,12 @@ fn find_dist_info<'a>(
 ///
 /// Returns a list of `(name, path)` tuples.
 pub fn entrypoint_paths(
-    site_packages: &SitePackages,
+    installed_packages: &InstalledPackages,
     package_name: &PackageName,
     package_version: &Version,
 ) -> Result<Vec<(String, PathBuf)>, Error> {
     // Find the `.dist-info` directory in the installed environment.
-    let dist_info_path = find_dist_info(site_packages, package_name, package_version)?;
+    let dist_info_path = find_dist_info(installed_packages, package_name, package_version)?;
     debug!(
         "Looking at `.dist-info` at: {}",
         dist_info_path.user_display()
@@ -424,7 +425,7 @@ pub fn entrypoint_paths(
     let record = read_record(File::open(dist_info_path.join("RECORD"))?)?;
 
     // The RECORD file uses relative paths, so we're looking for the relative path to be a prefix.
-    let layout = site_packages.interpreter().layout();
+    let layout = installed_packages.interpreter().layout();
     let script_relative = pathdiff::diff_paths(&layout.scheme.scripts, &layout.scheme.purelib)
         .ok_or_else(|| {
             io::Error::other(format!(

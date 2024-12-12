@@ -10,7 +10,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDistKind, Name};
 use uv_fs::Simplified;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::PackageName;
 use uv_python::PythonPreference;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
@@ -61,7 +61,7 @@ pub(crate) fn pip_freeze(
     report_target_environment(&environment, cache, printer)?;
 
     // Collect all the `site-packages` directories.
-    let site_packages = match paths {
+    let installed_packages = match paths {
         Some(paths) => {
             paths
                 .into_iter()
@@ -72,15 +72,15 @@ pub(crate) fn pip_freeze(
                         // Drop invalid paths as per `pip freeze`.
                         .ok()
                 })
-                .map(|environment| SitePackages::from_environment(&environment))
+                .map(|environment| InstalledPackages::from_environment(&environment))
                 .collect::<Result<Vec<_>>>()?
         }
-        None => vec![SitePackages::from_environment(&environment)?],
+        None => vec![InstalledPackages::from_environment(&environment)?],
     };
 
-    site_packages
+    installed_packages
         .iter()
-        .flat_map(uv_installer::SitePackages::iter)
+        .flat_map(uv_installer::InstalledPackages::iter)
         .filter(|dist| {
             if exclude_editable && dist.is_editable() {
                 return false;
@@ -121,7 +121,7 @@ pub(crate) fn pip_freeze(
         let markers = environment.interpreter().resolver_marker_environment();
         let tags = environment.interpreter().tags()?;
 
-        for entry in site_packages {
+        for entry in installed_packages {
             for diagnostic in entry.diagnostics(&markers, tags, dependency_metadata)? {
                 writeln!(
                     printer.stderr(),
