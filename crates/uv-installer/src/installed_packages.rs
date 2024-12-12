@@ -49,15 +49,16 @@ impl InstalledPackages {
     /// Build an index of installed packages from the given Python executable.
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
-        let mut by_name = FxHashMap::default();
-        let mut by_url = FxHashMap::default();
+        let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
+        let mut by_url: FxHashMap<Url, Vec<usize>> = FxHashMap::default();
 
-        for site_packages in interpreter.site_packages() {
+        for import_path in interpreter.sys_path() {
             // Read the site-packages directory.
-            let site_packages = match fs::read_dir(site_packages) {
-                Ok(site_packages) => {
+            let ordered_directory_paths = match fs::read_dir(import_path) {
+                Ok(import_path_entry) => {
+                    trace!("Discovering packages in: `{}`", import_path.user_display());
                     // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let dist_likes: BTreeSet<_> = site_packages
+                    let dist_likes: BTreeSet<_> = import_path_entry
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
@@ -74,18 +75,18 @@ impl InstalledPackages {
                     dist_likes
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(Self {
-                        interpreter: interpreter.clone(),
-                        distributions,
-                        by_name,
-                        by_url,
-                    });
+                    debug!(
+                        "Package directory does not exist: `{}`",
+                        import_path.user_display()
+                    );
+                    // The site-packages directory doesn't exist, skip it.
+                    continue;
                 }
                 Err(err) => return Err(err).context("Failed to read site-packages directory"),
             };
 
             // Index all installed packages by name.
-            for path in site_packages {
+            for path in ordered_directory_paths {
                 let dist_info = match InstalledDist::try_from_path(&path) {
                     Ok(Some(dist_info)) => dist_info,
                     Ok(None) => continue,
