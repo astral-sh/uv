@@ -26,7 +26,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, InstalledPackages, SatisfiesResult};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{
@@ -955,11 +955,16 @@ pub(crate) async fn run(
     };
 
     // If necessary, create an environment for the ephemeral requirements or command.
-    let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;
+    let base_installed_packages = InstalledPackages::from_interpreter(&base_interpreter)?;
     let requirements_env = match spec {
         None => None,
         Some(spec)
-            if can_skip_ephemeral(&spec, &base_interpreter, &base_site_packages, &settings) =>
+            if can_skip_ephemeral(
+                &spec,
+                &base_interpreter,
+                &base_installed_packages,
+                &settings,
+            ) =>
         {
             None
         }
@@ -979,7 +984,7 @@ pub(crate) async fn run(
                 } else {
                     // Otherwise, extract preferences from the base environment.
                     PreferenceLocation::Entries(
-                        base_site_packages
+                        base_installed_packages
                             .iter()
                             .filter_map(Preference::from_installed)
                             .collect::<Vec<_>>(),
@@ -1071,24 +1076,26 @@ pub(crate) async fn run(
     // existing such module in the python installation.
     if let Some(ephemeral_env) = ephemeral_env.as_ref() {
         if let Some(requirements_env) = requirements_env.as_ref() {
-            let requirements_site_packages =
-                requirements_env.site_packages().next().ok_or_else(|| {
+            let requirements_installed_packages = requirements_env
+                .installed_packages()
+                .next()
+                .ok_or_else(|| {
                     anyhow!("Requirements environment has no site packages directory")
                 })?;
-            let mut base_site_packages = base_interpreter
-                .runtime_site_packages()
+            let mut base_installed_packages = base_interpreter
+                .runtime_installed_packages()
                 .iter()
                 .map(|path| Cow::Borrowed(path.as_path()))
-                .chain(base_interpreter.site_packages())
+                .chain(base_interpreter.installed_packages())
                 .peekable();
-            if base_site_packages.peek().is_none() {
+            if base_installed_packages.peek().is_none() {
                 return Err(anyhow!("Base environment has no site packages directory"));
             }
 
             let overlay_content = format!(
                 "import site; {}",
-                std::iter::once(requirements_site_packages)
-                    .chain(base_site_packages)
+                std::iter::once(requirements_installed_packages)
+                    .chain(base_installed_packages)
                     .dedup()
                     .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
                     .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
@@ -1186,9 +1193,9 @@ pub(crate) async fn run(
             // environment.
             if base_interpreter.is_virtualenv()
                 && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
-                    .is_ok_and(|cfg| cfg.include_system_site_packages())
+                    .is_ok_and(|cfg| cfg.include_system_installed_packages())
             {
-                ephemeral_env.set_system_site_packages()?;
+                ephemeral_env.set_system_installed_packages()?;
             }
         }
     }
@@ -1317,7 +1324,7 @@ pub(crate) async fn run(
 fn can_skip_ephemeral(
     spec: &RequirementsSpecification,
     interpreter: &Interpreter,
-    site_packages: &SitePackages,
+    installed_packages: &InstalledPackages,
     settings: &ResolverInstallerSettings,
 ) -> bool {
     // Extract the build settings.
@@ -1350,7 +1357,7 @@ fn can_skip_ephemeral(
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
             .into_inner();
 
-    match site_packages.satisfies_spec(
+    match installed_packages.satisfies_spec(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,

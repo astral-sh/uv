@@ -21,7 +21,7 @@ use uv_distribution_types::{
     RequiresPython,
 };
 use uv_fs::Simplified;
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonRequest;
@@ -89,10 +89,10 @@ pub(crate) async fn pip_list(
     report_target_environment(&environment, cache, printer)?;
 
     // Build the installed index.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // Filter if `--editable` is specified; always sort by name.
-    let results = site_packages
+    let results = installed_packages
         .iter()
         .filter(|dist| editable.is_none() || editable == Some(dist.is_editable()))
         .filter(|dist| !exclude.contains(dist.name()))
@@ -295,7 +295,7 @@ pub(crate) async fn pip_list(
         let markers = environment.interpreter().resolver_marker_environment();
         let tags = environment.interpreter().tags()?;
 
-        for diagnostic in site_packages.diagnostics(&markers, tags, dependency_metadata)? {
+        for diagnostic in installed_packages.diagnostics(&markers, tags, dependency_metadata)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

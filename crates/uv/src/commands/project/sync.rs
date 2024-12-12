@@ -22,7 +22,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{Dist, Index, Name, Requirement, Resolution, ResolvedDist, SourceDist};
 use uv_fs::{PortablePathBuf, Simplified};
-use uv_installer::{InstallationStrategy, SitePackages};
+use uv_installer::{InstallationStrategy, InstalledPackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::{Preview, PreviewFeature};
@@ -880,12 +880,12 @@ pub(crate) async fn do_sync(
         .await?;
     }
 
-    let site_packages = SitePackages::from_environment(venv)?;
+    let installed_packages = InstalledPackages::from_environment(venv)?;
 
     // Sync the environment.
     let changelog = operations::install(
         &resolution,
-        site_packages,
+        installed_packages,
         InstallationStrategy::Strict,
         modifications,
         reinstall,

@@ -20,7 +20,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{InstallationStrategy, SitePackages};
+use uv_installer::{InstallationStrategy, InstalledPackages};
 use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
@@ -404,7 +404,7 @@ pub(crate) async fn pip_sync(
     );
 
     // Determine the set of installed packages.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
         let (install_path, lock) = read_pylock_toml(&pylock, &client_builder).await?;
@@ -462,7 +462,7 @@ pub(crate) async fn pip_sync(
             extras,
             &groups,
             preferences,
-            site_packages.clone(),
+            installed_packages.clone(),
             &hasher,
             &reinstall,
             &upgrade,
@@ -528,7 +528,7 @@ pub(crate) async fn pip_sync(
     // Sync the environment.
     match operations::install(
         &resolution,
-        site_packages,
+        installed_packages,
         InstallationStrategy::Permissive,
         Modifications::Exact,
         &reinstall,
