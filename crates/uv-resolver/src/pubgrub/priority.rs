@@ -40,7 +40,7 @@ impl PubGrubPriorities {
         match self.0.entry(name.clone()) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
                 // Preserve the original index.
-                let index = Self::get_index(next, &mut entry);
+                let index = Self::get_index(&entry).unwrap_or(next);
 
                 // Compute the priority.
                 let priority = if urls.get(name).is_some() {
@@ -80,14 +80,14 @@ impl PubGrubPriorities {
         }
     }
 
-    fn get_index(next: usize, entry: &mut OccupiedEntry<PackageName, PubGrubPriority>) -> usize {
+    fn get_index(entry: &OccupiedEntry<PackageName, PubGrubPriority>) -> Option<usize> {
         match entry.get() {
-            PubGrubPriority::ConflictLate(Reverse(index)) => *index,
-            PubGrubPriority::Unspecified(Reverse(index)) => *index,
-            PubGrubPriority::ConflictEarly(Reverse(index)) => *index,
-            PubGrubPriority::Singleton(Reverse(index)) => *index,
-            PubGrubPriority::DirectUrl(Reverse(index)) => *index,
-            PubGrubPriority::Root => next,
+            PubGrubPriority::ConflictLate(Reverse(index))
+            | PubGrubPriority::Unspecified(Reverse(index))
+            | PubGrubPriority::ConflictEarly(Reverse(index))
+            | PubGrubPriority::Singleton(Reverse(index))
+            | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
+            PubGrubPriority::Root => None,
         }
     }
 
@@ -109,11 +109,11 @@ impl PubGrubPriorities {
         let next = self.0.len();
         let Some(name) = package.name_no_root() else {
             // Not a correctness bug
-            assert!(
-                !cfg!(debug_assertions),
-                "URL packages must not be involved in conflict handling"
-            );
-            return false;
+            if cfg!(debug_assertions) {
+                panic!("URL packages must not be involved in conflict handling")
+            } else {
+                return false;
+            }
         };
         match self.0.entry(name.clone()) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
@@ -121,7 +121,7 @@ impl PubGrubPriorities {
                     // Already in the right category
                     return false;
                 };
-                let index = Self::get_index(next, &mut entry);
+                let index = Self::get_index(&entry).unwrap_or(next);
                 entry.insert(PubGrubPriority::ConflictEarly(Reverse(index)));
                 true
             }
@@ -136,11 +136,11 @@ impl PubGrubPriorities {
         let next = self.0.len();
         let Some(name) = package.name_no_root() else {
             // Not a correctness bug
-            assert!(
-                !cfg!(debug_assertions),
-                "URL packages must not be involved in conflict handling"
-            );
-            return false;
+            if cfg!(debug_assertions) {
+                panic!("URL packages must not be involved in conflict handling")
+            } else {
+                return false;
+            }
         };
         match self.0.entry(name.clone()) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
@@ -152,7 +152,7 @@ impl PubGrubPriorities {
                     // Already in the right category
                     return false;
                 };
-                let index = Self::get_index(next, &mut entry);
+                let index = Self::get_index(&entry).unwrap_or(next);
                 entry.insert(PubGrubPriority::ConflictLate(Reverse(index)));
                 true
             }
