@@ -6242,6 +6242,111 @@ fn lock_exclusion() -> Result<()> {
     Ok(())
 }
 
+/// See: <https://github.com/astral-sh/uv/issues/9832#issuecomment-2539121761>
+#[test]
+fn lock_relative_lock_deserialization() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+        dynamic = ["version"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        exclude = ["packages/child"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let packages = context.temp_dir.child("packages");
+
+    let member = packages.child("member");
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        requires-python = ">=3.12"
+        dependencies = []
+        dynamic = ["version"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = packages.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#,
+    )?;
+
+    // Add an arbitrary lockfile, to ensure that we attempt to validate it, which is necessary to
+    // trigger the bug.
+    child.child("uv.lock").write_str(
+        r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { editable = "." }
+        dependencies = [
+            { name = "project" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "project", directory = "../" }]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { directory = "../" }
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: Failed to generate package metadata for `child==0.1.0 @ editable+.`
+      Caused by: Failed to parse entry: `member`
+      Caused by: `member` references a workspace in `tool.uv.sources` (e.g., `member = { workspace = true }`), but is not a workspace member
+    "###);
+
+    Ok(())
+}
+
 /// Lock a workspace member with a non-workspace source.
 #[test]
 fn lock_non_workspace_source() -> Result<()> {
