@@ -25,7 +25,7 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{PythonRequest, PythonVariant};
+use crate::{sysconfig, PythonRequest, PythonVariant};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -40,6 +40,8 @@ pub enum Error {
     InvalidPythonVersion(String),
     #[error(transparent)]
     ExtractError(#[from] uv_extract::Error),
+    #[error(transparent)]
+    SysconfigError(#[from] sysconfig::Error),
     #[error("Failed to copy to: {0}", to.user_display())]
     CopyError {
         to: PathBuf,
@@ -488,6 +490,21 @@ impl ManagedPythonInstallation {
         let file = stdlib.join("EXTERNALLY-MANAGED");
         fs_err::write(file, EXTERNALLY_MANAGED)?;
 
+        Ok(())
+    }
+
+    /// Ensure that the `sysconfig` data is patched to match the installation path.
+    pub fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
+        if cfg!(unix) {
+            if *self.implementation() == ImplementationName::CPython {
+                sysconfig::update_sysconfig(
+                    self.path(),
+                    self.key.major,
+                    self.key.minor,
+                    self.key.variant.suffix(),
+                )?;
+            }
+        }
         Ok(())
     }
 

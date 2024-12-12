@@ -8,7 +8,7 @@ pub use crate::discovery::{
     find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
     PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
 };
-pub use crate::environment::{InvalidEnvironment, InvalidEnvironmentKind, PythonEnvironment};
+pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;
 pub use crate::installation::{PythonInstallation, PythonInstallationKey};
 pub use crate::interpreter::{Error as InterpreterError, Interpreter};
@@ -39,6 +39,7 @@ mod prefix;
 #[cfg(windows)]
 mod py_launcher;
 mod python_version;
+mod sysconfig;
 mod target;
 mod version_files;
 mod virtualenv;
@@ -220,6 +221,7 @@ mod tests {
                         "arch": "x86_64"
                     },
                     "manylinux_compatible": true,
+                    "standalone": true,
                     "markers": {
                         "implementation_name": "{IMPLEMENTATION}",
                         "implementation_version": "{FULL_VERSION}",
