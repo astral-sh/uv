@@ -838,8 +838,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 SelfCommand::Update(SelfUpdateArgs {
                     target_version,
                     token,
+                    dry_run,
                 }),
-        }) => commands::self_update(target_version, token, printer).await,
+        }) => commands::self_update(target_version, token, dry_run, printer).await,
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
             anyhow::bail!(

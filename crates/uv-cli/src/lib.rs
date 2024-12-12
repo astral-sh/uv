@@ -511,6 +511,12 @@ pub struct SelfUpdateArgs {
     /// A token is not required but can be used to reduce the chance of encountering rate limits.
     #[arg(long, env = EnvVars::UV_GITHUB_TOKEN)]
     pub token: Option<String>,
+
+    /// Run without performing the update.
+    ///
+    /// uv will report if it would upgrade or not.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 #[derive(Args)]

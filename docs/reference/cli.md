@@ -8762,6 +8762,10 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt><code>--dry-run</code></dt><dd><p>Run without performing the update.</p>
+
+<p>uv will report if it would upgrade or not.</p>
+
 </dd><dt><code>--help</code>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt><code>--native-tls</code></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
