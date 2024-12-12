@@ -20,7 +20,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
@@ -1325,7 +1325,7 @@ pub(crate) async fn sync_environment(
         sources,
     } = settings;
 
-    let site_packages = SitePackages::from_environment(&venv)?;
+    let installed_packages = InstalledPackages::from_environment(&venv)?;
 
     // Determine the markers tags to use for resolution.
     let interpreter = venv.interpreter();
@@ -1401,7 +1401,7 @@ pub(crate) async fn sync_environment(
     // Sync the environment.
     pip::operations::install(
         resolution,
-        site_packages,
+        installed_packages,
         Modifications::Exact,
         reinstall,
         build_options,
@@ -1500,9 +1500,9 @@ pub(crate) async fn update_environment(
     let marker_env = venv.interpreter().resolver_marker_environment();
 
     // Check if the current environment satisfies the requirements
-    let site_packages = SitePackages::from_environment(&venv)?;
+    let installed_packages = InstalledPackages::from_environment(&venv)?;
     if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
+        match installed_packages.satisfies(&requirements, &constraints, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -1618,7 +1618,7 @@ pub(crate) async fn update_environment(
         BTreeSet::default(),
         &extras,
         preferences,
-        site_packages.clone(),
+        installed_packages.clone(),
         &hasher,
         reinstall,
         upgrade,
@@ -1644,7 +1644,7 @@ pub(crate) async fn update_environment(
     // Sync the environment.
     let changelog = pip::operations::install(
         &resolution,
-        site_packages,
+        installed_packages,
         Modifications::Exact,
         reinstall,
         build_options,

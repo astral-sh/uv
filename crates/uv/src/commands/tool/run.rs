@@ -17,7 +17,7 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
 use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -177,21 +177,21 @@ pub(crate) async fn run(
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
     warn_executable_not_provided_by_package(
         executable,
         &from.name,
-        &site_packages,
+        &installed_packages,
         invocation_source,
     );
 
     let mut handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            match get_entrypoints(&from.name, &site_packages) {
+            match get_entrypoints(&from.name, &installed_packages) {
                 Ok(entrypoints) => {
                     writeln!(
                         printer.stdout(),
@@ -298,15 +298,15 @@ fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
 /// Return the entry points for the specified package.
 fn get_entrypoints(
     from: &PackageName,
-    site_packages: &SitePackages,
+    installed_packages: &InstalledPackages,
 ) -> anyhow::Result<Vec<(String, PathBuf)>> {
-    let installed = site_packages.get_packages(from);
+    let installed = installed_packages.get_packages(from);
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
     };
 
     Ok(entrypoint_paths(
-        site_packages,
+        installed_packages,
         installed_dist.name(),
         installed_dist.version(),
     )?)
@@ -383,10 +383,10 @@ async fn show_help(
 fn warn_executable_not_provided_by_package(
     executable: &str,
     from_package: &PackageName,
-    site_packages: &SitePackages,
+    installed_packages: &InstalledPackages,
     invocation_source: ToolRunCommand,
 ) {
-    let packages = matching_packages(executable, site_packages);
+    let packages = matching_packages(executable, installed_packages);
     if !packages
         .iter()
         .any(|package| package.name() == from_package)
@@ -586,7 +586,7 @@ async fn get_or_create_environment(
                 });
         if let Some(environment) = existing_environment {
             // Check if the installed packages meet the requirements.
-            let site_packages = SitePackages::from_environment(&environment)?;
+            let installed_packages = InstalledPackages::from_environment(&environment)?;
 
             let requirements = requirements
                 .iter()
@@ -596,7 +596,7 @@ async fn get_or_create_environment(
             let constraints = [];
 
             if matches!(
-                site_packages.satisfies(
+                installed_packages.satisfies(
                     &requirements,
                     &constraints,
                     &interpreter.resolver_marker_environment()

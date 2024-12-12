@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_distribution_types::{Diagnostic, InstalledDist, Name};
-use uv_installer::SitePackages;
+use uv_installer::InstalledPackages;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
 use crate::commands::pip::operations::report_target_environment;
@@ -34,7 +34,7 @@ pub(crate) fn pip_freeze(
     report_target_environment(&environment, cache, printer)?;
 
     // Collect all the `site-packages` directories.
-    let site_packages = match paths {
+    let installed = match paths {
         Some(paths) => {
             paths
                 .into_iter()
@@ -45,15 +45,15 @@ pub(crate) fn pip_freeze(
                         // Drop invalid paths as per `pip freeze`.
                         .ok()
                 })
-                .map(|environment| SitePackages::from_environment(&environment))
+                .map(|environment| InstalledPackages::from_environment(&environment))
                 .collect::<Result<Vec<_>>>()?
         }
-        None => vec![SitePackages::from_environment(&environment)?],
+        None => vec![InstalledPackages::from_environment(&environment)?],
     };
 
-    site_packages
+    installed
         .iter()
-        .flat_map(uv_installer::SitePackages::iter)
+        .flat_map(uv_installer::InstalledPackages::iter)
         .filter(|dist| !(exclude_editable && dist.is_editable()))
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .map(|dist| match dist {
@@ -85,7 +85,7 @@ pub(crate) fn pip_freeze(
         // Determine the markers to use for resolution.
         let markers = environment.interpreter().resolver_marker_environment();
 
-        for entry in site_packages {
+        for entry in installed {
             for diagnostic in entry.diagnostics(&markers)? {
                 writeln!(
                     printer.stderr(),
