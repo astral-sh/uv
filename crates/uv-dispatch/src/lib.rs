@@ -5,10 +5,11 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use futures::FutureExt;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
+use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
@@ -22,8 +23,8 @@ use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, Name, Resolution,
-    SourceDist, VersionOrUrlRef,
+    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
@@ -33,7 +34,43 @@ use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight,
+};
+
+#[derive(Debug, Error)]
+pub enum BuildDispatchError {
+    #[error(transparent)]
+    BuildFrontend(#[from] AnyErrorBuild),
+
+    #[error(transparent)]
+    Tags(#[from] uv_platform_tags::TagsError),
+
+    #[error(transparent)]
+    Resolve(#[from] uv_resolver::ResolveError),
+
+    #[error(transparent)]
+    Join(#[from] tokio::task::JoinError),
+
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    Prepare(#[from] uv_installer::PrepareError),
+}
+
+impl IsBuildBackendError for BuildDispatchError {
+    fn is_build_backend_error(&self) -> bool {
+        match self {
+            BuildDispatchError::Tags(_)
+            | BuildDispatchError::Resolve(_)
+            | BuildDispatchError::Join(_)
+            | BuildDispatchError::Anyhow(_)
+            | BuildDispatchError::Prepare(_) => false,
+            BuildDispatchError::BuildFrontend(err) => err.is_build_backend_error(),
+        }
+    }
+}
 
 /// The main implementation of [`BuildContext`], used by the CLI, see [`BuildContext`]
 /// documentation.
@@ -124,6 +161,7 @@ impl<'a> BuildDispatch<'a> {
     }
 }
 
+#[allow(refining_impl_trait)]
 impl<'a> BuildContext for BuildDispatch<'a> {
     type SourceDistBuilder = SourceBuild;
 
@@ -167,7 +205,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.index_locations
     }
 
-    async fn resolve<'data>(&'data self, requirements: &'data [Requirement]) -> Result<Resolution> {
+    async fn resolve<'data>(
+        &'data self,
+        requirements: &'data [Requirement],
+    ) -> Result<Resolution, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
         let tags = self.interpreter.tags()?;
@@ -215,7 +256,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
-    ) -> Result<Vec<CachedDist>> {
+    ) -> Result<Vec<CachedDist>, BuildDispatchError> {
         debug!(
             "Installing in {} in {}",
             resolution
@@ -325,7 +366,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
-    ) -> Result<SourceBuild> {
+    ) -> Result<SourceBuild, uv_build_frontend::Error> {
         let dist_name = dist.map(uv_distribution_types::Name::name);
         let dist_version = dist
             .map(uv_distribution_types::DistributionMetadata::version_or_url)
@@ -342,13 +383,12 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             // We always allow editable builds
             && !matches!(build_kind, BuildKind::Editable)
         {
-            if let Some(dist) = dist {
-                return Err(anyhow!(
-                    "Building source distributions for {} is disabled",
-                    dist.name()
-                ));
-            }
-            return Err(anyhow!("Building source distributions is disabled"));
+            let err = if let Some(dist) = dist {
+                uv_build_frontend::Error::NoSourceDistBuild(dist.name().clone())
+            } else {
+                uv_build_frontend::Error::NoSourceDistBuilds
+            };
+            return Err(err);
         }
 
         let builder = SourceBuild::setup(
@@ -382,7 +422,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         output_dir: &'data Path,
         build_kind: BuildKind,
         version_id: Option<&'data str>,
-    ) -> Result<Option<DistFilename>> {
+    ) -> Result<Option<DistFilename>, BuildDispatchError> {
         // Direct builds are a preview feature with the uv build backend.
         if self.preview.is_disabled() {
             trace!("Preview is disabled, not checking for direct build");

@@ -5559,7 +5559,8 @@ fn fail_to_add_revert_project() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -5574,6 +5575,7 @@ fn fail_to_add_revert_project() -> Result<()> {
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `parent` (v0.1.0) depends on `child`
     "###);
 
@@ -5668,7 +5670,8 @@ fn fail_to_edit_revert_project() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
-      ╰─▶ Build backend failed to determine requirements with `build_wheel()` (exit status: 1)
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
           [stderr]
           Traceback (most recent call last):
@@ -5683,6 +5686,7 @@ fn fail_to_edit_revert_project() -> Result<()> {
             File "<string>", line 1, in <module>
           ZeroDivisionError: division by zero
 
+          hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `parent` (v0.1.0) depends on `child`
     "###);
 
