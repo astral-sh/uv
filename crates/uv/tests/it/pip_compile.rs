@@ -13796,7 +13796,7 @@ fn invalid_platform() -> Result<()> {
               open3d==0.16.1
               open3d==0.17.0
               open3d==0.18.0
-          and open3d<=0.15.2 has no wheels with a matching Python ABI tag, we can conclude that open3d<0.9.0.0 cannot be used.
+          and open3d<=0.15.2 has no wheels with a matching Python ABI tag, we can conclude that open3d<0.15.2 cannot be used.
           And because open3d>=0.16.0 has no wheels with a matching platform tag and you require open3d, we can conclude that your requirements are unsatisfiable.
     "###);
 

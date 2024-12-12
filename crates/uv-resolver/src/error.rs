@@ -673,8 +673,14 @@ fn collapse_unavailable_versions(
                             // And the package and reason are the same...
                             if package == other_package && reason == other_reason {
                                 // Collapse both into a new node, with a union of their ranges
+                                let mut terms = terms.clone();
+                                if let Some(term) = terms.get_mut(package) {
+                                    if let Term::Positive(range) = term {
+                                        *range = range.union(other_versions);
+                                    }
+                                }
                                 *tree = DerivationTree::Derived(Derived {
-                                    terms: terms.clone(),
+                                    terms: terms,
                                     shared_id: *shared_id,
                                     cause1: cause1.clone(),
                                     cause2: Arc::new(DerivationTree::External(External::Custom(
@@ -696,8 +702,14 @@ fn collapse_unavailable_versions(
                             // And the package and reason are the same...
                             if package == other_package && reason == other_reason {
                                 // Collapse both into a new node, with a union of their ranges
+                                let mut terms = terms.clone();
+                                if let Some(term) = terms.get_mut(package) {
+                                    if let Term::Positive(range) = term {
+                                        *range = range.union(other_versions);
+                                    }
+                                }
                                 *tree = DerivationTree::Derived(Derived {
-                                    terms: terms.clone(),
+                                    terms: terms,
                                     shared_id: *shared_id,
                                     cause1: Arc::new(DerivationTree::External(External::Custom(
                                         package.clone(),
