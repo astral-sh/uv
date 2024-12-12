@@ -20,7 +20,7 @@ use uv_distribution_types::{
     Name, NameRequirementSpecification, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
@@ -230,7 +230,7 @@ pub(crate) async fn run(
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let installed_packages = InstalledPackages::from_environment(&environment)?;
 
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
@@ -242,7 +242,7 @@ pub(crate) async fn run(
             warn_executable_not_provided_by_package(
                 executable,
                 &from.name,
-                &site_packages,
+                &installed_packages,
                 invocation_source,
             );
         }
@@ -254,7 +254,7 @@ pub(crate) async fn run(
             if let Some(exit_status) = hint_on_not_found(
                 executable,
                 &from,
-                &site_packages,
+                &installed_packages,
                 invocation_source,
                 printer,
             )? {
@@ -275,7 +275,7 @@ pub(crate) async fn run(
 fn hint_on_not_found(
     executable: &str,
     from: &ToolRequirement,
-    site_packages: &SitePackages,
+    site_packages: &InstalledPackages,
     invocation_source: ToolRunCommand,
     printer: Printer,
 ) -> anyhow::Result<Option<ExitStatus>> {
@@ -333,15 +333,15 @@ fn hint_on_not_found(
 /// Return the entry points for the specified package.
 fn get_entrypoints(
     from: &PackageName,
-    site_packages: &SitePackages,
+    installed_packages: &InstalledPackages,
 ) -> anyhow::Result<Vec<(String, PathBuf)>> {
-    let installed = site_packages.get_packages(from);
+    let installed = installed_packages.get_packages(from);
     let Some(installed_dist) = installed.first().copied() else {
         bail!("Expected at least one requirement")
     };
 
     Ok(entrypoint_paths(
-        site_packages,
+        installed_packages,
         installed_dist.name(),
         installed_dist.version(),
     )?)
@@ -418,10 +418,10 @@ async fn show_help(
 fn warn_executable_not_provided_by_package(
     executable: &str,
     from_package: &PackageName,
-    site_packages: &SitePackages,
+    installed_packages: &InstalledPackages,
     invocation_source: ToolRunCommand,
 ) {
-    let packages = matching_packages(executable, site_packages);
+    let packages = matching_packages(executable, installed_packages);
     if !packages
         .iter()
         .any(|package| package.name() == from_package)
@@ -761,7 +761,7 @@ async fn get_or_create_environment(
                 {
                     if overrides.is_empty() {
                         // Check if the installed packages meet the requirements.
-                        let site_packages = SitePackages::from_environment(&environment)?;
+                        let installed_packages = InstalledPackages::from_environment(&environment)?;
 
                         let requirements = requirements
                             .iter()
@@ -775,7 +775,7 @@ async fn get_or_create_environment(
                             .collect::<Vec<_>>();
 
                         if matches!(
-                            site_packages.satisfies(
+                            installed_packages.satisfies(
                                 &requirements,
                                 &constraints,
                                 &interpreter.resolver_marker_environment()

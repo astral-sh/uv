@@ -22,7 +22,7 @@ use uv_configuration::{
 };
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
@@ -1076,7 +1076,7 @@ fn can_skip_ephemeral(
     base_interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
 ) -> bool {
-    let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
+    let Ok(installed_packages) = InstalledPackages::from_interpreter(base_interpreter) else {
         return false;
     };
 
@@ -1084,7 +1084,7 @@ fn can_skip_ephemeral(
         return false;
     }
 
-    match site_packages.satisfies(
+    match installed_packages.satisfies(
         &spec.requirements,
         &spec.constraints,
         &base_interpreter.resolver_marker_environment(),
