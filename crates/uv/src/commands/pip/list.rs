@@ -150,26 +150,48 @@ pub(crate) async fn pip_list(
         results
     };
 
+    let verbose = true; // TODO: this should be a flag
+
     match format {
         ListFormat::Json => {
             let rows = results
                 .iter()
                 .copied()
-                .map(|dist| Entry {
-                    name: dist.name().clone(),
-                    version: dist.version().clone(),
-                    latest_version: latest
-                        .get(dist.name())
-                        .and_then(|filename| filename.as_ref())
-                        .map(DistFilename::version)
-                        .cloned(),
-                    latest_filetype: latest
-                        .get(dist.name())
-                        .and_then(|filename| filename.as_ref())
-                        .map(FileType::from),
-                    editable_project_location: dist
-                        .as_editable()
-                        .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+                .map(|dist| {
+                    let location = if verbose && dist.path().parent().is_some() {
+                        Some(dist.path().parent().unwrap().simplified_display().to_string())
+                    } else {
+                        None
+                    };
+                    let installer = if verbose {
+                        match dist.installer() {
+                            Ok(installer) => installer,
+                            Err(err) => {
+                                println!("Error: {}", err);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+                    Entry {
+                        name: dist.name().clone(),
+                        version: dist.version().clone(),
+                        location,
+                        installer,
+                        latest_version: latest
+                            .get(dist.name())
+                            .and_then(|filename| filename.as_ref())
+                            .map(DistFilename::version)
+                            .cloned(),
+                        latest_filetype: latest
+                            .get(dist.name())
+                            .and_then(|filename| filename.as_ref())
+                            .map(FileType::from),
+                        editable_project_location: dist
+                            .as_editable()
+                            .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
+                    }
                 })
                 .collect_vec();
             let output = serde_json::to_string(&rows)?;
@@ -242,6 +264,29 @@ pub(crate) async fn pip_list(
                             })
                             .unwrap_or_default()
                         })
+                        .collect_vec(),
+                });
+            }
+
+            if true {
+                columns.push(Column {
+                    header: String::from("Location"),
+                    rows: results
+                        .iter()
+                        .map(|dist| {
+                            if dist.path().parent().is_some() {
+                                dist.path().parent().unwrap().simplified_display().to_string()
+                            } else {
+                                String::new()
+                            }
+                        })
+                        .collect_vec(),
+                });
+                columns.push(Column {
+                    header: String::from("Installer"),
+                    rows: results
+                        .iter()
+                        .map(|_| "uv".to_string())
                         .collect_vec(),
                 });
             }
@@ -326,6 +371,10 @@ struct Entry {
     latest_filetype: Option<FileType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     editable_project_location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    installer: Option<String>,
 }
 
 /// A column in a table.
