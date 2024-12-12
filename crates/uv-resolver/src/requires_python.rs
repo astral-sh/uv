@@ -1,7 +1,8 @@
-use pubgrub::Range;
 use std::cmp::Ordering;
 use std::collections::Bound;
 use std::ops::Deref;
+
+use pubgrub::Range;
 
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifier, VersionSpecifiers};
@@ -73,24 +74,43 @@ impl RequiresPython {
                 }
             })?;
 
-        // Extract the bounds.
-        let (lower_bound, upper_bound) = range
-            .bounding_range()
-            .map(|(lower_bound, upper_bound)| {
-                (
-                    LowerBound(lower_bound.cloned()),
-                    UpperBound(upper_bound.cloned()),
-                )
-            })
-            .unwrap_or((LowerBound::default(), UpperBound::default()));
-
         // Convert back to PEP 440 specifiers.
         let specifiers = VersionSpecifiers::from_release_only_bounds(range.iter());
 
-        Some(Self {
-            specifiers,
-            range: RequiresPythonRange(lower_bound, upper_bound),
-        })
+        // Extract the bounds.
+        let range = RequiresPythonRange::from_range(&range);
+
+        Some(Self { specifiers, range })
+    }
+
+    /// Split the [`RequiresPython`] at the given version.
+    ///
+    /// For example, if the current requirement is `>=3.10`, and the split point is `3.11`, then
+    /// the result will be `>=3.10 and <3.11` and `>=3.11`.
+    pub fn split(&self, bound: Bound<Version>) -> Option<(Self, Self)> {
+        let RequiresPythonRange(.., upper) = &self.range;
+
+        let left = Range::from_range_bounds((bound, upper.clone().into()));
+        let right = left.complement();
+
+        // Intersect left and right with the existing range.
+        let left = left.intersection(&Range::from(self.range.clone()));
+        let right = right.intersection(&Range::from(self.range.clone()));
+
+        if left.is_empty() || right.is_empty() {
+            None
+        } else {
+            Some((
+                Self {
+                    specifiers: VersionSpecifiers::from_release_only_bounds(left.iter()),
+                    range: RequiresPythonRange::from_range(&left),
+                },
+                Self {
+                    specifiers: VersionSpecifiers::from_release_only_bounds(right.iter()),
+                    range: RequiresPythonRange::from_range(&right),
+                },
+            ))
+        }
     }
 
     /// Narrow the [`RequiresPython`] by computing the intersection with the given range.
@@ -489,14 +509,9 @@ impl serde::Serialize for RequiresPython {
 impl<'de> serde::Deserialize<'de> for RequiresPython {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let specifiers = VersionSpecifiers::deserialize(deserializer)?;
-        let (lower_bound, upper_bound) = release_specifiers_to_ranges(specifiers.clone())
-            .bounding_range()
-            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
-            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
-        Ok(Self {
-            specifiers,
-            range: RequiresPythonRange(LowerBound(lower_bound), UpperBound(upper_bound)),
-        })
+        let range = release_specifiers_to_ranges(specifiers.clone());
+        let range = RequiresPythonRange::from_range(&range);
+        Ok(Self { specifiers, range })
     }
 }
 
@@ -504,6 +519,15 @@ impl<'de> serde::Deserialize<'de> for RequiresPython {
 pub struct RequiresPythonRange(LowerBound, UpperBound);
 
 impl RequiresPythonRange {
+    /// Initialize a [`RequiresPythonRange`] from a [`Range`].
+    pub fn from_range(range: &Range<Version>) -> Self {
+        let (lower, upper) = range
+            .bounding_range()
+            .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        Self(LowerBound(lower), UpperBound(upper))
+    }
+
     /// Initialize a [`RequiresPythonRange`] with the given bounds.
     pub fn new(lower: LowerBound, upper: UpperBound) -> Self {
         Self(lower, upper)

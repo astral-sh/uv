@@ -1,5 +1,5 @@
 use std::sync::Arc;
-
+use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
 
@@ -7,7 +7,7 @@ use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
 use crate::resolver::ForkState;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::PythonRequirement;
+use crate::{PythonRequirement, RequiresPython};
 
 /// Represents one or more marker environments for a resolution.
 ///
@@ -446,6 +446,45 @@ impl<'d> ForkingPossibility<'d> {
             };
             ForkingPossibility::Possible(forker)
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct VersionForker;
+
+impl VersionForker {
+    pub(crate) fn fork(
+        requires_python: &VersionSpecifiers,
+        python_requirement: &PythonRequirement,
+        env: &ResolverEnvironment,
+    ) -> Vec<ResolverEnvironment> {
+        let requires_python = RequiresPython::from_specifiers(requires_python);
+        let lower = requires_python.range().lower().clone();
+
+        // Attempt to split the current Python requirement based on the `requires-python` specifier.
+        //
+        // For example, if the current requirement is `>=3.10`, and the split point is `3.11`, then
+        // the result will be `>=3.10 and <3.11` and `>=3.11`.
+        let Some((left, right)) = python_requirement.split(lower.into()) else {
+            return vec![];
+        };
+
+        let Kind::Universal {
+            markers: ref env_marker,
+            ..
+        } = env.kind
+        else {
+            panic!("resolver must be in universal mode for forking")
+        };
+
+        let mut envs = vec![];
+        if !env_marker.is_disjoint(right.to_marker_tree()) {
+            envs.push(env.narrow_environment(right.to_marker_tree()));
+        }
+        if !env_marker.is_disjoint(left.to_marker_tree()) {
+            envs.push(env.narrow_environment(left.to_marker_tree()));
+        }
+        envs
     }
 }
 
