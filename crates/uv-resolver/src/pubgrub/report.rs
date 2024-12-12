@@ -1763,3 +1763,126 @@ impl<T: std::fmt::Display> std::fmt::Display for Padded<'_, T> {
         write!(f, "{result}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeSet, ops::Bound, str::FromStr};
+
+    use pubgrub::Ranges;
+    use uv_pep440::Version;
+
+    use crate::pubgrub::report::update_availability_range;
+
+    macro_rules! v {
+        ($ver:expr) => {
+            Version::from_str($ver).unwrap()
+        };
+    }
+
+    /// A minimized test case for the following scenario
+    ///
+    /// ```console
+    /// $ uv tool install open-webui --with 'requests[socks]' --exclude-newer 2024-12-01
+    ///   × No solution found when resolving dependencies:
+    ///   ╰─▶ Because only the following versions of ctranslate2 are available:
+    ///           ctranslate2<=4.0.0
+    ///           ctranslate2==4.1.0
+    ///           ctranslate2==4.2.1
+    ///           ctranslate2==4.3.1
+    ///           ctranslate2==4.4.0
+    ///           ctranslate2==4.5.0
+    ///       and ctranslate2>=4.0.0 ...
+    /// ```
+    #[test]
+    fn test_update_availability_range_ctranslate2() {
+        let ranges = Ranges::from_iter([
+            (Bound::Unbounded, Bound::Included(v!("4.0.0"))),
+            (Bound::Included(v!("4.1.0")), Bound::Included(v!("4.1.0"))),
+            (Bound::Included(v!("4.2.1")), Bound::Included(v!("4.2.1"))),
+            (Bound::Included(v!("4.3.1")), Bound::Included(v!("4.3.1"))),
+            (Bound::Included(v!("4.4.0")), Bound::Included(v!("4.4.0"))),
+            (Bound::Included(v!("4.5.0")), Bound::Included(v!("4.5.0"))),
+            (Bound::Included(v!("5")), Bound::Unbounded),
+        ]);
+
+        let available_versions = BTreeSet::from_iter(
+            [
+                "1.20.1", "2.17.0", "2.18.0", "2.19.0", "2.19.1", "2.20.0", "2.21.0", "2.21.1",
+                "2.22.0", "2.23.0", "2.24.0", "3.0.0", "3.0.1", "3.0.2", "3.1.0", "3.2.0", "3.3.0",
+                "3.4.0", "3.5.0", "3.5.1", "3.6.0", "3.7.0", "3.8.0", "3.9.0", "3.9.1", "3.10.0",
+                "3.10.1", "3.10.2", "3.10.3", "3.11.0", "3.12.0", "3.13.0", "3.14.0", "3.15.0",
+                "3.15.1", "3.16.0", "3.16.1", "3.17.0", "3.17.1", "3.18.0", "3.19.0", "3.20.0",
+                "3.21.0", "3.22.0", "3.23.0", "3.24.0", "4.0.0", "4.1.0", "4.2.1", "4.3.1",
+                "4.4.0", "4.5.0",
+            ]
+            .map(Version::from_str)
+            .map(Result::unwrap),
+        );
+
+        assert_eq!(
+            update_availability_range(&ranges, &available_versions),
+            Ranges::from_iter([
+                (Bound::Unbounded, Bound::Included(v!("4.0.0"))),
+                (Bound::Included(v!("4.1.0")), Bound::Included(v!("4.1.0"))),
+                (Bound::Included(v!("4.2.1")), Bound::Included(v!("4.2.1"))),
+                (Bound::Included(v!("4.3.1")), Bound::Included(v!("4.3.1"))),
+                (Bound::Included(v!("4.4.0")), Bound::Included(v!("4.4.0"))),
+                (Bound::Included(v!("4.5.0")), Bound::Included(v!("4.5.0"))),
+            ])
+        );
+    }
+
+    /// A minimized test case for the following scenario
+    ///
+    /// ```console
+    /// $ echo "rooster-blue" | uv pip compile - -p 3.10 --exclude-newer 2024-12-01
+    ///   × No solution found when resolving dependencies:
+    ///   ╰─▶ Because the requested Python version (>=3.10.0) does not satisfy Python>=3.11,<4.0 and all versions of rooster-blue depend on Python>=3.11,<4.0, we can conclude that all versions of
+    ///       rooster-blue cannot be used.
+    ///       And because only the following versions of rooster-blue are available:
+    ///           rooster-blue==0.0.1
+    ///           rooster-blue==0.0.2
+    ///           rooster-blue==0.0.3
+    ///           rooster-blue==0.0.4
+    ///           rooster-blue==0.0.5
+    ///           rooster-blue==0.0.6
+    ///           rooster-blue==0.0.7
+    ///           rooster-blue==0.0.8
+    ///       and you require rooster-blue, we can conclude that your requirements are unsatisfiable.
+    /// ```
+    #[test]
+    fn test_update_availability_range_rooster_blue() {
+        let ranges = Ranges::from_iter([
+            (Bound::Included(v!("0.0.1")), Bound::Included(v!("0.0.1"))),
+            (Bound::Included(v!("0.0.2")), Bound::Included(v!("0.0.2"))),
+            (Bound::Included(v!("0.0.3")), Bound::Included(v!("0.0.3"))),
+            (Bound::Included(v!("0.0.4")), Bound::Included(v!("0.0.4"))),
+            (Bound::Included(v!("0.0.5")), Bound::Included(v!("0.0.5"))),
+            (Bound::Included(v!("0.0.6")), Bound::Included(v!("0.0.6"))),
+            (Bound::Included(v!("0.0.7")), Bound::Included(v!("0.0.7"))),
+            (Bound::Included(v!("0.0.8")), Bound::Included(v!("0.0.8"))),
+        ]);
+
+        let available_versions = BTreeSet::from_iter(
+            [
+                "0.0.1", "0.0.2", "0.0.3", "0.0.4", "0.0.5", "0.0.6", "0.0.7", "0.0.8",
+            ]
+            .map(Version::from_str)
+            .map(Result::unwrap),
+        );
+
+        assert_eq!(
+            update_availability_range(&ranges, &available_versions),
+            Ranges::from_iter([
+                (Bound::Included(v!("0.0.1")), Bound::Included(v!("0.0.1"))),
+                (Bound::Included(v!("0.0.2")), Bound::Included(v!("0.0.2"))),
+                (Bound::Included(v!("0.0.3")), Bound::Included(v!("0.0.3"))),
+                (Bound::Included(v!("0.0.4")), Bound::Included(v!("0.0.4"))),
+                (Bound::Included(v!("0.0.5")), Bound::Included(v!("0.0.5"))),
+                (Bound::Included(v!("0.0.6")), Bound::Included(v!("0.0.6"))),
+                (Bound::Included(v!("0.0.7")), Bound::Included(v!("0.0.7"))),
+                (Bound::Included(v!("0.0.8")), Bound::Included(v!("0.0.8"))),
+            ])
+        );
+    }
+}
