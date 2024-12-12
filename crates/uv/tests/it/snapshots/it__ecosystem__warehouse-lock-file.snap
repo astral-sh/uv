@@ -8,6 +8,12 @@ requires-python = "==3.11.*"
 [options]
 exclude-newer = "2024-08-08T00:00:00Z"
 
+[manifest]
+
+[[manifest.dependency-metadata]]
+name = "psycopg-c"
+version = "3.2.1"
+
 [[package]]
 name = "alabaster"
 version = "1.0.0"
