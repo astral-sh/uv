@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::env::consts::ARCH;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -746,7 +747,9 @@ impl InterpreterInfo {
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
-            "",
+            // Shard interpreter metadata by host architecture, to avoid cache collisions when
+            // running universal binaries under Rosetta.
+            ARCH,
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't to query the executable with symbolic links resolved.
             format!("{}.msgpack", cache_digest(&absolute)),
