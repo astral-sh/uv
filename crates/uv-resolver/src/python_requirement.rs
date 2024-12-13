@@ -1,3 +1,5 @@
+use std::collections::Bound;
+
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_python::{Interpreter, PythonVersion};
@@ -82,6 +84,28 @@ impl PythonRequirement {
             target: self.target.narrow(target)?,
             source: self.source,
         })
+    }
+
+    /// Split the [`PythonRequirement`] at the given version.
+    ///
+    /// For example, if the current requirement is `>=3.10`, and the split point is `3.11`, then
+    /// the result will be `>=3.10 and <3.11` and `>=3.11`.
+    pub fn split(&self, at: Bound<Version>) -> Option<(Self, Self)> {
+        let (lower, upper) = self.target.split(at)?;
+        Some((
+            Self {
+                exact: self.exact.clone(),
+                installed: self.installed.clone(),
+                target: lower,
+                source: self.source,
+            },
+            Self {
+                exact: self.exact.clone(),
+                installed: self.installed.clone(),
+                target: upper,
+                source: self.source,
+            },
+        ))
     }
 
     /// Returns `true` if the minimum version of Python required by the target is greater than the

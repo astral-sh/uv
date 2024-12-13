@@ -30,7 +30,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{release_specifiers_to_ranges, Version, MIN_VERSION};
+use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
@@ -59,8 +59,8 @@ pub(crate) use crate::resolver::availability::{
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
-use crate::resolver::environment::ForkingPossibility;
 pub use crate::resolver::environment::ResolverEnvironment;
+use crate::resolver::environment::{fork_python_requirement, ForkingPossibility};
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
@@ -323,82 +323,90 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             let start = Instant::now();
             loop {
-                // Run unit propagation.
-                if let Err(err) = state.pubgrub.unit_propagation(state.next) {
-                    return Err(self.convert_no_solution_err(
-                        err,
-                        state.fork_urls,
-                        &state.fork_indexes,
-                        state.env,
-                        &visited,
-                        &self.locations,
-                        &self.capabilities,
-                    ));
-                }
-
-                // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
-                if self.dependency_mode.is_transitive() {
-                    Self::pre_visit(
-                        state
-                            .pubgrub
-                            .partial_solution
-                            .prioritized_packages()
-                            .map(|(id, range)| (&state.pubgrub.package_store[id], range)),
-                        &self.urls,
-                        &self.indexes,
-                        &state.python_requirement,
-                        &request_sink,
-                    )?;
-                }
-
-                // Choose a package version.
-                let Some(highest_priority_pkg) = state
-                    .pubgrub
-                    .partial_solution
-                    .pick_highest_priority_pkg(|id, _range| {
-                        state.priorities.get(&state.pubgrub.package_store[id])
-                    })
-                else {
-                    // All packages have been assigned, the fork has been successfully resolved
-                    if tracing::enabled!(Level::DEBUG) {
-                        prefetcher.log_tried_versions();
-                    }
-                    debug!(
-                        "{} resolution took {:.3}s",
-                        state.env,
-                        start.elapsed().as_secs_f32()
-                    );
-
-                    let resolution = state.into_resolution();
-
-                    // Walk over the selected versions, and mark them as preferences. We have to
-                    // add forks back as to not override the preferences from the lockfile for
-                    // the next fork
-                    //
-                    // If we're using a resolution mode that varies based on whether a dependency is
-                    // direct or transitive, skip preferences, as we risk adding a preference from
-                    // one fork (in which it's a transitive dependency) to another fork (in which
-                    // it's direct).
-                    if matches!(
-                        self.options.resolution_mode,
-                        ResolutionMode::Lowest | ResolutionMode::Highest
-                    ) {
-                        for (package, version) in &resolution.nodes {
-                            preferences.insert(
-                                package.name.clone(),
-                                package.index.clone(),
-                                resolution
-                                    .env
-                                    .try_universal_markers()
-                                    .unwrap_or(UniversalMarker::TRUE),
-                                version.clone(),
-                            );
+                let highest_priority_pkg =
+                    if let Some(initial) = state.initial.take() {
+                        // If we just forked based on `requires-python`, we can skip unit
+                        // propagation, since we already propagated the package that initiated
+                        // the fork.
+                        initial
+                    } else {
+                        // Run unit propagation.
+                        if let Err(err) = state.pubgrub.unit_propagation(state.next) {
+                            return Err(self.convert_no_solution_err(
+                                err,
+                                state.fork_urls,
+                                &state.fork_indexes,
+                                state.env,
+                                &visited,
+                                &self.locations,
+                                &self.capabilities,
+                            ));
                         }
-                    }
 
-                    resolutions.push(resolution);
-                    continue 'FORK;
-                };
+                        // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
+                        if self.dependency_mode.is_transitive() {
+                            Self::pre_visit(
+                                state
+                                    .pubgrub
+                                    .partial_solution
+                                    .prioritized_packages()
+                                    .map(|(id, range)| (&state.pubgrub.package_store[id], range)),
+                                &self.urls,
+                                &self.indexes,
+                                &state.python_requirement,
+                                &request_sink,
+                            )?;
+                        }
+
+                        // Choose a package.
+                        let Some(highest_priority_pkg) =
+                            state.pubgrub.partial_solution.pick_highest_priority_pkg(
+                                |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
+                            )
+                        else {
+                            // All packages have been assigned, the fork has been successfully resolved
+                            if tracing::enabled!(Level::DEBUG) {
+                                prefetcher.log_tried_versions();
+                            }
+                            debug!(
+                                "{} resolution took {:.3}s",
+                                state.env,
+                                start.elapsed().as_secs_f32()
+                            );
+
+                            let resolution = state.into_resolution();
+
+                            // Walk over the selected versions, and mark them as preferences. We have to
+                            // add forks back as to not override the preferences from the lockfile for
+                            // the next fork
+                            //
+                            // If we're using a resolution mode that varies based on whether a dependency is
+                            // direct or transitive, skip preferences, as we risk adding a preference from
+                            // one fork (in which it's a transitive dependency) to another fork (in which
+                            // it's direct).
+                            if matches!(
+                                self.options.resolution_mode,
+                                ResolutionMode::Lowest | ResolutionMode::Highest
+                            ) {
+                                for (package, version) in &resolution.nodes {
+                                    preferences.insert(
+                                        package.name.clone(),
+                                        package.index.clone(),
+                                        resolution
+                                            .env
+                                            .try_universal_markers()
+                                            .unwrap_or(UniversalMarker::TRUE),
+                                        version.clone(),
+                                    );
+                                }
+                            }
+
+                            resolutions.push(resolution);
+                            continue 'FORK;
+                        };
+
+                        highest_priority_pkg
+                    };
 
                 state.next = highest_priority_pkg;
 
@@ -481,8 +489,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                     Some(version) => version,
                 };
+
                 let version = match version {
-                    ResolverVersion::Available(version) => version,
+                    ResolverVersion::Unforked(version) => version,
+                    ResolverVersion::Forked(forks) => {
+                        for mut fork in self.version_forks_to_fork_states(state, forks) {
+                            fork.initial = Some(next_id);
+                            forked_states.push(fork);
+                        }
+                        continue 'FORK;
+                    }
                     ResolverVersion::Unavailable(version, reason) => {
                         state.add_unavailable_version(version, reason);
                         continue;
@@ -742,6 +758,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             })
     }
 
+    /// Convert the dependency [`Fork`]s into [`ForkState`]s.
+    #[allow(clippy::unused_self)]
+    fn version_forks_to_fork_states(
+        &self,
+        current_state: ForkState,
+        forks: Vec<ResolverEnvironment>,
+    ) -> impl Iterator<Item = ForkState> + '_ {
+        // This is a somewhat tortured technique to ensure
+        // that our resolver state is only cloned as much
+        // as it needs to be. We basically move the state
+        // into `forked_states`, and then only clone it if
+        // there is at least one more fork to visit.
+        let mut cur_state = Some(current_state);
+        let forks_len = forks.len();
+        forks.into_iter().enumerate().map(move |(i, fork)| {
+            let is_last = i == forks_len - 1;
+            let forked_state = cur_state.take().unwrap();
+            if !is_last {
+                cur_state = Some(forked_state.clone());
+            }
+
+            forked_state.with_env(fork)
+        })
+    }
+
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
     /// before it is selected, to allow metadata to be fetched in parallel.
     fn visit_package(
@@ -864,7 +905,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         match &**package {
             PubGrubPackageInner::Root(_) => {
-                Ok(Some(ResolverVersion::Available(MIN_VERSION.clone())))
+                Ok(Some(ResolverVersion::Unforked(MIN_VERSION.clone())))
             }
 
             PubGrubPackageInner::Python(_) => {
@@ -1000,7 +1041,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        Ok(Some(ResolverVersion::Available(version.clone())))
+        Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
 
     /// Given a candidate registry requirement, choose the next version in range to try, or `None`
@@ -1080,7 +1121,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         // Check whether the version is incompatible due to its Python requirement.
-        if let Some(incompatibility) = Self::check_requires_python(dist, python_requirement) {
+        if let Some((requires_python, incompatibility)) =
+            Self::check_requires_python(dist, python_requirement)
+        {
+            if env.marker_environment().is_none() {
+                let forks = fork_python_requirement(requires_python, python_requirement, env);
+                if !forks.is_empty() {
+                    debug!(
+                        "Forking Python requirement `{}` on `{}` for {}=={} ({})",
+                        python_requirement.target(),
+                        requires_python,
+                        name,
+                        candidate.version(),
+                        forks
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    return Ok(Some(ResolverVersion::Forked(forks)));
+                }
+            }
+
             return Ok(Some(ResolverVersion::Unavailable(
                 candidate.version().clone(),
                 UnavailableVersion::IncompatibleDist(incompatibility),
@@ -1129,47 +1191,39 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        Ok(Some(ResolverVersion::Available(version)))
+        Ok(Some(ResolverVersion::Unforked(version)))
     }
 
     /// Check if the distribution is incompatible with the Python requirement, and if so, return
     /// the incompatibility.
-    fn check_requires_python(
-        dist: &CompatibleDist,
+    fn check_requires_python<'dist>(
+        dist: &'dist CompatibleDist,
         python_requirement: &PythonRequirement,
-    ) -> Option<IncompatibleDist> {
-        let requires_python = match dist {
-            CompatibleDist::InstalledDist(_) => None,
-            CompatibleDist::SourceDist { sdist, .. }
-            | CompatibleDist::IncompatibleWheel { sdist, .. } => {
-                sdist.file.requires_python.as_ref()
-            }
-            CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
-        }?;
+    ) -> Option<(&'dist VersionSpecifiers, IncompatibleDist)> {
+        let requires_python = dist.requires_python()?;
         if python_requirement.target().is_contained_by(requires_python) {
             None
         } else {
-            if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
-                Some(IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
+            let incompatibility = if matches!(dist, CompatibleDist::CompatibleWheel { .. }) {
+                IncompatibleDist::Wheel(IncompatibleWheel::RequiresPython(
                     requires_python.clone(),
                     if python_requirement.installed() == python_requirement.target() {
                         PythonRequirementKind::Installed
                     } else {
                         PythonRequirementKind::Target
                     },
-                )))
-            } else {
-                Some(IncompatibleDist::Source(
-                    IncompatibleSource::RequiresPython(
-                        requires_python.clone(),
-                        if python_requirement.installed() == python_requirement.target() {
-                            PythonRequirementKind::Installed
-                        } else {
-                            PythonRequirementKind::Target
-                        },
-                    ),
                 ))
-            }
+            } else {
+                IncompatibleDist::Source(IncompatibleSource::RequiresPython(
+                    requires_python.clone(),
+                    if python_requirement.installed() == python_requirement.target() {
+                        PythonRequirementKind::Installed
+                    } else {
+                        PythonRequirementKind::Target
+                    },
+                ))
+            };
+            Some((requires_python, incompatibility))
         }
     }
 
@@ -2078,6 +2132,9 @@ pub(crate) struct ForkState {
     /// in this state. We also ultimately retrieve the final set of version
     /// assignments (to packages) from this state's "partial solution."
     pubgrub: State<UvDependencyProvider>,
+    /// The initial package to select. If set, the first iteration over this state will avoid
+    /// asking PubGrub for the highest-priority package, and will instead use the provided package.
+    initial: Option<Id<PubGrubPackage>>,
     /// The next package on which to run unit propagation.
     next: Id<PubGrubPackage>,
     /// The set of pinned versions we accrue throughout resolution.
@@ -2147,6 +2204,7 @@ impl ForkState {
         python_requirement: PythonRequirement,
     ) -> Self {
         Self {
+            initial: None,
             next: pubgrub.root_package,
             pubgrub,
             pins: FilePins::default(),
