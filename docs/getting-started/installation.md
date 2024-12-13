@@ -160,7 +160,10 @@ To enable shell autocompletion for uv commands, run one of the following:
     echo 'eval "$(uv generate-shell-completion zsh)"' >> ~/.zshrc
     echo 'uv generate-shell-completion fish | source' >> ~/.config/fish/config.fish
     echo 'eval (uv generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
-    # If you are using fish shell you can add the completion to a file in the completions folder, like this:
+    # If you are using fish shell you can add the completion to a file in the completions folder.
+    # If you don't have the completions folder, create it like this:
+    mkdir ~/.config/fish/completions/uv.fish
+    # Then add the completion to the completions folder, like this:
     uv generate-shell-completion fish > ~/.config/fish/completions/uv.fish
     ```
 
