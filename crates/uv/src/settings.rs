@@ -33,7 +33,7 @@ use uv_pep508::{ExtraName, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, ExcludeNewer, MultiVersionMode, PrereleaseMode, ResolutionMode,
+    AnnotationStyle, DependencyMode, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
     Combine, FilesystemOptions, Options, PipOptions, PublishOptions, PythonInstallMirrors,
@@ -576,7 +576,7 @@ impl ToolUpgradeSettings {
             resolution,
             prerelease,
             pre,
-            multi_version,
+            fork_strategy,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -610,7 +610,7 @@ impl ToolUpgradeSettings {
             resolution,
             prerelease,
             pre,
-            multi_version,
+            fork_strategy,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -2219,7 +2219,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) multi_version: MultiVersionMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2238,7 +2238,7 @@ pub(crate) struct ResolverSettingsRef<'a> {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) multi_version: MultiVersionMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2270,7 +2270,7 @@ impl ResolverSettings {
             keyring_provider: self.keyring_provider,
             resolution: self.resolution,
             prerelease: self.prerelease,
-            multi_version: self.multi_version,
+            fork_strategy: self.fork_strategy,
             dependency_metadata: &self.dependency_metadata,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
@@ -2305,7 +2305,7 @@ impl From<ResolverOptions> for ResolverSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
-            multi_version: value.multi_version.unwrap_or_default(),
+            fork_strategy: value.fork_strategy.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
             ),
@@ -2341,7 +2341,7 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) multi_version: MultiVersionMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2368,7 +2368,7 @@ pub(crate) struct ResolverInstallerSettings {
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) multi_version: MultiVersionMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) config_setting: ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2405,7 +2405,7 @@ impl ResolverInstallerSettings {
             keyring_provider: self.keyring_provider,
             resolution: self.resolution,
             prerelease: self.prerelease,
-            multi_version: self.multi_version,
+            fork_strategy: self.fork_strategy,
             dependency_metadata: &self.dependency_metadata,
             config_setting: &self.config_setting,
             no_build_isolation: self.no_build_isolation,
@@ -2442,7 +2442,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             ),
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
-            multi_version: value.multi_version.unwrap_or_default(),
+            fork_strategy: value.fork_strategy.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
             ),
@@ -2501,7 +2501,7 @@ pub(crate) struct PipSettings {
     pub(crate) dependency_mode: DependencyMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) multi_version: MultiVersionMode,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: DependencyMetadata,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) no_strip_extras: bool,
@@ -2568,7 +2568,7 @@ impl PipSettings {
             allow_empty_requirements,
             resolution,
             prerelease,
-            multi_version,
+            fork_strategy,
             dependency_metadata,
             output_file,
             no_strip_extras,
@@ -2610,7 +2610,7 @@ impl PipSettings {
             keyring_provider: top_level_keyring_provider,
             resolution: top_level_resolution,
             prerelease: top_level_prerelease,
-            multi_version: top_level_multi_version,
+            fork_strategy: top_level_fork_strategy,
             dependency_metadata: top_level_dependency_metadata,
             config_settings: top_level_config_settings,
             no_build_isolation: top_level_no_build_isolation,
@@ -2642,7 +2642,7 @@ impl PipSettings {
         let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
         let resolution = resolution.combine(top_level_resolution);
         let prerelease = prerelease.combine(top_level_prerelease);
-        let multi_version = multi_version.combine(top_level_multi_version);
+        let fork_strategy = fork_strategy.combine(top_level_fork_strategy);
         let dependency_metadata = dependency_metadata.combine(top_level_dependency_metadata);
         let config_settings = config_settings.combine(top_level_config_settings);
         let no_build_isolation = no_build_isolation.combine(top_level_no_build_isolation);
@@ -2688,9 +2688,9 @@ impl PipSettings {
             },
             resolution: args.resolution.combine(resolution).unwrap_or_default(),
             prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
-            multi_version: args
-                .multi_version
-                .combine(multi_version)
+            fork_strategy: args
+                .fork_strategy
+                .combine(fork_strategy)
                 .unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 args.dependency_metadata
@@ -2833,7 +2833,7 @@ impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
             keyring_provider: settings.keyring_provider,
             resolution: settings.resolution,
             prerelease: settings.prerelease,
-            multi_version: settings.multi_version,
+            fork_strategy: settings.fork_strategy,
             dependency_metadata: settings.dependency_metadata,
             config_setting: settings.config_setting,
             no_build_isolation: settings.no_build_isolation,

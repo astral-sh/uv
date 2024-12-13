@@ -169,7 +169,7 @@ pub(crate) async fn tree(
                 keyring_provider,
                 resolution: _,
                 prerelease: _,
-                multi_version: _,
+                fork_strategy: _,
                 dependency_metadata: _,
                 config_setting: _,
                 no_build_isolation: _,

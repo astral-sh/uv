@@ -43,9 +43,9 @@ use crate::candidate_selector::{CandidateDist, CandidateSelector};
 use crate::dependency_provider::UvDependencyProvider;
 use crate::error::{NoSolutionError, ResolveError};
 use crate::fork_indexes::ForkIndexes;
+use crate::fork_strategy::ForkStrategy;
 use crate::fork_urls::ForkUrls;
 use crate::manifest::Manifest;
-use crate::multi_version_mode::MultiVersionMode;
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::pubgrub::{
@@ -1125,10 +1125,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if let Some((requires_python, incompatibility)) =
             Self::check_requires_python(dist, python_requirement)
         {
-            if matches!(
-                self.options.multi_version_mode,
-                MultiVersionMode::RequiresPython
-            ) {
+            if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython) {
                 if env.marker_environment().is_none() {
                     let forks = fork_python_requirement(requires_python, python_requirement, env);
                     if !forks.is_empty() {

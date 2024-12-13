@@ -1,6 +1,6 @@
 use uv_configuration::IndexStrategy;
 
-use crate::multi_version_mode::MultiVersionMode;
+use crate::fork_strategy::ForkStrategy;
 use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
@@ -9,7 +9,7 @@ pub struct Options {
     pub resolution_mode: ResolutionMode,
     pub prerelease_mode: PrereleaseMode,
     pub dependency_mode: DependencyMode,
-    pub multi_version_mode: MultiVersionMode,
+    pub fork_strategy: ForkStrategy,
     pub exclude_newer: Option<ExcludeNewer>,
     pub index_strategy: IndexStrategy,
     pub flexibility: Flexibility,
@@ -21,7 +21,7 @@ pub struct OptionsBuilder {
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
-    multi_version_mode: MultiVersionMode,
+    fork_strategy: ForkStrategy,
     exclude_newer: Option<ExcludeNewer>,
     index_strategy: IndexStrategy,
     flexibility: Flexibility,
@@ -56,8 +56,8 @@ impl OptionsBuilder {
 
     /// Sets the multi-version mode.
     #[must_use]
-    pub fn multi_version_mode(mut self, multi_version_mode: MultiVersionMode) -> Self {
-        self.multi_version_mode = multi_version_mode;
+    pub fn fork_strategy(mut self, fork_strategy: ForkStrategy) -> Self {
+        self.fork_strategy = fork_strategy;
         self
     }
 
@@ -88,7 +88,7 @@ impl OptionsBuilder {
             resolution_mode: self.resolution_mode,
             prerelease_mode: self.prerelease_mode,
             dependency_mode: self.dependency_mode,
-            multi_version_mode: self.multi_version_mode,
+            fork_strategy: self.fork_strategy,
             exclude_newer: self.exclude_newer,
             index_strategy: self.index_strategy,
             flexibility: self.flexibility,

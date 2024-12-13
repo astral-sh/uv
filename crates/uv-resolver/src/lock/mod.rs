@@ -13,11 +13,11 @@ use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
+use crate::fork_strategy::ForkStrategy;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::target::InstallTarget;
 pub use crate::lock::tree::TreeDisplay;
-use crate::multi_version_mode::MultiVersionMode;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
@@ -240,7 +240,7 @@ impl Lock {
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
-            multi_version_mode: resolution.options.multi_version_mode,
+            fork_strategy: resolution.options.fork_strategy,
             exclude_newer: resolution.options.exclude_newer,
         };
         let lock = Self::new(
@@ -551,8 +551,8 @@ impl Lock {
     }
 
     /// Returns the multi-version mode used to generate this lock.
-    pub fn multi_version_mode(&self) -> MultiVersionMode {
-        self.options.multi_version_mode
+    pub fn fork_strategy(&self) -> ForkStrategy {
+        self.options.fork_strategy
     }
 
     /// Returns the exclude newer setting used to generate this lock.
@@ -682,10 +682,10 @@ impl Lock {
                     value(self.options.prerelease_mode.to_string()),
                 );
             }
-            if self.options.multi_version_mode != MultiVersionMode::default() {
+            if self.options.fork_strategy != ForkStrategy::default() {
                 options_table.insert(
-                    "multi-version-mode",
-                    value(self.options.multi_version_mode.to_string()),
+                    "fork-strategy",
+                    value(self.options.fork_strategy.to_string()),
                 );
             }
             if let Some(exclude_newer) = self.options.exclude_newer {
@@ -1330,9 +1330,9 @@ struct ResolverOptions {
     /// The [`PrereleaseMode`] used to generate this lock.
     #[serde(default)]
     prerelease_mode: PrereleaseMode,
-    /// The [`MultiVersionMode`] used to generate this lock.
+    /// The [`ForkStrategy`] used to generate this lock.
     #[serde(default)]
-    multi_version_mode: MultiVersionMode,
+    fork_strategy: ForkStrategy,
     /// The [`ExcludeNewer`] used to generate this lock.
     exclude_newer: Option<ExcludeNewer>,
 }

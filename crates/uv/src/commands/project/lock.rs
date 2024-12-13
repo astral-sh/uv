@@ -316,7 +316,7 @@ async fn do_lock(
         keyring_provider,
         resolution,
         prerelease,
-        multi_version,
+        fork_strategy,
         dependency_metadata,
         config_setting,
         no_build_isolation,
@@ -469,7 +469,7 @@ async fn do_lock(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution)
         .prerelease_mode(prerelease)
-        .multi_version_mode(multi_version)
+        .fork_strategy(fork_strategy)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
         .build();
@@ -752,12 +752,12 @@ impl ValidatedLock {
             );
             return Ok(Self::Unusable(lock));
         }
-        if lock.multi_version_mode() != options.multi_version_mode {
+        if lock.fork_strategy() != options.fork_strategy {
             let _ = writeln!(
                 printer.stderr(),
-                "Ignoring existing lockfile due to change in multi-version mode: `{}` vs. `{}`",
-                lock.multi_version_mode().cyan(),
-                options.multi_version_mode.cyan()
+                "Ignoring existing lockfile due to change in fork strategy: `{}` vs. `{}`",
+                lock.fork_strategy().cyan(),
+                options.fork_strategy.cyan()
             );
             return Ok(Self::Unusable(lock));
         }

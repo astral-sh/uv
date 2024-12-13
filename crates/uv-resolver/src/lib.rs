@@ -3,12 +3,12 @@ pub use error::{NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
+pub use fork_strategy::ForkStrategy;
 pub use lock::{
     InstallTarget, Lock, LockError, LockVersion, PackageMap, RequirementsTxtExport,
     ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
 };
 pub use manifest::Manifest;
-pub use multi_version_mode::MultiVersionMode;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
@@ -42,12 +42,12 @@ mod exclude_newer;
 mod exclusions;
 mod flat_index;
 mod fork_indexes;
+mod fork_strategy;
 mod fork_urls;
 mod graph_ops;
 mod lock;
 mod manifest;
 mod marker;
-mod multi_version_mode;
 mod options;
 mod pins;
 mod preferences;

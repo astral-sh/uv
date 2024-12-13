@@ -82,6 +82,11 @@ use this space-separated list of URLs as additional indexes when searching for p
 Equivalent to the `--find-links` command-line argument. If set, uv will use this
 comma-separated list of additional locations to search for packages.
 
+### `UV_FORK_STRATEGY`
+
+Equivalent to the `--fork-strategy` argument. Controls version selection during universal
+resolution.
+
 ### `UV_FROZEN`
 
 Equivalent to the `--frozen` command-line argument. If set, uv will run without
@@ -153,10 +158,6 @@ a link mode.
 
 Equivalent to the `--locked` command-line argument. If set, uv will assert that the
 `uv.lock` remains unchanged.
-
-### `UV_MULTI_VERSION`
-
-Equivalent to the `--multi-version` argument. Controls version selection across forks.
 
 ### `UV_NATIVE_TLS`
 

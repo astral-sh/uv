@@ -2,7 +2,7 @@
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub enum MultiVersionMode {
+pub enum ForkStrategy {
     /// Optimize for selecting the fewest number of versions for each package. Older versions may
     /// be preferred if they are compatible with a wider range of supported Python versions or
     /// platforms.
@@ -13,7 +13,7 @@ pub enum MultiVersionMode {
     RequiresPython,
 }
 
-impl std::fmt::Display for MultiVersionMode {
+impl std::fmt::Display for ForkStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Fewest => write!(f, "fewest"),
