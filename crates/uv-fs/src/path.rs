@@ -9,7 +9,7 @@ use path_slash::PathExt;
 #[allow(clippy::exit, clippy::print_stderr)]
 pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::current_dir().unwrap_or_else(|_e| {
-        eprintln!("Current directory does not exist.");
+        eprintln!("Current directory does not exist");
         std::process::exit(1);
     })
 });
