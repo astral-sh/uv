@@ -106,11 +106,10 @@ impl InstalledPackages {
                 let idx = distributions.len();
 
                 // Index the distribution by name.
-                let name = dist_info.name().clone();
-                if by_name.contains_key(&name) {
-                    continue;
-                }
-                by_name.entry(name).or_default().push(idx);
+                by_name
+                    .entry(dist_info.name().clone())
+                    .or_default()
+                    .push(idx);
 
                 // Index the distribution by URL.
                 if let InstalledDist::Url(dist) = &dist_info {
