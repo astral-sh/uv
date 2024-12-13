@@ -135,6 +135,21 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
             .join(" ")
     }
 
+    /// Remove any references to `-isysroot` in a whitespace-separated string.
+    fn remove_isysroot(s: &str) -> String {
+        // If we see `-isysroot`, drop it and the next part.
+        let mut parts = s.split_whitespace().peekable();
+        let mut result = Vec::with_capacity(parts.size_hint().0);
+        while let Some(part) = parts.next() {
+            if part == "-isysroot" {
+                parts.next();
+            } else {
+                result.push(part);
+            }
+        }
+        result.join(" ")
+    }
+
     // Patch each value, as needed.
     let mut count = 0;
     for (key, value) in data.iter_mut() {
@@ -142,6 +157,7 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
             continue;
         };
         let patched = update_prefix(value, real_prefix);
+        let patched = remove_isysroot(&patched);
         if *value != patched {
             trace!("Updated `{key}` from `{value}` to `{patched}`");
             count += 1;
@@ -184,6 +200,9 @@ mod tests {
     fn update_real_prefix() -> Result<(), Error> {
         let sysconfigdata = [
             ("BASEMODLIBS", ""),
+            ("BINDIR", "/install/bin"),
+            ("BINLIBDEST", "/install/lib/python3.10"),
+            ("BLDLIBRARY", "-L. -lpython3.10"),
             ("BUILDPYTHON", "python.exe"),
             ("prefix", "/install/prefix"),
             ("exec_prefix", "/install/exec_prefix"),
@@ -200,11 +219,37 @@ mod tests {
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "BASEMODLIBS": "",
+            "BINDIR": "/real/prefix/bin",
+            "BINLIBDEST": "/real/prefix/lib/python3.10",
+            "BLDLIBRARY": "-L. -lpython3.10",
             "BUILDPYTHON": "python.exe",
             "PYTHON_BUILD_STANDALONE": 1,
             "base": "/real/prefix/base",
             "exec_prefix": "/real/prefix/exec_prefix",
             "prefix": "/real/prefix/prefix"
+        }
+        "###);
+
+        Ok(())
+    }
+
+    #[test]
+    fn remove_isysroot() -> Result<(), Error> {
+        let sysconfigdata = [
+            ("BLDSHARED", "clang -bundle -undefined dynamic_lookup -arch arm64 -isysroot /Applications/MacOSX14.2.sdk"),
+        ]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+            .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r###"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "BLDSHARED": "clang -bundle -undefined dynamic_lookup -arch arm64",
+            "PYTHON_BUILD_STANDALONE": 1
         }
         "###);
 
