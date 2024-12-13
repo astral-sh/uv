@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.5.9
+
+### Enhancements
+
+- Fork version selection based on `requires-python` requirements ([#9827](https://github.com/astral-sh/uv/pull/9827))
+- Patch `sysconfig` data at install time ([#9857](https://github.com/astral-sh/uv/pull/9857))
+- Remove `-isysroot` when patching sysconfig ([#9860](https://github.com/astral-sh/uv/pull/9860))
+
+### Configuration
+
+- Introduce a `--fork-strategy` preference mode ([#9868](https://github.com/astral-sh/uv/pull/9868))
+- Add support for `UV_OFFLINE` ([#9795](https://github.com/astral-sh/uv/pull/9795))
+
+### Bug fixes
+
+- Avoid `panic!()` when current directory does not exist ([#9876](https://github.com/astral-sh/uv/pull/9876))
+- Avoid reusing interpreter metadata when running under Rosetta ([#9846](https://github.com/astral-sh/uv/pull/9846))
+- Avoid trailing slash when deserializing from lockfile ([#9848](https://github.com/astral-sh/uv/pull/9848))
+- Fix bug in terms when collapsing unavailable versions in resolver errors ([#9877](https://github.com/astral-sh/uv/pull/9877))
+- Fix suggestion to use `uv help python` on invalid install requests ([#9820](https://github.com/astral-sh/uv/pull/9820))
+- Skip root when assessing prefix viability ([#9823](https://github.com/astral-sh/uv/pull/9823))
+- Avoid spurious 'Upgraded tool environment' in `uv tool upgrade` ([#9870](https://github.com/astral-sh/uv/pull/9870))
+
+### Rust API
+
+- Upgrade minimum Rust version to 1.83 ([#9815](https://github.com/astral-sh/uv/pull/9815))
+
+### Documentation
+
+- Document the `--fork-strategy` setting ([#9887](https://github.com/astral-sh/uv/pull/9887))
+
+### Preview features
+
+- Build backend: Allow underscores in entrypoints ([#9825](https://github.com/astral-sh/uv/pull/9825))
+
 ## 0.5.8
 
 **This release does not include the `powerpc64le-unknown-linux-musl` target due to a build issue. See [#9793](https://github.com/astral-sh/uv/issues/9793) for details. If this change affects you, please file an issue with your use-case.**
