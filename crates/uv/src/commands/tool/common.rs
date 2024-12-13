@@ -23,7 +23,10 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Return all packages which contain an executable with the given name.
-pub(super) fn matching_packages(name: &str, installed_packages: &InstalledPackages) -> Vec<InstalledDist> {
+pub(super) fn matching_packages(
+    name: &str,
+    installed_packages: &InstalledPackages,
+) -> Vec<InstalledDist> {
     installed_packages
         .iter()
         .filter_map(|package| {

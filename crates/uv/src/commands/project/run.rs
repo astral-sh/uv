@@ -24,7 +24,7 @@ use uv_dispatch::SharedState;
 use uv_distribution::LoweredRequirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
-use uv_installer::{SatisfiesResult, InstalledPackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,

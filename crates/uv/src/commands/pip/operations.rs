@@ -26,7 +26,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
-use uv_installer::{Plan, Planner, Preparer, InstalledPackages};
+use uv_installer::{InstalledPackages, Plan, Planner, Preparer};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};

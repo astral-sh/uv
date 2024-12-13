@@ -26,7 +26,7 @@ use uv_distribution_types::{
     SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_installer::{Installer, Plan, Planner, Preparer, InstalledPackages};
+use uv_installer::{InstalledPackages, Installer, Plan, Planner, Preparer};
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{

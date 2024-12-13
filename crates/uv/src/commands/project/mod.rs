@@ -18,7 +18,7 @@ use uv_distribution_types::{
 };
 use uv_fs::{Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
-use uv_installer::{SatisfiesResult, InstalledPackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;

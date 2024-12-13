@@ -17,7 +17,7 @@ use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
 use uv_dispatch::SharedState;
 use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
-use uv_installer::{SatisfiesResult, InstalledPackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;

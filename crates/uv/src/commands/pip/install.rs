@@ -18,7 +18,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::linker::LinkMode;
-use uv_installer::{SatisfiesResult, InstalledPackages};
+use uv_installer::{InstalledPackages, SatisfiesResult};
 use uv_pep508::PackageName;
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{

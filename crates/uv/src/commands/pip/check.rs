@@ -51,8 +51,10 @@ pub(crate) fn pip_check(
     let markers = environment.interpreter().resolver_marker_environment();
 
     // Run the diagnostics.
-    let diagnostics: Vec<InstalledPackagesDiagnostic> =
-        installed_packages.diagnostics(&markers)?.into_iter().collect();
+    let diagnostics: Vec<InstalledPackagesDiagnostic> = installed_packages
+        .diagnostics(&markers)?
+        .into_iter()
+        .collect();
 
     if diagnostics.is_empty() {
         writeln!(
