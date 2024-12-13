@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, Bound};
 use std::fmt::Formatter;
 use std::sync::Arc;
@@ -315,6 +316,7 @@ impl std::fmt::Display for NoSolutionError {
             available_versions: &self.available_versions,
             python_requirement: &self.python_requirement,
             workspace_members: &self.workspace_members,
+            available_ranges: RefCell::new(FxHashMap::default()),
         };
 
         // Transform the error tree for reporting

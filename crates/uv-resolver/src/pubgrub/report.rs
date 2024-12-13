@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
@@ -31,7 +32,11 @@ pub(crate) struct PubGrubReportFormatter<'a> {
     /// The versions that were available for each package
     pub(crate) python_requirement: &'a PythonRequirement,
 
+    /// The packages that are members of the workspace
     pub(crate) workspace_members: &'a BTreeSet<PackageName>,
+
+    /// The simplified available ranges for each package
+    pub(crate) available_ranges: RefCell<FxHashMap<PackageName, Range<Version>>>,
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
@@ -86,6 +91,13 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         } else {
                             complement
                         };
+
+                    if let Some(name) = package.name() {
+                        self.available_ranges
+                            .borrow_mut()
+                            .insert(name.clone(), range.clone());
+                    }
+
                     if range.is_empty() {
                         return format!("there are no versions of {package}");
                     }
@@ -529,10 +541,17 @@ impl PubGrubReportFormatter<'_> {
         let Some(name) = package.name() else {
             return Cow::Borrowed(set);
         };
+
         if set == &Range::full() {
             Cow::Borrowed(set)
         } else {
-            Cow::Owned(set.simplify(self.available_versions.get(name).into_iter().flatten()))
+            let set = set.simplify(self.available_versions.get(name).into_iter().flatten());
+            if let Some(available_ranges) = self.available_ranges.borrow().get(name) {
+                if set.as_singleton().is_none() && set == *available_ranges {
+                    return Cow::Owned(Range::full());
+                }
+            }
+            Cow::Owned(set)
         }
     }
 
