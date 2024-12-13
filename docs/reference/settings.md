@@ -773,9 +773,9 @@ By default, uv will optimize for selecting the latest version of each package fo
 supported Python version (`requires-python`), while minimizing the number of selected
 versions across platforms.
 
-Under `fewest`, uv will minimize the number of
-selected versions for each package, preferring older versions that are compatible with a
-wider range of supported Python versions or platforms.
+Under `fewest`, uv will minimize the number of selected versions for each package,
+preferring older versions that are compatible with a wider range of supported Python
+versions or platforms.
 
 **Default value**: `"fewest"`
 
@@ -2154,9 +2154,9 @@ By default, uv will optimize for selecting the latest version of each package fo
 supported Python version (`requires-python`), while minimizing the number of selected
 versions across platforms.
 
-Under `fewest`, uv will minimize the number of
-selected versions for each package, preferring older versions that are compatible with a
-wider range of supported Python versions or platforms.
+Under `fewest`, uv will minimize the number of selected versions for each package,
+preferring older versions that are compatible with a wider range of supported Python
+versions or platforms.
 
 **Default value**: `"fewest"`
 
