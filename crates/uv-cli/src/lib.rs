@@ -4052,9 +4052,9 @@ pub struct ToolUpgradeArgs {
     /// supported Python version (`requires-python`), while minimizing the number of selected
     /// versions across platforms.
     ///
-    /// Under `fewest`, uv will minimize the number of
-    /// selected versions for each package, preferring older versions that are compatible with a
-    /// wider range of supported Python versions or platforms.
+    /// Under `fewest`, uv will minimize the number of selected versions for each package,
+    /// preferring older versions that are compatible with a wider range of supported Python
+    /// versions or platforms.
     #[arg(
         long,
         value_enum,
@@ -4859,9 +4859,9 @@ pub struct ResolverArgs {
     /// supported Python version (`requires-python`), while minimizing the number of selected
     /// versions across platforms.
     ///
-    /// Under `fewest`, uv will minimize the number of
-    /// selected versions for each package, preferring older versions that are compatible with a
-    /// wider range of supported Python versions or platforms.
+    /// Under `fewest`, uv will minimize the number of selected versions for each package,
+    /// preferring older versions that are compatible with a wider range of supported Python
+    /// versions or platforms.
     #[arg(
         long,
         value_enum,
@@ -5049,9 +5049,9 @@ pub struct ResolverInstallerArgs {
     /// supported Python version (`requires-python`), while minimizing the number of selected
     /// versions across platforms.
     ///
-    /// Under `fewest`, uv will minimize the number of
-    /// selected versions for each package, preferring older versions that are compatible with a
-    /// wider range of supported Python versions or platforms.
+    /// Under `fewest`, uv will minimize the number of selected versions for each package,
+    /// preferring older versions that are compatible with a wider range of supported Python
+    /// versions or platforms.
     #[arg(
         long,
         value_enum,

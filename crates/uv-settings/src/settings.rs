@@ -493,9 +493,9 @@ pub struct ResolverInstallerOptions {
     /// supported Python version (`requires-python`), while minimizing the number of selected
     /// versions across platforms.
     ///
-    /// Under `fewest`, uv will minimize the number of
-    /// selected versions for each package, preferring older versions that are compatible with a
-    /// wider range of supported Python versions or platforms.
+    /// Under `fewest`, uv will minimize the number of selected versions for each package,
+    /// preferring older versions that are compatible with a wider range of supported Python
+    /// versions or platforms.
     #[option(
         default = "\"fewest\"",
         value_type = "str",
@@ -1095,9 +1095,9 @@ pub struct PipOptions {
     /// supported Python version (`requires-python`), while minimizing the number of selected
     /// versions across platforms.
     ///
-    /// Under `fewest`, uv will minimize the number of
-    /// selected versions for each package, preferring older versions that are compatible with a
-    /// wider range of supported Python versions or platforms.
+    /// Under `fewest`, uv will minimize the number of selected versions for each package,
+    /// preferring older versions that are compatible with a wider range of supported Python
+    /// versions or platforms.
     #[option(
         default = "\"fewest\"",
         value_type = "str",
