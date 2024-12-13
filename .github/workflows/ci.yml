@@ -152,6 +152,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Install system dependencies"
+        run: sudo apt-get install liblzma-dev
       - name: "Generate all"
         run: cargo dev generate-all --mode check
 
