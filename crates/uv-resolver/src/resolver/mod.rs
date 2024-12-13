@@ -1259,8 +1259,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         };
 
         debug!(
-            "Selecting: {:?}=={} [{}] ({})",
-            package,
+            "Selecting: {}=={} [{}] ({})",
+            name,
             candidate.version(),
             candidate.choice_kind(),
             filename,
