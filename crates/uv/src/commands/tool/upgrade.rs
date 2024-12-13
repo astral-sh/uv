@@ -178,17 +178,19 @@ pub(crate) async fn upgrade(
     }
 
     if let Some(python_request) = python_request {
-        let tools = did_upgrade_environment
-            .iter()
-            .map(|name| format!("`{}`", name.cyan()))
-            .collect::<Vec<_>>();
-        let s = if tools.len() > 1 { "s" } else { "" };
-        writeln!(
-            printer.stderr(),
-            "Upgraded tool environment{s} for {} to {}",
-            conjunction(tools),
-            python_request.cyan(),
-        )?;
+        if !did_upgrade_environment.is_empty() {
+            let tools = did_upgrade_environment
+                .iter()
+                .map(|name| format!("`{}`", name.cyan()))
+                .collect::<Vec<_>>();
+            let s = if tools.len() > 1 { "s" } else { "" };
+            writeln!(
+                printer.stderr(),
+                "Upgraded tool environment{s} for {} to {}",
+                conjunction(tools),
+                python_request.cyan(),
+            )?;
+        }
     }
 
     Ok(ExitStatus::Success)
