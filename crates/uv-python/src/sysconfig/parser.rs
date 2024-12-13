@@ -4,7 +4,7 @@ use std::str::FromStr;
 use serde::Serialize;
 use serde_json::ser::PrettyFormatter;
 
-use crate::sysconfig::cursor::{Cursor, EOF_CHAR};
+use crate::sysconfig::cursor::Cursor;
 
 /// A value in the [`SysconfigData`] map.
 ///
@@ -106,7 +106,11 @@ impl FromStr for SysconfigData {
 
         let mut map = BTreeMap::new();
         loop {
-            match cursor.first() {
+            let Some(next) = cursor.bump() else {
+                return Err(Error::UnexpectedEof);
+            };
+
+            match next {
                 '\'' | '"' => {
                     // Parse key.
                     let key = parse_string(&mut cursor)?;
@@ -136,13 +140,10 @@ impl FromStr for SysconfigData {
                 }
 
                 // Skip whitespace.
-                ' ' | '\n' | '\r' | '\t' => {
-                    cursor.bump();
-                }
+                ' ' | '\n' | '\r' | '\t' => {}
 
                 // When we see a closing brace, we're done.
                 '}' => {
-                    cursor.bump();
                     break;
                 }
 
@@ -155,77 +156,81 @@ impl FromStr for SysconfigData {
 }
 
 /// Parse a Python string literal.
+///
+/// Expects the previous character to be the opening quote character.
 fn parse_string(cursor: &mut Cursor) -> Result<String, Error> {
-    let quote = cursor.bump().expect("Expected opening quote");
+    let quote = cursor.previous();
     assert!(quote == '\'' || quote == '"', "Invalid quote character");
 
     let mut result = String::new();
     loop {
-        if cursor.first() == EOF_CHAR {
-            return Err(Error::UnexpectedCharacter(EOF_CHAR));
-        }
+        let Some(c) = cursor.bump() else {
+            return Err(Error::UnexpectedEof);
+        };
+        match c {
+            '\\' => {
+                // Handle escaped quotes.
+                if cursor.first() == quote {
+                    // Consume the backslash.
+                    cursor.bump();
+                    result.push(quote);
+                    continue;
+                }
 
-        // Handle escaped quotes.
-        if cursor.first() == '\\' {
-            // Consume the backslash.
-            cursor.bump();
-            if cursor.first() == quote {
-                result.push(quote);
+                // Keep the backslash and following character.
+                result.push('\\');
+                result.push(cursor.first());
                 cursor.bump();
-                continue;
             }
 
-            // Keep the backslash and following character.
-            result.push('\\');
-            result.push(cursor.first());
-            cursor.bump();
-            continue;
-        }
+            // Consume closing quote.
+            c if c == quote => {
+                break;
+            }
 
-        // Consume closing quote.
-        if cursor.first() == quote {
-            cursor.bump();
-            break;
+            c => {
+                result.push(c);
+            }
         }
-
-        result.push(cursor.first());
-        cursor.bump();
     }
     Ok(result)
 }
 
 /// Parse a Python string, which may be a concatenation of multiple string literals.
+///
+/// Expects the cursor to start at an opening quote character.
 fn parse_concatenated_string(cursor: &mut Cursor) -> Result<String, Error> {
     let mut result = String::new();
     loop {
-        let c = cursor.first();
-        if c == EOF_CHAR {
-            break;
+        let Some(c) = cursor.bump() else {
+            return Err(Error::UnexpectedEof);
+        };
+        match c {
+            '\'' | '"' => {
+                // Parse a new string fragment and append it.
+                result.push_str(&parse_string(cursor)?);
+            }
+            c if is_python_whitespace(c) => {
+                // Skip whitespace between fragments
+            }
+            c => return Err(Error::UnexpectedCharacter(c)),
         }
-        if c == '\'' || c == '"' {
-            // Parse a new string fragment and append it.
-            result.push_str(&parse_string(cursor)?);
-        } else if is_python_whitespace(c) {
-            // Skip whitespace between fragments
-            cursor.bump();
-        } else if c == ',' || c == '}' {
-            // End of value.
+
+        // Lookahead to the end of the string.
+        if matches!(cursor.first(), ',' | '}') {
             break;
-        } else {
-            return Err(Error::UnexpectedCharacter(c));
         }
     }
     Ok(result)
 }
 
 /// Parse an integer literal.
+///
+/// Expects the cursor to start at the first digit of the integer.
 fn parse_int(cursor: &mut Cursor) -> Result<i32, std::num::ParseIntError> {
     let mut result = String::new();
     loop {
         let c = cursor.first();
-        if c == EOF_CHAR {
-            break;
-        }
         if !c.is_ascii_digit() {
             break;
         }
@@ -251,6 +256,8 @@ pub enum Error {
     MissingOpenBrace,
     #[error("Unexpected character: {0}")]
     UnexpectedCharacter(char),
+    #[error("Unexpected end of file")]
+    UnexpectedEof,
     #[error("Failed to parse integer")]
     ParseInt(#[from] std::num::ParseIntError),
     #[error("`_sysconfigdata_` is missing a header comment")]
@@ -272,6 +279,32 @@ mod tests {
                 "key1": "value1",
                 "key2": 42,
                 "key3": "multi-part" " string"
+            }
+        "#
+        );
+
+        let result = input.parse::<SysconfigData>().expect("Parsing failed");
+        let snapshot = result.to_string_pretty().unwrap();
+
+        insta::assert_snapshot!(snapshot, @r###"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "key1": "value1",
+            "key2": 42,
+            "key3": "multi-part string"
+        }
+        "###);
+    }
+
+    #[test]
+    fn test_parse_trailing_comma() {
+        let input = indoc::indoc!(
+            r#"
+            # system configuration generated and used by the sysconfig module
+            build_time_vars = {
+                "key1": "value1",
+                "key2": 42,
+                "key3": "multi-part" " string",
             }
         "#
         );
@@ -397,6 +430,41 @@ mod tests {
             # system configuration generated and used by the sysconfig module
             build_time_vars = {
                 "key1": &123
+            }
+        "#
+        );
+
+        let result = input.parse::<SysconfigData>();
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail due to unexpected character"
+        );
+    }
+
+    #[test]
+    fn test_unexpected_eof() {
+        let input = indoc::indoc!(
+            r#"
+            # system configuration generated and used by the sysconfig module
+            build_time_vars = {
+                "key1": 123
+        "#
+        );
+
+        let result = input.parse::<SysconfigData>();
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail due to unexpected character"
+        );
+    }
+
+    #[test]
+    fn test_unexpected_comma() {
+        let input = indoc::indoc!(
+            r#"
+            # system configuration generated and used by the sysconfig module
+            build_time_vars = {
+                "key1": 123,,
             }
         "#
         );
