@@ -13108,6 +13108,36 @@ fn universal_constrained_environment() -> Result<()> {
     Ok(())
 }
 
+/// Resolve a package that has no versions that satisfy the current Python version.
+#[test]
+fn compile_enumerate_no_versions() -> Result<()> {
+    let context = TestContext::new("3.10");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("rooster-blue")?;
+
+    uv_snapshot!(context.pip_compile().arg("requirements.in").env(EnvVars::UV_EXCLUDE_NEWER, "2024-12-01"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because the current Python version (3.10.15) does not satisfy Python>=3.11,<4.0 and all versions of rooster-blue depend on Python>=3.11,<4.0, we can conclude that all versions of rooster-blue cannot be used.
+          And because only the following versions of rooster-blue are available:
+              rooster-blue==0.0.1
+              rooster-blue==0.0.2
+              rooster-blue==0.0.3
+              rooster-blue==0.0.4
+              rooster-blue==0.0.5
+              rooster-blue==0.0.6
+              rooster-blue==0.0.7
+              rooster-blue==0.0.8
+          and you require rooster-blue, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    Ok(())
+}
+
 /// Resolve a version of Flask that ships a `requires.txt` file in an `egg-info` directory, but
 /// otherwise doesn't include static metadata.
 #[test]
