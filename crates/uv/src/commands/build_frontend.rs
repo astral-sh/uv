@@ -205,6 +205,7 @@ async fn build_impl(
         keyring_provider,
         resolution: _,
         prerelease: _,
+        fork_strategy: _,
         dependency_metadata,
         config_setting,
         no_build_isolation,

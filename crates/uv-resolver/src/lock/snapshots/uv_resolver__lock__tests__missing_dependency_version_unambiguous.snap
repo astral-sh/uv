@@ -33,6 +33,7 @@ Ok(
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             exclude_newer: None,
         },
         packages: [

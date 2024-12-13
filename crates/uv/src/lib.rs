@@ -339,6 +339,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
                 args.settings.prerelease,
+                args.settings.fork_strategy,
                 args.settings.dependency_mode,
                 args.settings.upgrade,
                 args.settings.generate_hashes,

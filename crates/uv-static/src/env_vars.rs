@@ -46,6 +46,10 @@ impl EnvVars {
     /// `allow`, uv will allow pre-release versions for all dependencies.
     pub const UV_PRERELEASE: &'static str = "UV_PRERELEASE";
 
+    /// Equivalent to the `--fork-strategy` argument. Controls version selection during universal
+    /// resolution.
+    pub const UV_FORK_STRATEGY: &'static str = "UV_FORK_STRATEGY";
+
     /// Equivalent to the `--system` command-line argument. If set to `true`, uv will
     /// use the first Python interpreter found in the system `PATH`.
     /// WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI)

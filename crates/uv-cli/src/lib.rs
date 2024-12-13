@@ -19,7 +19,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
-use uv_resolver::{AnnotationStyle, ExcludeNewer, PrereleaseMode, ResolutionMode};
+use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 
 pub mod comma;
@@ -4045,6 +4045,24 @@ pub struct ToolUpgradeArgs {
     #[arg(long, hide = true)]
     pub pre: bool,
 
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will optimize for selecting the latest version of each package for each
+    /// supported Python version (`requires-python`), while minimizing the number of selected
+    /// versions across platforms.
+    ///
+    /// Under `fewest`, uv will minimize the number of
+    /// selected versions for each package, preferring older versions that are compatible with a
+    /// wider range of supported Python versions or platforms.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_FORK_STRATEGY,
+        help_heading = "Resolver options"
+    )]
+    pub fork_strategy: Option<ForkStrategy>,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -4834,6 +4852,24 @@ pub struct ResolverArgs {
     #[arg(long, hide = true, help_heading = "Resolver options")]
     pub pre: bool,
 
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will optimize for selecting the latest version of each package for each
+    /// supported Python version (`requires-python`), while minimizing the number of selected
+    /// versions across platforms.
+    ///
+    /// Under `fewest`, uv will minimize the number of
+    /// selected versions for each package, preferring older versions that are compatible with a
+    /// wider range of supported Python versions or platforms.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_FORK_STRATEGY,
+        help_heading = "Resolver options"
+    )]
+    pub fork_strategy: Option<ForkStrategy>,
+
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(
         long,
@@ -5005,6 +5041,24 @@ pub struct ResolverInstallerArgs {
 
     #[arg(long, hide = true)]
     pub pre: bool,
+
+    /// The strategy to use when selecting multiple versions of a given package across Python
+    /// versions and platforms.
+    ///
+    /// By default, uv will optimize for selecting the latest version of each package for each
+    /// supported Python version (`requires-python`), while minimizing the number of selected
+    /// versions across platforms.
+    ///
+    /// Under `fewest`, uv will minimize the number of
+    /// selected versions for each package, preferring older versions that are compatible with a
+    /// wider range of supported Python versions or platforms.
+    #[arg(
+        long,
+        value_enum,
+        env = EnvVars::UV_FORK_STRATEGY,
+        help_heading = "Resolver options"
+    )]
+    pub fork_strategy: Option<ForkStrategy>,
 
     /// Settings to pass to the PEP 517 build backend, specified as `KEY=VALUE` pairs.
     #[arg(

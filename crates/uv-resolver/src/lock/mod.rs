@@ -13,6 +13,7 @@ use std::sync::{Arc, LazyLock};
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use url::Url;
 
+use crate::fork_strategy::ForkStrategy;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::target::InstallTarget;
@@ -239,6 +240,7 @@ impl Lock {
         let options = ResolverOptions {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
+            fork_strategy: resolution.options.fork_strategy,
             exclude_newer: resolution.options.exclude_newer,
         };
         let lock = Self::new(
@@ -548,6 +550,11 @@ impl Lock {
         self.options.prerelease_mode
     }
 
+    /// Returns the multi-version mode used to generate this lock.
+    pub fn fork_strategy(&self) -> ForkStrategy {
+        self.options.fork_strategy
+    }
+
     /// Returns the exclude newer setting used to generate this lock.
     pub fn exclude_newer(&self) -> Option<ExcludeNewer> {
         self.options.exclude_newer
@@ -673,6 +680,12 @@ impl Lock {
                 options_table.insert(
                     "prerelease-mode",
                     value(self.options.prerelease_mode.to_string()),
+                );
+            }
+            if self.options.fork_strategy != ForkStrategy::default() {
+                options_table.insert(
+                    "fork-strategy",
+                    value(self.options.fork_strategy.to_string()),
                 );
             }
             if let Some(exclude_newer) = self.options.exclude_newer {
@@ -1317,6 +1330,9 @@ struct ResolverOptions {
     /// The [`PrereleaseMode`] used to generate this lock.
     #[serde(default)]
     prerelease_mode: PrereleaseMode,
+    /// The [`ForkStrategy`] used to generate this lock.
+    #[serde(default)]
+    fork_strategy: ForkStrategy,
     /// The [`ExcludeNewer`] used to generate this lock.
     exclude_newer: Option<ExcludeNewer>,
 }

@@ -147,6 +147,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -302,6 +303,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -458,6 +460,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -646,6 +649,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -773,6 +777,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -939,6 +944,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1148,6 +1154,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1365,6 +1372,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1545,6 +1553,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1694,6 +1703,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -1895,6 +1905,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2079,6 +2090,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2228,6 +2240,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2360,6 +2373,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2492,6 +2506,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2626,6 +2641,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2759,6 +2775,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 LowestDirect,
             ),
             prerelease: None,
+            fork_strategy: None,
             dependency_metadata: None,
             config_settings: None,
             no_build_isolation: None,
@@ -2792,6 +2809,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             keyring_provider: Disabled,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -2943,6 +2961,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3133,6 +3152,7 @@ fn resolve_both() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3411,6 +3431,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3482,7 +3503,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
     "###
     );
 
@@ -3637,6 +3658,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: LowestDirect,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3772,6 +3794,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -3926,6 +3949,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4133,6 +4157,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4319,6 +4344,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4511,6 +4537,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4698,6 +4725,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -4892,6 +4920,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -5079,6 +5108,7 @@ fn index_priority() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -5219,6 +5249,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -5345,6 +5376,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -5469,6 +5501,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -5595,6 +5628,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -5719,6 +5753,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),
@@ -5844,6 +5879,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             dependency_mode: Transitive,
             resolution: Highest,
             prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             dependency_metadata: DependencyMetadata(
                 {},
             ),

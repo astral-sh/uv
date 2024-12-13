@@ -764,6 +764,42 @@ formats described above.
 
 ---
 
+### [`fork-strategy`](#fork-strategy) {: #fork-strategy }
+
+The strategy to use when selecting multiple versions of a given package across Python
+versions and platforms.
+
+By default, uv will optimize for selecting the latest version of each package for each
+supported Python version (`requires-python`), while minimizing the number of selected
+versions across platforms.
+
+Under `fewest`, uv will minimize the number of
+selected versions for each package, preferring older versions that are compatible with a
+wider range of supported Python versions or platforms.
+
+**Default value**: `"fewest"`
+
+**Possible values**:
+
+- `"fewest"`: Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms
+- `"requires-python"`: Optimize for selecting latest supported version of each package, for each supported Python version
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    fork-strategy = "fewest"
+    ```
+=== "uv.toml"
+
+    ```toml
+    fork-strategy = "fewest"
+    ```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The package indexes to use when resolving dependencies.
@@ -2104,6 +2140,44 @@ formats described above.
     ```toml
     [pip]
     find-links = ["https://download.pytorch.org/whl/torch_stable.html"]
+    ```
+
+---
+
+#### [`fork-strategy`](#pip_fork-strategy) {: #pip_fork-strategy }
+<span id="fork-strategy"></span>
+
+The strategy to use when selecting multiple versions of a given package across Python
+versions and platforms.
+
+By default, uv will optimize for selecting the latest version of each package for each
+supported Python version (`requires-python`), while minimizing the number of selected
+versions across platforms.
+
+Under `fewest`, uv will minimize the number of
+selected versions for each package, preferring older versions that are compatible with a
+wider range of supported Python versions or platforms.
+
+**Default value**: `"fewest"`
+
+**Possible values**:
+
+- `"fewest"`: Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms
+- `"requires-python"`: Optimize for selecting latest supported version of each package, for each supported Python version
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    fork-strategy = "fewest"
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    fork-strategy = "fewest"
     ```
 
 ---

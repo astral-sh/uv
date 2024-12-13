@@ -31,7 +31,7 @@ use uv_requirements::{
     upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
 };
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex,
+    AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverEnvironment,
 };
@@ -57,6 +57,7 @@ pub(crate) async fn pip_compile(
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
+    fork_strategy: ForkStrategy,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     generate_hashes: bool,
@@ -361,6 +362,7 @@ pub(crate) async fn pip_compile(
     let options = OptionsBuilder::new()
         .resolution_mode(resolution_mode)
         .prerelease_mode(prerelease_mode)
+        .fork_strategy(fork_strategy)
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)

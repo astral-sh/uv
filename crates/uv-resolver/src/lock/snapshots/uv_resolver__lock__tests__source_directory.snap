@@ -1,5 +1,5 @@
 ---
-source: crates/uv-resolver/src/lock/tests.rs
+source: crates/uv-resolver/src/lock/mod.rs
 expression: result
 ---
 Ok(
@@ -33,6 +33,7 @@ Ok(
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             exclude_newer: None,
         },
         packages: [

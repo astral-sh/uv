@@ -3,6 +3,7 @@ pub use error::{NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
+pub use fork_strategy::ForkStrategy;
 pub use lock::{
     InstallTarget, Lock, LockError, LockVersion, PackageMap, RequirementsTxtExport,
     ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
@@ -41,6 +42,7 @@ mod exclude_newer;
 mod exclusions;
 mod flat_index;
 mod fork_indexes;
+mod fork_strategy;
 mod fork_urls;
 mod graph_ops;
 mod lock;
