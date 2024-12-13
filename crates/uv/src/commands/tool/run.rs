@@ -302,7 +302,7 @@ fn get_entrypoints(
 ) -> anyhow::Result<Vec<(String, PathBuf)>> {
     let installed = installed_packages.get_packages(from);
     let Some(installed_dist) = installed.first().copied() else {
-        bail!("Expected at least one requirement")
+        bail!("Expected at least one installed package to get entrypoints for `{}`", from);
     };
 
     Ok(entrypoint_paths(
