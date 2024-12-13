@@ -2518,7 +2518,7 @@ fn disjunction(items: &[&str]) -> String {
 fn try_into_u8_slice(release: &[u64]) -> Result<Vec<u8>, std::num::TryFromIntError> {
     release
         .iter()
-        .map(|x| match (*x).try_into() {
+        .map(|x| match u8::try_from(*x) {
             Ok(x) => Ok(x),
             Err(e) => Err(e),
         })
@@ -2527,7 +2527,7 @@ fn try_into_u8_slice(release: &[u64]) -> Result<Vec<u8>, std::num::TryFromIntErr
 
 /// Convert a wheel tag formatted version (e.g., `38`) to multiple components (e.g., `3.8`).
 ///
-/// The major version is always assumed to be a single digit 0-9. The minor version is all of
+/// The major version is always assumed to be a single digit 0-9. The minor version is all
 /// the following content.
 ///
 /// If not a wheel tag formatted version, the input is returned unchanged.

@@ -310,6 +310,7 @@ pub(crate) async fn install(
     // installations that match the request
     for installation in &installations {
         installation.ensure_externally_managed()?;
+        installation.ensure_sysconfig_patched()?;
         installation.ensure_canonical_executables()?;
 
         if preview.is_disabled() {

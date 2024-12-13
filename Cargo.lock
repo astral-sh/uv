@@ -5296,6 +5296,7 @@ dependencies = [
  "futures",
  "goblin",
  "indoc",
+ "insta",
  "itertools 0.13.0",
  "owo-colors",
  "procfs",

@@ -573,7 +573,10 @@ def main() -> None:
         "sys_executable": sys.executable,
         "sys_path": sys.path,
         "stdlib": sysconfig.get_path("stdlib"),
-        "sysconfig_prefix": sysconfig.get_config_var("prefix"),
+        # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
+        # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
+        # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.
+        "standalone": sysconfig.get_config_var("prefix") == "/install" or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE")),
         "scheme": get_scheme(),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,
