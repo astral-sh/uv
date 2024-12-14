@@ -52,9 +52,6 @@ pub enum ResolveError {
         extra: ExtraName,
     },
 
-    #[error("Overrides contain conflicting URLs for package `{0}`:\n- {1}\n- {2}")]
-    ConflictingOverrideUrls(PackageName, String, String),
-
     #[error(
         "Requirements contain conflicting URLs for package `{package_name}`{}:\n- {}",
         if env.marker_environment().is_some() {

@@ -215,7 +215,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             capabilities: capabilities.clone(),
             selector: CandidateSelector::for_resolution(options, &manifest, &env),
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode)?,
+            urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
             project: manifest.project,
             workspace_members: manifest.workspace_members,
@@ -2245,10 +2245,10 @@ impl ForkState {
                 // requirement was a URL requirement. `Urls` applies canonicalization to this and
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
-                if let Some(url) = urls.get_url(&self.env, name, url.as_ref(), git)? {
+                for url in urls.get_url(&self.env, name, url.as_ref(), git)? {
                     self.fork_urls.insert(name, url, &self.env)?;
                     has_url = true;
-                };
+                }
 
                 // If the package is pinned to an exact index, add it to the fork.
                 for index in indexes.get(name, &self.env) {
