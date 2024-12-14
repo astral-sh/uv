@@ -189,8 +189,8 @@ Type "help", "copyright", "credits" or "license" for more information.
 Use a specific Python version in the current directory:
 
 ```console
-$ uv python pin pypy@3.11
-Pinned `.python-version` to `pypy@3.11`
+$ uv python pin 3.11
+Pinned `.python-version` to `3.11`
 ```
 
 See the [Python installation documentation](https://docs.astral.sh/uv/guides/install-python/) to get
