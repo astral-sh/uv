@@ -387,35 +387,43 @@ fn display_tree_inner(
     lines: &mut Vec<String>,
     depth: usize,
 ) {
+    let prefix = "  ".repeat(depth).to_string();
     match error {
         DerivationTree::Derived(derived) => {
             display_tree_inner(&derived.cause1, lines, depth + 1);
             display_tree_inner(&derived.cause2, lines, depth + 1);
-        }
-        DerivationTree::External(external) => {
-            let prefix = "  ".repeat(depth).to_string();
-            match external {
-                External::FromDependencyOf(package, version, dependency, dependency_version) => {
-                    lines.push(format!(
-                        "{prefix}{package}{version} depends on {dependency}{dependency_version}"
-                    ));
-                }
-                External::Custom(package, versions, reason) => match reason {
-                    UnavailableReason::Package(_) => {
-                        lines.push(format!("{prefix}{package} {reason}"));
+            for (package, term) in &derived.terms {
+                match term {
+                    Term::Positive(versions) => {
+                        lines.push(format!("{prefix}term {package}{versions}"));
                     }
-                    UnavailableReason::Version(_) => {
-                        lines.push(format!("{prefix}{package}{versions} {reason}"));
+                    Term::Negative(versions) => {
+                        lines.push(format!("{prefix}term not {package}{versions}"));
                     }
-                },
-                External::NoVersions(package, versions) => {
-                    lines.push(format!("{prefix}no versions of {package}{versions}"));
-                }
-                External::NotRoot(package, versions) => {
-                    lines.push(format!("{prefix}not root {package}{versions}"));
                 }
             }
         }
+        DerivationTree::External(external) => match external {
+            External::FromDependencyOf(package, version, dependency, dependency_version) => {
+                lines.push(format!(
+                    "{prefix}{package}{version} depends on {dependency}{dependency_version}"
+                ));
+            }
+            External::Custom(package, versions, reason) => match reason {
+                UnavailableReason::Package(_) => {
+                    lines.push(format!("{prefix}{package} {reason}"));
+                }
+                UnavailableReason::Version(_) => {
+                    lines.push(format!("{prefix}{package}{versions} {reason}"));
+                }
+            },
+            External::NoVersions(package, versions) => {
+                lines.push(format!("{prefix}no versions of {package}{versions}"));
+            }
+            External::NotRoot(package, versions) => {
+                lines.push(format!("{prefix}not root {package}{versions}"));
+            }
+        },
     }
 }
 
