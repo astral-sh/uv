@@ -32,6 +32,10 @@ pub struct ResolutionMetadata {
     /// Whether the version field is dynamic.
     #[serde(default)]
     pub dynamic: bool,
+    #[serde(default)]
+    pub classifiers: Option<Vec<String>>,
+    #[serde(default)]
+    pub license: Option<String>,
 }
 
 /// From <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/metadata.rs#LL78C2-L91C26>
@@ -74,6 +78,11 @@ impl ResolutionMetadata {
         let dynamic = headers
             .get_all_values("Dynamic")
             .any(|field| field == "Version");
+        let classifiers = Some(headers
+            .get_all_values("Classifier")
+            .collect::<Vec<_>>());
+        let license = headers
+            .get_first_value("License");
 
         Ok(Self {
             name,
@@ -82,6 +91,8 @@ impl ResolutionMetadata {
             requires_python,
             provides_extras,
             dynamic,
+            classifiers,
+            license,
         })
     }
 
@@ -149,6 +160,11 @@ impl ResolutionMetadata {
                 }
             })
             .collect::<Vec<_>>();
+        let classifiers = Some(headers
+            .get_all_values("Classifiers")
+            .collect::<Vec<_>>());
+        let license = headers
+            .get_first_value("License");
 
         Ok(Self {
             name,
@@ -157,6 +173,8 @@ impl ResolutionMetadata {
             requires_python,
             provides_extras,
             dynamic,
+            classifiers,
+            license,
         })
     }
 
@@ -240,4 +258,6 @@ mod tests {
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_dist, vec!["foo".parse().unwrap()]);
     }
+
+    // TODO(RL): write test cases for checking classifier information
 }

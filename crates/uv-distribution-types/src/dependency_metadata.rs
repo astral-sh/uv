@@ -52,6 +52,8 @@ impl DependencyMetadata {
                 requires_python: metadata.requires_python.clone(),
                 provides_extras: metadata.provides_extras.clone(),
                 dynamic: false,
+                classifiers: metadata.classifiers.clone(),
+                license: metadata.license.clone(),
             })
         } else {
             // If no version was requested (i.e., it's a direct URL dependency), allow a single
@@ -72,6 +74,8 @@ impl DependencyMetadata {
                 requires_python: metadata.requires_python.clone(),
                 provides_extras: metadata.provides_extras.clone(),
                 dynamic: false,
+                classifiers: metadata.classifiers.clone(),
+                license: metadata.license.clone(),
             })
         }
     }
@@ -111,4 +115,6 @@ pub struct StaticMetadata {
     pub requires_python: Option<VersionSpecifiers>,
     #[serde(default)]
     pub provides_extras: Vec<ExtraName>,
+    pub classifiers: Option<Vec<String>>,
+    pub license: Option<String>,
 }

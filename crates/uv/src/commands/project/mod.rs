@@ -62,6 +62,7 @@ pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
 pub(crate) mod tree;
+pub(crate) mod license;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
