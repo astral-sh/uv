@@ -136,7 +136,9 @@ impl KeyringProvider {
         trace!("Creating entry in keyring for URL {url} and username {username}");
 
         match self.backend {
-            KeyringProviderBackend::Subprocess => self.set_subprocess(url.as_str(), username, password).await,
+            KeyringProviderBackend::Subprocess => {
+                self.set_subprocess(url.as_str(), username, password).await
+            }
             #[cfg(test)]
             KeyringProviderBackend::Dummy(ref store) => {
                 let test = password;
@@ -146,12 +148,17 @@ impl KeyringProvider {
     }
 
     #[instrument(skip(self))]
-    async fn set_subprocess(&self, service_name: &str, username: &str, password: &str) -> Option<()> {
+    async fn set_subprocess(
+        &self,
+        service_name: &str,
+        username: &str,
+        password: &str,
+    ) -> Option<()> {
         let mut child = Command::new("keyring")
             .arg("set")
             .arg(service_name)
             .arg(username)
-            .stdin(Stdio::piped())  // Allow writing to stdin
+            .stdin(Stdio::piped()) // Allow writing to stdin
             .stdout(Stdio::piped()) // Optionally capture stdout for debugging
             .stderr(Stdio::piped()) // Capture stderr for debugging
             .spawn()
@@ -161,9 +168,17 @@ impl KeyringProvider {
         // If we successfully spawn the process, we can write to its stdin
         if let Some(mut stdin) = child.stdin.take() {
             // Write the password to the stdin of the keyring process
-            stdin.write(password.as_bytes()).await.inspect_err(|_| warn!("Failure providing the password to keyring!")).ok()?;
-            stdin.flush().await.inspect_err(|_| warn!("Failure flushing the password input to keyring")).ok()?;
-        }            
+            stdin
+                .write(password.as_bytes())
+                .await
+                .inspect_err(|_| warn!("Failure providing the password to keyring!"))
+                .ok()?;
+            stdin
+                .flush()
+                .await
+                .inspect_err(|_| warn!("Failure flushing the password input to keyring"))
+                .ok()?;
+        }
 
         let output = child
             .wait_with_output()

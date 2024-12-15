@@ -9,8 +9,6 @@ use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
 use crate::{IndexUrl, IndexUrlError};
 
-
-
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Index {
@@ -147,7 +145,9 @@ impl Index {
                 return Some(credentials);
             }
 
-            if let Some(credentials) = Credentials::from_keyring(name.to_string(), self.url.url(), keyring_provider) {
+            if let Some(credentials) =
+                Credentials::from_keyring(name.to_string(), self.url.url(), keyring_provider)
+            {
                 return Some(credentials);
             }
         }

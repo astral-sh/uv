@@ -5187,7 +5187,6 @@ pub struct PublishArgs {
     pub skip_existing: bool,
 }
 
-
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
 /// [PEP 660](https://peps.python.org/pep-0660/) for specifications of the parameters.
 #[derive(Subcommand)]
@@ -5217,9 +5216,6 @@ pub enum BuildBackendCommand {
     /// PEP 660 hook `prepare_metadata_for_build_editable`.
     PrepareMetadataForBuildEditable { wheel_directory: PathBuf },
 }
-
-
-
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
@@ -5262,7 +5258,6 @@ pub enum IndexCredentialsCommand {
     Add(IndexCredentialsArgs),
 }
 
-
 #[derive(Args)]
 pub struct IndexSourceArgs {
     /// The name of the index
@@ -5271,7 +5266,7 @@ pub struct IndexSourceArgs {
 }
 
 #[derive(Args)]
-pub struct  IndexCredentialsArgs {
+pub struct IndexCredentialsArgs {
     /// The name of the index
     #[arg(long)]
     pub name: String,

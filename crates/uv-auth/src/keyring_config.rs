@@ -3,24 +3,23 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use toml;
 use thiserror::Error;
+use toml;
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
-    
+
     #[error("Serialization/Deserialization error: {0}")]
     SerdeError(#[from] toml::de::Error),
-    
+
     #[error("Invalid configuration path")]
     InvalidPath,
 
     #[error("Serialization error while storing config: {0}")]
     TomlSerializationError(#[from] toml::ser::Error),
 }
-
 
 pub trait ConfigFile {
     fn path() -> Result<PathBuf, ConfigError>;
@@ -88,12 +87,11 @@ impl AuthConfig {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use std::fs;
+    use std::path::Path;
 
     // Helper function to clean up a temporary file
     fn remove_temp_file(path: &Path) -> io::Result<()> {

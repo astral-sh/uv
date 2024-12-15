@@ -22,7 +22,10 @@ use uv_cli::{
     compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
     PipCommand, PipNamespace, ProjectCommand,
 };
-use uv_cli::{IndexCommand, IndexCredentialsCommand, IndexNamespace, PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
+use uv_cli::{
+    IndexCommand, IndexCredentialsCommand, IndexNamespace, PythonCommand, PythonNamespace,
+    ToolCommand, ToolNamespace, TopLevelArgs,
+};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_fs::CWD;
@@ -1259,20 +1262,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         .await
         .expect("tokio threadpool exited unexpectedly"),
-        Commands::Index (IndexNamespace {
-            command: IndexCommand::Add(args)
+        Commands::Index(IndexNamespace {
+            command: IndexCommand::Add(args),
         }) => {
             println!("Add an index with name {}", args.name);
             return Ok(ExitStatus::Success);
         }
-        Commands::Index (IndexNamespace {
-            command: IndexCommand::List(_)
+        Commands::Index(IndexNamespace {
+            command: IndexCommand::List(_),
         }) => {
             println!("List all indexes");
             return Ok(ExitStatus::Success);
         }
-        Commands::Index (IndexNamespace {
-            command: IndexCommand::Delete(args)
+        Commands::Index(IndexNamespace {
+            command: IndexCommand::Delete(args),
         }) => {
             println!("Delete index {}", args.name);
             return Ok(ExitStatus::Success);
@@ -1281,13 +1284,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: IndexCommand::Credentials(IndexCredentialsCommand::Add(args)),
         }) => {
             let IndexSettings {
-                name, username, keyring_provider, index
+                name,
+                username,
+                keyring_provider,
+                index,
             } = IndexSettings::resolve(args, filesystem);
 
             let _ = add_credentials(name, username, keyring_provider, index).await;
             return Ok(ExitStatus::Success);
         }
-        
     };
     result
 }

@@ -282,8 +282,6 @@ pub(crate) async fn add(
     let hasher = HashStrategy::default();
     let sources = SourceStrategy::Enabled;
 
-
-
     // Add all authenticated sources to the cache.
     for index in settings.index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials(settings.keyring_provider.to_provider()) {

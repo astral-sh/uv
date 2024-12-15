@@ -6,18 +6,17 @@ use netrc::Netrc;
 use reqwest::header::HeaderValue;
 use reqwest::Request;
 
+use futures::executor;
 use std::io::Read;
 use std::io::Write;
-use futures::executor;
 
 use url::Url;
 
 use uv_static::EnvVars;
 
-use crate::KeyringProvider;
 use crate::keyring_config::AuthConfig;
 use crate::keyring_config::ConfigFile;
-
+use crate::KeyringProvider;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Credentials {
@@ -29,7 +28,6 @@ pub struct Credentials {
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
 pub(crate) struct Username(Option<String>);
-
 
 impl Username {
     /// Create a new username.
@@ -165,14 +163,18 @@ impl Credentials {
     }
 
     /// Extracte the [`Credentials`] from keyring, given a named source.
-    /// 
+    ///
     /// Look up the username stored for the named source in the user-level config.
     /// Load the credentials from keyring for the service and username.
-    pub fn from_keyring(name: String, url: &Url, keyring_provider: Option<KeyringProvider>) -> Option<Self> {
+    pub fn from_keyring(
+        name: String,
+        url: &Url,
+        keyring_provider: Option<KeyringProvider>,
+    ) -> Option<Self> {
         if keyring_provider.is_none() {
-            return None
+            return None;
         }
-        
+
         let auth_config = match AuthConfig::load() {
             Ok(auth_config) => auth_config,
             Err(_) => {
@@ -189,7 +191,7 @@ impl Credentials {
             }
         };
 
-        return executor::block_on(keyring_provider.unwrap().fetch(&url, &index.username));        
+        return executor::block_on(keyring_provider.unwrap().fetch(&url, &index.username));
     }
 
     /// Parse [`Credentials`] from an HTTP request, if any.
@@ -423,7 +425,5 @@ mod tests {
 
         // // Act
         // let credentials = Credentials::from_keyring(index.to_string(), "example.com".to_string(), Some(keyring_provider));
-
-        
     }
 }
