@@ -40,6 +40,7 @@ mod parser;
 /// Replacement mode for sysconfig values.
 #[derive(Debug)]
 enum ReplacementMode {
+    Partial { from: String },
     Full,
 }
 
@@ -52,8 +53,13 @@ struct ReplacementEntry {
 
 impl ReplacementEntry {
     /// Patches a sysconfig value either partially (replacing a specific word) or fully.
-    fn patch(&self, _entry: &str) -> String {
+    fn patch(&self, entry: &str) -> String {
         match &self.mode {
+            ReplacementMode::Partial { from } => entry
+                .split_whitespace()
+                .map(|word| if word == from { &self.to } else { word })
+                .collect::<Vec<_>>()
+                .join(" "),
             ReplacementMode::Full => self.to.clone(),
         }
     }
@@ -62,13 +68,69 @@ impl ReplacementEntry {
 /// Mapping for sysconfig keys to lookup and replace with the appropriate entry.
 static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, ReplacementEntry>> =
     LazyLock::new(|| {
-        BTreeMap::from_iter([(
-            "AR".to_string(),
-            ReplacementEntry {
-                mode: ReplacementMode::Full,
-                to: "ar".to_string(),
-            },
-        )])
+        BTreeMap::from_iter([
+            (
+                "CC".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "clang".to_string(),
+                    },
+                    to: "cc".to_string(),
+                },
+            ),
+            (
+                "CXX".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "clang++".to_string(),
+                    },
+                    to: "c++".to_string(),
+                },
+            ),
+            (
+                "BLDSHARED".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "clang".to_string(),
+                    },
+                    to: "cc".to_string(),
+                },
+            ),
+            (
+                "LDSHARED".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "clang".to_string(),
+                    },
+                    to: "cc".to_string(),
+                },
+            ),
+            (
+                "LDCXXSHARED".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "clang++".to_string(),
+                    },
+                    to: "c++".to_string(),
+                },
+            ),
+            (
+                "LINKCC".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "clang".to_string(),
+                    },
+                    to: "cc".to_string(),
+                },
+            ),
+            (
+                "AR".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Full,
+                    to: "ar".to_string(),
+                },
+            ),
+        ])
     });
 
 /// Update the `sysconfig` data in a Python installation.
@@ -292,8 +354,8 @@ mod tests {
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "AR": "ar",
-            "CC": "clang -pthread",
-            "CXX": "clang++ -pthread",
+            "CC": "cc -pthread",
+            "CXX": "c++ -pthread",
             "PYTHON_BUILD_STANDALONE": 1
         }
         "###);
@@ -316,7 +378,7 @@ mod tests {
         insta::assert_snapshot!(data.to_string_pretty()?, @r###"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
-            "BLDSHARED": "clang -bundle -undefined dynamic_lookup -arch arm64",
+            "BLDSHARED": "cc -bundle -undefined dynamic_lookup -arch arm64",
             "PYTHON_BUILD_STANDALONE": 1
         }
         "###);
