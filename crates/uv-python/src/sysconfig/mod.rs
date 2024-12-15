@@ -24,9 +24,11 @@
 //! CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //! ```
 
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use tracing::trace;
 
@@ -34,6 +36,40 @@ use crate::sysconfig::parser::{Error as ParseError, SysconfigData, Value};
 
 mod cursor;
 mod parser;
+
+/// Replacement mode for sysconfig values.
+#[derive(Debug)]
+enum ReplacementMode {
+    Full,
+}
+
+/// A replacement entry to patch in sysconfig data.
+#[derive(Debug)]
+struct ReplacementEntry {
+    mode: ReplacementMode,
+    to: String,
+}
+
+impl ReplacementEntry {
+    /// Patches a sysconfig value either partially (replacing a specific word) or fully.
+    fn patch(&self, _entry: &str) -> String {
+        match &self.mode {
+            ReplacementMode::Full => self.to.clone(),
+        }
+    }
+}
+
+/// Mapping for sysconfig keys to lookup and replace with the appropriate entry.
+static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, ReplacementEntry>> =
+    LazyLock::new(|| {
+        BTreeMap::from_iter([(
+            "AR".to_string(),
+            ReplacementEntry {
+                mode: ReplacementMode::Full,
+                to: "ar".to_string(),
+            },
+        )])
+    });
 
 /// Update the `sysconfig` data in a Python installation.
 pub(crate) fn update_sysconfig(
@@ -157,7 +193,12 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
             continue;
         };
         let patched = update_prefix(value, real_prefix);
-        let patched = remove_isysroot(&patched);
+        let mut patched = remove_isysroot(&patched);
+
+        if let Some(replacement_entry) = DEFAULT_VARIABLE_UPDATES.get(key) {
+            patched = replacement_entry.patch(&patched);
+        }
+
         if *value != patched {
             trace!("Updated `{key}` from `{value}` to `{patched}`");
             count += 1;
@@ -227,6 +268,33 @@ mod tests {
             "base": "/real/prefix/base",
             "exec_prefix": "/real/prefix/exec_prefix",
             "prefix": "/real/prefix/prefix"
+        }
+        "###);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_replacements() -> Result<(), Error> {
+        let sysconfigdata = [
+            ("CC", "clang -pthread"),
+            ("CXX", "clang++ -pthread"),
+            ("AR", "/tools/llvm/bin/llvm-ar"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+        .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r###"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "AR": "ar",
+            "CC": "clang -pthread",
+            "CXX": "clang++ -pthread",
+            "PYTHON_BUILD_STANDALONE": 1
         }
         "###);
 
