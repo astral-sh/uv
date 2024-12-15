@@ -167,8 +167,7 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
       |
     1 | [project]
       | ^^^^^^^^^
-    missing field `name`
-
+    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     "###
     );
 
@@ -285,6 +284,7 @@ fn invalid_pyproject_toml_requirement_indirect() -> Result<()> {
     pyproject_toml.write_str(
         r#"[project]
 name = "project"
+version = "0.1.0"
 dependencies = ["flask==1.0.x"]
 "#,
     )?;
