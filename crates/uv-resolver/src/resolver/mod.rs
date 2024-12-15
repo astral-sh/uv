@@ -31,7 +31,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
-use uv_pep508::MarkerTree;
+use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
     ConflictItem, ConflictItemRef, Conflicts, Requirement, ResolutionMetadata, VerbatimParsedUrl,
@@ -61,7 +61,9 @@ pub(crate) use crate::resolver::availability::{
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
 pub use crate::resolver::environment::ResolverEnvironment;
-use crate::resolver::environment::{fork_python_requirement, ForkingPossibility};
+use crate::resolver::environment::{
+    fork_version_by_marker, fork_version_by_python_requirement, ForkingPossibility,
+};
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
@@ -69,6 +71,7 @@ pub(crate) use provider::MetadataUnavailable;
 
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
+use crate::resolver::markers::KnownMarkers;
 pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
@@ -85,6 +88,7 @@ mod environment;
 mod fork_map;
 mod index;
 mod indexes;
+mod markers;
 mod provider;
 mod reporter;
 mod urls;
@@ -485,6 +489,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     term_intersection.unwrap_positive(),
                     &mut state.pins,
                     &preferences,
+                    &state.known_markers,
                     &state.fork_urls,
                     &state.env,
                     &state.python_requirement,
@@ -621,6 +626,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             let index =
                                 package.name().and_then(|name| state.fork_indexes.get(name));
                             self.visit_package(package, url, index, &request_sink)?;
+                            state.visit_package(package);
                         }
                     }
                     ForkedDependencies::Forked {
@@ -863,6 +869,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .name()
                         .and_then(|name| forked_state.fork_indexes.get(name));
                     self.visit_package(package, url, index, request_sink)?;
+                    forked_state.visit_package(package);
                 }
                 Ok(forked_state)
             })
@@ -1007,6 +1014,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         range: &Range<Version>,
         pins: &mut FilePins,
         preferences: &Preferences,
+        known_markers: &KnownMarkers,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
@@ -1040,6 +1048,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         preferences,
                         env,
                         python_requirement,
+                        known_markers,
                         pins,
                         visited,
                         request_sink,
@@ -1140,6 +1149,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         preferences: &Preferences,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        known_markers: &KnownMarkers,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -1211,7 +1221,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         {
             if matches!(self.options.fork_strategy, ForkStrategy::RequiresPython) {
                 if env.marker_environment().is_none() {
-                    let forks = fork_python_requirement(requires_python, python_requirement, env);
+                    let forks = fork_version_by_python_requirement(
+                        requires_python,
+                        python_requirement,
+                        env,
+                    );
                     if !forks.is_empty() {
                         debug!(
                             "Forking Python requirement `{}` on `{}` for {}=={} ({})",
@@ -1234,6 +1248,49 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 candidate.version().clone(),
                 UnavailableVersion::IncompatibleDist(incompatibility),
             )));
+        }
+
+        // Check whether this version covers all supported platforms.
+        if !dist.implied_markers().is_true() {
+            for platform in [
+                ResolverPlatform::Linux,
+                ResolverPlatform::Windows,
+                ResolverPlatform::MacOS,
+            ] {
+                // If the platform is part of the current environment...
+                let marker = platform.marker();
+                if env.included_by_marker(marker) {
+                    // But isn't supported by the distribution...
+                    if dist.implied_markers().is_disjoint(marker)
+                        && known_markers
+                            .get(name)
+                            .is_none_or(|m| !m.is_disjoint(marker))
+                    {
+                        // Then we need to fork.
+                        let forks = fork_version_by_marker(env, marker);
+                        return if forks.is_empty() {
+                            Ok(Some(ResolverVersion::Unavailable(
+                                candidate.version().clone(),
+                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::MissingPlatform(platform.to_string()),
+                                )),
+                            )))
+                        } else {
+                            debug!(
+                                "Forking platform for {}=={} ({})",
+                                name,
+                                candidate.version(),
+                                forks
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                            Ok(Some(ResolverVersion::Forked(forks)))
+                        };
+                    }
+                }
+            }
         }
 
         let filename = match dist.for_installation() {
@@ -2210,6 +2267,8 @@ pub(crate) struct ForkState {
     /// After resolution is finished, this maps is consulted in order to select
     /// the wheel chosen during resolution.
     pins: FilePins,
+    /// The superset of markers for which a dependency is known to be relevant.
+    known_markers: KnownMarkers,
     /// Ensure we don't have duplicate URLs in any branch.
     ///
     /// Unlike [`Urls`], we add only the URLs we have seen in this branch, and there can be only
@@ -2272,6 +2331,7 @@ impl ForkState {
             next: pubgrub.root_package,
             pubgrub,
             pins: FilePins::default(),
+            known_markers: KnownMarkers::default(),
             fork_urls: ForkUrls::default(),
             fork_indexes: ForkIndexes::default(),
             priorities: PubGrubPriorities::default(),
@@ -2478,6 +2538,22 @@ impl ForkState {
             self.python_requirement = req;
         }
         self
+    }
+
+    /// Visit a package and update the known markers.
+    fn visit_package(&mut self, package: &PubGrubPackage) {
+        match &**package {
+            PubGrubPackageInner::Dev { marker, name, .. } => {
+                self.known_markers.insert(name.clone(), *marker);
+            }
+            PubGrubPackageInner::Extra { marker, name, .. } => {
+                self.known_markers.insert(name.clone(), *marker);
+            }
+            PubGrubPackageInner::Marker { marker, name, .. } => {
+                self.known_markers.insert(name.clone(), *marker);
+            }
+            _ => {}
+        }
     }
 
     fn into_resolution(self) -> Resolution {
@@ -3339,4 +3415,42 @@ struct ConflictTracker {
     ///
     /// Distilled from `culprit` for fast checking in the hot loop.
     deprioritize: Vec<Id<PubGrubPackage>>,
+}
+
+/// A platform for which the resolver is solving.
+#[derive(Debug, Clone, Copy)]
+enum ResolverPlatform {
+    Linux,
+    Windows,
+    MacOS,
+}
+
+impl ResolverPlatform {
+    /// Return the platform's `sys.platform` value.
+    fn sys_platform(self) -> &'static str {
+        match self {
+            ResolverPlatform::Linux => "linux",
+            ResolverPlatform::Windows => "win32",
+            ResolverPlatform::MacOS => "darwin",
+        }
+    }
+
+    /// Return a [`MarkerTree`] for the platform.
+    fn marker(self) -> MarkerTree {
+        MarkerTree::expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: self.sys_platform().to_string(),
+        })
+    }
+}
+
+impl Display for ResolverPlatform {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolverPlatform::Linux => write!(f, "Linux"),
+            ResolverPlatform::Windows => write!(f, "Windows"),
+            ResolverPlatform::MacOS => write!(f, "macOS"),
+        }
+    }
 }
