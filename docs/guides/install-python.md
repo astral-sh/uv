@@ -89,7 +89,7 @@ automatically download Python versions when they are required. For example, the 
 download Python 3.12 if it was not installed:
 
 ```console
-$ uv run --python 3.12 python -c 'print("hello world")'
+$ uv run --python 3.12 python -c "print('hello world')"
 ```
 
 Even if a specific Python version is not requested, uv will download the latest version on demand.
