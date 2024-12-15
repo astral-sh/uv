@@ -16778,12 +16778,73 @@ fn lock_invalid_project_table() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × Failed to build `b @ file://[TEMP_DIR]/b`
       ├─▶ Failed to extract static metadata from `pyproject.toml`
-      ├─▶ `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set.
       ╰─▶ TOML parse error at line 2, column 10
             |
           2 |         [project.urls]
             |          ^^^^^^^
-          missing field `name`
+          `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_missing_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {
+        r#"
+        [project]
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 1
+      |
+    1 | [project]
+      | ^^^^^^^^^
+    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn lock_missing_version() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {
+        r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 1
+      |
+    1 | [project]
+      | ^^^^^^^^^
+    `pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list
     "###);
 
     Ok(())
