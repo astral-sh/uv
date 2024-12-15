@@ -5,13 +5,29 @@ use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
 
-/// and operating system.
+/// Add shared arguments to a command.
+///
+/// In particular, remove any user-defined environment variables and set any machine-specific
+/// environment variables to static values.
 fn add_shared_args(mut command: Command) -> Command {
     command
+        .env_clear()
         .env(EnvVars::UV_LINK_MODE, "clone")
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8");
+
+    if cfg!(unix) {
+        // Avoid locale issues in tests
+        command.env(EnvVars::LC_ALL, "C");
+    }
+
+    if cfg!(all(windows, debug_assertions)) {
+        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
+        // default windows stack of 1MB
+        command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
+    }
+
     command
 }
 
@@ -164,11 +180,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -320,11 +332,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -477,11 +485,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -666,11 +670,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -794,11 +794,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -961,11 +957,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1171,11 +1163,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1389,11 +1377,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1570,11 +1554,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1720,11 +1700,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -1922,11 +1898,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2107,11 +2079,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2257,11 +2225,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2390,11 +2354,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2523,11 +2483,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2658,11 +2614,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -2780,11 +2732,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             config_settings: None,
             no_build_isolation: None,
             no_build_isolation_package: None,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             link_mode: Some(
                 Clone,
             ),
@@ -2818,11 +2766,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             ),
             no_build_isolation: false,
             no_build_isolation_package: [],
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             link_mode: Clone,
             compile_bytecode: false,
             sources: Enabled,
@@ -2978,11 +2922,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3169,11 +3109,7 @@ fn resolve_both() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3448,11 +3384,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3675,11 +3607,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3811,11 +3739,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -3966,11 +3890,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4174,11 +4094,7 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4361,11 +4277,7 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4554,11 +4466,7 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4742,11 +4650,7 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -4937,11 +4841,7 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5125,11 +5025,7 @@ fn index_priority() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5266,11 +5162,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5393,11 +5285,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5518,11 +5406,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5645,11 +5529,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5770,11 +5650,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
@@ -5896,11 +5772,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             python_version: None,
             python_platform: None,
             universal: false,
-            exclude_newer: Some(
-                ExcludeNewer(
-                    2024-03-25T00:00:00Z,
-                ),
-            ),
+            exclude_newer: None,
             no_emit_package: [],
             emit_index_url: false,
             emit_find_links: false,
