@@ -1,6 +1,6 @@
 use std::process::Stdio;
-use tokio::process::Command;
-use tracing::{instrument, trace, warn};
+use tokio::{io::AsyncWriteExt, process::Command};
+use tracing::{debug, instrument, trace, warn};
 use url::Url;
 
 use crate::credentials::Credentials;
@@ -114,6 +114,74 @@ impl KeyringProvider {
         }
     }
 
+    /// Set credentials for the given [`Url`] from the keyring.
+    #[instrument(skip_all, fields(url = % url.to_string(), username))]
+    pub async fn set(&self, url: &Url, username: &str, password: &str) {
+        // Validate the request
+        debug_assert!(
+            url.host_str().is_some(),
+            "Should only use keyring for urls with host"
+        );
+        debug_assert!(
+            url.password().is_none(),
+            "Should only use keyring for urls without a password"
+        );
+        debug_assert!(
+            !username.is_empty(),
+            "Should only use keyring with a username"
+        );
+
+        // Check the full URL first
+        // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
+        trace!("Creating entry in keyring for URL {url} and username {username}");
+
+        match self.backend {
+            KeyringProviderBackend::Subprocess => self.set_subprocess(url.as_str(), username, password).await,
+            #[cfg(test)]
+            KeyringProviderBackend::Dummy(ref store) => {
+                let test = password;
+                None
+            }
+        };
+    }
+
+    #[instrument(skip(self))]
+    async fn set_subprocess(&self, service_name: &str, username: &str, password: &str) -> Option<()> {
+        let mut child = Command::new("keyring")
+            .arg("set")
+            .arg(service_name)
+            .arg(username)
+            .stdin(Stdio::piped())  // Allow writing to stdin
+            .stdout(Stdio::piped()) // Optionally capture stdout for debugging
+            .stderr(Stdio::piped()) // Capture stderr for debugging
+            .spawn()
+            .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
+            .ok()?;
+
+        // If we successfully spawn the process, we can write to its stdin
+        if let Some(mut stdin) = child.stdin.take() {
+            // Write the password to the stdin of the keyring process
+            stdin.write(password.as_bytes()).await.inspect_err(|_| warn!("Failure providing the password to keyring!")).ok()?;
+            stdin.flush().await.inspect_err(|_| warn!("Failure flushing the password input to keyring")).ok()?;
+        }            
+
+        let output = child
+            .wait_with_output()
+            .await
+            .inspect_err(|err| warn!("Failed to wait for `keyring` output: {err}"))
+            .ok()?;
+
+        if output.status.success() {
+            // On success, parse the newline terminated password
+            debug!("Password successfully saved");
+        } else {
+            // On failure, no password was available
+            debug!("Could not save password in keyring");
+        };
+
+        return None;
+    }
+
     #[cfg(test)]
     fn fetch_dummy(
         store: &std::collections::HashMap<(String, &'static str), &'static str>,
@@ -123,6 +191,17 @@ impl KeyringProvider {
         store
             .get(&(service_name.to_string(), username))
             .map(|password| (*password).to_string())
+    }
+
+    #[cfg(test)]
+    fn set_dummy(
+        store: &mut std::collections::HashMap<(String, &str), &str>,
+        service_name: &str,
+        username: &str,
+        password: &str,
+    ) -> Option<()> {
+        // store.insert((service_name.to_string(), username), password);
+        None
     }
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].

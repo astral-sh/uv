@@ -7,6 +7,8 @@ use cache::CredentialsCache;
 pub use credentials::Credentials;
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
+pub use keyring_config::AuthConfig;
+pub use keyring_config::ConfigFile;
 use realm::Realm;
 
 mod cache;
@@ -14,6 +16,7 @@ mod credentials;
 mod keyring;
 mod middleware;
 mod realm;
+mod keyring_config;
 
 // TODO(zanieb): Consider passing a cache explicitly throughout
 
