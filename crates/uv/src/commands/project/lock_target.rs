@@ -151,6 +151,17 @@ impl<'lock> LockTarget<'lock> {
         }
     }
 
+    /// Returns the set of required platforms for the [`LockTarget`].
+    pub(crate) fn required_environments(self) -> Option<&'lock SupportedEnvironments> {
+        match self {
+            Self::Workspace(workspace) => workspace.required_environments(),
+            Self::Script(_) => {
+                // TODO(charlie): Add support for environments in scripts.
+                None
+            }
+        }
+    }
+
     /// Returns the set of conflicts for the [`LockTarget`].
     pub(crate) fn conflicts(self) -> Conflicts {
         match self {

@@ -11,7 +11,8 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPri
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
-    InstalledDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef,
+    InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -123,6 +124,7 @@ impl IncompatibleDist {
                     None => format!("has {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("requires {self}"),
+                IncompatibleWheel::MissingPlatform(_) => format!("has {self}"),
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("has {self}"),
@@ -150,6 +152,7 @@ impl IncompatibleDist {
                     None => format!("have {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("require {self}"),
+                IncompatibleWheel::MissingPlatform(_) => format!("have {self}"),
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("have {self}"),
@@ -194,6 +197,7 @@ impl IncompatibleDist {
                 IncompatibleWheel::Yanked(..) => None,
                 IncompatibleWheel::ExcludeNewer(..) => None,
                 IncompatibleWheel::RequiresPython(..) => None,
+                IncompatibleWheel::MissingPlatform(..) => None,
             },
             Self::Source(..) => None,
             Self::Unavailable => None,
@@ -233,6 +237,15 @@ impl Display for IncompatibleDist {
                 },
                 IncompatibleWheel::RequiresPython(python, _) => {
                     write!(f, "Python {python}")
+                }
+                IncompatibleWheel::MissingPlatform(marker) => {
+                    if let Some(platform) = KnownPlatform::from_marker(*marker) {
+                        write!(f, "no {platform}-compatible wheels")
+                    } else if let Some(marker) = marker.try_to_string() {
+                        write!(f, "no `{marker}`-compatible wheels")
+                    } else {
+                        write!(f, "no compatible wheels")
+                    }
                 }
             },
             Self::Source(incompatibility) => match incompatibility {
@@ -288,6 +301,8 @@ pub enum IncompatibleWheel {
     Yanked(Yanked),
     /// The use of binary wheels is disabled.
     NoBinary,
+    /// Wheels are not available for the current platform.
+    MissingPlatform(MarkerTree),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -694,28 +709,41 @@ impl IncompatibleWheel {
                         timestamp_other < timestamp_self
                     }
                 },
-                Self::NoBinary | Self::RequiresPython(_, _) | Self::Tag(_) | Self::Yanked(_) => {
-                    true
-                }
+                Self::MissingPlatform(_)
+                | Self::NoBinary
+                | Self::RequiresPython(_, _)
+                | Self::Tag(_)
+                | Self::Yanked(_) => true,
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
                 Self::Tag(tag_other) => tag_self > tag_other,
-                Self::NoBinary | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
+                Self::MissingPlatform(_)
+                | Self::NoBinary
+                | Self::RequiresPython(_, _)
+                | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
-                Self::NoBinary | Self::Yanked(_) => true,
+                Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
-                Self::NoBinary => true,
+                Self::MissingPlatform(_) | Self::NoBinary => true,
             },
-            Self::NoBinary => false,
+            Self::NoBinary => match other {
+                Self::ExcludeNewer(_)
+                | Self::Tag(_)
+                | Self::RequiresPython(_, _)
+                | Self::Yanked(_) => false,
+                Self::NoBinary => false,
+                Self::MissingPlatform(_) => true,
+            },
+            Self::MissingPlatform(_) => false,
         }
     }
 }

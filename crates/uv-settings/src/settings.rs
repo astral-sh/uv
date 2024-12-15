@@ -110,6 +110,9 @@ pub struct Options {
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
 
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub required_environments: Option<SupportedEnvironments>,
+
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're only respected in `pyproject.toml` files, and should be rejected in `uv.toml` files.
@@ -1790,6 +1793,7 @@ pub struct OptionsWire {
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
+    required_environments: Option<SupportedEnvironments>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -1855,6 +1859,7 @@ impl From<OptionsWire> for Options {
             override_dependencies,
             constraint_dependencies,
             environments,
+            required_environments,
             conflicts,
             publish_url,
             trusted_publishing,
@@ -1918,6 +1923,7 @@ impl From<OptionsWire> for Options {
             override_dependencies,
             constraint_dependencies,
             environments,
+            required_environments,
             install_mirrors: PythonInstallMirrors::resolve(
                 python_install_mirror,
                 pypy_install_mirror,
