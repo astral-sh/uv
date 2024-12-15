@@ -10,6 +10,7 @@ Ok(
             [],
         ),
         supported_environments: [],
+        required_platforms: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(
                 [
