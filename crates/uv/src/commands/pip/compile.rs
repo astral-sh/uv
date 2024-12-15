@@ -637,6 +637,18 @@ fn cmd(
                 return Some(None);
             }
 
+            // Always skip the `--no-progress` flag.
+            if arg == "--no-progress" {
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Always skip the `--native-tls` flag.
+            if arg == "--native-tls" {
+                *skip_next = None;
+                return Some(None);
+            }
+
             // Return the argument.
             Some(Some(arg))
         })
