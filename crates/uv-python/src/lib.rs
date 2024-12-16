@@ -20,7 +20,10 @@ pub use crate::version_files::{
     DiscoveryOptions as VersionFileDiscoveryOptions, FilePreference as VersionFilePreference,
     PythonVersionFile, PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
 };
-pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
+pub use crate::virtualenv::{
+    virtualenv_from_env, virtualenv_from_working_dir, Error as VirtualEnvError,
+    PyVenvConfiguration, VirtualEnvironment,
+};
 
 mod cpuinfo;
 mod discovery;
