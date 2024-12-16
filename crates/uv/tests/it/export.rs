@@ -128,7 +128,7 @@ fn dependency_extra() -> Result<()> {
     click==8.1.7 \
         --hash=sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28 \
         --hash=sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de
-    colorama==0.4.6 ; platform_system == 'Windows' \
+    colorama==0.4.6 ; sys_platform == 'win32' \
         --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
         --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
     flask==3.0.2 \

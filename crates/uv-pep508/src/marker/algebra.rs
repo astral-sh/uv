@@ -271,10 +271,53 @@ impl InternerGuard<'_> {
                 key,
                 operator,
                 value,
-            } => (
-                Variable::String(key.into()),
-                Edges::from_string(operator, value),
-            ),
+            } => {
+                // Normalize `platform_system` markers to `sys_platform` nodes.
+                let (key, value) = match (key, value.as_str()) {
+                    (MarkerValueString::PlatformSystem, "Windows") => {
+                        (CanonicalMarkerValueString::SysPlatform, "win32".to_string())
+                    }
+                    (MarkerValueString::PlatformSystem, "Darwin") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        "darwin".to_string(),
+                    ),
+                    (MarkerValueString::PlatformSystem, "Linux") => {
+                        (CanonicalMarkerValueString::SysPlatform, "linux".to_string())
+                    }
+                    (MarkerValueString::PlatformSystem, "Java") => {
+                        (CanonicalMarkerValueString::SysPlatform, "java".to_string())
+                    }
+                    (MarkerValueString::PlatformSystem, "AIX") => {
+                        (CanonicalMarkerValueString::SysPlatform, "aix".to_string())
+                    }
+                    (MarkerValueString::PlatformSystem, "FreeBSD") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        "freebsd".to_string(),
+                    ),
+                    (MarkerValueString::PlatformSystem, "NetBSD") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        "netbsd".to_string(),
+                    ),
+                    (MarkerValueString::PlatformSystem, "OpenBSD") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        "openbsd".to_string(),
+                    ),
+                    (MarkerValueString::PlatformSystem, "SunOS") => {
+                        (CanonicalMarkerValueString::SysPlatform, "sunos".to_string())
+                    }
+                    // See: https://peps.python.org/pep-0738/#sys
+                    (MarkerValueString::PlatformSystem, "Android") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        "android".to_string(),
+                    ),
+                    // See: https://peps.python.org/pep-0730/#sys
+                    (MarkerValueString::PlatformSystem, "iOS") => {
+                        (CanonicalMarkerValueString::SysPlatform, "ios".to_string())
+                    }
+                    _ => (key.into(), value),
+                };
+                (Variable::String(key), Edges::from_string(operator, value))
+            }
             // A variable representing the existence or absence of a particular extra.
             MarkerExpression::Extra {
                 name: MarkerValueExtra::Extra(extra),
@@ -822,84 +865,6 @@ impl InternerGuard<'_> {
         }
         let mut tree = NodeId::FALSE;
         for (a, b) in [
-            // sys_platform == 'darwin' and platform_system == 'Windows'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "darwin".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Windows".to_string(),
-                },
-            ),
-            // sys_platform == 'darwin' and platform_system == 'Linux'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "darwin".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Linux".to_string(),
-                },
-            ),
-            // sys_platform == 'win32' and platform_system == 'Darwin'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Darwin".to_string(),
-                },
-            ),
-            // sys_platform == 'win32' and platform_system == 'Linux'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Linux".to_string(),
-                },
-            ),
-            // sys_platform == 'linux' and platform_system == 'Darwin'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "linux".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Darwin".to_string(),
-                },
-            ),
-            // sys_platform == 'linux' and platform_system == 'Windows'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "linux".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Windows".to_string(),
-                },
-            ),
             // os_name == 'nt' and sys_platform == 'darwin'
             (
                 MarkerExpression::String {
@@ -939,51 +904,13 @@ impl InternerGuard<'_> {
                     value: "win32".to_string(),
                 },
             ),
-            // os_name == 'nt' and platform_system == 'Darwin'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::OsName,
-                    operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Darwin".to_string(),
-                },
-            ),
-            // os_name == 'nt' and platform_system == 'Linux'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::OsName,
-                    operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Linux".to_string(),
-                },
-            ),
-            // os_name == 'posix' and platform_system == 'Windows'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::OsName,
-                    operator: MarkerOperator::Equal,
-                    value: "posix".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::PlatformSystem,
-                    operator: MarkerOperator::Equal,
-                    value: "Windows".to_string(),
-                },
-            ),
         ] {
             let a = self.expression(a);
             let b = self.expression(b);
             let a_and_b = conjunction(self, a, b);
             tree = disjunction(self, tree, a_and_b);
         }
+
         self.state.exclusions = Some(tree);
         tree
     }

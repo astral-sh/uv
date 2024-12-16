@@ -60,24 +60,15 @@ mod tree;
 pub const VERSION: u32 = 1;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 = MarkerTree::from_str(
-        "platform_system == 'Linux' and os_name == 'posix' and sys_platform == 'linux'",
-    )
-    .unwrap();
+    let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static WINDOWS_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 = MarkerTree::from_str(
-        "platform_system == 'Windows' and os_name == 'nt' and sys_platform == 'win32'",
-    )
-    .unwrap();
+    let pep508 = MarkerTree::from_str("os_name == 'nt' and sys_platform == 'win32'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 = MarkerTree::from_str(
-        "platform_system == 'Darwin' and os_name == 'posix' and sys_platform == 'darwin'",
-    )
-    .unwrap();
+    let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 
