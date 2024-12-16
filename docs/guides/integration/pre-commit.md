@@ -3,7 +3,7 @@
 An official pre-commit hook is provided at
 [`astral-sh/uv-pre-commit`](https://github.com/astral-sh/uv-pre-commit).
 
-To make sure your `uv.lock` file is up to date even if your `pyporject.toml` file was changed via
+To make sure your `uv.lock` file is up to date even if your `pyproject.toml` file was changed via
 pre-commit, add the following to the `.pre-commit-config.yaml`:
 
 ```yaml title=".pre-commit-config.yaml"
