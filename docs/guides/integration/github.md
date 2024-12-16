@@ -117,10 +117,11 @@ jobs:
           python-version-file: "pyproject.toml"
 ```
 
-## Multiple python versions
+## Multiple Python versions
 
-When using a matrix strategy, set the python version under `astral-sh/setup-uv`, overriding any
-python version specifications in `pyproject.toml` and `.python-version`:
+When using a matrix test test multiple Python versions, set the Python version using
+`astral-sh/setup-uv`, which will override the Python version specification in the `pyproject.toml`
+or `.python-version` files:
 
 ```yaml title="example.yml" hl_lines="17 18"
 jobs:
@@ -141,6 +142,25 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ matrix.python-version }}
+```
+
+If not using the `setup-uv` action, you can set the `UV_PYTHON` environment variable:
+
+```yaml title="example.yml" hl_lines="12"
+jobs:
+  build:
+    name: continuous-integration
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v4
 ```
 
 ## Syncing and running
