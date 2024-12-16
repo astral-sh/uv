@@ -333,6 +333,7 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         collapse_unavailable_versions(&mut tree);
+        collapse_redundant_no_versions(&mut tree);
         collapse_redundant_depends_on_no_versions(&mut tree);
 
         if should_display_tree {
@@ -424,6 +425,62 @@ fn display_tree_inner(
                 lines.push(format!("{prefix}not root {package}{versions}"));
             }
         },
+    }
+}
+
+fn collapse_redundant_no_versions(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) {
+    match tree {
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                // If we have a node for a package with no versions...
+                (
+                    DerivationTree::External(External::NoVersions(package, versions)),
+                    ref mut other,
+                )
+                | (
+                    ref mut other,
+                    DerivationTree::External(External::NoVersions(package, versions)),
+                ) => {
+                    // First, always recursively visit the other side of the tree
+                    collapse_redundant_no_versions(other);
+
+                    let DerivationTree::Derived(derived) = other else {
+                        return;
+                    };
+
+                    // If the range in the conclusion (terms) matches the range of no versions,
+                    // then we'll drop this node
+                    let Some(Term::Positive(term)) = derived.terms.get(package) else {
+                        return;
+                    };
+                    let versions = versions.complement();
+
+                    // If we're disqualifying a single version, this is important to retain, e.g,
+                    // for `only foo==1.0.0 is available`
+                    if versions.as_singleton().is_some() {
+                        return;
+                    }
+
+                    if *term != versions {
+                        return;
+                    }
+
+                    // Replace this node with the other tree
+                    *tree = other.clone();
+                }
+                // If not, just recurse
+                _ => {
+                    collapse_redundant_no_versions(Arc::make_mut(&mut derived.cause1));
+                    collapse_redundant_no_versions(Arc::make_mut(&mut derived.cause2));
+                }
+            }
+        }
     }
 }
 
