@@ -149,6 +149,7 @@ nav:
       - Settings: reference/settings.md
       - Build failures: reference/build_failures.md
       - Resolver: reference/resolver-internals.md
+      - Dependency specifiers: reference/dependency-specifiers.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
           - reference/policies/index.md
