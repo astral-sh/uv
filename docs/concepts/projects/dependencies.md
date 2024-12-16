@@ -44,7 +44,7 @@ The dependency will include a constraint, e.g., `>=0.27.2`, for the most recent,
 of the package. An alternative constraint can be provided:
 
 ```console
-$ uv add 'httpx>=0.20'
+$ uv add "httpx>=0.20"
 ```
 
 When adding a dependency from a source other than a package registry, uv will add an entry in the
@@ -71,7 +71,7 @@ httpx = { git = "https://github.com/encode/httpx" }
 If a dependency cannot be used, uv will display an error.:
 
 ```console
-$ uv add 'httpx>9999'
+$ uv add "httpx>9999"
   × No solution found when resolving dependencies:
   ╰─▶ Because only httpx<=1.0.0b0 is available and your project depends on httpx>9999,
       we can conclude that your project's requirements are unsatisfiable.
@@ -96,7 +96,7 @@ references to the dependency, it will also be removed.
 To change an existing dependency, e.g., to use a different constraint for `httpx`:
 
 ```console
-$ uv add 'httpx>0.1.0'
+$ uv add "httpx>0.1.0"
 ```
 
 !!! note
@@ -106,7 +106,7 @@ $ uv add 'httpx>0.1.0'
     constraints. To force the package version to update to the latest within the constraints, use `--upgrade-package <name>`, e.g.:
 
     ```console
-    $ uv add 'httpx>0.1.0' --upgrade-package httpx
+    $ uv add "httpx>0.1.0" --upgrade-package httpx
     ```
 
     See the [lockfile](./sync.md#upgrading-locked-package-versions) documentation for more details
@@ -127,7 +127,7 @@ use [environment markers](https://peps.python.org/pep-0508/#environment-markers)
 For example, to install `jax` on Linux, but not on Windows or macOS:
 
 ```console
-$ uv add 'jax; sys_platform == "linux"'
+$ uv add "jax; sys_platform == 'linux'"
 ```
 
 The resulting `pyproject.toml` will then include the environment marker in the dependency
@@ -144,7 +144,7 @@ dependencies = ["jax; sys_platform == 'linux'"]
 Similarly, to include `numpy` on Python 3.11 and later:
 
 ```console
-$ uv add 'numpy; python_version >= "3.11"'
+$ uv add "numpy; python_version >= '3.11'"
 ```
 
 See Python's [environment marker](https://peps.python.org/pep-0508/#environment-markers)
