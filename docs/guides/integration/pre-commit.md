@@ -3,6 +3,27 @@
 An official pre-commit hook is provided at
 [`astral-sh/uv-pre-commit`](https://github.com/astral-sh/uv-pre-commit).
 
+To make sure your `uv.lock` file is up to date even if your `pyproject.toml` file was changed via
+pre-commit, add the following to the `.pre-commit-config.yaml`:
+
+```yaml title=".pre-commit-config.yaml"
+- repo: https://github.com/astral-sh/uv-pre-commit
+  # uv version.
+  rev: 0.5.8
+  hooks:
+    - id: uv-lock
+```
+
+To keep your `requirements.txt` file updated using pre-commit:
+
+```yaml title=".pre-commit-config.yaml"
+- repo: https://github.com/astral-sh/uv-pre-commit
+  # uv version.
+  rev: 0.5.8
+  hooks:
+    - id: uv-export
+```
+
 To compile requirements via pre-commit, add the following to the `.pre-commit-config.yaml`:
 
 ```yaml title=".pre-commit-config.yaml"
