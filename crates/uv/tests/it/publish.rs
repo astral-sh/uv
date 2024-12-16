@@ -337,6 +337,7 @@ fn invalid_index() {
         version = "0.1.0"
 
         [[tool.uv.index]]
+        explicit = true
         name = "foo"
         url = "https://example.com"
 

@@ -1218,7 +1218,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let (publish_url, check_url) = if let Some(index_name) = index {
                 debug!("Publishing with index {index_name}");
                 let index = index_locations
-                    .indexes()
+                    .simple_indexes()
                     .find(|index| {
                         index
                             .name
@@ -1227,7 +1227,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     })
                     .with_context(|| {
                         let mut index_names: Vec<String> = index_locations
-                            .indexes()
+                            .simple_indexes()
                             .filter_map(|index| index.name.as_ref())
                             .map(ToString::to_string)
                             .collect();

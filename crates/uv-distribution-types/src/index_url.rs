@@ -283,6 +283,22 @@ impl<'a> IndexLocations {
             .filter(|index| !index.explicit)
     }
 
+    /// Return an iterator over all simple [`Index`] entries in order.
+    ///
+    /// If `no_index` was enabled, then this always returns an empty iterator.
+    pub fn simple_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        if self.no_index {
+            Either::Left(std::iter::empty())
+        } else {
+            let mut seen = FxHashSet::default();
+            Either::Right(
+                self.indexes.iter().filter(move |index| {
+                    index.name.as_ref().map_or(true, |name| seen.insert(name))
+                }),
+            )
+        }
+    }
+
     /// Return an iterator over the [`FlatIndexLocation`] entries.
     pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         self.flat_index.iter()
