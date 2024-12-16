@@ -497,7 +497,7 @@ pub struct ResolverInstallerOptions {
     /// preferring older versions that are compatible with a wider range of supported Python
     /// versions or platforms.
     #[option(
-        default = "\"fewest\"",
+        default = "\"requires-python\"",
         value_type = "str",
         example = r#"
             fork-strategy = "fewest"
@@ -1099,7 +1099,7 @@ pub struct PipOptions {
     /// preferring older versions that are compatible with a wider range of supported Python
     /// versions or platforms.
     #[option(
-        default = "\"fewest\"",
+        default = "\"requires-python\"",
         value_type = "str",
         example = r#"
             fork-strategy = "fewest"

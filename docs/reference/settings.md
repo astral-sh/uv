@@ -777,7 +777,7 @@ Under `fewest`, uv will minimize the number of selected versions for each packag
 preferring older versions that are compatible with a wider range of supported Python
 versions or platforms.
 
-**Default value**: `"fewest"`
+**Default value**: `"requires-python"`
 
 **Possible values**:
 
@@ -2158,7 +2158,7 @@ Under `fewest`, uv will minimize the number of selected versions for each packag
 preferring older versions that are compatible with a wider range of supported Python
 versions or platforms.
 
-**Default value**: `"fewest"`
+**Default value**: `"requires-python"`
 
 **Possible values**:
 
