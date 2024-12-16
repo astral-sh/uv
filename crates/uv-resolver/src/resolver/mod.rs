@@ -336,27 +336,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     } else {
                         // Run unit propagation.
                         let result = state.pubgrub.unit_propagation(state.next);
-                match result {
-                    Err(err) => {
-                        // If unit propagation failed, there is no solution.
-                        return Err(self.convert_no_solution_err(
-                            err,
-                            state.fork_urls,
-                            &state.fork_indexes,
-                            state.env,
-                            &visited,
-                            &self.locations,
-                            &self.capabilities,
-                        ));
-                    }
-                    Ok(conflicts) => {
-                        for (affected, incompatibility) in conflicts {
-                            // Conflict tracking: If there was a conflict, track affected and
-                            // culprit for all root cause incompatibilities
-                            state.record_conflict(affected, None, incompatibility);
+                        match result {
+                            Err(err) => {
+                                // If unit propagation failed, there is no solution.
+                                return Err(self.convert_no_solution_err(
+                                    err,
+                                    state.fork_urls,
+                                    &state.fork_indexes,
+                                    state.env,
+                                    &visited,
+                                    &self.locations,
+                                    &self.capabilities,
+                                ));
+                            }
+                            Ok(conflicts) => {
+                                for (affected, incompatibility) in conflicts {
+                                    // Conflict tracking: If there was a conflict, track affected and
+                                    // culprit for all root cause incompatibilities
+                                    state.record_conflict(affected, None, incompatibility);
+                                }
+                            }
                         }
-                    }
-                }
 
                         // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
                         if self.dependency_mode.is_transitive() {
@@ -375,17 +375,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                         Self::reprioritize_conflicts(&mut state);
 
-                trace!(
-                    "assigned packages: {}",
-                    state
-                        .pubgrub
-                        .partial_solution
-                        .extract_solution()
-                        .filter(|(p, _)| !state.pubgrub.package_store[*p].is_proxy())
-                        .map(|(p, v)| format!("{}=={}", state.pubgrub.package_store[p], v))
-                        .join(", ")
-                );
-                // Choose a package .
+                        trace!(
+                            "assigned packages: {}",
+                            state
+                                .pubgrub
+                                .partial_solution
+                                .extract_solution()
+                                .filter(|(p, _)| !state.pubgrub.package_store[*p].is_proxy())
+                                .map(|(p, v)| format!("{}=={}", state.pubgrub.package_store[p], v))
+                                .join(", ")
+                        );
+                        // Choose a package .
                         let Some(highest_priority_pkg) =
                             state.pubgrub.partial_solution.pick_highest_priority_pkg(
                                 |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
@@ -431,17 +431,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             resolutions.push(resolution);
                             continue 'FORK;
                         };
-                trace!(
-                    "Chose package for decision: {}. remaining choices: {}",
-                    state.pubgrub.package_store[highest_priority_pkg],
-                    state
-                        .pubgrub
-                        .partial_solution
-                        .undecided_packages()
-                        .filter(|(p, _)| !state.pubgrub.package_store[**p].is_proxy())
-                        .map(|(p, _)| state.pubgrub.package_store[*p].to_string())
-                        .join(", ")
-                );
+                        trace!(
+                            "Chose package for decision: {}. remaining choices: {}",
+                            state.pubgrub.package_store[highest_priority_pkg],
+                            state
+                                .pubgrub
+                                .partial_solution
+                                .undecided_packages()
+                                .filter(|(p, _)| !state.pubgrub.package_store[**p].is_proxy())
+                                .map(|(p, _)| state.pubgrub.package_store[*p].to_string())
+                                .join(", ")
+                        );
 
                         highest_priority_pkg
                     };
