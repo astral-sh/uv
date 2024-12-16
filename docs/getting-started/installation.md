@@ -190,24 +190,9 @@ Then restart the shell or source the shell config file.
 
 ## Uninstallation
 
-If you need to remove uv from your system, just remove the `uv` and `uvx` binaries:
+If you need to remove uv from your system, follow these steps:
 
-=== "macOS and Linux"
-
-    ```console
-    $ rm ~/.local/bin/uv ~/.local/bin/uvx
-    ```
-
-=== "Windows"
-
-    ```powershell
-    $ rm $HOME\.local\bin\uv.exe
-    $ rm $HOME\.local\bin\uvx.exe
-    ```
-
-!!! tip
-
-    You may want to remove data that uv has stored before removing the binaries:
+1.  Clean up stored data (optional):
 
     ```console
     $ uv cache clean
@@ -215,11 +200,30 @@ If you need to remove uv from your system, just remove the `uv` and `uvx` binari
     $ rm -r "$(uv tool dir)"
     ```
 
-!!! note
+    !!! tip
 
-    Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
-    uninstall. Upgrading from an older version will not automatically remove the binaries from
-    `~/.cargo/bin`.
+        Before removing the binaries, you may want to remove any data that uv has stored.
+
+2.  Remove the uv and uvx binaries:
+
+    === "macOS and Linux"
+
+        ```console
+        $ rm ~/.local/bin/uv ~/.local/bin/uvx
+        ```
+
+    === "Windows"
+
+        ```powershell
+        $ rm $HOME\.local\bin\uv.exe
+        $ rm $HOME\.local\bin\uvx.exe
+        ```
+
+    !!! note
+
+        Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
+        uninstall. Upgrading from an older version will not automatically remove the binaries from
+        `~/.cargo/bin`.
 
 ## Next steps
 
