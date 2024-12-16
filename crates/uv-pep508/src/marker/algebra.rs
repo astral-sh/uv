@@ -984,6 +984,58 @@ impl InternerGuard<'_> {
             let a_and_b = conjunction(self, a, b);
             tree = disjunction(self, tree, a_and_b);
         }
+
+        // These are markers that must have the same value (i.e., they must both be true or both be
+        // false).
+        for (a, b) in [
+            // sys_platform == 'win32' and platform_system == 'Windows'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "win32".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Windows".to_string(),
+                },
+            ),
+            // sys_platform == 'darwin' and platform_system == 'Darwin'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Darwin".to_string(),
+                },
+            ),
+            // sys_platform == 'linux' and platform_system == 'Linux'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "linux".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::PlatformSystem,
+                    operator: MarkerOperator::Equal,
+                    value: "Linux".to_string(),
+                },
+            ),
+        ] {
+            let a = self.expression(a);
+            let b = self.expression(b);
+            let a_and_not_b = conjunction(self, a, b.not());
+            let not_a_and_b = conjunction(self, a.not(), b);
+            tree = disjunction(self, tree, a_and_not_b);
+            tree = disjunction(self, tree, not_a_and_b);
+        }
+
         self.state.exclusions = Some(tree);
         tree
     }
