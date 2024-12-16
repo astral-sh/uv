@@ -142,9 +142,7 @@ impl Display for IncompatibleDist {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
-                IncompatibleWheel::NoBinary => {
-                    f.write_str("no source distribution and using wheels is disabled")
-                }
+                IncompatibleWheel::NoBinary => f.write_str("no source distribution"),
                 IncompatibleWheel::Tag(tag) => match tag {
                     IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
@@ -175,9 +173,7 @@ impl Display for IncompatibleDist {
                 }
             },
             Self::Source(incompatibility) => match incompatibility {
-                IncompatibleSource::NoBuild => {
-                    f.write_str("no usable wheels and building from source is disabled")
-                }
+                IncompatibleSource::NoBuild => f.write_str("no usable wheels"),
                 IncompatibleSource::Yanked(yanked) => match yanked {
                     Yanked::Bool(_) => f.write_str("yanked"),
                     Yanked::Reason(reason) => write!(
