@@ -103,9 +103,12 @@ impl PubGrubPriorities {
         }
     }
 
+    /// Mark a package as prioritized by setting it to [`PubGrubPriority::ConflictEarly`], if it
+    /// doesn't have a higher priority already.
+    ///
     /// Returns whether the priority was changed, i.e., it's the first time we hit this condition
     /// for the package.
-    pub(crate) fn make_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
+    pub(crate) fn mark_conflict_early(&mut self, package: &PubGrubPackage) -> bool {
         let next = self.0.len();
         let Some(name) = package.name_no_root() else {
             // Not a correctness bug
@@ -117,7 +120,10 @@ impl PubGrubPriorities {
         };
         match self.0.entry(name.clone()) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
-                if matches!(entry.get(), PubGrubPriority::ConflictEarly(_)) {
+                if matches!(
+                    entry.get(),
+                    PubGrubPriority::ConflictEarly(_) | PubGrubPriority::Singleton(_)
+                ) {
                     // Already in the right category
                     return false;
                 };
@@ -132,7 +138,12 @@ impl PubGrubPriorities {
         }
     }
 
-    pub(crate) fn make_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
+    /// Mark a package as prioritized by setting it to [`PubGrubPriority::ConflictLate`], if it
+    /// doesn't have a higher priority already.
+    ///
+    /// Returns whether the priority was changed, i.e., it's the first time this package was
+    /// marked as conflicting above the threshold.
+    pub(crate) fn mark_conflict_late(&mut self, package: &PubGrubPackage) -> bool {
         let next = self.0.len();
         let Some(name) = package.name_no_root() else {
             // Not a correctness bug
@@ -147,7 +158,9 @@ impl PubGrubPriorities {
                 // The ConflictEarly` match avoids infinite loops.
                 if matches!(
                     entry.get(),
-                    PubGrubPriority::ConflictLate(_) | PubGrubPriority::ConflictEarly(_)
+                    PubGrubPriority::ConflictLate(_)
+                        | PubGrubPriority::ConflictEarly(_)
+                        | PubGrubPriority::Singleton(_)
                 ) {
                     // Already in the right category
                     return false;

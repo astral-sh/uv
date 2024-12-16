@@ -683,10 +683,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ///
     /// To be called after unit propagation.
     fn reprioritize_conflicts(state: &mut ForkState) {
-        for package in state.conflict_tracker.priotize.drain(..) {
+        for package in state.conflict_tracker.prioritize.drain(..) {
             let changed = state
                 .priorities
-                .make_conflict_early(&state.pubgrub.package_store[package]);
+                .mark_conflict_early(&state.pubgrub.package_store[package]);
             if changed {
                 debug!(
                     "Package {} has too many conflicts (affected), prioritizing",
@@ -701,10 +701,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        for package in state.conflict_tracker.depriotize.drain(..) {
+        for package in state.conflict_tracker.deprioritize.drain(..) {
             let changed = state
                 .priorities
-                .make_conflict_late(&state.pubgrub.package_store[package]);
+                .mark_conflict_late(&state.pubgrub.package_store[package]);
             if changed {
                 debug!(
                     "Package {} has too many conflicts (culprit), deprioritizing and backtracking",
@@ -2438,7 +2438,7 @@ impl ForkState {
                 .or_default();
             *culprit_count += 1;
             if *culprit_count == CONFLICT_THRESHOLD {
-                self.conflict_tracker.depriotize.push(incompatible);
+                self.conflict_tracker.deprioritize.push(incompatible);
             }
         }
         // Don't track conflicts between a marker package and the main package, when the
@@ -2448,7 +2448,7 @@ impl ForkState {
                 let incompatibility = self.pubgrub.incompatibility_store[incompatibility]
                     .iter()
                     .map(|(package, _term)| {
-                        format!("{:?}", self.pubgrub.package_store[package].clone(),)
+                        format!("{}", self.pubgrub.package_store[package].clone(),)
                     })
                     .join(", ");
                 if let Some(version) = version {
@@ -2467,7 +2467,7 @@ impl ForkState {
             let affected_count = self.conflict_tracker.affected.entry(self.next).or_default();
             *affected_count += 1;
             if *affected_count == CONFLICT_THRESHOLD {
-                self.conflict_tracker.priotize.push(self.next);
+                self.conflict_tracker.prioritize.push(self.next);
             }
         }
     }
@@ -3384,11 +3384,11 @@ struct ConflictTracker {
     /// Package(s) to be prioritized after the next unit propagation
     ///
     /// Distilled from `affected` for fast checking in the hot loop.
-    priotize: Vec<Id<PubGrubPackage>>,
+    prioritize: Vec<Id<PubGrubPackage>>,
     /// How often a package was decided earlier and caused another package to be discarded.
     culprit: FxHashMap<Id<PubGrubPackage>, usize>,
     /// Package(s) to be de-prioritized after the next unit propagation
     ///
     /// Distilled from `culprit` for fast checking in the hot loop.
-    depriotize: Vec<Id<PubGrubPackage>>,
+    deprioritize: Vec<Id<PubGrubPackage>>,
 }

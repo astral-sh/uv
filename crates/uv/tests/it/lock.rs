@@ -14433,7 +14433,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Adding transitive dependency for project==0.1.0: anyio*
     DEBUG Searching for a compatible version of anyio (*)
     DEBUG No compatible version found for: anyio
-    DEBUG Recording unit propagation conflict of anyio from incompatibility of (PubGrubPackage(Package { name: PackageName("project"), extra: None, dev: None, marker: true }))
+    DEBUG Recording unit propagation conflict of anyio from incompatibility of (project)
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
     DEBUG No compatible version found for: project
       × No solution found when resolving dependencies:
