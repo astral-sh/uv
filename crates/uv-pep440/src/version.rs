@@ -580,6 +580,21 @@ impl Version {
         Self::new(self.release().iter().copied())
     }
 
+    /// Return the version with trailing `.0` release segments removed.
+    ///
+    /// # Panics
+    ///
+    /// When the release is all zero segments.
+    #[inline]
+    #[must_use]
+    pub fn without_trailing_zeros(self) -> Self {
+        let mut release = self.release().to_vec();
+        while let Some(0) = release.last() {
+            release.pop();
+        }
+        self.with_release(release)
+    }
+
     /// Set the min-release component and return the updated version.
     ///
     /// The "min" component is internal-only, and does not exist in PEP 440.

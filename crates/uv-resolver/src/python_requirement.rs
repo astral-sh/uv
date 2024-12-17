@@ -24,8 +24,15 @@ impl PythonRequirement {
     /// [`PythonVersion`].
     pub fn from_python_version(interpreter: &Interpreter, python_version: &PythonVersion) -> Self {
         let exact = interpreter.python_full_version().version.clone();
-        let installed = interpreter.python_full_version().version.only_release();
-        let target = python_version.python_full_version().only_release();
+        let installed = interpreter
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
+        let target = python_version
+            .python_full_version()
+            .only_release()
+            .without_trailing_zeros();
         Self {
             exact,
             installed: RequiresPython::greater_than_equal_version(&installed),
@@ -45,8 +52,16 @@ impl PythonRequirement {
 
     /// Create a [`PythonRequirement`] to resolve against an [`Interpreter`].
     pub fn from_interpreter(interpreter: &Interpreter) -> Self {
-        let exact = interpreter.python_full_version().version.clone();
-        let installed = interpreter.python_full_version().version.only_release();
+        let exact = interpreter
+            .python_full_version()
+            .version
+            .clone()
+            .without_trailing_zeros();
+        let installed = interpreter
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
         Self {
             exact,
             installed: RequiresPython::greater_than_equal_version(&installed),
@@ -65,8 +80,16 @@ impl PythonRequirement {
         marker_env: &MarkerEnvironment,
         requires_python: RequiresPython,
     ) -> Self {
-        let exact = marker_env.python_full_version().version.clone();
-        let installed = marker_env.python_full_version().version.only_release();
+        let exact = marker_env
+            .python_full_version()
+            .version
+            .clone()
+            .without_trailing_zeros();
+        let installed = marker_env
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
         Self {
             exact,
             installed: RequiresPython::greater_than_equal_version(&installed),
