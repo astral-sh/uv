@@ -30,7 +30,7 @@ SELF_DIR = Path(__file__).parent
 REPO_ROOT = SELF_DIR.parent
 VERSIONS_FILE = REPO_ROOT / "crates" / "uv-python" / "download-metadata.json"
 PREFIXES = [
-    "https://github.com/indygreg/python-build-standalone/releases/download/",
+    "https://github.com/astral-sh/python-build-standalone/releases/download/",
     "https://downloads.python.org/pypy/",
 ]
 

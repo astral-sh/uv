@@ -272,10 +272,10 @@ uv supports downloading and installing CPython and PyPy distributions.
 ### CPython distributions
 
 As Python does not publish official distributable CPython binaries, uv instead uses pre-built
-third-party distributions from the
-[`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project.
-`python-build-standalone` is partially maintained by the uv maintainers and is used in many other
-Python projects, like [Rye](https://github.com/astral-sh/rye) and
+distributions from the Astral
+[`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
+`python-build-standalone` is also is used in many other Python projects, like
+[Rye](https://github.com/astral-sh/rye), [Mise](https://mise.jdx.dev/lang/python.html), and
 [bazelbuild/rules_python](https://github.com/bazelbuild/rules_python).
 
 The uv Python distributions are self-contained, highly-portable, and performant. While Python can be

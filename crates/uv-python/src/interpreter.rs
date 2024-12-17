@@ -434,7 +434,7 @@ impl Interpreter {
     /// `python-build-standalone`; if it returns `false`, the interpreter is definitely _not_ from
     /// `python-build-standalone`.
     ///
-    /// See: <https://github.com/indygreg/python-build-standalone/issues/382>
+    /// See: <https://github.com/astral-sh/python-build-standalone/issues/382>
     pub fn is_standalone(&self) -> bool {
         self.standalone
     }

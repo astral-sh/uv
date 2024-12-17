@@ -657,7 +657,7 @@ impl ManagedPythonDownload {
             LenientImplementationName::Known(ImplementationName::CPython) => {
                 if let Some(mirror) = python_install_mirror {
                     let Some(suffix) = self.url.strip_prefix(
-                        "https://github.com/indygreg/python-build-standalone/releases/download/",
+                        "https://github.com/astral-sh/python-build-standalone/releases/download/",
                     ) else {
                         return Err(Error::Mirror(EnvVars::UV_PYTHON_INSTALL_MIRROR, self.url));
                     };

@@ -460,8 +460,8 @@ fn help_subsubcommand() {
 
     Multiple Python versions may be requested.
 
-    Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone`
-    project. PyPy distributions are downloaded from `python.org`.
+    Supports CPython and PyPy. CPython distributions are downloaded from the Astral
+    `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
 
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
@@ -500,8 +500,8 @@ fn help_subsubcommand() {
               Set the URL to use as the source for downloading Python installations.
               
               The provided URL will replace
-              `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
-              `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+              `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
+              `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
               

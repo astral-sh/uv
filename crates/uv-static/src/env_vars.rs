@@ -218,11 +218,11 @@ impl EnvVars {
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 
-    /// Managed Python installations are downloaded from
-    /// [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
+    /// Managed Python installations are downloaded from the Astral
+    /// [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
     /// This variable can be set to a mirror URL to use a different source for Python installations.
-    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
-    /// `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    /// The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
+    /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     pub const UV_PYTHON_INSTALL_MIRROR: &'static str = "UV_PYTHON_INSTALL_MIRROR";
 

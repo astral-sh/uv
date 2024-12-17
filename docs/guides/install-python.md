@@ -23,7 +23,7 @@ system. If you've previously installed Python with uv, a new version will not be
 
 !!! note
 
-    Python does not publish official distributable binaries. As such, uv uses third-party distributions from the [`python-build-standalone`](https://github.com/indygreg/python-build-standalone) project. The project is partially maintained by the uv maintainers and is used by other prominent Python projects (e.g., [Rye](https://github.com/astral-sh/rye), [Bazel](https://github.com/bazelbuild/rules_python)). See the [Python distributions](../concepts/python-versions.md#managed-python-distributions) documentation for more details.
+    Python does not publish official distributable binaries. As such, uv uses distributions from Astral [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project. See the [Python distributions](../concepts/python-versions.md#managed-python-distributions) documentation for more details.
 
 <!-- TODO(zanieb): Restore when Python shim management is added
 Note that when an automatic Python installation occurs, the `python` command will not be added to the shell. Use `uv python install-shim` to ensure the `python` shim is installed.
