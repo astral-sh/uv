@@ -119,8 +119,31 @@ impl PyProjectToml {
         self.project.readme.as_ref()
     }
 
-    pub(crate) fn license_files(&self) -> Option<&[String]> {
-        self.project.license_files.as_deref()
+    /// The license files that need to be included in the source distribution.
+    pub(crate) fn license_files_source_dist(&self) -> impl Iterator<Item = &str> {
+        let license_file = self
+            .project
+            .license
+            .as_ref()
+            .and_then(|license| license.file())
+            .into_iter();
+        let license_files = self
+            .project
+            .license_files
+            .iter()
+            .flatten()
+            .map(String::as_str);
+        license_files.chain(license_file)
+    }
+
+    /// The license files that need to be included in the wheel.
+    pub(crate) fn license_files_wheel(&self) -> impl Iterator<Item = &str> {
+        // The pre-PEP 639 `license = { file = "..." }` is included inline in `METADATA`.
+        self.project
+            .license_files
+            .iter()
+            .flatten()
+            .map(String::as_str)
     }
 
     pub(crate) fn settings(&self) -> Option<&BuildBackendSettings> {
@@ -682,8 +705,18 @@ pub(crate) enum License {
     },
     File {
         /// The file containing the license text.
-        file: PathBuf,
+        file: String,
     },
+}
+
+impl License {
+    fn file(&self) -> Option<&str> {
+        if let Self::File { file } = self {
+            Some(file)
+        } else {
+            None
+        }
+    }
 }
 
 /// A `project.authors` or `project.maintainers` entry as specified in
