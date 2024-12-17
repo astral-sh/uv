@@ -598,7 +598,7 @@ enum InterpreterInfoResult {
 pub enum InterpreterInfoError {
     #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
     LibcNotFound,
-    #[error("Unknown operation system: `{operating_system}`")]
+    #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
     #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
     UnsupportedPythonVersion { python_version: String },
