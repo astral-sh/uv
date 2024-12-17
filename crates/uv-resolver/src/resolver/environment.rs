@@ -435,7 +435,7 @@ impl<'d> ForkingPossibility<'d> {
         env: &ResolverEnvironment,
         dep: &'d PubGrubDependency,
     ) -> ForkingPossibility<'d> {
-        let marker = dep.package.marker().unwrap_or(MarkerTree::TRUE);
+        let marker = dep.package.marker();
         if !env.included_by_marker(marker) {
             ForkingPossibility::DependencyAlwaysExcluded
         } else if marker.is_true() {
@@ -506,7 +506,7 @@ impl<'d> Forker<'d> {
     /// Returns true if the dependency represented by this forker may be
     /// included in the given resolver environment.
     pub(crate) fn included(&self, env: &ResolverEnvironment) -> bool {
-        let marker = self.package.marker().unwrap_or(MarkerTree::TRUE);
+        let marker = self.package.marker();
         env.included_by_marker(marker)
     }
 }

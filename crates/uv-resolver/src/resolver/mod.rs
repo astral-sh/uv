@@ -3053,16 +3053,13 @@ impl Forks {
                 // For example, given `requires-python = ">=3.7"` and `uv ; python_version >= "3.8"`,
                 // where uv itself only supports Python 3.8 and later, we need to fork to ensure
                 // that the resolution can find a solution.
-                if !dep
-                    .package
-                    .marker()
-                    .and_then(marker::requires_python)
-                    .is_some_and(|bound| python_requirement.raises(&bound))
+                if marker::requires_python(dep.package.marker())
+                    .is_none_or(|bound| !python_requirement.raises(&bound))
                 {
                     let dep = deps.pop().unwrap();
-                    let markers = dep.package.marker().unwrap_or(MarkerTree::TRUE);
+                    let marker = dep.package.marker();
                     for fork in &mut forks {
-                        if fork.env.included_by_marker(markers) {
+                        if fork.env.included_by_marker(marker) {
                             fork.add_dependency(dep.clone());
                         }
                     }
@@ -3249,10 +3246,8 @@ impl Fork {
     fn set_env(&mut self, env: ResolverEnvironment) {
         self.env = env;
         self.dependencies.retain(|dep| {
-            let Some(markers) = dep.package.marker() else {
-                return true;
-            };
-            if self.env.included_by_marker(markers) {
+            let marker = dep.package.marker();
+            if self.env.included_by_marker(marker) {
                 return true;
             }
             if let Some(conflicting_item) = dep.package.conflicting_item() {
