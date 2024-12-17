@@ -4833,7 +4833,7 @@ dependencies = [
  "futures",
  "itertools 0.13.0",
  "rustc-hash",
- "thiserror 2.0.3",
+ "thiserror 2.0.7",
  "tokio",
  "tracing",
  "uv-build-backend",
