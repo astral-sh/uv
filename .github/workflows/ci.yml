@@ -1857,7 +1857,7 @@ jobs:
           cargo run --bin uv -- pip compile scripts/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --profile profiling --features codspeed --features performance -p uv-bench
+        run: cargo codspeed build --profile profiling --features "codspeed,performance" -p uv-bench
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@v3
