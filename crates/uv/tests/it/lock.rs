@@ -3232,8 +3232,8 @@ fn lock_requires_python() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (python_full_version >= '3.7' and python_full_version < '3.7.9'):
-      ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and the requested Python version (>=3.7) does not satisfy Python>=3.7.9,<3.8, we can conclude that Python>=3.7.9 cannot be used.
-          And because pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4 and only pygls<=1.3.0 is available, we can conclude that all of:
+      ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
+          And because only pygls<=1.3.0 is available, we can conclude that all of:
               pygls>=1.1.0,<1.3.0
               pygls>1.3.0
            cannot be used. (1)

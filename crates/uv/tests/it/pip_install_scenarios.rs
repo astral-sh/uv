@@ -3722,19 +3722,14 @@ fn python_greater_than_current_excluded() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that all of:
-              Python>=3.10,<3.11
-              Python>=3.12
-           cannot be used.
-          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 cannot be used.
-          And because package-a==2.0.0 depends on Python>=3.10 and only the following versions of package-a are available:
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==2.0.0 depends on Python>=3.10, we can conclude that package-a==2.0.0 cannot be used.
+          And because only the following versions of package-a are available:
               package-a<=2.0.0
               package-a==3.0.0
               package-a==4.0.0
           we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 cannot be used.
-          And because package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
           And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
 
           Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
