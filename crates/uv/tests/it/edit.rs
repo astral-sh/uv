@@ -1113,7 +1113,7 @@ fn add_remove_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `anyio` is in the `dev` group (try: `uv remove anyio --group dev`)
+    hint: `anyio` is in the `dev` group (try: `uv remove anyio --group dev`)
     error: The dependency `anyio` could not be found in `project.dependencies`
     "###);
 
@@ -1336,7 +1336,7 @@ fn add_remove_optional() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `anyio` is an optional dependency (try: `uv remove anyio --optional io`)
+    hint: `anyio` is an optional dependency (try: `uv remove anyio --optional io`)
     error: The dependency `anyio` could not be found in `project.dependencies`
     "###);
 
@@ -4863,7 +4863,7 @@ fn remove_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: `anyio` is a production dependency
+    hint: `anyio` is a production dependency
     error: The dependency `anyio` could not be found in `dependency-groups.test`
     "###);
 
