@@ -393,6 +393,7 @@ pub(crate) async fn pip_install(
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
+        .build_options(build_options.clone())
         .build();
 
     // Resolve the requirements.

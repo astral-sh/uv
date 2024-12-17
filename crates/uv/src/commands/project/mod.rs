@@ -1122,6 +1122,7 @@ pub(crate) async fn resolve_environment<'a>(
         .fork_strategy(fork_strategy)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
+        .build_options(build_options.clone())
         .build();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -1478,6 +1479,7 @@ pub(crate) async fn update_environment(
         .fork_strategy(*fork_strategy)
         .exclude_newer(*exclude_newer)
         .index_strategy(*index_strategy)
+        .build_options(build_options.clone())
         .build();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them

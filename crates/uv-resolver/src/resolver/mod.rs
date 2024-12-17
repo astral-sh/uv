@@ -216,7 +216,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             index: index.clone(),
             git: git.clone(),
             capabilities: capabilities.clone(),
-            selector: CandidateSelector::for_resolution(options, &manifest, &env),
+            selector: CandidateSelector::for_resolution(&options, &manifest, &env),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
@@ -675,7 +675,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.python_requirement,
             &self.conflicts,
             self.selector.resolution_strategy(),
-            self.options,
+            self.options.clone(),
         )
     }
 
@@ -2185,7 +2185,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             fork_urls,
             env,
             self.workspace_members.clone(),
-            self.options,
+            self.options.clone(),
         ))
     }
 

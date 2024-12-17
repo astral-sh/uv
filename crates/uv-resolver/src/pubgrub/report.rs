@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
 use rustc_hash::FxHashMap;
 
-use uv_configuration::IndexStrategy;
+use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
     IndexLocations, IndexUrl,
@@ -557,7 +557,7 @@ impl PubGrubReportFormatter<'_> {
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         workspace_members: &BTreeSet<PackageName>,
-        options: Options,
+        options: &Options,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         match derivation_tree {
@@ -601,11 +601,13 @@ impl PubGrubReportFormatter<'_> {
                         IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
                             output_hints.insert(PubGrubHint::NoBinary {
                                 package: package.clone(),
+                                option: options.build_options.no_binary().clone(),
                             });
                         }
                         IncompatibleDist::Source(IncompatibleSource::NoBuild) => {
                             output_hints.insert(PubGrubHint::NoBuild {
                                 package: package.clone(),
+                                option: options.build_options.no_build().clone(),
                             });
                         }
                         _ => {}
@@ -1009,9 +1011,17 @@ pub(crate) enum PubGrubHint {
         next_index: IndexUrl,
     },
     /// No wheels are available for a package, and using source distributions was disabled.
-    NoBuild { package: PubGrubPackage },
+    NoBuild {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        option: NoBuild,
+    },
     /// No source distributions are available for a package, and using pre-built wheels was disabled.
-    NoBinary { package: PubGrubPackage },
+    NoBinary {
+        package: PubGrubPackage,
+        // excluded from `PartialEq` and `Hash`
+        option: NoBinary,
+    },
     /// An index returned an Unauthorized (401) response.
     UnauthorizedIndex { index: IndexUrl },
     /// An index returned a Forbidden (403) response.
@@ -1132,8 +1142,8 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
             PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
             PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
-            PubGrubHint::NoBuild { package } => Self::NoBuild { package },
-            PubGrubHint::NoBinary { package } => Self::NoBinary { package },
+            PubGrubHint::NoBuild { package, .. } => Self::NoBuild { package },
+            PubGrubHint::NoBinary { package, .. } => Self::NoBinary { package },
         }
     }
 }
@@ -1408,19 +1418,33 @@ impl std::fmt::Display for PubGrubHint {
                     "403 Forbidden".red(),
                 )
             }
-            Self::NoBuild { package } => {
+            Self::NoBuild { package, option } => {
+                let option = match option {
+                    NoBuild::All => "for all packages (i.e., with `--no-build`)".to_string(),
+                    NoBuild::Packages(_) => {
+                        format!("for `{package}` (i.e., with `--no-build-package {package}`)",)
+                    }
+                    NoBuild::None => unreachable!(),
+                };
                 write!(
                     f,
-                    "{}{} Wheels are required for `{}` because building from source is disabled",
+                    "{}{} Wheels are required for `{}` because building from source is disabled {option}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
                 )
             }
-            Self::NoBinary { package } => {
+            Self::NoBinary { package, option } => {
+                let option = match option {
+                    NoBinary::All => "for all packages (i.e., with `--no-binary`)".to_string(),
+                    NoBinary::Packages(_) => {
+                        format!("for `{package}` (i.e., with `--no-binary-package {package}`)",)
+                    }
+                    NoBinary::None => unreachable!(),
+                };
                 write!(
                     f,
-                    "{}{} A source distributions is required for `{}` because using pre-built wheels is disabled",
+                    "{}{} A source distribution is required for `{}` because using pre-built wheels is disabled {option}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),

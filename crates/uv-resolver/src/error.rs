@@ -356,7 +356,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.fork_urls,
             &self.env,
             &self.workspace_members,
-            self.options,
+            &self.options,
             &mut additional_hints,
         );
         for hint in additional_hints {

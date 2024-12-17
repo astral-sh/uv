@@ -177,6 +177,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer)
                 .index_strategy(self.index_strategy)
+                .build_options(self.build_options.clone())
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,

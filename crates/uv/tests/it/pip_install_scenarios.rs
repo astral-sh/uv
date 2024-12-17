@@ -4205,7 +4205,7 @@ fn no_wheels_no_build() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no usable wheels, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are required for `package-a` because building from source is disabled
+          hint: Wheels are required for `package-a` because building from source is disabled for `package-a` (i.e., with `--no-build-package package-a`)
     "###);
 
     assert_not_installed(&context.venv, "no_wheels_no_build_a", &context.temp_dir);
@@ -4315,7 +4315,7 @@ fn only_wheels_no_binary() {
       ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no source distribution, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: A source distributions is required for `package-a` because using pre-built wheels is disabled
+          hint: A source distribution is required for `package-a` because using pre-built wheels is disabled for `package-a` (i.e., with `--no-binary-package package-a`)
     "###);
 
     assert_not_installed(&context.venv, "only_wheels_no_binary_a", &context.temp_dir);

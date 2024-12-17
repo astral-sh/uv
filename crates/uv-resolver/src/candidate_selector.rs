@@ -28,7 +28,7 @@ pub(crate) struct CandidateSelector {
 impl CandidateSelector {
     /// Return a [`CandidateSelector`] for the given [`Manifest`].
     pub(crate) fn for_resolution(
-        options: Options,
+        options: &Options,
         manifest: &Manifest,
         env: &ResolverEnvironment,
     ) -> Self {
