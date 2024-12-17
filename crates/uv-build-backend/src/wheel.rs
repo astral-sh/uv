@@ -175,7 +175,7 @@ fn write_wheel(
     debug!("Visited {files_visited} files for wheel build");
 
     // Add the license files
-    if let Some(license_files) = &pyproject_toml.license_files() {
+    if pyproject_toml.license_files_wheel().next().is_some() {
         debug!("Adding license files");
         let license_dir = format!(
             "{}-{}.dist-info/licenses/",
@@ -186,7 +186,7 @@ fn write_wheel(
         wheel_subdir_from_globs(
             source_tree,
             &license_dir,
-            license_files,
+            pyproject_toml.license_files_wheel(),
             &mut wheel_writer,
             "project.license-files",
         )?;
@@ -429,14 +429,15 @@ pub(crate) fn build_exclude_matcher(
 fn wheel_subdir_from_globs(
     src: &Path,
     target: &str,
-    globs: &[String],
+    globs: impl IntoIterator<Item = impl AsRef<str>>,
     wheel_writer: &mut impl DirectoryWriter,
     // For error messages
     globs_field: &str,
 ) -> Result<(), Error> {
     let license_files_globs: Vec<_> = globs
-        .iter()
+        .into_iter()
         .map(|license_files| {
+            let license_files = license_files.as_ref();
             trace!(
                 "Including {} at `{}` with `{}`",
                 globs_field,

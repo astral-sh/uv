@@ -180,9 +180,10 @@ mod tests {
     use super::*;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
+    use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
-    use std::io::BufReader;
+    use std::io::{BufReader, Read};
     use tempfile::TempDir;
     use uv_fs::{copy_dir_all, relative_to};
 
@@ -390,5 +391,74 @@ mod tests {
             fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
             fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap()
         );
+    }
+
+    /// Test that `license = { file = "LICENSE" }` is supported.
+    #[test]
+    fn license_file_pre_pep639() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "pep-pep639-license"
+            version = "1.0.0"
+            license = { file = "license.txt" }
+
+            [build-system]
+            requires = ["uv>=0.5.15,<0.6"]
+            build-backend = "uv"
+        "#
+            },
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("pep_pep639_license")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("pep_pep639_license")
+                .join("__init__.py"),
+        )
+        .unwrap();
+        fs_err::write(
+            src.path().join("license.txt"),
+            "Copy carefully.\nSincerely, the authors",
+        )
+        .unwrap();
+
+        // Build a wheel from a source distribution
+        let output_dir = TempDir::new().unwrap();
+        build_source_dist(src.path(), output_dir.path(), "0.5.15").unwrap();
+        let sdist_tree = TempDir::new().unwrap();
+        let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
+        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+        source_dist.unpack(sdist_tree.path()).unwrap();
+        build_wheel(
+            &sdist_tree.path().join("pep_pep639_license-1.0.0"),
+            output_dir.path(),
+            None,
+            "0.5.15",
+        )
+        .unwrap();
+        let wheel = output_dir
+            .path()
+            .join("pep_pep639_license-1.0.0-py3-none-any.whl");
+        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
+
+        let mut metadata = String::new();
+        wheel
+            .by_name("pep_pep639_license-1.0.0.dist-info/METADATA")
+            .unwrap()
+            .read_to_string(&mut metadata)
+            .unwrap();
+
+        assert_snapshot!(metadata, @r###"
+        Metadata-Version: 2.3
+        Name: pep-pep639-license
+        Version: 1.0.0
+        License: Copy carefully.
+                 Sincerely, the authors
+        "###);
     }
 }
