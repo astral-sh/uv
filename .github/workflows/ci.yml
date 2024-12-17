@@ -220,7 +220,7 @@ jobs:
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on:
-      labels: "depot-macos-latest"
+      labels: "macos-latest-xlarge"
     name: "cargo test | macos"
     steps:
       - uses: actions/checkout@v4
