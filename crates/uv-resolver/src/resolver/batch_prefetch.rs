@@ -235,7 +235,11 @@ impl BatchPrefetcher {
             }
         }
 
-        debug!("Prefetching {prefetch_count} {name} versions");
+        match prefetch_count {
+            0 => debug!("No `{name}` versions to prefetch"),
+            1 => debug!("Prefetched 1 `{name}` version"),
+            _ => debug!("Prefetched {prefetch_count} `{name}` versions"),
+        }
 
         self.last_prefetch.insert(name.clone(), num_tried);
         Ok(())
