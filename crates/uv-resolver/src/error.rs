@@ -338,6 +338,10 @@ impl std::fmt::Display for NoSolutionError {
 
         simplify_derivation_tree_ranges(&mut tree, &self.available_versions);
 
+        while collapse_redundant_no_versions_tree(&mut tree) {
+            // Continue collapsing until no more redundant nodes are found
+        }
+
         if should_display_tree {
             display_tree(&tree, "Resolver derivation tree after reduction");
         }
@@ -480,6 +484,81 @@ fn collapse_redundant_no_versions(
                 _ => {
                     collapse_redundant_no_versions(Arc::make_mut(&mut derived.cause1));
                     collapse_redundant_no_versions(Arc::make_mut(&mut derived.cause2));
+                }
+            }
+        }
+    }
+}
+
+/// Given a [`DerivationTree`], collapse any derived trees with two `NoVersions` nodes for the same
+/// package. For example, if we have a tree like:
+///
+/// ```text
+/// term Python>=3.7.9
+///   no versions of Python>=3.7.9, <3.8
+///   no versions of Python>=3.8
+/// ```
+///
+/// We can simplify this to:
+///
+/// ```text
+/// no versions of Python>=3.7.9
+/// ```
+///
+/// This function returns a `bool` indicating if a change was made. This allows for repeated calls,
+/// e.g., the following tree contains nested redundant trees:
+///
+/// ```text
+/// term Python>=3.10
+///   no versions of Python>=3.11, <3.12
+///   term Python>=3.10, <3.11 | >=3.12
+///     no versions of Python>=3.12
+///     no versions of Python>=3.10, <3.11
+/// ```
+///
+/// We can simplify this to:
+///
+/// ```text
+/// no versions of Python>=3.10
+/// ```
+///
+/// This appears to be common with the way the resolver currently models Python version
+/// incompatibilities.
+fn collapse_redundant_no_versions_tree(
+    tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+) -> bool {
+    match tree {
+        DerivationTree::External(_) => false,
+        DerivationTree::Derived(derived) => {
+            match (
+                Arc::make_mut(&mut derived.cause1),
+                Arc::make_mut(&mut derived.cause2),
+            ) {
+                // If we have a tree with two `NoVersions` nodes for the same package...
+                (
+                    DerivationTree::External(External::NoVersions(package, versions)),
+                    DerivationTree::External(External::NoVersions(other_package, other_versions)),
+                ) if package == other_package => {
+                    // Retrieve the terms from the parent.
+                    let Some(Term::Positive(term)) = derived.terms.get(package) else {
+                        return false;
+                    };
+
+                    // If they're both subsets of the term, then drop this node in favor of the term
+                    if versions.subset_of(term) && other_versions.subset_of(term) {
+                        *tree = DerivationTree::External(External::NoVersions(
+                            package.clone(),
+                            term.clone(),
+                        ));
+                        return true;
+                    }
+
+                    false
+                }
+                // If not, just recurse
+                _ => {
+                    collapse_redundant_no_versions_tree(Arc::make_mut(&mut derived.cause1))
+                        || collapse_redundant_no_versions_tree(Arc::make_mut(&mut derived.cause2))
                 }
             }
         }
