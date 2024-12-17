@@ -192,7 +192,7 @@ pub(crate) fn simplify_conflict_markers(
 
     let mut inferences: FxHashMap<NodeIndex, Vec<FxHashSet<Inference>>> = FxHashMap::default();
     for (node_id, sets) in activated {
-        let mut new_sets = vec![];
+        let mut new_sets = Vec::with_capacity(sets.len());
         for set in sets {
             let mut new_set = FxHashSet::default();
             for item in set {
