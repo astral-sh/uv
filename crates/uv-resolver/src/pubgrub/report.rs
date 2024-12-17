@@ -204,12 +204,8 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                         _ => (),
                     }
                 }
-                if let [(p, t)] = slice {
-                    if PackageTerm::new(p, t, self).plural() {
-                        result.push_str(" are incompatible");
-                    } else {
-                        result.push_str(" is incompatible");
-                    }
+                if slice.len() == 1 {
+                    result.push_str(" cannot be used");
                 } else {
                     result.push_str(" are incompatible");
                 }
@@ -1442,22 +1438,6 @@ impl PackageTerm<'_> {
             package,
             term,
             formatter,
-        }
-    }
-
-    /// Returns `true` if the predicate following this package term should be singular or plural.
-    fn plural(&self) -> bool {
-        match self.term {
-            Term::Positive(set) => self.formatter.compatible_range(self.package, set).plural(),
-            Term::Negative(set) => {
-                if set.as_singleton().is_some() {
-                    false
-                } else {
-                    self.formatter
-                        .compatible_range(self.package, &set.complement())
-                        .plural()
-                }
-            }
         }
     }
 }
