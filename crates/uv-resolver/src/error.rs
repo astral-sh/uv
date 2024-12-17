@@ -20,6 +20,7 @@ use uv_static::EnvVars;
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
+use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
@@ -333,10 +334,17 @@ impl std::fmt::Display for NoSolutionError {
         }
 
         collapse_unavailable_versions(&mut tree);
-        collapse_redundant_no_versions(&mut tree);
         collapse_redundant_depends_on_no_versions(&mut tree);
 
-        simplify_derivation_tree_ranges(&mut tree, &self.available_versions);
+        simplify_derivation_tree_ranges(
+            &mut tree,
+            &self.available_versions,
+            &self.selector,
+            &self.env,
+        );
+
+        // This needs to be applied _after_ simplification of the ranges
+        collapse_redundant_no_versions(&mut tree);
 
         while collapse_redundant_no_versions_tree(&mut tree) {
             // Continue collapsing until no more redundant nodes are found
@@ -456,15 +464,17 @@ fn collapse_redundant_no_versions(
                     // First, always recursively visit the other side of the tree
                     collapse_redundant_no_versions(other);
 
-                    let DerivationTree::Derived(derived) = other else {
+                    // Retrieve the nearest terms, either alongside this node or from the parent.
+                    let package_terms = if let DerivationTree::Derived(derived) = other {
+                        derived.terms.get(package)
+                    } else {
+                        derived.terms.get(package)
+                    };
+
+                    let Some(Term::Positive(term)) = package_terms else {
                         return;
                     };
 
-                    // If the range in the conclusion (terms) matches the range of no versions,
-                    // then we'll drop this node
-                    let Some(Term::Positive(term)) = derived.terms.get(package) else {
-                        return;
-                    };
                     let versions = versions.complement();
 
                     // If we're disqualifying a single version, this is important to retain, e.g,
@@ -473,11 +483,13 @@ fn collapse_redundant_no_versions(
                         return;
                     }
 
-                    if *term != versions {
+                    // If the range in the conclusion (terms) matches the range of no versions,
+                    // then we'll drop this node. If the range is "all versions", then there's no
+                    // also no need to enumerate the available versions.
+                    if *term != Range::full() && *term != versions {
                         return;
                     }
 
-                    // Replace this node with the other tree
                     *tree = other.clone();
                 }
                 // If not, just recurse
@@ -1088,24 +1100,50 @@ impl std::fmt::Display for NoSolutionHeader {
 fn simplify_derivation_tree_ranges(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
     available_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
+    candidate_selector: &CandidateSelector,
+    resolver_environment: &ResolverEnvironment,
 ) {
     match tree {
         DerivationTree::External(external) => match external {
             External::FromDependencyOf(package1, versions1, package2, versions2) => {
-                if let Some(simplified) = simplify_range(versions1, package1, available_versions) {
+                if let Some(simplified) = simplify_range(
+                    versions1,
+                    package1,
+                    available_versions,
+                    candidate_selector,
+                    resolver_environment,
+                ) {
                     *versions1 = simplified;
                 }
-                if let Some(simplified) = simplify_range(versions2, package2, available_versions) {
+                if let Some(simplified) = simplify_range(
+                    versions2,
+                    package2,
+                    available_versions,
+                    candidate_selector,
+                    resolver_environment,
+                ) {
                     *versions2 = simplified;
                 }
             }
             External::NoVersions(package, versions) => {
-                if let Some(simplified) = simplify_range(versions, package, available_versions) {
+                if let Some(simplified) = simplify_range(
+                    versions,
+                    package,
+                    available_versions,
+                    candidate_selector,
+                    resolver_environment,
+                ) {
                     *versions = simplified;
                 }
             }
             External::Custom(package, versions, _) => {
-                if let Some(simplified) = simplify_range(versions, package, available_versions) {
+                if let Some(simplified) = simplify_range(
+                    versions,
+                    package,
+                    available_versions,
+                    candidate_selector,
+                    resolver_environment,
+                ) {
                     *versions = simplified;
                 }
             }
@@ -1113,8 +1151,18 @@ fn simplify_derivation_tree_ranges(
         },
         DerivationTree::Derived(derived) => {
             // Recursively simplify both sides of the tree
-            simplify_derivation_tree_ranges(Arc::make_mut(&mut derived.cause1), available_versions);
-            simplify_derivation_tree_ranges(Arc::make_mut(&mut derived.cause2), available_versions);
+            simplify_derivation_tree_ranges(
+                Arc::make_mut(&mut derived.cause1),
+                available_versions,
+                candidate_selector,
+                resolver_environment,
+            );
+            simplify_derivation_tree_ranges(
+                Arc::make_mut(&mut derived.cause2),
+                available_versions,
+                candidate_selector,
+                resolver_environment,
+            );
 
             // Simplify the terms
             derived.terms = std::mem::take(&mut derived.terms)
@@ -1122,10 +1170,24 @@ fn simplify_derivation_tree_ranges(
                 .map(|(pkg, term)| {
                     let term = match term {
                         Term::Positive(versions) => Term::Positive(
-                            simplify_range(&versions, &pkg, available_versions).unwrap_or(versions),
+                            simplify_range(
+                                &versions,
+                                &pkg,
+                                available_versions,
+                                candidate_selector,
+                                resolver_environment,
+                            )
+                            .unwrap_or(versions),
                         ),
                         Term::Negative(versions) => Term::Negative(
-                            simplify_range(&versions, &pkg, available_versions).unwrap_or(versions),
+                            simplify_range(
+                                &versions,
+                                &pkg,
+                                available_versions,
+                                candidate_selector,
+                                resolver_environment,
+                            )
+                            .unwrap_or(versions),
                         ),
                     };
                     (pkg, term)
@@ -1142,6 +1204,8 @@ fn simplify_range(
     range: &Range<Version>,
     package: &PubGrubPackage,
     available_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
+    candidate_selector: &CandidateSelector,
+    resolver_environment: &ResolverEnvironment,
 ) -> Option<Range<Version>> {
     // If there's not a package name or available versions, we can't simplify anything
     let name = package.name()?;
@@ -1159,6 +1223,39 @@ fn simplify_range(
         }
     }
 
+    // Check if pre-releases are allowed
+    let prereleases_not_allowed = candidate_selector
+        .prerelease_strategy()
+        .allows(name, resolver_environment)
+        != AllowPrerelease::Yes;
+
+    let any_prerelease = range.iter().any(|(start, end)| {
+        let is_pre1 = match start {
+            Bound::Included(version) => version.any_prerelease(),
+            Bound::Excluded(version) => version.any_prerelease(),
+            Bound::Unbounded => false,
+        };
+        let is_pre2 = match end {
+            Bound::Included(version) => version.any_prerelease(),
+            Bound::Excluded(version) => version.any_prerelease(),
+            Bound::Unbounded => false,
+        };
+        is_pre1 || is_pre2
+    });
+
     // Simplify the range, as implemented in PubGrub
-    Some(range.simplify(versions.iter()))
+    Some(range.simplify(versions.iter().filter(|version| {
+        // If there are pre-releases in the range segments, we need to include pre-releases
+        if any_prerelease {
+            return true;
+        }
+
+        // If pre-releases are not allowed, filter out pre-releases
+        if prereleases_not_allowed && version.any_prerelease() {
+            return false;
+        }
+
+        // Otherwise, include the version
+        true
+    })))
 }
