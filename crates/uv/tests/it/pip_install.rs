@@ -2176,7 +2176,7 @@ fn install_only_binary_all_and_no_binary_all() {
 
           hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
-          hint: Wheels are required for `anyio` because building from source is disabled
+          hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
     "###
     );
 
@@ -2269,7 +2269,7 @@ fn only_binary_requirements_txt() {
       × No solution found when resolving dependencies:
       ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are required for `django-allauth` because building from source is disabled
+          hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
     "###
     );
 }

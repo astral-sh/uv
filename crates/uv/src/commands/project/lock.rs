@@ -472,6 +472,7 @@ async fn do_lock(
         .fork_strategy(fork_strategy)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
+        .build_options(build_options.clone())
         .build();
     let hasher = HashStrategy::Generate;
 
