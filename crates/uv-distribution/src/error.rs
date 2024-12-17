@@ -8,10 +8,12 @@ use zip::result::ZipError;
 use crate::metadata::MetadataError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::WheelFilenameError;
+use uv_distribution_types::IsBuildBackendError;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashAlgorithm, HashDigest, ParsedUrlError};
+use uv_types::AnyErrorBuild;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -52,7 +54,7 @@ pub enum Error {
 
     // Build error
     #[error(transparent)]
-    Build(anyhow::Error),
+    Build(AnyErrorBuild),
     #[error("Built wheel has an invalid filename")]
     WheelFilename(#[from] WheelFilenameError),
     #[error("Package metadata name `{metadata}` does not match given name `{given}`")]
@@ -170,6 +172,15 @@ impl From<reqwest_middleware::Error> for Error {
             reqwest_middleware::Error::Reqwest(error) => {
                 Self::Reqwest(WrappedReqwestError::from(error))
             }
+        }
+    }
+}
+
+impl IsBuildBackendError for Error {
+    fn is_build_backend_error(&self) -> bool {
+        match self {
+            Self::Build(err) => err.is_build_backend_error(),
+            _ => false,
         }
     }
 }

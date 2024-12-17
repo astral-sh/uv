@@ -42,7 +42,7 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildContext, BuildIsolation, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
 
 #[derive(Debug, Error)]
@@ -66,7 +66,7 @@ enum Error {
     #[error(transparent)]
     BuildBackend(#[from] uv_build_backend::Error),
     #[error(transparent)]
-    BuildDispatch(anyhow::Error),
+    BuildDispatch(AnyErrorBuild),
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
     #[error("Failed to write message")]
@@ -923,7 +923,7 @@ async fn build_sdist(
                     build_output,
                 )
                 .await
-                .map_err(Error::BuildDispatch)?;
+                .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 filename: DistFilename::SourceDistFilename(
@@ -1020,7 +1020,7 @@ async fn build_wheel(
                     build_output,
                 )
                 .await
-                .map_err(Error::BuildDispatch)?;
+                .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
                 filename: DistFilename::WheelFilename(

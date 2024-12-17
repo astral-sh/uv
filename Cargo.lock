@@ -4585,7 +4585,6 @@ name = "uv-build-frontend"
 version = "0.0.1"
 dependencies = [
  "anstream",
- "anyhow",
  "fs-err 3.0.0",
  "indoc",
  "insta",
@@ -4834,6 +4833,7 @@ dependencies = [
  "futures",
  "itertools 0.13.0",
  "rustc-hash",
+ "thiserror 2.0.3",
  "tokio",
  "tracing",
  "uv-build-backend",
@@ -4847,6 +4847,7 @@ dependencies = [
  "uv-git",
  "uv-install-wheel",
  "uv-installer",
+ "uv-platform-tags",
  "uv-pypi-types",
  "uv-python",
  "uv-resolver",

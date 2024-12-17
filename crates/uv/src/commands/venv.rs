@@ -26,7 +26,7 @@ use uv_python::{
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
-use uv_types::{BuildContext, BuildIsolation, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
@@ -113,7 +113,7 @@ enum VenvError {
 
     #[error("Failed to install seed packages")]
     #[diagnostic(code(uv::venv::seed))]
-    Seed(#[source] anyhow::Error),
+    Seed(#[source] AnyErrorBuild),
 
     #[error("Failed to extract interpreter tags")]
     #[diagnostic(code(uv::venv::tags))]
@@ -360,11 +360,11 @@ async fn venv_impl(
         let resolution = build_dispatch
             .resolve(&requirements)
             .await
-            .map_err(VenvError::Seed)?;
+            .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
             .install(&resolution, &venv)
             .await
-            .map_err(VenvError::Seed)?;
+            .map_err(|err| VenvError::Seed(err.into()))?;
 
         let changelog = Changelog::from_installed(installed);
         DefaultInstallLogger

@@ -226,20 +226,15 @@ pub enum Error {
 
 impl Error {
     /// Create an [`Error`] from a distribution error.
-    fn from_dist(dist: Dist, cause: uv_distribution::Error, resolution: &Resolution) -> Self {
-        let kind = match &dist {
-            Dist::Built(_) => DistErrorKind::Download,
-            Dist::Source(dist) => {
-                if dist.is_local() {
-                    DistErrorKind::Build
-                } else {
-                    DistErrorKind::DownloadAndBuild
-                }
-            }
-        };
+    fn from_dist(dist: Dist, err: uv_distribution::Error, resolution: &Resolution) -> Self {
         let chain =
             DerivationChain::from_resolution(resolution, (&dist).into()).unwrap_or_default();
-        Self::Dist(kind, Box::new(dist), chain, cause)
+        Self::Dist(
+            DistErrorKind::from_dist_and_err(&dist, &err),
+            Box::new(dist),
+            chain,
+            err,
+        )
     }
 }
 

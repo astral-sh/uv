@@ -1879,7 +1879,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Some(&source.to_string()),
             )
             .await
-            .map_err(Error::Build)?
+            .map_err(|err| Error::Build(err.into()))?
         {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
@@ -1900,7 +1900,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     BuildOutput::Debug,
                 )
                 .await
-                .map_err(Error::Build)?
+                .map_err(|err| Error::Build(err.into()))?
                 .wheel(temp_dir.path())
                 .await
                 .map_err(Error::Build)?
@@ -1976,7 +1976,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 BuildOutput::Debug,
             )
             .await
-            .map_err(Error::Build)?;
+            .map_err(|err| Error::Build(err.into()))?;
 
         // Build the metadata.
         let dist_info = builder.metadata().await.map_err(Error::Build)?;
