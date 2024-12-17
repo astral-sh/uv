@@ -152,8 +152,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: "Install system dependencies"
-        run: sudo apt-get install liblzma-dev
       - name: "Generate all"
         run: cargo dev generate-all --mode check
 
@@ -1853,13 +1851,13 @@ jobs:
       - name: "Install requirements and prime cache"
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev liblzma-dev
+          sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
           cargo run --bin uv -- venv --cache-dir .cache
           cargo run --bin uv -- pip compile scripts/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
           cargo run --bin uv -- pip compile scripts/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --profile profiling --features codspeed -p uv-bench
+        run: cargo codspeed build --profile profiling --features "codspeed,performance" -p uv-bench
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@v3
