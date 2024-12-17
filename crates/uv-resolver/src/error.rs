@@ -485,7 +485,7 @@ fn collapse_redundant_no_versions(
 
                     // If the range in the conclusion (terms) matches the range of no versions,
                     // then we'll drop this node. If the range is "all versions", then there's no
-                    // also no  need to enumerate the available versions.
+                    // also no need to enumerate the available versions.
                     if *term != Range::full() && *term != versions {
                         return;
                     }
