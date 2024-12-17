@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.10
+
+### Enhancements
+
+- Improve backtracking behavior when packages conflict repeatedly ([#9843](https://github.com/astral-sh/uv/pull/9843))
+- Patch Python `sysconfig` values such as `AR` at `ar` install time ([#9905](https://github.com/astral-sh/uv/pull/9905))
+- Patch Python `sysconfig` values such as `clang` to `cc` at install time ([#9916](https://github.com/astral-sh/uv/pull/9916))
+- Skip `--native-tls` in `pip compile` header ([#9913](https://github.com/astral-sh/uv/pull/9913))
+- Add resolver error hint for no-binary and no-build failures ([#9948](https://github.com/astral-sh/uv/pull/9948))
+- Improve build error messages ([#9660](https://github.com/astral-sh/uv/pull/9660))
+- Reduce redundant Python version incompatibilities in resolver error message ([#9957](https://github.com/astral-sh/uv/pull/9957))
+- Reduce redundant enumeration of all package versions in some resolver errors ([#9885](https://github.com/astral-sh/uv/pull/9885))
+- Improve display of ranges when pre-releases are not allowed ([#9944](https://github.com/astral-sh/uv/pull/9944))
+- Improve error messages for `uv remove` ([#9959](https://github.com/astral-sh/uv/pull/9959))
+- Improve phrasing for single term incompatibilities ([#9953](https://github.com/astral-sh/uv/pull/9953))
+- Improve styling of `uv remove` dependency hints ([#9960](https://github.com/astral-sh/uv/pull/9960))
+- Omit trailing zeros on Python requirements inferred from versions ([#9952](https://github.com/astral-sh/uv/pull/9952))
+- Show a concise error message for missing `version` field ([#9912](https://github.com/astral-sh/uv/pull/9912))
+- Use the build options value to improve hints for no wheel / source distribution errors ([#9950](https://github.com/astral-sh/uv/pull/9950))
+
+### Bug fixes
+
+- Allow multiple disjoint URLs in overrides ([#9893](https://github.com/astral-sh/uv/pull/9893))
+- Include explicit indexes in publish index choice ([#9932](https://github.com/astral-sh/uv/pull/9932))
+- Fix Python interpreter detection for 32-bit operating systems on 64-bit hosts ([#9970](https://github.com/astral-sh/uv/pull/9970))
+
+### Documentation
+
+- Fix typo "operation system" ([#9971](https://github.com/astral-sh/uv/pull/9971))
+- Clarify uninstallation docs ([#9938](https://github.com/astral-sh/uv/pull/9938))
+- Add a note to say that dependencies between workspace members are editable ([#9363](https://github.com/astral-sh/uv/pull/9363))
+- Correctly document default value of `fork-strategy` setting ([#9931](https://github.com/astral-sh/uv/pull/9931))
+- Use double quotes for Windows support in examples ([#9946](https://github.com/astral-sh/uv/pull/9946))
+- Remove `pypy` from top-level pin example ([#9896](https://github.com/astral-sh/uv/pull/9896))
+- Update references to `python-build-standalone` to reflect the transferred project ([#9977](https://github.com/astral-sh/uv/pull/9977))
+- Use a different Ruff version in documentation ([#9943](https://github.com/astral-sh/uv/pull/9943))
+- Change example so it works as-is on `powershell` and `cmd.exe` ([#9903](https://github.com/astral-sh/uv/pull/9903))
+- Clarify best practice for Python matrix strategy in GitHub Actions ([#9454](https://github.com/astral-sh/uv/pull/9454))
+- Add documentation for `uv-lock` and `uv-export` pre-commit hooks ([#9872](https://github.com/astral-sh/uv/pull/9872))
+
+### Preview features
+
+- Build backend: Fix pre-PEP 639 license files ([#9965](https://github.com/astral-sh/uv/pull/9965))
+
 ## 0.5.9
 
 ### Enhancements
