@@ -112,7 +112,7 @@ pub(crate) async fn remove(
                 if deps.is_empty() {
                     warn_if_present(&package, &toml);
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dependencies`"
+                        "The dependency `{package}` could not be found in `project.dependencies`"
                     );
                 }
             }
@@ -123,7 +123,7 @@ pub(crate) async fn remove(
                 if dev_deps.is_empty() && group_deps.is_empty() {
                     warn_if_present(&package, &toml);
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
+                        "The dependency `{package}` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`"
                     );
                 }
             }
@@ -132,7 +132,7 @@ pub(crate) async fn remove(
                 if deps.is_empty() {
                     warn_if_present(&package, &toml);
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `optional-dependencies`"
+                        "The dependency `{package}` could not be found in `project.optional-dependencies.{extra}`"
                     );
                 }
             }
@@ -144,7 +144,7 @@ pub(crate) async fn remove(
                     if dev_deps.is_empty() && group_deps.is_empty() {
                         warn_if_present(&package, &toml);
                         anyhow::bail!(
-                            "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
+                            "The dependency `{package}` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`"
                         );
                     }
                 } else {
@@ -152,7 +152,7 @@ pub(crate) async fn remove(
                     if deps.is_empty() {
                         warn_if_present(&package, &toml);
                         anyhow::bail!(
-                            "The dependency `{package}` could not be found in `dependency-groups`"
+                            "The dependency `{package}` could not be found in `dependency-groups.{group}`"
                         );
                     }
                 }
@@ -323,16 +323,21 @@ fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
                 warn_user!("`{name}` is a production dependency");
             }
             DependencyType::Dev => {
-                warn_user!("`{name}` is a development dependency; try calling `uv remove --dev`");
+                warn_user!(
+                    "`{name}` is a development dependency (try: `{}`)",
+                    format!("uv remove {name} --dev`").bold()
+                );
             }
             DependencyType::Optional(group) => {
                 warn_user!(
-                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
+                    "`{name}` is an optional dependency (try: `{}`)",
+                    format!("uv remove {name} --optional {group}").bold()
                 );
             }
             DependencyType::Group(group) => {
                 warn_user!(
-                    "`{name}` is in the `{group}` group; try calling `uv remove --group {group}`",
+                    "`{name}` is in the `{group}` group (try: `{}`)",
+                    format!("uv remove {name} --group {group}").bold()
                 );
             }
         }
