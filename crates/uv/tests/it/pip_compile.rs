@@ -12807,8 +12807,10 @@ fn no_binary_only_binary() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only source-distribution>=0.0.1 is available and source-distribution==0.0.1 has no usable wheels and building from source is disabled, we can conclude that source-distribution<=0.0.1 cannot be used.
+      ╰─▶ Because only source-distribution>=0.0.1 is available and source-distribution==0.0.1 has no usable wheels, we can conclude that source-distribution<=0.0.1 cannot be used.
           And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are required for `source-distribution` because building from source is disabled
     "###
     );
 

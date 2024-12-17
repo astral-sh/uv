@@ -9,7 +9,10 @@ use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Te
 use rustc_hash::FxHashMap;
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
+use uv_distribution_types::{
+    IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
+    IndexLocations, IndexUrl,
+};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 
@@ -18,7 +21,9 @@ use crate::error::ErrorTree;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
-use crate::resolver::{MetadataUnavailable, UnavailablePackage, UnavailableReason};
+use crate::resolver::{
+    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
+};
 use crate::{Flexibility, Options, RequiresPython, ResolverEnvironment};
 
 use super::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
@@ -556,9 +561,58 @@ impl PubGrubReportFormatter<'_> {
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
         match derivation_tree {
-            DerivationTree::External(
-                External::Custom(package, set, _) | External::NoVersions(package, set),
-            ) => {
+            DerivationTree::External(External::Custom(package, set, reason)) => {
+                if let PubGrubPackageInner::Package { name, .. } = &**package {
+                    // Check for no versions due to pre-release options.
+                    if options.flexibility == Flexibility::Configurable {
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_available_hint(
+                                package,
+                                name,
+                                set,
+                                selector,
+                                env,
+                                output_hints,
+                            );
+                        }
+                    }
+
+                    // Check for no versions due to no `--find-links` flat index.
+                    Self::index_hints(
+                        package,
+                        name,
+                        set,
+                        selector,
+                        index_locations,
+                        index_capabilities,
+                        available_indexes,
+                        unavailable_packages,
+                        incomplete_packages,
+                        output_hints,
+                    );
+                }
+
+                // Check for unavailable versions due to `--no-build` or `--no-binary`.
+                if let UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
+                    incompatibility,
+                )) = reason
+                {
+                    match incompatibility {
+                        IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
+                            output_hints.insert(PubGrubHint::NoBinary {
+                                package: package.clone(),
+                            });
+                        }
+                        IncompatibleDist::Source(IncompatibleSource::NoBuild) => {
+                            output_hints.insert(PubGrubHint::NoBuild {
+                                package: package.clone(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            DerivationTree::External(External::NoVersions(package, set)) => {
                 if let PubGrubPackageInner::Package { name, .. } = &**package {
                     // Check for no versions due to pre-release options.
                     if options.flexibility == Flexibility::Configurable {
@@ -954,6 +1008,10 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         next_index: IndexUrl,
     },
+    /// No wheels are available for a package, and using source distributions was disabled.
+    NoBuild { package: PubGrubPackage },
+    /// No source distributions are available for a package, and using pre-built wheels was disabled.
+    NoBinary { package: PubGrubPackage },
     /// An index returned an Unauthorized (401) response.
     UnauthorizedIndex { index: IndexUrl },
     /// An index returned a Forbidden (403) response.
@@ -1013,6 +1071,12 @@ enum PubGrubHintCore {
     ForbiddenIndex {
         index: IndexUrl,
     },
+    NoBuild {
+        package: PubGrubPackage,
+    },
+    NoBinary {
+        package: PubGrubPackage,
+    },
 }
 
 impl From<PubGrubHint> for PubGrubHintCore {
@@ -1068,6 +1132,8 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::UncheckedIndex { package, .. } => Self::UncheckedIndex { package },
             PubGrubHint::UnauthorizedIndex { index } => Self::UnauthorizedIndex { index },
             PubGrubHint::ForbiddenIndex { index } => Self::ForbiddenIndex { index },
+            PubGrubHint::NoBuild { package } => Self::NoBuild { package },
+            PubGrubHint::NoBinary { package } => Self::NoBinary { package },
         }
     }
 }
@@ -1340,6 +1406,24 @@ impl std::fmt::Display for PubGrubHint {
                     ":".bold(),
                     index.redacted().cyan(),
                     "403 Forbidden".red(),
+                )
+            }
+            Self::NoBuild { package } => {
+                write!(
+                    f,
+                    "{}{} Wheels are required for `{}` because building from source is disabled",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                )
+            }
+            Self::NoBinary { package } => {
+                write!(
+                    f,
+                    "{}{} A source distributions is required for `{}` because using pre-built wheels is disabled",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
                 )
             }
         }
