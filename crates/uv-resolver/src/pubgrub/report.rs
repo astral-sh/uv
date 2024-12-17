@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
@@ -74,9 +73,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     );
                 }
 
-                let set = self.simplify_set(set, package);
-
-                if set.as_ref() == &Range::full() {
+                if set == &Range::full() {
                     format!("there are no versions of {package}")
                 } else if set.as_singleton().is_some() {
                     format!("there is no version of {package}{set}")
@@ -114,8 +111,6 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 } else {
                     match reason {
                         UnavailableReason::Package(reason) => {
-                            // While there may be a term attached, this error applies to the entire
-                            // package, so we show it for the entire package
                             format!(
                                 "{}{}",
                                 Padded::new("", &package, " "),
@@ -123,8 +118,7 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                             )
                         }
                         UnavailableReason::Version(reason) => {
-                            let set = self.simplify_set(set, package);
-                            let range = self.compatible_range(package, &set);
+                            let range = self.compatible_range(package, set);
                             let reason = if range.plural() {
                                 reason.plural_message()
                             } else {
@@ -136,14 +130,11 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
             }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
-                let package_set = self.simplify_set(package_set, package);
-                let dependency_set = self.simplify_set(dependency_set, dependency);
-
                 if package.name_no_root() == dependency.name_no_root() {
                     if let Some(member) = self.format_workspace_member(package) {
                         return format!(
                             "{member} depends on itself at an incompatible version ({})",
-                            PackageRange::dependency(dependency, &dependency_set, None)
+                            PackageRange::dependency(dependency, dependency_set, None)
                         );
                     }
                 }
@@ -151,13 +142,13 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 if let Some(root) = self.format_root_requires(package) {
                     return format!(
                         "{root} {}",
-                        self.dependency_range(dependency, &dependency_set)
+                        self.dependency_range(dependency, dependency_set)
                     );
                 }
                 format!(
                     "{}",
-                    self.compatible_range(package, &package_set)
-                        .depends_on(dependency, &dependency_set),
+                    self.compatible_range(package, package_set)
+                        .depends_on(dependency, dependency_set),
                 )
             }
         }
@@ -178,18 +169,16 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
             [(package, Term::Positive(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
             {
-                let range = self.simplify_set(range, package);
                 if let Some(member) = self.format_workspace_member(package) {
                     format!("{member}'s requirements are unsatisfiable")
                 } else {
-                    format!("{} cannot be used", self.compatible_range(package, &range))
+                    format!("{} cannot be used", self.compatible_range(package, range))
                 }
             }
             [(package, Term::Negative(range))]
                 if matches!(&**(*package), PubGrubPackageInner::Package { .. }) =>
             {
-                let range = self.simplify_set(range, package);
-                format!("{} must be used", self.compatible_range(package, &range))
+                format!("{} must be used", self.compatible_range(package, range))
             }
             [(p1, Term::Positive(r1)), (p2, Term::Negative(r2))] => self.format_external(
                 &External::FromDependencyOf((*p1).clone(), r1.clone(), (*p2).clone(), r2.clone()),
@@ -478,11 +467,8 @@ impl PubGrubReportFormatter<'_> {
                 External::FromDependencyOf(package1, package_set1, dependency1, dependency_set1),
                 External::FromDependencyOf(package2, _, dependency2, dependency_set2),
             ) if package1 == package2 => {
-                let dependency_set1 = self.simplify_set(dependency_set1, dependency1);
-                let dependency1 = self.dependency_range(dependency1, &dependency_set1);
-
-                let dependency_set2 = self.simplify_set(dependency_set2, dependency2);
-                let dependency2 = self.dependency_range(dependency2, &dependency_set2);
+                let dependency1 = self.dependency_range(dependency1, dependency_set1);
+                let dependency2 = self.dependency_range(dependency2, dependency_set2);
 
                 if let Some(root) = self.format_root_requires(package1) {
                     return format!(
@@ -491,13 +477,12 @@ impl PubGrubReportFormatter<'_> {
                         dependency2,
                     );
                 }
-                let package_set = self.simplify_set(package_set1, package1);
 
                 format!(
                     "{}",
-                    self.compatible_range(package1, &package_set)
-                        .depends_on(dependency1.package, &dependency_set1)
-                        .and(dependency2.package, &dependency_set2),
+                    self.compatible_range(package1, package_set1)
+                        .depends_on(dependency1.package, dependency_set1)
+                        .and(dependency2.package, dependency_set2),
                 )
             }
             (.., External::FromDependencyOf(package, _, dependency, _))
@@ -522,22 +507,6 @@ impl PubGrubReportFormatter<'_> {
                     &external2,
                 )
             }
-        }
-    }
-
-    /// Simplify a [`Range`] of versions using the available versions for a package.
-    fn simplify_set<'a>(
-        &self,
-        set: &'a Range<Version>,
-        package: &PubGrubPackage,
-    ) -> Cow<'a, Range<Version>> {
-        let Some(name) = package.name() else {
-            return Cow::Borrowed(set);
-        };
-        if set == &Range::full() {
-            Cow::Borrowed(set)
-        } else {
-            Cow::Owned(set.simplify(self.available_versions.get(name).into_iter().flatten()))
         }
     }
 
@@ -685,7 +654,7 @@ impl PubGrubReportFormatter<'_> {
                         source: self.python_requirement.source(),
                         requires_python: self.python_requirement.target().clone(),
                         package: package.clone(),
-                        package_set: self.simplify_set(package_set, package).into_owned(),
+                        package_set: package_set.clone(),
                         package_requires_python: dependency_set.clone(),
                     });
                 }
@@ -878,7 +847,7 @@ impl PubGrubReportFormatter<'_> {
             if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
                 hints.insert(PubGrubHint::PrereleaseRequested {
                     package: package.clone(),
-                    range: self.simplify_set(set, package).into_owned(),
+                    range: set.clone(),
                 });
             }
         } else if let Some(version) = package
