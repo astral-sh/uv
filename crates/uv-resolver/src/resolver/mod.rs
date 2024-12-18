@@ -1255,44 +1255,50 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             )));
         }
 
-        // Check whether this version covers all supported platforms.
-        if !dist.implied_markers().is_true() {
-            for platform in [
-                ResolverPlatform::Linux,
-                ResolverPlatform::Windows,
-                ResolverPlatform::MacOS,
-            ] {
-                // If the platform is part of the current environment...
-                let marker = platform.marker();
-                if env.included_by_marker(marker) {
-                    // But isn't supported by the distribution...
-                    if dist.implied_markers().is_disjoint(marker)
-                        && known_markers
-                            .get(name)
-                            .is_none_or(|m| !m.is_disjoint(marker))
-                    {
-                        // Then we need to fork.
-                        let forks = fork_version_by_marker(env, marker);
-                        return if forks.is_empty() {
-                            Ok(Some(ResolverVersion::Unavailable(
-                                candidate.version().clone(),
-                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                                    IncompatibleWheel::MissingPlatform(platform.to_string()),
-                                )),
-                            )))
-                        } else {
-                            debug!(
-                                "Forking platform for {}=={} ({})",
-                                name,
-                                candidate.version(),
-                                forks
-                                    .iter()
-                                    .map(ToString::to_string)
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            );
-                            Ok(Some(ResolverVersion::Forked(forks)))
-                        };
+        // Check whether this version covers all supported platforms. This only applies to versions
+        // that lack source distributions and, for now, we only apply this to local versions. The
+        // intent is such that, if we're resolving PyTorch, and we choose `torch==2.5.2+cpu`, we
+        // want to fork so that we can select `torch==2.5.2` on macOS (since the `+cpu` variant
+        // doesn't include any macOS wheels).
+        if candidate.version().is_local() {
+            if !dist.implied_markers().is_true() {
+                for platform in [
+                    ResolverPlatform::Linux,
+                    ResolverPlatform::Windows,
+                    ResolverPlatform::MacOS,
+                ] {
+                    // If the platform is part of the current environment...
+                    let marker = platform.marker();
+                    if env.included_by_marker(marker) {
+                        // But isn't supported by the distribution...
+                        if dist.implied_markers().is_disjoint(marker)
+                            && known_markers
+                                .get(name)
+                                .is_none_or(|m| !m.is_disjoint(marker))
+                        {
+                            // Then we need to fork.
+                            let forks = fork_version_by_marker(env, marker);
+                            return if forks.is_empty() {
+                                Ok(Some(ResolverVersion::Unavailable(
+                                    candidate.version().clone(),
+                                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                                        IncompatibleWheel::MissingPlatform(platform.to_string()),
+                                    )),
+                                )))
+                            } else {
+                                debug!(
+                                    "Forking platform for {}=={} ({})",
+                                    name,
+                                    candidate.version(),
+                                    forks
+                                        .iter()
+                                        .map(ToString::to_string)
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                );
+                                Ok(Some(ResolverVersion::Forked(forks)))
+                            };
+                        }
                     }
                 }
             }
