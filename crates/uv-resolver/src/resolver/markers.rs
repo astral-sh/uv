@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use rustc_hash::FxHashMap;
 
 use uv_normalize::PackageName;
@@ -12,12 +10,12 @@ use uv_pep508::MarkerTree;
 /// such, the marker value represents a superset of the environments in which the package is known
 /// to be included, but it may include environments in which the package is ultimately excluded.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct KnownMarkers(Arc<FxHashMap<PackageName, MarkerTree>>);
+pub(crate) struct KnownMarkers(FxHashMap<PackageName, MarkerTree>);
 
 impl KnownMarkers {
     /// Inserts the given [`MarkerTree`] for the given package name.
     pub(crate) fn insert(&mut self, package_name: PackageName, marker_tree: MarkerTree) {
-        Arc::make_mut(&mut self.0)
+        self.0
             .entry(package_name)
             .or_insert(MarkerTree::FALSE)
             .or(marker_tree);
