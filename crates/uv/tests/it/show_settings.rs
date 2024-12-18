@@ -10,12 +10,16 @@ use crate::common::{uv_snapshot, TestContext};
 /// In particular, remove any user-defined environment variables and set any machine-specific
 /// environment variables to static values.
 fn add_shared_args(mut command: Command) -> Command {
+    // Create an empty directory for XDG_CONFIG_DIRS to avoid loading system configuration.
+    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
+
     command
         .env_clear()
         .env(EnvVars::UV_LINK_MODE, "clone")
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
-        .env(EnvVars::UV_CONCURRENT_INSTALLS, "8");
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
+        .env(EnvVars::XDG_CONFIG_DIRS, xdg.path());
 
     if cfg!(unix) {
         // Avoid locale issues in tests
