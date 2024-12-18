@@ -4354,8 +4354,7 @@ pub struct PythonInstallArgs {
     /// 3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
     /// and `python`.
     ///
-    /// If multiple Python versions are requested during the installation, the first request will be
-    /// the default.
+    /// If multiple Python versions are requested, uv will exit with an error.
     #[arg(long)]
     pub default: bool,
 }
