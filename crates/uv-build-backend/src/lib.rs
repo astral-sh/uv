@@ -11,6 +11,7 @@ use std::fs::FileType;
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 use thiserror::Error;
+use tracing::debug;
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
 
@@ -139,26 +140,22 @@ fn check_metadata_directory(
         return Ok(());
     };
 
-    let dist_info_dir = format!(
-        "{}-{}.dist-info",
-        pyproject_toml.name().as_dist_info_name(),
-        pyproject_toml.version()
+    debug!(
+        "Checking metadata directory {}",
+        metadata_directory.user_display()
     );
 
     // `METADATA` is a mandatory file.
     let current = pyproject_toml
         .to_metadata(source_tree)?
         .core_metadata_format();
-    let previous =
-        fs_err::read_to_string(metadata_directory.join(&dist_info_dir).join("METADATA"))?;
+    let previous = fs_err::read_to_string(metadata_directory.join("METADATA"))?;
     if previous != current {
         return Err(Error::InconsistentSteps("METADATA"));
     }
 
     // `entry_points.txt` is not written if it would be empty.
-    let entrypoints_path = metadata_directory
-        .join(&dist_info_dir)
-        .join("entry_points.txt");
+    let entrypoints_path = metadata_directory.join("entry_points.txt");
     match pyproject_toml.to_entry_points()? {
         None => {
             if entrypoints_path.is_file() {
@@ -459,6 +456,70 @@ mod tests {
         Version: 1.0.0
         License: Copy carefully.
                  Sincerely, the authors
+        "###);
+    }
+
+    /// Test that `build_wheel` works after the `prepare_metadata_for_build_wheel` hook.
+    #[test]
+    fn prepare_metadata_then_build_wheel() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "two-step-build"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv>=0.5.15,<0.6"]
+            build-backend = "uv"
+        "#
+            },
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("two_step_build")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("two_step_build")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        // Prepare the metadata.
+        let metadata_dir = TempDir::new().unwrap();
+        let dist_info_dir = metadata(src.path(), metadata_dir.path(), "0.5.15").unwrap();
+        let metadata_prepared =
+            fs_err::read_to_string(metadata_dir.path().join(&dist_info_dir).join("METADATA"))
+                .unwrap();
+
+        // Build the wheel, using the prepared metadata directory.
+        let output_dir = TempDir::new().unwrap();
+        build_wheel(
+            src.path(),
+            output_dir.path(),
+            Some(&metadata_dir.path().join(&dist_info_dir)),
+            "0.5.15",
+        )
+        .unwrap();
+        let wheel = output_dir
+            .path()
+            .join("two_step_build-1.0.0-py3-none-any.whl");
+        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
+
+        let mut metadata_wheel = String::new();
+        wheel
+            .by_name("two_step_build-1.0.0.dist-info/METADATA")
+            .unwrap()
+            .read_to_string(&mut metadata_wheel)
+            .unwrap();
+
+        assert_eq!(metadata_prepared, metadata_wheel);
+
+        assert_snapshot!(metadata_wheel, @r###"
+        Metadata-Version: 2.3
+        Name: two-step-build
+        Version: 1.0.0
         "###);
     }
 }
