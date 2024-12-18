@@ -216,6 +216,7 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
     Ok(())
 }
 
+#[cfg(windows)]
 fn backoff_file_move() -> backoff::ExponentialBackoff {
     backoff::ExponentialBackoffBuilder::default()
         .with_initial_interval(std::time::Duration::from_millis(10))
@@ -229,7 +230,8 @@ pub async fn rename_with_retry(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
-    if cfg!(windows) {
+    #[cfg(windows)]
+    {
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -255,7 +257,9 @@ pub async fn rename_with_retry(
             }
         })
         .await
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         fs_err::tokio::rename(from, to).await
     }
 }
@@ -265,7 +269,8 @@ pub fn rename_with_retry_sync(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
-    if cfg!(windows) {
+    #[cfg(windows)]
+    {
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -299,7 +304,9 @@ pub fn rename_with_retry_sync(
                 ),
             )
         })
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         fs_err::rename(from, to)
     }
 }
@@ -309,7 +316,8 @@ pub fn persist_with_retry_sync(
     from: NamedTempFile,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
-    if cfg!(windows) {
+    #[cfg(windows)]
+    {
         // On Windows, antivirus software can lock files temporarily, making them inaccessible.
         // This is most common for DLLs, and the common suggestion is to retry the operation with
         // some backoff.
@@ -364,7 +372,9 @@ pub fn persist_with_retry_sync(
                 format!("{err:?}"),
             )),
         }
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         fs_err::rename(from, to)
     }
 }

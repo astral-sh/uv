@@ -17,7 +17,6 @@ workspace = true
 
 [dependencies]
 
-backoff = { workspace = true }
 cachedir = { workspace = true }
 dunce = { workspace = true }
 either = { workspace = true }
@@ -39,6 +38,7 @@ winsafe = { workspace = true }
 rustix = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
+backoff = { workspace = true }
 junction = { workspace = true }
 
 [features]
