@@ -110,6 +110,45 @@ latest version. If a `.python-version` file is present, uv will install the Pyth
 the file. A project that requires multiple Python versions may define a `.python-versions` file. If
 present, uv will install all of the Python versions listed in the file.
 
+### Installing Python executables
+
+!!! important
+
+    Support for installing Python executables is in _preview_, this means the behavior is experimental
+    and subject to change.
+
+To install Python executables into your `PATH`, provide the `--preview` option:
+
+```console
+$ uv python install 3.12 --preview
+```
+
+This will install a Python executable for the requested version into `~/.local/bin`, e.g., as
+`python3.12`.
+
+!!! tip
+
+    If `~/.local/bin` is not in your `PATH`, you can add it with `uv tool update-shell`.
+
+To install `python` and `python3` executables, include the `--default` option:
+
+```console
+$ uv python install 3.12 --default --preview
+```
+
+When installing Python executables, uv will only overwrite an existing executable if it is managed
+by uv — e.g., if `~/.local/bin/python3.12` exists already uv will not overwrite it without the
+`--force` flag.
+
+uv will update executables that it manages. However, it will prefer the latest patch version of each
+Python minor version by default. For example:
+
+```console
+$ uv python install 3.12.7 --preview  # Adds `python3.12` to `~/.local/bin`
+$ uv python install 3.12.6 --preview  # Does not update `python3.12`
+$ uv python install 3.12.8 --preview  # Updates `python3.12` to point to 3.12.8
+```
+
 ## Project Python versions
 
 uv will respect Python requirements defined in `requires-python` in the `pyproject.toml` file during
