@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.39/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.42/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -16,6 +16,166 @@ use insta::assert_snapshot;
 use uv_static::EnvVars;
 
 use crate::common::{packse_index_url, uv_snapshot, TestContext};
+
+/// There are two packages, `a` and `b`. We select `a` with `a==2.0.0` first, and then `b`, but `a==2.0.0` conflicts with all new versions of `b`, so we backtrack through versions of `b`.
+///
+/// We need to detect this conflict and prioritize `b` over `a` instead of backtracking down to the too old version of `b==1.0.0` that doesn't depend on `a` anymore.
+///
+/// ```text
+/// wrong-backtracking-basic
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires b
+/// │       ├── satisfied by b-1.0.0
+/// │       ├── satisfied by b-2.0.0
+/// │       ├── satisfied by b-2.0.1
+/// │       ├── satisfied by b-2.0.2
+/// │       ├── satisfied by b-2.0.3
+/// │       ├── satisfied by b-2.0.4
+/// │       ├── satisfied by b-2.0.5
+/// │       ├── satisfied by b-2.0.6
+/// │       ├── satisfied by b-2.0.7
+/// │       ├── satisfied by b-2.0.8
+/// │       └── satisfied by b-2.0.9
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   └── a-2.0.0
+/// ├── b
+/// │   ├── b-1.0.0
+/// │   │   └── requires too-old
+/// │   │       └── satisfied by too-old-1.0.0
+/// │   ├── b-2.0.0
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.1
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.2
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.3
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.4
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.5
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.6
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.7
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.8
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   └── b-2.0.9
+/// │       └── requires a==1.0.0
+/// │           └── satisfied by a-1.0.0
+/// └── too-old
+///     └── too-old-1.0.0
+/// ```
+#[test]
+fn wrong_backtracking_basic() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"wrong-backtracking-basic-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''wrong-backtracking-basic-a''',
+          '''wrong-backtracking-basic-b''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r###"
+        version = 1
+        requires-python = ">=3.8"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+            { name = "package-b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a" },
+            { name = "package-b" },
+        ]
+
+        [[package]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_basic_a-1.0.0.tar.gz", hash = "sha256:5251a827291d4e5b7ca11c742df3aa26802cc55442e3f5fc307ff3423b8f9295" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_basic_a-1.0.0-py3-none-any.whl", hash = "sha256:d9a7ee79b176cd36c9db03e36bc3325856dd4fb061aefc6159eecad6e8776e88" },
+        ]
+
+        [[package]]
+        name = "package-b"
+        version = "2.0.9"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-a" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_basic_b-2.0.9.tar.gz", hash = "sha256:a4e95f3f0f0d82cc5f19de6c638f70300da1b5101f1ba70d8814c7fe7e949e20" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_basic_b-2.0.9-py3-none-any.whl", hash = "sha256:bf96af1a69f8c1d1d9c2687cd5d6f023cda56dd77d3f37f3cdd422e2a410541f" },
+        ]
+        "###
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
 
 /// This test ensures that multiple non-conflicting but also
 /// non-overlapping dependency specifications with the same package name
