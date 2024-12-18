@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::Command;
 
 use assert_fs::prelude::*;
@@ -9,13 +10,15 @@ use crate::common::{uv_snapshot, TestContext};
 ///
 /// In particular, remove any user-defined environment variables and set any machine-specific
 /// environment variables to static values.
-fn add_shared_args(mut command: Command) -> Command {
+fn add_shared_args(mut command: Command, cwd: &Path) -> Command {
     command
         .env_clear()
         .env(EnvVars::UV_LINK_MODE, "clone")
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
-        .env(EnvVars::UV_CONCURRENT_INSTALLS, "8");
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
+        // Set an explicit `XDG_CONFIG_DIRS` to avoid loading system configuration.
+        .env(EnvVars::XDG_CONFIG_DIRS, cwd);
 
     if cfg!(unix) {
         // Avoid locale issues in tests
@@ -53,7 +56,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -204,7 +207,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     );
 
     // Resolution should use the highest version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=highest"), @r###"
@@ -356,7 +359,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     );
 
     // Resolution should use the highest version, and omit hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=highest")
@@ -543,7 +546,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -697,7 +700,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     fs_err::remove_file(config.path())?;
 
     // Resolution should use the highest version, and omit hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -830,7 +833,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1007,7 +1010,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1188,7 +1191,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
 
     // Providing an additional index URL on the command-line should be merged with the
     // configuration file.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--extra-index-url")
@@ -1427,7 +1430,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("tqdm")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1603,7 +1606,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1742,7 +1745,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -1922,7 +1925,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     );
 
     // But the command-line should take precedence over both.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .arg("--resolution=lowest-direct"), @r###"
@@ -2127,7 +2130,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
@@ -2256,7 +2259,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "})?;
 
     // Resolution should use the lowest direct version and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
@@ -2385,7 +2388,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the highest version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
@@ -2516,7 +2519,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     "#})?;
 
     // Resolution should use the highest version.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
@@ -2666,7 +2669,7 @@ fn resolve_tool() -> anyhow::Result<()> {
 
     // If we're running a user-level command, like `uv tool install`, we should use lowest direct,
     // but retain build isolation (since we ignore the local configuration).
-    uv_snapshot!(context.filters(), add_shared_args(context.tool_install())
+    uv_snapshot!(context.filters(), add_shared_args(context.tool_install(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
@@ -2825,7 +2828,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should use the lowest direct version, and generate hashes.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -2982,7 +2985,7 @@ fn resolve_both() -> anyhow::Result<()> {
     requirements_in.write_str("anyio>3.0.0")?;
 
     // Resolution should succeed, but warn that the `pip` section in `pyproject.toml` is ignored.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -3156,7 +3159,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3183,7 +3186,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3219,7 +3222,7 @@ fn valid_conflicts() -> anyhow::Result<()> {
             [{extra = "x1"}, {extra = "x2"}],
         ]
     "#})?;
-    uv_snapshot!(context.filters(), add_shared_args(context.lock()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3255,7 +3258,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
@@ -3420,7 +3423,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
@@ -3454,7 +3457,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     })?;
 
     // The file should be rejected for violating the schema, with a custom warning.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
@@ -3509,7 +3512,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
 
     // Resolution in `child` should use lowest-direct, skipping the `pyproject.toml`, which lacks a
     // `tool.uv`.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .current_dir(&child), @r###"
@@ -3641,7 +3644,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         [tool.uv]
     "#})?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in")
         .current_dir(&child), @r###"
@@ -3782,7 +3785,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--show-settings")
         .arg("requirements.in"), @r###"
     success: true
@@ -3934,7 +3937,7 @@ fn index_priority() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
@@ -4117,7 +4120,7 @@ fn index_priority() -> anyhow::Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
@@ -4306,7 +4309,7 @@ fn index_priority() -> anyhow::Result<()> {
     "#})?;
 
     // Prefer the `--default-index` from the CLI, and treat it as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--default-index")
@@ -4490,7 +4493,7 @@ fn index_priority() -> anyhow::Result<()> {
     );
 
     // Prefer the `--index` from the CLI, but treat the index from the file as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index")
@@ -4681,7 +4684,7 @@ fn index_priority() -> anyhow::Result<()> {
     "#})?;
 
     // Prefer the `--index-url` from the CLI, and treat it as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--index-url")
@@ -4865,7 +4868,7 @@ fn index_priority() -> anyhow::Result<()> {
     );
 
     // Prefer the `--extra-index-url` from the CLI, but not as the default.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("requirements.in")
         .arg("--show-settings")
         .arg("--extra-index-url")
@@ -5063,7 +5066,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--show-settings"), @r###"
@@ -5185,7 +5188,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-verify-hashes")
@@ -5306,7 +5309,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--require-hashes")
@@ -5429,7 +5432,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--no-require-hashes")
@@ -5550,7 +5553,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .env("UV_NO_VERIFY_HASHES", "1")
@@ -5671,7 +5674,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     "###
     );
 
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_install())
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_install(), context.temp_dir.path())
         .arg("-r")
         .arg("requirements.in")
         .arg("--verify-hashes")
