@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.39/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.42/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -3021,7 +3021,8 @@ fn package_prereleases_global_boundary() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a<0.2.0a2
-/// │       └── satisfied by a-0.1.0
+/// │       ├── satisfied by a-0.1.0
+/// │       └── satisfied by a-0.2.0a1
 /// └── a
 ///     ├── a-0.1.0
 ///     ├── a-0.2.0
@@ -3162,7 +3163,8 @@ fn requires_package_prerelease_and_final_any() {
 /// │   ├── requires a
 /// │   │   └── satisfied by a-0.1.0
 /// │   └── requires b>0.0.0a1
-/// │       └── satisfied by b-0.1.0
+/// │       ├── satisfied by b-0.1.0
+/// │       └── satisfied by b-1.0.0a1
 /// ├── a
 /// │   └── a-0.1.0
 /// │       └── requires b>0.1
@@ -3329,7 +3331,15 @@ fn transitive_package_only_prereleases() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires c!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5,>1.0.0
-/// │           └── unsatisfied: no matching version
+/// │           ├── satisfied by c-2.0.0a1
+/// │           ├── satisfied by c-2.0.0a2
+/// │           ├── satisfied by c-2.0.0a3
+/// │           ├── satisfied by c-2.0.0a4
+/// │           ├── satisfied by c-2.0.0a8
+/// │           ├── satisfied by c-2.0.0a9
+/// │           ├── satisfied by c-2.0.0b2
+/// │           ├── satisfied by c-2.0.0b3
+/// │           └── satisfied by c-2.0.0b4
 /// ├── b
 /// │   └── b-1.0.0
 /// │       └── requires c<=3.0.0,>=1.0.0
