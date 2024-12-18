@@ -1860,9 +1860,9 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         version = 1
         requires-python = ">=3.7"
         resolution-markers = [
+            "python_full_version >= '3.10'",
             "python_full_version >= '3.8' and python_full_version < '3.10'",
             "python_full_version < '3.8'",
-            "python_full_version >= '3.10'",
         ]
 
         [options]
@@ -2045,8 +2045,8 @@ fn lock_conditional_dependency_extra() -> Result<()> {
         version = "2.2.1"
         source = { registry = "https://pypi.org/simple" }
         resolution-markers = [
-            "python_full_version >= '3.8' and python_full_version < '3.10'",
             "python_full_version >= '3.10'",
+            "python_full_version >= '3.8' and python_full_version < '3.10'",
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/7a/50/7fd50a27caa0652cd4caf224aa87741ea41d3265ad13f010886167cfcc79/urllib3-2.2.1.tar.gz", hash = "sha256:d0570876c61ab9e520d776c38acbbb5b05a776d3f9ff98a5c8fd5162a444cf19", size = 291020 }
         wheels = [
@@ -2961,8 +2961,8 @@ fn lock_partial_git() -> Result<()> {
         version = 1
         requires-python = ">=3.10"
         resolution-markers = [
-            "python_full_version < '3.12'",
             "python_full_version >= '3.12'",
+            "python_full_version < '3.12'",
         ]
 
         [options]
@@ -5143,10 +5143,10 @@ fn lock_python_version_marker_complement() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
-            "python_full_version < '3.10'",
-            "python_full_version == '3.10'",
-            "python_full_version > '3.10' and python_full_version < '3.11'",
             "python_full_version >= '3.11'",
+            "python_full_version > '3.10' and python_full_version < '3.11'",
+            "python_full_version == '3.10'",
+            "python_full_version < '3.10'",
         ]
 
         [options]
@@ -12481,9 +12481,9 @@ fn lock_narrowed_python_version() -> Result<()> {
         version = 1
         requires-python = ">=3.7"
         resolution-markers = [
-            "python_full_version < '3.9'",
-            "python_full_version >= '3.9' and python_full_version < '3.11'",
             "python_full_version >= '3.11'",
+            "python_full_version >= '3.9' and python_full_version < '3.11'",
+            "python_full_version < '3.9'",
         ]
 
         [options]
@@ -13216,8 +13216,8 @@ fn lock_non_project_fork() -> Result<()> {
         version = 1
         requires-python = ">=3.10"
         resolution-markers = [
-            "python_full_version < '3.11'",
             "python_full_version >= '3.11'",
+            "python_full_version < '3.11'",
         ]
 
         [options]
@@ -15752,9 +15752,9 @@ fn lock_python_upper_bound() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
-            "python_full_version >= '3.13'",
-            "python_full_version < '3.9'",
             "python_full_version >= '3.9' and python_full_version < '3.13'",
+            "python_full_version < '3.9'",
+            "python_full_version >= '3.13'",
         ]
 
         [options]
@@ -16983,8 +16983,8 @@ fn lock_change_requires_python() -> Result<()> {
         version = 1
         requires-python = ">=3.12"
         resolution-markers = [
-            "python_full_version < '3.13'",
             "python_full_version >= '3.13'",
+            "python_full_version < '3.13'",
         ]
 
         [options]
@@ -17092,9 +17092,9 @@ fn lock_change_requires_python() -> Result<()> {
         version = 1
         requires-python = ">=3.10"
         resolution-markers = [
-            "python_full_version < '3.12'",
-            "python_full_version == '3.12.*'",
             "python_full_version >= '3.13'",
+            "python_full_version == '3.12.*'",
+            "python_full_version < '3.12'",
         ]
 
         [options]
