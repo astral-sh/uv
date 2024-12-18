@@ -1047,9 +1047,9 @@ fn fork_incomplete_markers() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
-            "python_full_version < '3.10'",
-            "python_full_version == '3.10.*'",
             "python_full_version >= '3.11'",
+            "python_full_version == '3.10.*'",
+            "python_full_version < '3.10'",
         ]
 
         [[package]]
@@ -3117,9 +3117,9 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         version = 1
         requires-python = ">=3.8"
         resolution-markers = [
-            "python_full_version < '3.10'",
-            "python_full_version == '3.10.*'",
             "python_full_version >= '3.11'",
+            "python_full_version == '3.10.*'",
+            "python_full_version < '3.10'",
         ]
 
         [[package]]

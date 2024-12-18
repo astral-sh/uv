@@ -131,7 +131,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version < '3.12'`:
+    error: Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version >= '3.12'`:
     - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
     - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
     "###
@@ -207,8 +207,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
-        "python_full_version < '3.12'",
         "python_full_version >= '3.12'",
+        "python_full_version < '3.12'",
     ]
 
     [options]
@@ -402,8 +402,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
-        "python_full_version < '3.12'",
         "python_full_version >= '3.12'",
+        "python_full_version < '3.12'",
     ]
 
     [options]
@@ -563,8 +563,8 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     version = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
-        "python_full_version < '3.12'",
         "python_full_version >= '3.12'",
+        "python_full_version < '3.12'",
     ]
 
     [options]
@@ -648,8 +648,8 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     version = 1
     requires-python = ">=3.11, <3.13"
     resolution-markers = [
-        "python_full_version < '3.12'",
         "python_full_version >= '3.12'",
+        "python_full_version < '3.12'",
     ]
 
     [options]
