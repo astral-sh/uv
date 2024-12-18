@@ -273,6 +273,20 @@ impl InternerGuard<'_> {
                 value,
             } => {
                 // Normalize `platform_system` markers to `sys_platform` nodes.
+                //
+                // The `platform` module is "primarily intended for diagnostic information to be
+                // read by humans."
+                //
+                // We only normalize when we can confidently guarantee that the values are
+                // exactly equivalent. For example, we normalize `platform_system == 'Windows'`
+                // to `sys_platform == 'win32'`, but we do not normalize `platform_system == 'FreeBSD'`
+                // to `sys_platform == 'freebsd'`, since FreeBSD typically includes a major version
+                // in its `sys.platform` output.
+                //
+                // For cases that aren't normalized, we do our best to encode known-incompatible
+                // values in `exclusions`.
+                //
+                // See: https://discuss.python.org/t/clarify-usage-of-platform-system/70900
                 let (key, value) = match (key, value.as_str()) {
                     (MarkerValueString::PlatformSystem, "Windows") => {
                         (CanonicalMarkerValueString::SysPlatform, "win32".to_string())
@@ -284,36 +298,18 @@ impl InternerGuard<'_> {
                     (MarkerValueString::PlatformSystem, "Linux") => {
                         (CanonicalMarkerValueString::SysPlatform, "linux".to_string())
                     }
-                    (MarkerValueString::PlatformSystem, "Java") => {
-                        (CanonicalMarkerValueString::SysPlatform, "java".to_string())
-                    }
                     (MarkerValueString::PlatformSystem, "AIX") => {
                         (CanonicalMarkerValueString::SysPlatform, "aix".to_string())
                     }
-                    (MarkerValueString::PlatformSystem, "FreeBSD") => (
+                    (MarkerValueString::PlatformSystem, "Emscripten") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "freebsd".to_string(),
+                        "emscripten".to_string(),
                     ),
-                    (MarkerValueString::PlatformSystem, "NetBSD") => (
-                        CanonicalMarkerValueString::SysPlatform,
-                        "netbsd".to_string(),
-                    ),
-                    (MarkerValueString::PlatformSystem, "OpenBSD") => (
-                        CanonicalMarkerValueString::SysPlatform,
-                        "openbsd".to_string(),
-                    ),
-                    (MarkerValueString::PlatformSystem, "SunOS") => {
-                        (CanonicalMarkerValueString::SysPlatform, "sunos".to_string())
-                    }
                     // See: https://peps.python.org/pep-0738/#sys
                     (MarkerValueString::PlatformSystem, "Android") => (
                         CanonicalMarkerValueString::SysPlatform,
                         "android".to_string(),
                     ),
-                    // See: https://peps.python.org/pep-0730/#sys
-                    (MarkerValueString::PlatformSystem, "iOS") => {
-                        (CanonicalMarkerValueString::SysPlatform, "ios".to_string())
-                    }
                     _ => (key.into(), value),
                 };
                 (Variable::String(key), Edges::from_string(operator, value))
@@ -864,21 +860,11 @@ impl InternerGuard<'_> {
             return exclusions;
         }
         let mut tree = NodeId::FALSE;
-        for (a, b) in [
-            // os_name == 'nt' and sys_platform == 'darwin'
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::OsName,
-                    operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "darwin".to_string(),
-                },
-            ),
-            // os_name == 'nt' and sys_platform == 'linux'
+
+        // Pairs of `os_name` and `sys_platform` that are known to be incompatible.
+        //
+        // For example: `os_name == 'nt' and sys_platform == 'darwin'`
+        let mut pairs = vec![
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
@@ -891,7 +877,30 @@ impl InternerGuard<'_> {
                     value: "linux".to_string(),
                 },
             ),
-            // os_name == 'posix' and sys_platform == 'win32'
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "darwin".to_string(),
+                },
+            ),
+            (
+                MarkerExpression::String {
+                    key: MarkerValueString::OsName,
+                    operator: MarkerOperator::Equal,
+                    value: "nt".to_string(),
+                },
+                MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: "ios".to_string(),
+                },
+            ),
             (
                 MarkerExpression::String {
                     key: MarkerValueString::OsName,
@@ -904,7 +913,55 @@ impl InternerGuard<'_> {
                     value: "win32".to_string(),
                 },
             ),
-        ] {
+        ];
+
+        // Pairs of `platform_system` and `sys_platform` that are known to be incompatible.
+        //
+        // For example: `platform_system == 'FreeBSD' and sys_platform == 'darwin'`
+        //
+        // Any `platform_system` values that we normalize away (like `Windows` to `win32`) are
+        // omitted, since we never expect them to be present in the tree.
+        //
+        // Unfortunately, we can't include Cygwin here, since Cygwin appears to use a
+        // `platform_system` value with versions encoded (e.g., `CYGWIN_NT-10.0-22631).
+        //
+        for platform_system in ["FreeBSD", "NetBSD", "OpenBSD", "SunOS", "iOS", "iPadOS"] {
+            // An enumeration of known values, excluding FreeBSD, SunOS, and other Unix systems,
+            // which use the lowercased `uname -s`, which typically includes a version (e.g.,
+            // `freebsd8`).
+            //
+            // See: https://docs.python.org/3/library/sys.html#sys.platform
+            for sys_platform in [
+                "aix",
+                "android",
+                "emscripten",
+                "ios",
+                "linux",
+                "darwin",
+                "win32",
+                "cygwin",
+                "wasi",
+            ] {
+                // Some of the above pairs are actually compatible.
+                if matches!((platform_system, sys_platform), ("iOS" | "iPadOS", "ios")) {
+                    continue;
+                }
+                pairs.push((
+                    MarkerExpression::String {
+                        key: MarkerValueString::PlatformSystem,
+                        operator: MarkerOperator::Equal,
+                        value: platform_system.to_string(),
+                    },
+                    MarkerExpression::String {
+                        key: MarkerValueString::SysPlatform,
+                        operator: MarkerOperator::Equal,
+                        value: sys_platform.to_string(),
+                    },
+                ));
+            }
+        }
+
+        for (a, b) in pairs {
             let a = self.expression(a);
             let b = self.expression(b);
             let a_and_b = conjunction(self, a, b);
