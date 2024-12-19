@@ -471,6 +471,7 @@ pub(crate) async fn add(
             Some(Source::Git {
                 mut git,
                 subdirectory,
+                path,
                 rev,
                 tag,
                 branch,
@@ -489,6 +490,7 @@ pub(crate) async fn add(
                 Some(Source::Git {
                     git,
                     subdirectory,
+                    path,
                     rev,
                     tag,
                     branch,
@@ -972,7 +974,7 @@ fn augment_requirement(
         UnresolvedRequirement::Named(requirement) => {
             UnresolvedRequirement::Named(uv_pypi_types::Requirement {
                 source: match requirement.source {
-                    RequirementSource::Git {
+                    RequirementSource::GitDirectory {
                         repository,
                         reference,
                         precise,
@@ -988,7 +990,7 @@ fn augment_requirement(
                         } else {
                             reference
                         };
-                        RequirementSource::Git {
+                        RequirementSource::GitDirectory {
                             repository,
                             reference,
                             precise,
@@ -1004,7 +1006,7 @@ fn augment_requirement(
         UnresolvedRequirement::Unnamed(requirement) => {
             UnresolvedRequirement::Unnamed(UnnamedRequirement {
                 url: match requirement.url.parsed_url {
-                    ParsedUrl::Git(mut git) => {
+                    ParsedUrl::GitDirectory(mut git) => {
                         let reference = if let Some(rev) = rev {
                             Some(GitReference::from_rev(rev.to_string()))
                         } else if let Some(tag) = tag {
@@ -1016,7 +1018,7 @@ fn augment_requirement(
                             git.url = git.url.with_reference(reference);
                         }
                         VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::Git(git),
+                            parsed_url: ParsedUrl::GitDirectory(git),
                             verbatim: requirement.url.verbatim,
                         }
                     }

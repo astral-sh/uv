@@ -20,7 +20,7 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_pypi_types::{
-    LenientRequirement, ParsedArchiveUrl, ParsedGitUrl, ParsedUrl, VerbatimParsedUrl,
+    LenientRequirement, ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedUrl, VerbatimParsedUrl,
 };
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, InstallTarget};
@@ -604,7 +604,7 @@ fn store_credentials_from_workspace(workspace: &Workspace) {
                 continue;
             };
             match &url.parsed_url {
-                ParsedUrl::Git(ParsedGitUrl { url, .. }) => {
+                ParsedUrl::GitDirectory(ParsedGitDirectoryUrl { url, .. }) => {
                     uv_git::store_credentials_from_url(url.repository());
                 }
                 ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {

@@ -75,6 +75,15 @@ impl CachedDist {
                 editable: false,
                 r#virtual: false,
             }),
+            Dist::Built(BuiltDist::GitPath(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: dist.url,
+                hashes,
+                cache_info,
+                path,
+                editable: false,
+                r#virtual: false,
+            }),
             Dist::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
                 filename,
                 path,
@@ -90,7 +99,16 @@ impl CachedDist {
                 editable: false,
                 r#virtual: false,
             }),
-            Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
+            Dist::Source(SourceDist::GitDirectory(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: dist.url,
+                hashes,
+                cache_info,
+                path,
+                editable: false,
+                r#virtual: false,
+            }),
+            Dist::Source(SourceDist::GitPath(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: dist.url,
                 hashes,

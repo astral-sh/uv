@@ -16,8 +16,8 @@ use uv_pep508::{
 };
 
 use crate::{
-    ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
-    ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
+    ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
 
 #[derive(Debug, Error)]
@@ -192,7 +192,8 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimUrl> {
                     Some(VersionOrUrl::VersionSpecifier(specifier))
                 }
                 RequirementSource::Url { url, .. }
-                | RequirementSource::Git { url, .. }
+                | RequirementSource::GitPath { url, .. }
+                | RequirementSource::GitDirectory { url, .. }
                 | RequirementSource::Path { url, .. }
                 | RequirementSource::Directory { url, .. } => Some(VersionOrUrl::Url(url)),
             },
@@ -225,7 +226,7 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                     }),
                     verbatim: url,
                 })),
-                RequirementSource::Git {
+                RequirementSource::GitDirectory {
                     repository,
                     reference,
                     precise,
@@ -238,9 +239,31 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                         GitUrl::from_reference(repository, reference)
                     };
                     Some(VersionOrUrl::Url(VerbatimParsedUrl {
-                        parsed_url: ParsedUrl::Git(ParsedGitUrl {
+                        parsed_url: ParsedUrl::GitDirectory(ParsedGitDirectoryUrl {
                             url: git_url,
                             subdirectory,
+                        }),
+                        verbatim: url,
+                    }))
+                }
+                RequirementSource::GitPath {
+                    repository,
+                    reference,
+                    precise,
+                    install_path,
+                    ext,
+                    url,
+                } => {
+                    let git_url = if let Some(precise) = precise {
+                        GitUrl::from_commit(repository, reference, precise)
+                    } else {
+                        GitUrl::from_reference(repository, reference)
+                    };
+                    Some(VersionOrUrl::Url(VerbatimParsedUrl {
+                        parsed_url: ParsedUrl::GitPath(ParsedGitPathUrl {
+                            url: git_url,
+                            install_path,
+                            ext,
                         }),
                         verbatim: url,
                     }))
@@ -334,7 +357,7 @@ impl Display for Requirement {
             RequirementSource::Url { url, .. } => {
                 write!(f, " @ {url}")?;
             }
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 url: _,
                 repository,
                 reference,
@@ -348,6 +371,20 @@ impl Display for Requirement {
                 if let Some(subdirectory) = subdirectory {
                     writeln!(f, "#subdirectory={}", subdirectory.display())?;
                 }
+            }
+            RequirementSource::GitPath {
+                url: _,
+                repository,
+                reference,
+                precise: _,
+                install_path,
+                ext: _,
+            } => {
+                write!(f, " @ git+{repository}")?;
+                if let Some(reference) = reference.as_str() {
+                    write!(f, "@{reference}")?;
+                }
+                writeln!(f, "#path={}", install_path.display())?;
             }
             RequirementSource::Path { url, .. } => {
                 write!(f, " @ {url}")?;
@@ -400,7 +437,7 @@ pub enum RequirementSource {
         url: VerbatimUrl,
     },
     /// A remote Git repository, over either HTTPS or SSH.
-    Git {
+    GitDirectory {
         /// The repository URL (without the `git+` prefix).
         repository: Url,
         /// Optionally, the revision, tag, or branch to use.
@@ -409,6 +446,22 @@ pub enum RequirementSource {
         precise: Option<GitSha>,
         /// The path to the source distribution if it is not in the repository root.
         subdirectory: Option<PathBuf>,
+        /// The PEP 508 style url in the format
+        /// `git+<scheme>://<domain>/<path>@<rev>#subdirectory=<subdirectory>`.
+        url: VerbatimUrl,
+    },
+    /// A remote Git repository, over either HTTPS or SSH.
+    GitPath {
+        /// The repository URL (without the `git+` prefix).
+        repository: Url,
+        /// Optionally, the revision, tag, or branch to use.
+        reference: GitReference,
+        /// The precise commit to use, if known.
+        precise: Option<GitSha>,
+        /// The path to the file in the repository.
+        install_path: PathBuf,
+        /// The file extension, e.g. `tar.gz`, `zip`, etc.
+        ext: DistExtension,
         /// The PEP 508 style url in the format
         /// `git+<scheme>://<domain>/<path>@<rev>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -456,12 +509,20 @@ impl RequirementSource {
                 r#virtual: directory.r#virtual,
                 url,
             },
-            ParsedUrl::Git(git) => RequirementSource::Git {
+            ParsedUrl::GitDirectory(git) => RequirementSource::GitDirectory {
                 url,
                 repository: git.url.repository().clone(),
                 reference: git.url.reference().clone(),
                 precise: git.url.precise(),
                 subdirectory: git.subdirectory,
+            },
+            ParsedUrl::GitPath(git) => RequirementSource::GitPath {
+                url,
+                repository: git.url.repository().clone(),
+                reference: git.url.reference().clone(),
+                precise: git.url.precise(),
+                install_path: git.install_path.clone(),
+                ext: git.ext,
             },
             ParsedUrl::Archive(archive) => RequirementSource::Url {
                 url,
@@ -521,18 +582,35 @@ impl RequirementSource {
                 )),
                 verbatim: url.clone(),
             }),
-            Self::Git {
+            Self::GitDirectory {
                 repository,
                 reference,
                 precise,
                 subdirectory,
                 url,
             } => Some(VerbatimParsedUrl {
-                parsed_url: ParsedUrl::Git(ParsedGitUrl::from_source(
+                parsed_url: ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
                     repository.clone(),
                     reference.clone(),
                     *precise,
                     subdirectory.clone(),
+                )),
+                verbatim: url.clone(),
+            }),
+            Self::GitPath {
+                repository,
+                reference,
+                precise,
+                install_path,
+                ext,
+                url,
+            } => Some(VerbatimParsedUrl {
+                parsed_url: ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
+                    repository.clone(),
+                    reference.clone(),
+                    *precise,
+                    install_path.clone(),
+                    *ext,
                 )),
                 verbatim: url.clone(),
             }),
@@ -551,9 +629,11 @@ impl RequirementSource {
                     Some(VersionOrUrl::VersionSpecifier(specifier.clone()))
                 }
             }
-            Self::Url { .. } | Self::Git { .. } | Self::Path { .. } | Self::Directory { .. } => {
-                Some(VersionOrUrl::Url(self.to_verbatim_parsed_url()?))
-            }
+            Self::Url { .. }
+            | Self::GitPath { .. }
+            | Self::GitDirectory { .. }
+            | Self::Path { .. }
+            | Self::Directory { .. } => Some(VersionOrUrl::Url(self.to_verbatim_parsed_url()?)),
         }
     }
 
@@ -566,30 +646,34 @@ impl RequirementSource {
     pub fn is_empty(&self) -> bool {
         match self {
             Self::Registry { specifier, .. } => specifier.is_empty(),
-            Self::Url { .. } | Self::Git { .. } | Self::Path { .. } | Self::Directory { .. } => {
-                false
-            }
+            Self::Url { .. }
+            | Self::GitPath { .. }
+            | Self::GitDirectory { .. }
+            | Self::Path { .. }
+            | Self::Directory { .. } => false,
         }
     }
 
     /// If the source is the registry, return the version specifiers
     pub fn version_specifiers(&self) -> Option<&VersionSpecifiers> {
         match self {
-            RequirementSource::Registry { specifier, .. } => Some(specifier),
-            RequirementSource::Url { .. }
-            | RequirementSource::Git { .. }
-            | RequirementSource::Path { .. }
-            | RequirementSource::Directory { .. } => None,
+            Self::Registry { specifier, .. } => Some(specifier),
+            Self::Url { .. }
+            | Self::GitPath { .. }
+            | Self::GitDirectory { .. }
+            | Self::Path { .. }
+            | Self::Directory { .. } => None,
         }
     }
 
     /// Convert the source to a [`RequirementSource`] relative to the given path.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         match self {
-            RequirementSource::Registry { .. }
-            | RequirementSource::Url { .. }
-            | RequirementSource::Git { .. } => Ok(self),
-            RequirementSource::Path {
+            Self::Registry { .. }
+            | Self::Url { .. }
+            | Self::GitPath { .. }
+            | Self::GitDirectory { .. } => Ok(self),
+            Self::Path {
                 install_path,
                 ext,
                 url,
@@ -599,7 +683,7 @@ impl RequirementSource {
                 ext,
                 url,
             }),
-            RequirementSource::Directory {
+            Self::Directory {
                 install_path,
                 editable,
                 r#virtual,
@@ -632,7 +716,7 @@ impl Display for RequirementSource {
             Self::Url { url, .. } => {
                 write!(f, " {url}")?;
             }
-            Self::Git {
+            Self::GitDirectory {
                 url: _,
                 repository,
                 reference,
@@ -646,6 +730,20 @@ impl Display for RequirementSource {
                 if let Some(subdirectory) = subdirectory {
                     writeln!(f, "#subdirectory={}", subdirectory.display())?;
                 }
+            }
+            Self::GitPath {
+                url: _,
+                repository,
+                reference,
+                precise: _,
+                install_path,
+                ext: _,
+            } => {
+                write!(f, " git+{repository}")?;
+                if let Some(reference) = reference.as_str() {
+                    write!(f, "@{reference}")?;
+                }
+                writeln!(f, "#path={}", install_path.display())?;
             }
             Self::Path { url, .. } => {
                 write!(f, "{url}")?;
@@ -711,7 +809,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
             },
-            RequirementSource::Git {
+            RequirementSource::GitDirectory {
                 repository,
                 reference,
                 precise,
@@ -736,6 +834,58 @@ impl From<RequirementSource> for RequirementSourceWire {
                 {
                     url.query_pairs_mut()
                         .append_pair("subdirectory", &subdirectory);
+                }
+
+                // Put the requested reference in the query.
+                match reference {
+                    GitReference::Branch(branch) => {
+                        url.query_pairs_mut()
+                            .append_pair("branch", branch.to_string().as_str());
+                    }
+                    GitReference::Tag(tag) => {
+                        url.query_pairs_mut()
+                            .append_pair("tag", tag.to_string().as_str());
+                    }
+                    GitReference::ShortCommit(rev)
+                    | GitReference::BranchOrTag(rev)
+                    | GitReference::BranchOrTagOrCommit(rev)
+                    | GitReference::NamedRef(rev)
+                    | GitReference::FullCommit(rev) => {
+                        url.query_pairs_mut()
+                            .append_pair("rev", rev.to_string().as_str());
+                    }
+                    GitReference::DefaultBranch => {}
+                }
+
+                // Put the precise commit in the fragment.
+                if let Some(precise) = precise {
+                    url.set_fragment(Some(&precise.to_string()));
+                }
+
+                Self::Git {
+                    git: url.to_string(),
+                }
+            }
+            RequirementSource::GitPath {
+                repository,
+                reference,
+                precise,
+                install_path,
+                ext: _,
+                url: _,
+            } => {
+                let mut url = repository;
+
+                // Redact the credentials.
+                redact_credentials(&mut url);
+
+                // Clear out any existing state.
+                url.set_fragment(None);
+                url.set_query(None);
+
+                // Put the path in the query.
+                if let Some(install_path) = install_path.to_str() {
+                    url.query_pairs_mut().append_pair("path", install_path);
                 }
 
                 // Put the requested reference in the query.
@@ -818,6 +968,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
                 let mut reference = GitReference::DefaultBranch;
                 let mut subdirectory: Option<PortablePathBuf> = None;
+                let mut path: Option<PortablePathBuf> = None;
                 for (key, val) in repository.query_pairs() {
                     match &*key {
                         "tag" => reference = GitReference::Tag(val.into_owned()),
@@ -825,6 +976,9 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                         "rev" => reference = GitReference::from_rev(val.into_owned()),
                         "subdirectory" => {
                             subdirectory = Some(PortablePathBuf::from(val.as_ref()));
+                        }
+                        "path" => {
+                            path = Some(PortablePathBuf::from(val.as_ref()));
                         }
                         _ => continue,
                     };
@@ -847,15 +1001,31 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 if let Some(subdirectory) = subdirectory.as_ref() {
                     url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
                 }
+                if let Some(path) = path.as_ref() {
+                    url.set_fragment(Some(&format!("path={path}")));
+                }
                 let url = VerbatimUrl::from_url(url);
 
-                Ok(Self::Git {
-                    repository,
-                    reference,
-                    precise,
-                    subdirectory: subdirectory.map(PathBuf::from),
-                    url,
-                })
+                if let Some(install_path) = path.map(PathBuf::from) {
+                    Ok(Self::GitPath {
+                        repository,
+                        reference,
+                        precise,
+                        ext: DistExtension::from_path(install_path.as_path()).map_err(|err| {
+                            ParsedUrlError::MissingExtensionPath(install_path.clone(), err)
+                        })?,
+                        install_path,
+                        url,
+                    })
+                } else {
+                    Ok(Self::GitDirectory {
+                        repository,
+                        reference,
+                        precise,
+                        subdirectory: subdirectory.map(PathBuf::from),
+                        url,
+                    })
+                }
             }
             RequirementSourceWire::Direct { url, subdirectory } => {
                 let location = url.clone();

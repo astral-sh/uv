@@ -243,6 +243,14 @@ impl From<&ResolvedDist> for RequirementSource {
                     url: wheel.url.clone(),
                     ext: DistExtension::Wheel,
                 },
+                Dist::Built(BuiltDist::GitPath(wheel)) => RequirementSource::GitPath {
+                    url: wheel.url.clone(),
+                    repository: wheel.git.repository().clone(),
+                    reference: wheel.git.reference().clone(),
+                    precise: wheel.git.precise(),
+                    install_path: wheel.install_path.clone(),
+                    ext: DistExtension::Wheel,
+                },
                 Dist::Source(SourceDist::Registry(sdist)) => RequirementSource::Registry {
                     specifier: uv_pep440::VersionSpecifiers::from(
                         uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
@@ -260,7 +268,15 @@ impl From<&ResolvedDist> for RequirementSource {
                         ext: DistExtension::Source(sdist.ext),
                     }
                 }
-                Dist::Source(SourceDist::Git(sdist)) => RequirementSource::Git {
+                Dist::Source(SourceDist::GitPath(sdist)) => RequirementSource::GitPath {
+                    url: sdist.url.clone(),
+                    repository: sdist.git.repository().clone(),
+                    reference: sdist.git.reference().clone(),
+                    precise: sdist.git.precise(),
+                    install_path: sdist.install_path.clone(),
+                    ext: DistExtension::Source(sdist.ext),
+                },
+                Dist::Source(SourceDist::GitDirectory(sdist)) => RequirementSource::GitDirectory {
                     url: sdist.url.clone(),
                     repository: sdist.git.repository().clone(),
                     reference: sdist.git.reference().clone(),

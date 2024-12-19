@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::archive::Archive;
-use crate::{HttpArchivePointer, LocalArchivePointer};
+use crate::{HttpArchivePointer, PathArchivePointer};
 use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
@@ -125,7 +125,7 @@ impl CachedWheel {
         let filename = WheelFilename::from_stem(filename).ok()?;
 
         // Read the pointer.
-        let pointer = LocalArchivePointer::read_from(path).ok()??;
+        let pointer = PathArchivePointer::read_from(path).ok()??;
         let cache_info = pointer.to_cache_info();
         let Archive { id, hashes } = pointer.into_archive();
 
