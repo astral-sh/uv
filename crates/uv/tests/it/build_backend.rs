@@ -214,3 +214,67 @@ fn built_by_uv_editable() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn preserve_executable_bit() -> Result<()> {
+    use std::io::Write;
+
+    let context = TestContext::new("3.12");
+
+    let project_dir = context.temp_dir.path().join("preserve_executable_bit");
+    context
+        .init()
+        .arg("--build-backend")
+        .arg("uv")
+        .arg("--preview")
+        .arg(&project_dir)
+        .assert()
+        .success();
+
+    fs_err::OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open(project_dir.join("pyproject.toml"))?
+        .write_all(
+            indoc! {r#"
+            [tool.uv.build-backend.data]
+            scripts = "scripts"
+        "#}
+            .as_bytes(),
+        )?;
+
+    fs_err::create_dir(project_dir.join("scripts"))?;
+    fs_err::write(
+        project_dir.join("scripts").join("greet.sh"),
+        indoc! {r#"
+        echo "Hi from the shell"
+    "#},
+    )?;
+
+    context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(context.temp_dir.path())
+        .current_dir(project_dir)
+        .assert()
+        .success();
+
+    let wheel = context
+        .temp_dir
+        .path()
+        .join("preserve_executable_bit-0.1.0-py3-none-any.whl");
+    context.pip_install().arg(wheel).assert().success();
+
+    uv_snapshot!(Command::new("greet.sh")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hi from the shell
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
