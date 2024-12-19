@@ -100,7 +100,7 @@ nav:
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
       - Working on projects: guides/projects.md
-      - Publishing packages: guides/publish.md
+      - Building and Publishing: guides/build_and_publish.md
       - Integrations:
           - guides/integration/index.md
           - Docker: guides/integration/docker.md
@@ -148,6 +148,7 @@ nav:
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Build failures: reference/build_failures.md
+      - pyproject.toml: reference/pyproject_toml.md
       - Resolver: reference/resolver-internals.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
