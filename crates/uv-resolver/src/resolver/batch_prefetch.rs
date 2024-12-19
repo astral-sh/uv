@@ -39,6 +39,7 @@ enum BatchPrefetchStrategy {
 /// have to fetch the metadata for a lot of versions.
 ///
 /// Note that these all heuristics that could totally prefetch lots of irrelevant versions.
+#[derive(Clone)]
 pub(crate) struct BatchPrefetcher {
     // Internal types.
     tried_versions: FxHashMap<PackageName, usize>,
