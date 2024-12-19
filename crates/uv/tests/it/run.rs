@@ -2493,6 +2493,20 @@ fn run_zipapp() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_stdin_args() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.argv)").arg("foo").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ['-c', 'foo', 'bar']
+
+    ----- stderr -----
+    "###);
+}
+
 /// Run a module equivalent to `python -m foo`.
 #[test]
 fn run_module() {

@@ -1181,7 +1181,7 @@ pub(crate) enum RunCommand {
     /// [zipapp]: <https://docs.python.org/3/library/zipapp.html>
     PythonZipapp(PathBuf, Vec<OsString>),
     /// Execute a `python` script provided via `stdin`.
-    PythonStdin(Vec<u8>),
+    PythonStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
     PythonRemote(tempfile::NamedTempFile, Vec<OsString>),
     /// Execute an external command.
@@ -1208,7 +1208,7 @@ impl RunCommand {
                     Cow::Borrowed("python")
                 }
             }
-            Self::PythonStdin(_) => Cow::Borrowed("python -c"),
+            Self::PythonStdin(..) => Cow::Borrowed("python -c"),
             Self::External(executable, _) => executable.to_string_lossy(),
         }
     }
@@ -1261,7 +1261,7 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonStdin(script) => {
+            Self::PythonStdin(script, args) => {
                 let mut process = Command::new(interpreter.sys_executable());
                 process.arg("-c");
 
@@ -1276,6 +1276,7 @@ impl RunCommand {
                     let script = String::from_utf8(script.clone()).expect("script is valid UTF-8");
                     process.arg(script);
                 }
+                process.args(args);
 
                 process
             }
@@ -1414,7 +1415,7 @@ impl RunCommand {
         if target.eq_ignore_ascii_case("-") {
             let mut buf = Vec::with_capacity(1024);
             std::io::stdin().read_to_end(&mut buf)?;
-            Ok(Self::PythonStdin(buf))
+            Ok(Self::PythonStdin(buf, args.to_vec()))
         } else if target.eq_ignore_ascii_case("python") {
             Ok(Self::Python(args.to_vec()))
         } else if target_path
