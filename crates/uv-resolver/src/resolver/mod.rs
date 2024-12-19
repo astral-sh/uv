@@ -310,12 +310,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let pubgrub = State::init(root.clone(), MIN_VERSION.clone());
-        let mut prefetcher = BatchPrefetcher::new(
+        let prefetcher = BatchPrefetcher::new(
             self.capabilities.clone(),
             self.index.clone(),
             request_sink.clone(),
         );
-        let state = ForkState::new(pubgrub, self.env.clone(), self.python_requirement.clone());
+        let state = ForkState::new(
+            pubgrub,
+            self.env.clone(),
+            self.python_requirement.clone(),
+            prefetcher,
+        );
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state);
         let mut resolutions = vec![];
@@ -393,7 +398,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         else {
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
-                                prefetcher.log_tried_versions();
+                                state.prefetcher.log_tried_versions();
                             }
                             debug!(
                                 "{} resolution took {:.3}s",
@@ -472,7 +477,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // (idempotent due to caching).
                 self.request_package(next_package, url, index, &request_sink)?;
 
-                prefetcher.version_tried(next_package);
+                state.prefetcher.version_tried(next_package);
 
                 let term_intersection = state
                     .pubgrub
@@ -545,7 +550,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Only consider registry packages for prefetch.
                 if url.is_none() {
-                    prefetcher.prefetch_batches(
+                    state.prefetcher.prefetch_batches(
                         next_package,
                         index,
                         &version,
@@ -2259,6 +2264,10 @@ pub(crate) struct ForkState {
     /// solution that omits Python 3.8 support.
     python_requirement: PythonRequirement,
     conflict_tracker: ConflictTracker,
+    /// Prefetch package versions for packages with many rejected versions.
+    ///
+    /// Tracked on the fork state to avoid counting each identical version between forks as new try.
+    prefetcher: BatchPrefetcher,
 }
 
 impl ForkState {
@@ -2266,6 +2275,7 @@ impl ForkState {
         pubgrub: State<UvDependencyProvider>,
         env: ResolverEnvironment,
         python_requirement: PythonRequirement,
+        prefetcher: BatchPrefetcher,
     ) -> Self {
         Self {
             initial: None,
@@ -2279,6 +2289,7 @@ impl ForkState {
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
+            prefetcher,
         }
     }
 
