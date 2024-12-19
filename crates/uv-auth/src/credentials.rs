@@ -5,11 +5,18 @@ use base64::write::EncoderWriter;
 use netrc::Netrc;
 use reqwest::header::HeaderValue;
 use reqwest::Request;
+
+use futures::executor;
 use std::io::Read;
 use std::io::Write;
+
 use url::Url;
 
 use uv_static::EnvVars;
+
+use crate::keyring_config::AuthConfig;
+use crate::keyring_config::ConfigFile;
+use crate::KeyringProvider;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Credentials {
@@ -155,6 +162,38 @@ impl Credentials {
         }
     }
 
+    /// Extracte the [`Credentials`] from keyring, given a named source.
+    ///
+    /// Look up the username stored for the named source in the user-level config.
+    /// Load the credentials from keyring for the service and username.
+    pub fn from_keyring(
+        name: String,
+        url: &Url,
+        keyring_provider: Option<KeyringProvider>,
+    ) -> Option<Self> {
+        if keyring_provider.is_none() {
+            return None;
+        }
+
+        let auth_config = match AuthConfig::load() {
+            Ok(auth_config) => auth_config,
+            Err(_) => {
+                eprintln!("Error loading auth config");
+                return None;
+            }
+        };
+
+        let index = match auth_config.find_entry(&name) {
+            Some(i) => i,
+            None => {
+                eprintln!("Could not find entry for {name}");
+                return None;
+            }
+        };
+
+        return executor::block_on(keyring_provider.unwrap().fetch(&url, &index.username));
+    }
+
     /// Parse [`Credentials`] from an HTTP request, if any.
     ///
     /// Only HTTP Basic Authentication is supported.
@@ -247,6 +286,7 @@ impl Credentials {
 
 #[cfg(test)]
 mod tests {
+
     use insta::assert_debug_snapshot;
 
     use super::*;
@@ -352,5 +392,38 @@ mod tests {
 
         assert_debug_snapshot!(header, @r###""Basic dXNlcjpwYXNzd29yZD09""###);
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
+    }
+
+    #[test]
+    fn from_keyring() {
+        // let service_name = "example.com";
+        // let username = "user1";
+        // let index = "index1";
+
+        // let child = Command::new("keyring")
+        //     .arg("set")
+        //     .arg(service_name)
+        //     .arg(username)
+        //     .stdin(Stdio::null())
+        //     .stdout(Stdio::piped())
+        //     .stderr(Stdio::inherit())
+        //     .spawn()
+        //     .inspect_err(|err| eprint!("Failure running `keyring` command: {err}"))
+        //     .ok()?;
+
+        // let output = executor::block_on(child.wait_with_output())
+        //     .inspect_err(|err| eprintln!("Failed to wait for `keyring` output: {err}"))
+        //     .ok()?;
+
+        // assert!(output.status.success());
+
+        // let keyring_provider = KeyringProvider::subprocess();
+
+        // let mut auth_config = AuthConfig::load()?;
+        // auth_config.add_entry(index.to_string(), username.to_string());
+        // auth_config.store();
+
+        // // Act
+        // let credentials = Credentials::from_keyring(index.to_string(), "example.com".to_string(), Some(keyring_provider));
     }
 }
