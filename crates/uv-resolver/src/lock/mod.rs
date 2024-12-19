@@ -83,6 +83,8 @@ pub struct Lock {
     conflicts: Conflicts,
     /// The list of supported environments specified by the user.
     supported_environments: Vec<MarkerTree>,
+    /// The list of required platforms specified by the user.
+    required_platforms: Option<Vec<MarkerTree>>,
     /// The range of supported Python versions.
     requires_python: RequiresPython,
     /// We discard the lockfile if these options don't match.
@@ -242,6 +244,7 @@ impl Lock {
             ResolverManifest::default(),
             Conflicts::empty(),
             vec![],
+            None,
             resolution.fork_markers.clone(),
         )?;
         Ok(lock)
@@ -314,6 +317,7 @@ impl Lock {
         manifest: ResolverManifest,
         conflicts: Conflicts,
         supported_environments: Vec<MarkerTree>,
+        required_platforms: Option<Vec<MarkerTree>>,
         fork_markers: Vec<UniversalMarker>,
     ) -> Result<Self, LockError> {
         // Put all dependencies for each package in a canonical order and
@@ -464,6 +468,7 @@ impl Lock {
             fork_markers,
             conflicts,
             supported_environments,
+            required_platforms,
             requires_python,
             options,
             packages,
@@ -503,6 +508,18 @@ impl Lock {
             .into_iter()
             .map(|marker| self.requires_python.complexify_markers(marker))
             .collect();
+        self
+    }
+
+    /// Record the required platforms that were used to generate this lock.
+    #[must_use]
+    pub fn with_required_platforms(mut self, required_platforms: Option<Vec<MarkerTree>>) -> Self {
+        self.required_platforms = required_platforms.map(|required_platforms| {
+            required_platforms
+                .into_iter()
+                .map(|marker| self.requires_python.complexify_markers(marker))
+                .collect()
+        });
         self
     }
 
@@ -561,6 +578,11 @@ impl Lock {
         &self.supported_environments
     }
 
+    /// Returns the required platforms that were used to generate this lock.
+    pub fn required_platforms(&self) -> Option<&[MarkerTree]> {
+        self.required_platforms.as_deref()
+    }
+
     /// Returns the workspace members that were used to generate this lock.
     pub fn members(&self) -> &BTreeSet<PackageName> {
         &self.manifest.members
@@ -591,6 +613,18 @@ impl Lock {
             .copied()
             .map(|marker| self.simplify_environment(marker))
             .collect()
+    }
+
+    /// Returns the required platforms that were used to generate this
+    /// lock.
+    pub fn simplified_required_platforms(&self) -> Option<Vec<MarkerTree>> {
+        self.required_platforms().map(|required_platforms| {
+            required_platforms
+                .iter()
+                .copied()
+                .map(|marker| self.simplify_environment(marker))
+                .collect()
+        })
     }
 
     /// Simplify the given marker environment with respect to the lockfile's
@@ -1402,6 +1436,8 @@ struct LockWire {
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(rename = "supported-markers", default)]
     supported_environments: Vec<SimplifiedMarkerTree>,
+    #[serde(rename = "required-platforms")]
+    required_platforms: Option<Vec<SimplifiedMarkerTree>>,
     #[serde(rename = "conflicts", default)]
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
@@ -1444,6 +1480,12 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
+        let required_platforms = wire.required_platforms.map(|required_platforms| {
+            required_platforms
+                .into_iter()
+                .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+                .collect()
+        });
         let fork_markers = wire
             .fork_markers
             .into_iter()
@@ -1462,6 +1504,7 @@ impl TryFrom<LockWire> for Lock {
             wire.manifest,
             wire.conflicts.unwrap_or_else(Conflicts::empty),
             supported_environments,
+            required_platforms,
             fork_markers,
         )?;
 

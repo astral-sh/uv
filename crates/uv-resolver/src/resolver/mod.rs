@@ -31,7 +31,7 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
     ConflictItem, ConflictItemRef, Conflicts, Requirement, ResolutionMetadata, VerbatimParsedUrl,
@@ -1255,43 +1255,36 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // intent is such that, if we're resolving PyTorch, and we choose `torch==2.5.2+cpu`, we
         // want to fork so that we can select `torch==2.5.2` on macOS (since the `+cpu` variant
         // doesn't include any macOS wheels).
-        if candidate.version().is_local() {
-            if !dist.implied_markers().is_true() {
-                for platform in [
-                    ResolverPlatform::Linux,
-                    ResolverPlatform::Windows,
-                    ResolverPlatform::MacOS,
-                ] {
-                    // If the platform is part of the current environment...
-                    let marker = platform.marker();
-                    if env.included_by_marker(marker) {
-                        // But isn't supported by the distribution...
-                        if dist.implied_markers().is_disjoint(marker)
-                            && !find_environments(id, pubgrub).is_disjoint(marker)
-                        {
-                            // Then we need to fork.
-                            let forks = fork_version_by_marker(env, marker);
-                            return if forks.is_empty() {
-                                Ok(Some(ResolverVersion::Unavailable(
-                                    candidate.version().clone(),
-                                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                                        IncompatibleWheel::MissingPlatform(platform.to_string()),
-                                    )),
-                                )))
-                            } else {
-                                debug!(
-                                    "Forking platform for {}=={} ({})",
-                                    name,
-                                    candidate.version(),
-                                    forks
-                                        .iter()
-                                        .map(ToString::to_string)
-                                        .collect::<Vec<_>>()
-                                        .join(", ")
-                                );
-                                Ok(Some(ResolverVersion::Forked(forks)))
-                            };
-                        }
+        if !dist.implied_markers().is_true() {
+            for marker in self.options.required_platforms.iter().copied() {
+                // If the platform is part of the current environment...
+                if env.included_by_marker(marker) {
+                    // But isn't supported by the distribution...
+                    if dist.implied_markers().is_disjoint(marker)
+                        && !find_environments(id, pubgrub).is_disjoint(marker)
+                    {
+                        // Then we need to fork.
+                        let forks = fork_version_by_marker(env, marker);
+                        return if forks.is_empty() {
+                            Ok(Some(ResolverVersion::Unavailable(
+                                candidate.version().clone(),
+                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::MissingPlatform(marker),
+                                )),
+                            )))
+                        } else {
+                            debug!(
+                                "Forking platform for {}=={} ({})",
+                                name,
+                                candidate.version(),
+                                forks
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                            Ok(Some(ResolverVersion::Forked(forks)))
+                        };
                     }
                 }
             }
@@ -3429,42 +3422,4 @@ struct ConflictTracker {
     ///
     /// Distilled from `culprit` for fast checking in the hot loop.
     deprioritize: Vec<Id<PubGrubPackage>>,
-}
-
-/// A platform for which the resolver is solving.
-#[derive(Debug, Clone, Copy)]
-enum ResolverPlatform {
-    Linux,
-    Windows,
-    MacOS,
-}
-
-impl ResolverPlatform {
-    /// Return the platform's `sys.platform` value.
-    fn sys_platform(self) -> &'static str {
-        match self {
-            ResolverPlatform::Linux => "linux",
-            ResolverPlatform::Windows => "win32",
-            ResolverPlatform::MacOS => "darwin",
-        }
-    }
-
-    /// Return a [`MarkerTree`] for the platform.
-    fn marker(self) -> MarkerTree {
-        MarkerTree::expression(MarkerExpression::String {
-            key: MarkerValueString::SysPlatform,
-            operator: MarkerOperator::Equal,
-            value: self.sys_platform().to_string(),
-        })
-    }
-}
-
-impl Display for ResolverPlatform {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResolverPlatform::Linux => write!(f, "Linux"),
-            ResolverPlatform::Windows => write!(f, "Windows"),
-            ResolverPlatform::MacOS => write!(f, "macOS"),
-        }
-    }
 }

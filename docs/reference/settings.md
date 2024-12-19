@@ -273,6 +273,36 @@ package = false
 
 ---
 
+### [`required-platforms`](#required-platforms) {: #required-platforms }
+
+A list of required platforms, for packages that lack source distributions.
+
+When a package does not have a source distribution, it's availability will be limited to
+the platforms supported by its built distributions (wheels). For example, if a package only
+publishes wheels for Linux, then it won't be installable on macOS or Windows.
+
+By default, uv will require that each package includes at least one wheel for Linux, macOS,
+and Windows. The `required-platforms` setting can be used to make those requirements more
+or less strict. For example, an empty `required-platforms` list avoid enforcing any such
+requirements on binary-only packages.
+
+**Default value**: `[]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Require that the package is available for macOS on arm64 and x86_64.
+required-platforms = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
+```
+
+---
+
 ### [`sources`](#sources) {: #sources }
 
 The sources to use when resolving dependencies.
