@@ -2,7 +2,7 @@
 
 ## Dependency caching
 
-uv uses aggressive caching to avoid re-downloading (and re-building dependencies) that have already
+uv uses aggressive caching to avoid re-downloading (and re-building) dependencies that have already
 been accessed in prior runs.
 
 The specifics of uv's caching semantics vary based on the nature of the dependency:
