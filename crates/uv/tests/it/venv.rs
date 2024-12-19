@@ -1117,7 +1117,7 @@ fn create_venv_apostrophe() {
 
     // One of them should be commonly available on a linux developer machine, if not, we have to
     // extend the fallbacks.
-    let shell = env::var_os("SHELL").unwrap_or(OsString::from("bash"));
+    let shell = env::var_os(EnvVars::SHELL).unwrap_or(OsString::from("bash"));
     let mut child = Command::new(shell)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

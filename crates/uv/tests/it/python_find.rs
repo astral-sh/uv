@@ -593,7 +593,7 @@ fn python_find_venv_invalid() {
     "###);
 
     // Unless the virtual environment is not active
-    uv_snapshot!(context.filters(), context.python_find().env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::VIRTUAL_ENV), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
